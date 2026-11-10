@@ -9,5 +9,17 @@
   },
   "scripts": {
     "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.10",
+    "@fastify/websocket": "^11.3.7",
+    "@webdcc/protocol": "workspace:*",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@webdcc/fake-adapter": "workspace:*",
+    "ws": "^8.22.2"
   }
 }

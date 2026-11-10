@@ -1,3 +1,7 @@
-// @webdcc/protocol：前后端共享类型
-// 骨架占位：实现见 SPEC 对应里程碑。
-export const PACKAGE = '@webdcc/protocol';
+export * from './events.js';
+export * from './adapter.js';
+export * from './sync.js';
+export * from './api.js';
+export * from './ulid.js';
+
+export const PROTOCOL_VERSION = 1;

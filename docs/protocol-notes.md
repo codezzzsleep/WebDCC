@@ -505,3 +505,7 @@ questions: 1..4 题，每题 {
 ### 7.5 假模型的一个坑（对所有探针都适用）
 
 Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools: []`、只有 1 条 message），mock-anthropic 的 plan 第 0 步会回给它但被 CLI 丢弃；真正的对话请求是第 2 个（13 个工具，含 `AskUserQuestion`）。做"第 N 次模型调用"的断言时要跳过首包。DSH 与 Codex 没有这个现象（实测）。
+
+### 7.6 一条实现约定（M1 定下）
+
+`assistant.message.phase` 的归属：**adapter 负责**在 turn 结束前把该轮最后一条助手消息标为 `final`，manager 不修改已落库的事件（seq 日志保持不可变）。M3–M5 实现真实 adapter 时按此约定：无法判断"最后一条"时，把最后一条 `assistant.message` 的 `item.complete` 推迟到 `turn.completed` 之前发出。
