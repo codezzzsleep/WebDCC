@@ -15,7 +15,7 @@
 Error: expect(received).toBeLessThanOrEqual(expected)
 
 Expected: <= 1000
-Received:    8808
+Received:    8383
 ```
 
 # Page snapshot
@@ -39,9 +39,9 @@ Received:    8808
         - generic [ref=f1e17]: ▸
         - generic "/tmp/wdcc-e2e-workspace" [ref=f1e18]: e2e 工作区
         - link "＋" [ref=f1e19] [cursor=pointer]:
-          - /url: /new?w=01M73Q0KWVPKQQCWJMBAF7YWZB
+          - /url: /new?w=01M73Q611962KTZFJSQCFFN2DM
       - link "DS 五千事件会话 刚刚" [ref=f1e20] [cursor=pointer]:
-        - /url: /s/01M73Q0N0R0JZYK6R2W2SYRD15
+        - /url: /s/01M73Q626N44AAVMEE5FB0P6KA
         - generic [ref=f1e21]: DS
         - generic [ref=f1e22]: 五千事件会话
         - generic [ref=f1e23]: 刚刚
@@ -61,7 +61,7 @@ Received:    8808
       - generic [ref=f1e40]:
         - generic [ref=f1e41]:
           - paragraph [ref=f1e44]: 五千事件会话
-          - generic [ref=f1e45]: 05:49
+          - generic [ref=f1e45]: 05:52
         - generic [ref=f1e47]: 运行中…
       - generic [ref=f1e49]:
         - button "已完成，用时 0秒 ⌄" [ref=f1e51] [cursor=pointer]
@@ -82,7 +82,7 @@ Received:    8808
       - generic [ref=f1e68]:
         - generic [ref=f1e69]:
           - paragraph [ref=f1e72]: 第 0 轮
-          - generic [ref=f1e73]: 05:49
+          - generic [ref=f1e73]: 05:52
         - generic [ref=f1e75]: 运行中…
       - generic [ref=f1e77]:
         - button "已完成，用时 0秒 ⌄" [ref=f1e79] [cursor=pointer]
@@ -103,7 +103,7 @@ Received:    8808
       - generic [ref=f1e96]:
         - generic [ref=f1e97]:
           - paragraph [ref=f1e100]: 第 1 轮
-          - generic [ref=f1e101]: 05:50
+          - generic [ref=f1e101]: 05:53
         - generic [ref=f1e103]: 运行中…
       - generic [ref=f1e105]:
         - button "已完成，用时 0秒 ⌄" [ref=f1e107] [cursor=pointer]
@@ -124,7 +124,7 @@ Received:    8808
       - generic [ref=f1e124]:
         - generic [ref=f1e125]:
           - paragraph [ref=f1e128]: 第 2 轮
-          - generic [ref=f1e129]: 05:50
+          - generic [ref=f1e129]: 05:53
         - generic [ref=f1e131]: 运行中…
       - generic [ref=f1e133]:
         - button "已完成，用时 0秒 ⌄" [ref=f1e135] [cursor=pointer]
@@ -145,7 +145,7 @@ Received:    8808
       - generic [ref=f1e152]:
         - generic [ref=f1e153]:
           - paragraph [ref=f1e156]: 第 3 轮
-          - generic [ref=f1e157]: 05:50
+          - generic [ref=f1e157]: 05:53
         - generic [ref=f1e159]: 运行中…
       - generic [ref=f1e161]:
         - button "已完成，用时 0秒 ⌄" [ref=f1e163] [cursor=pointer]
@@ -166,7 +166,7 @@ Received:    8808
       - generic [ref=f1e180]:
         - generic [ref=f1e181]:
           - paragraph [ref=f1e184]: 第 4 轮
-          - generic [ref=f1e185]: 05:50
+          - generic [ref=f1e185]: 05:53
         - generic [ref=f1e187]: 运行中…
       - generic [ref=f1e189]:
         - button "已完成，用时 0秒 ⌄" [ref=f1e191] [cursor=pointer]
@@ -187,7 +187,7 @@ Received:    8808
       - generic [ref=f1e208]:
         - generic [ref=f1e209]:
           - paragraph [ref=f1e212]: 第 5 轮
-          - generic [ref=f1e213]: 05:50
+          - generic [ref=f1e213]: 05:53
         - generic [ref=f1e215]: 运行中…
       - generic [ref=f1e217]:
         - button "已完成，用时 0秒 ⌄" [ref=f1e219] [cursor=pointer]
@@ -205,22 +205,17 @@ Received:    8808
           - generic [ref=f1e232]:
             - generic [ref=f1e233]: 完成
             - button "带到…" [ref=f1e234] [cursor=pointer]
+    - generic [ref=f1e235]:
       - generic [ref=f1e236]:
-        - generic [ref=f1e237]:
-          - paragraph [ref=f1e240]: 第 6 轮
-          - generic [ref=f1e241]: 05:50
-        - generic [ref=f1e243]: 运行中…
-    - generic [ref=f1e244]:
-      - generic [ref=f1e245]:
-        - textbox "发消息或创建任务, / 调用指令, @ 文件或对话" [ref=f1e246]
-        - generic [ref=f1e247]:
-          - generic [ref=f1e248]:
-            - button "＋" [ref=f1e249] [cursor=pointer]
-            - button "仅可查看" [ref=f1e251] [cursor=pointer]
-          - generic [ref=f1e252]:
-            - generic [ref=f1e253]: Fake Model
-            - button "发送" [ref=f1e254] [cursor=pointer]
-      - generic [ref=f1e255]: 102 轮 · 4896 步
+        - textbox "发消息或创建任务, / 调用指令, @ 文件或对话" [ref=f1e237]
+        - generic [ref=f1e238]:
+          - generic [ref=f1e239]:
+            - button "＋" [ref=f1e240] [cursor=pointer]
+            - button "仅可查看" [ref=f1e242] [cursor=pointer]
+          - generic [ref=f1e243]:
+            - generic [ref=f1e244]: Fake Model
+            - button "发送" [ref=f1e245] [cursor=pointer]
+      - generic [ref=f1e246]: 102 轮 · 4896 步
 ```
 
 # Test source
@@ -271,7 +266,7 @@ Received:    8808
   43 |     const domMs = Date.now() - startedAt;
   44 |     const request = await firstRequest;
   45 |     const limit = Number(new URL(request.url()).searchParams.get('limit') ?? '0');
-  46 |     await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 15_000 });
+  46 |     await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 15_000, polling: 25 });
   47 |     const firstPaintMs = Date.now() - startedAt;
   48 |     console.log(`A5 未缓存：DOM ${domMs}ms，limit=${limit}，首屏 ${firstPaintMs}ms`);
   49 |     expect(limit).toBeLessThanOrEqual(200);
@@ -283,7 +278,7 @@ Received:    8808
   54 |     await freshPage.goto('/new');
   55 |     const switchStart = Date.now();
   56 |     await freshPage.goto(`/s/${big.sessionId}`, { waitUntil: 'domcontentloaded' });
-  57 |     await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 10_000 });
+  57 |     await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 10_000, polling: 25 });
   58 |     const switchMs = Date.now() - switchStart;
   59 |     console.log(`A5 已缓存：切换首屏 ${switchMs}ms`);
   60 |     expect(switchMs).toBeLessThanOrEqual(1500);

@@ -246,7 +246,11 @@ export class AppStore {
 
   // ---------- 会话加载 ----------
 
+  trace: Record<string, number> = {};
+
   async ensureSession(sessionId: string): Promise<void> {
+    const t0 = performance.now();
+    this.trace['ensureStart'] = t0;
     if (this.events.has(sessionId) === false) {
       const cached = await cache.getEvents(sessionId, 500).catch(() => []);
       const map = new Map<number, StoredEvent>();
@@ -282,6 +286,7 @@ export class AppStore {
       this.cursors.set(sessionId, cursor);
       this.connection.subscribe(sessionId, cursor);
     }
+    this.trace['ensureEnd'] = performance.now();
     this.notify();
   }
 
@@ -482,3 +487,6 @@ export class AppStore {
 }
 
 export const store = new AppStore();
+
+// 便于 e2e 与排错观察内部状态（只读用途）
+(globalThis as { __wdccStore?: AppStore }).__wdccStore = store;

@@ -43,7 +43,7 @@ test.describe('M2 / A5 切换性能', () => {
     const domMs = Date.now() - startedAt;
     const request = await firstRequest;
     const limit = Number(new URL(request.url()).searchParams.get('limit') ?? '0');
-    await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 15_000 });
+    await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 15_000, polling: 25 });
     const firstPaintMs = Date.now() - startedAt;
     console.log(`A5 未缓存：DOM ${domMs}ms，limit=${limit}，首屏 ${firstPaintMs}ms`);
     expect(limit).toBeLessThanOrEqual(200);
@@ -54,7 +54,7 @@ test.describe('M2 / A5 切换性能', () => {
     await freshPage.goto('/new');
     const switchStart = Date.now();
     await freshPage.goto(`/s/${big.sessionId}`, { waitUntil: 'domcontentloaded' });
-    await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 10_000 });
+    await freshPage.waitForFunction(() => document.querySelectorAll('.turn').length > 0, undefined, { timeout: 10_000, polling: 25 });
     const switchMs = Date.now() - switchStart;
     console.log(`A5 已缓存：切换首屏 ${switchMs}ms`);
     expect(switchMs).toBeLessThanOrEqual(1500);
