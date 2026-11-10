@@ -1,3 +1,3 @@
-// CodexAdapter（codex app-server）
-// 骨架占位：实现见 SPEC 对应里程碑。
-export const PACKAGE = '@webdcc/adapter-codex';
+export * from './adapter.js';
+export type { Frame } from './rpc.js';
+export { JsonRpcStdio } from './rpc.js';

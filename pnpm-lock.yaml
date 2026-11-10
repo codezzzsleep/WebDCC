@@ -209,7 +209,11 @@ importers:
         specifier: 0.3.322
         version: 0.3.322(@anthropic-ai/sdk@1.7.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.2(zod@4.6.7))(zod@4.6.7)
 
-  packages/adapters/codex: {}
+  packages/adapters/codex:
+    dependencies:
+      '@webdcc/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
 
   packages/adapters/dsh: {}
 
@@ -223,6 +227,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.3.7
         version: 11.3.7
+      '@webdcc/adapter-codex':
+        specifier: workspace:*
+        version: link:../adapters/codex
       '@webdcc/protocol':
         specifier: workspace:*
         version: link:../protocol

@@ -37,6 +37,15 @@
 | A6a/6b/6e | **通过**（6a 慢网流式可见且界面可操作；6b 断网 30s 后时间线与服务端一致；6e 离线刷新应用外壳可用） |
 | A12 截图 | 已完成，`docs/acceptance/M2/`（11 张：新会话页、收起/展开轮次、轨迹、@ 菜单、停靠区文件/diff/会话、审批卡片、手机视图） |
 
+## M3 进度（进行中）
+
+| 项 | 状态 |
+|---|---|
+| CodexAdapter（app-server 子进程、JSON-RPC、thread/turn、审批回包、事件映射、resume/dispose/probe/buildLaunchSpec） | 已实现，`npx tsx scripts/test-codex-adapter.ts` 冒烟通过（29 条事件，含 turn.completed/usage/command/reasoning） |
+| 接入生产组装点 `packages/server/src/adapters.ts` | 已接入（`WDCC_ENABLE_CODEX=0` 可关闭） |
+| `model_catalog_json` 前置与 fixtures 重录 | 待做 |
+| `native.spec.ts` 的 Codex 部分、A1/A2 | 待做 |
+
 ## M1 偏差与说明
 
 - **真实 adapter 尚未接入**：M1 只注册 fake-adapter；`packages/server/src/adapters.ts` 是生产组装点，M3–M5 依次填入 Codex / Claude / DSH。
