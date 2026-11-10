@@ -46,8 +46,8 @@
 | `model_catalog_json` 前置 | **已核实并否决**：自定义条目必须带 `base_instructions`/`instructions_template`，填它就是平台提供系统提示词 → 违反 R1。改用 Codex 自带元数据；代价是假模型下没有 `fileChange`/`turn/plan/updated`，adapter 按 5.2/6.3 两种情况处理。已写进 SPEC 13 与 protocol-notes §7.7 |
 | `native.spec.ts` 的 Codex 部分 | 完成（4 个断言：thread/start、turn/start、`-c` 白名单、访问模式映射），全绿 |
 | fixtures 重录 | 待做 |
-| A1（Codex） | **7/8 通过**（`scripts/accept-codex-a1.ts`：新建、流式、命令、工具、审批、一轮完成、打断）。**未通过**：`dispose` 后 `resume` 的新一轮卡住。证据链：`thread/resume` 成功 → `turn/start` 返回 turnId → mock 收到第 6 次请求并回了 `exec_command` → 事件计数 `approval.request=5 / approval.resolved=4`，**有 1 个审批请求没被解决**，所以这一轮一直挂着。下一步查"resume 后的审批请求为什么没有被 auto-approve 处理"（可能是 `approvalId` 映射或 `hasApprovalResolved` 判定） |
-| A2（Codex） | 待做（`skills/list`、`mcpServerStatus/list` 结构化对比） |
+| A1（Codex） | **7/8 通过**（`scripts/accept-codex-a1.ts`：新建、流式、命令、工具、审批、一轮完成、打断）。**已修复并通过（8/8）**。根因：Codex 审批的 `id` 是 JSON-RPC 请求 id，每个 app-server 进程从 0 重新开始；resume 后新进程的 id 与上一进程重复，被我们的"已处理"去重逻辑跳过，那一轮就挂住了。修法：`approvalId = 进程token:请求id`。已写进 protocol-notes §7.8 |
+| A2（Codex） | **通过**（`scripts/accept-codex-a2.ts`）：直接 app-server 与 adapter 启动参数下 `skills/list`、`mcpServerStatus/list`、`instructionSources` 三者完全一致，AGENTS.md 被加载 |
 
 ## M1 偏差与说明
 

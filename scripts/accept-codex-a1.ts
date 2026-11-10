@@ -50,7 +50,10 @@ const autoTimer = setInterval(() => {
       if (event.kind !== 'approval.request') continue;
       const data = event.data as { approvalId: string; options: { id: string }[] };
       if (server.store.hasApprovalResolved(session.id, data.approvalId)) continue;
-      await server.manager.approve(session.id, { approvalId: data.approvalId, optionId: data.options[0]?.id ?? 'accept' }).catch(() => undefined);
+      console.log('  → 自动批准', data.approvalId);
+      await server.manager
+        .approve(session.id, { approvalId: data.approvalId, optionId: data.options[0]?.id ?? 'accept' })
+        .catch((error: unknown) => console.log('  → 批准失败', String(error)));
     }
   })();
 }, 300);
@@ -103,6 +106,9 @@ for (const event of events.filter((item) => item.kind === 'turn.completed' || it
 }
 const counts = new Map<string, number>();
 for (const event of events) counts.set(event.kind, (counts.get(event.kind) ?? 0) + 1);
+const approvalIds = events.filter((event) => event.kind === 'approval.request').map((event) => (event.data as { approvalId: string }).approvalId);
+const resolvedIds = events.filter((event) => event.kind === 'approval.resolved').map((event) => (event.data as { approvalId: string }).approvalId);
+console.log('  审批请求：', approvalIds.join(','), '| 已解决：', resolvedIds.join(','));
 console.log('  事件计数：' + [...counts].map(([kind, count]) => `${kind}=${count}`).join(' '));
 console.log(`\n事件总数 ${events.length}；kind：${[...new Set(events.map((event) => event.kind))].join(', ')}`);
 clearInterval(autoTimer);

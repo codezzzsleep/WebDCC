@@ -30,6 +30,9 @@ interface PendingApproval {
 
 interface SessionRuntime {
   nativeId: string;
+  /** 每个 app-server 进程一个 token：JSON-RPC 的 request id 在每个进程里从 0/1 开始，
+   *  resume 后会与上一进程的 id 重复，必须拼上 token 才能全局唯一 */
+  processToken: string;
   /** resume 之后等线程真正挂上（thread/started）再发首轮 */
   ready: Promise<void>;
   rpc: JsonRpcStdio;
@@ -203,6 +206,7 @@ export class CodexAdapter implements AgentAdapter {
     });
     const runtime: SessionRuntime = {
       nativeId: '',
+      processToken: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       ready,
       rpc,
       cwd: opts.cwd,
@@ -472,7 +476,7 @@ export class CodexAdapter implements AgentAdapter {
               ? 'legacyPatch'
               : 'userInput';
 
-    const approvalId = String(id);
+    const approvalId = `${runtime?.processToken ?? 'p'}:${id}`;
     runtime?.approvals.set(approvalId, { requestId: id, kind });
 
     const detail = JSON.stringify(params['command'] ?? params['commandActions'] ?? params['reason'] ?? params, null, 2);

@@ -517,3 +517,9 @@ Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools
 - 其他必填字段：`supported_in_api`、`priority`、`visibility`、`description`、`display_name`、`shell_type`、`apply_patch_tool_type`、`truncation_policy`、`input_modalities`、`context_window`、`max_context_window`、`default_reasoning_level`（字符串）、`supported_reasoning_levels`（`{effort, description}`）、`supports_reasoning_summaries`、`web_search_tool_type`、`experimental_supported_tools`（数组）。
 - 填 `base_instructions` 就是由平台提供系统提示词，违反 R1。**结论：v1 不用自定义 catalog**，用 Codex 内置模型元数据。
 - 用内置元数据（`gpt-5`）实测下发的工具：`exec_command`、`write_stdin`、`view_image`、`request_user_input`、`get_goal`/`create_goal`/`update_goal`、`spawn_agent`/`send_input`/`resume_agent`/`wait_agent`/`close_agent`、`web_search` —— **没有 `apply_patch`、没有 `update_plan`**，因此假模型下不会出现 `fileChange` 与 `turn/plan/updated`。
+
+### 7.8 Codex 审批 id 的坑（M3 实测）
+
+`item/*/requestApproval` 的 `id` 是 **JSON-RPC 请求 id**，每个 `codex app-server` 进程都从 0/1 重新开始。会话 `dispose` 后 `resume` 会拉起新进程，新进程的审批 id 又与上一进程重复；若我方直接用 `String(id)` 当 `approvalId`，去重逻辑（`approval.resolved` 里已有同名 id）会把 resume 之后的审批当成"已处理"而跳过，那一轮就会永远挂着。
+
+**修法**：`approvalId = `${进程 token}:${id}``（进程 token 在每次 `startProcess` 时生成），`PendingApproval` 里另存原始 `requestId` 用于回包。实测修好后 A1 的 8 项全过。
