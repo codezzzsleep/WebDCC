@@ -86,3 +86,14 @@
 - **`assistant.message.phase` 由 adapter 负责**：manager 不重写已落库的事件（seq 日志不可变）。adapter 在 turn 结束前把最后一条助手消息标 `final`；M3–M5 实现时按此约定做。
 - **Provider / models 端点推迟到 M6**：11.1 表里的 `/api/providers*`、`/api/models` 未在 M1 实现（M6 的 Provider 管理页会用到）。
 - **前端构建链**：Vite 锁 7.3.8 + @vitejs/plugin-react 5.2.0（plugin-react 6 依赖 Vite 8/rolldown，会在本机 Illegal instruction）。`pnpm build` 产出 `packages/web/dist` 与 `packages/server/dist/main.js`（esbuild 单文件，`better-sqlite3` external），已用生产包做过冒烟：token 换 Cookie、401、带 Cookie 访问都正常。
+
+
+## M7 与总结（2026-11-11）
+
+- **A6 补齐**：6c/6d/6f 通过（`e2e/m7.spec.ts`）；A6 六个场景全部有自动化覆盖
+- **部署**：deploy.md 补齐 systemd、环境变量、HTTPS/Service Worker 说明；生产包在本机以 `WDCC_HOST=0.0.0.0` 跑通（token 打印、401、Cookie 后 200）
+- **总验收**：`docs/acceptance-report.md` 逐条记录 A1–A13；48 个单测 + 16 个 e2e + typecheck + lint 全绿
+
+### 最终状态
+
+M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提前核实；两处 SPEC 与实测的冲突（Codex catalog 与 R1、Codex 审批 id 冲突）已按 0.1 节规则记录并修复。剩余待办只有两类：**真实模型验证**（无 Key）与**界面人工确认**（截图已存档）。
