@@ -10,5 +10,9 @@ export async function adapters(): Promise<AgentAdapter[]> {
     const { CodexAdapter } = await import('@webdcc/adapter-codex');
     list.push(new CodexAdapter());
   }
+  if (process.env['WDCC_ENABLE_CLAUDE'] !== '0') {
+    const { ClaudeAdapter } = await import('@webdcc/adapter-claude');
+    list.push(new ClaudeAdapter());
+  }
   return list;
 }

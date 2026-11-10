@@ -37,6 +37,16 @@
 | A6a/6b/6e | **通过**（6a 慢网流式可见且界面可操作；6b 断网 30s 后时间线与服务端一致；6e 离线刷新应用外壳可用） |
 | A12 截图 | 已完成，`docs/acceptance/M2/`（11 张：新会话页、收起/展开轮次、轨迹、@ 菜单、停靠区文件/diff/会话、审批卡片、手机视图） |
 
+## M4 进度（进行中）
+
+| 项 | 状态 |
+|---|---|
+| ClaudeAdapter（Agent SDK `query()` 流式输入、canUseTool 分流审批/提问、interrupt、resume、事件映射、六档访问模式） | 完成 |
+| A1（Claude，假模型） | ✅ 8/8（`scripts/accept-claude-a1.ts`）：新建、流式、命令、读文件、改文件、审批、完成、打断、session_id 落库、**dispose 后 resume 继续** |
+| A2（Claude） | ✅（`scripts/accept-claude-a2.ts`）：项目 `.mcp.json` 加载（wdccecho connected）、hooks 生效、51 个斜杠命令、28 个工具 |
+| native.spec（Claude 部分） | ✅ 4 个断言：preset 系统提示词、settingSources、无 mcpServers/hooks/agents/allowedTools、六档 permissionMode 透传 |
+| 接入生产组装点 | 已接入（`WDCC_ENABLE_CLAUDE=0` 可关闭） |
+
 ## M3 进度（完成，已合并 PR #4）
 
 | 项 | 状态 |

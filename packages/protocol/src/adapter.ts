@@ -47,7 +47,9 @@ export type AdapterEvent =
   | { type: 'item.delta'; itemKey: string; field: 'text' | 'output'; append: string }
   | { type: 'item.update'; itemKey: string; data: unknown }
   | { type: 'item.complete'; itemKey: string; kind: EventKind; data: unknown; turnId?: string; native?: unknown; nativeSeq?: number }
-  | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error' };
+  | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error' }
+  /** 原生 id 迟到（Claude Code 要等首条消息才有 session_id）：manager 收到后落库 */
+  | { type: 'native-id'; nativeId: string };
 
 export interface AgentAdapter {
   id: AgentId;
