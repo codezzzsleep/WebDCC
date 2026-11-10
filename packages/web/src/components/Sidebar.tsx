@@ -56,6 +56,11 @@ export function Sidebar({ currentSessionId, dockSessionId, workspaces, onAddWork
         ＋ 新会话
       </Link>
 
+      <Link to="/settings/providers" className="session-row" data-testid="nav-providers">
+        <span className="agent-mark">⚙</span>
+        <span className="session-title">Provider 与模型</span>
+      </Link>
+
       <div className="sidebar-section-title">
         <span>工作区</span>
         <span className="sidebar-actions">

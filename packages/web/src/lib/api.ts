@@ -1,6 +1,7 @@
 /** REST 客户端（同源，Cookie 认证） */
 import type {
   BrowseResponse,
+  ProviderDto,
   Command,
   DraftDto,
   EventsPageResponse,
@@ -50,6 +51,16 @@ export const api = {
   draft: (id: string) => request<DraftDto>(`/api/sessions/${id}/draft`),
   saveDraft: (id: string, text: string, fileIds: string[]) =>
     request<DraftDto>(`/api/sessions/${id}/draft`, { method: 'PUT', body: JSON.stringify({ text, fileIds }) }),
+  providers: () => request<ProviderDto[]>('/api/providers'),
+  createProvider: (input: {
+    name: string;
+    baseUrl: string;
+    protocols: string[];
+    models: string[];
+    apiKey?: string;
+    codexCatalogPath?: string;
+  }) => request<ProviderDto>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),
+  deleteProvider: (id: string) => fetch(`/api/providers/${id}`, { method: 'DELETE', credentials: 'same-origin' }),
   command: (command: Command) =>
     request<{ ok: boolean; value?: unknown; error?: string; code?: string }>('/api/commands', {
       method: 'POST',

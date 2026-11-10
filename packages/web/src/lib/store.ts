@@ -64,6 +64,9 @@ export class AppStore {
   private draftTimers = new Map<string, NodeJS.Timeout>();
 
   readonly connection: SyncConnection;
+  /** 非当前查看的会话完成/等待审批时的未读数（A13） */
+  unread = new Map<string, number>();
+  currentSessionId: string | null = null;
   feedSeq = 0;
   connectionState: ConnectionState = 'connecting';
   connectionAttempt = 0;
@@ -229,12 +232,46 @@ export class AppStore {
     }
   }
 
+  setCurrentSession(sessionId: string | null): void {
+    this.currentSessionId = sessionId;
+    if (sessionId !== null && this.unread.delete(sessionId)) this.notify();
+  }
+
+  private bumpUnread(sessionId: string, title: string): void {
+    if (this.currentSessionId === sessionId) return;
+    this.unread.set(sessionId, (this.unread.get(sessionId) ?? 0) + 1);
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('WebDCC', { body: `${title} 有新的进展` });
+      }
+    } catch {
+      // 通知不可用时静默
+    }
+    this.notify();
+  }
+
+  unreadTotal(): number {
+    let total = 0;
+    for (const count of this.unread.values()) total += count;
+    return total;
+  }
+
+  appendDraft(sessionId: string, text: string): void {
+    const current = this.getDraft(sessionId);
+    const next = current.text === '' ? text : `${current.text}
+${text}`;
+    this.setDraft(sessionId, next, current.fileIds);
+  }
+
   applyEvent(event: StoredEvent): void {
     const map = this.events.get(event.sessionId) ?? new Map<number, StoredEvent>();
     map.set(event.seq, event);
     this.events.set(event.sessionId, map);
     const hot = this.hot.get(event.sessionId);
     if (hot !== undefined) hot.delete(event.itemKey);
+    if (event.kind === 'turn.completed' || event.kind === 'approval.request') {
+      this.bumpUnread(event.sessionId, this.sessions.get(event.sessionId)?.title ?? '会话');
+    }
     if (event.kind === 'user.message') {
       const clientCommandId = (event.data as { clientCommandId?: string }).clientCommandId;
       if (clientCommandId !== undefined) {
@@ -474,6 +511,13 @@ export class AppStore {
         void api.saveDraft(sessionId, text, fileIds).catch(() => undefined);
       }, 1000),
     );
+  }
+
+  /** 立即把草稿写进 IndexedDB 与服务端（"带到…"后马上跳转时用） */
+  async flushDraft(sessionId: string): Promise<void> {
+    const draft = this.getDraft(sessionId);
+    await cache.putDraft({ sessionId, text: draft.text, fileIds: draft.fileIds }).catch(() => undefined);
+    await api.saveDraft(sessionId, draft.text, draft.fileIds).catch(() => undefined);
   }
 
   async loadDraft(sessionId: string): Promise<{ text: string; fileIds: string[] }> {

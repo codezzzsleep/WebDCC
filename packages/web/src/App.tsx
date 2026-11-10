@@ -10,6 +10,8 @@ import { Timeline } from './components/Timeline.js';
 import { Trajectory } from './components/Trajectory.js';
 import { Composer } from './components/Composer.js';
 import { Dock, type DockState } from './components/Dock.js';
+import { HandoffDialog } from './components/HandoffDialog.js';
+import { ProvidersPage } from './pages/Providers.js';
 import { NewSession } from './pages/NewSession.js';
 
 function useBootstrap(): { workspaces: WorkspaceDto[]; meta: MetaResponse | null } {
@@ -114,6 +116,10 @@ function RootLayout(): React.ReactElement {
 
 function ConnectionBar(): React.ReactElement | null {
   useStoreVersion();
+  const total = store.unreadTotal();
+  useEffect(() => {
+    document.title = total > 0 ? `(${total}) WebDCC` : 'WebDCC';
+  }, [total]);
   if (store.connectionState === 'online') return null;
   const label = store.connectionState === 'reconnecting' ? `网络断开，正在重连（第 ${store.connectionAttempt} 次）` : '正在连接…';
   return <div className="connection-bar">{label}</div>;
@@ -156,9 +162,15 @@ function SessionPage(): React.ReactElement {
   const [mainId, dockSessionId] = sid.split('+');
   const session = mainId === undefined ? undefined : store.getSession(mainId);
   const [tab, setTab] = useState<'chat' | 'trajectory'>('chat');
+  const [handoffText, setHandoffText] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    if (mainId !== undefined) void store.ensureSession(mainId);
+    store.setCurrentSession(mainId ?? null);
+    if (mainId !== undefined) {
+      void store.ensureSession(mainId);
+      void ensureNotificationPermission();
+    }
     if (dockSessionId !== undefined) void store.ensureSession(dockSessionId);
   }, [mainId, dockSessionId]);
 
@@ -198,11 +210,7 @@ function SessionPage(): React.ReactElement {
         />
         {tab === 'chat' ? (
           <>
-            <Timeline
-              sessionId={mainId}
-              onOpenDiff={openDiff}
-              onHandoff={(text) => store.setDraft(mainId, text)}
-            />
+            <Timeline sessionId={mainId} onOpenDiff={openDiff} onHandoff={setHandoffText} />
             <Composer
               sessionId={mainId}
               workspaceId={session?.workspaceId ?? ''}
@@ -223,11 +231,37 @@ function SessionPage(): React.ReactElement {
             if (mainId !== undefined) void navigate({ to: '/s/$sid', params: { sid: mainId }, search: {} });
           }}
           onPromote={(sessionId) => void navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} })}
-          onHandoff={(text) => store.setDraft(mainId, text)}
+          onHandoff={setHandoffText}
         />
+      ) : null}
+      {handoffText !== null && session !== undefined ? (
+        <HandoffDialog
+          text={handoffText}
+          fromSessionId={mainId}
+          workspaceId={session.workspaceId}
+          onClose={() => setHandoffText(null)}
+          onHanded={(targetSessionId, title) => {
+            setHandoffText(null);
+            setToast(`已放进「${title}」的输入框，还没发送`);
+            void navigate({ to: '/s/$sid', params: { sid: `${mainId}+${targetSessionId}` }, search: {} });
+          }}
+        />
+      ) : null}
+      {toast !== null ? (
+        <div className="toast" onClick={() => setToast(null)} data-testid="toast">
+          {toast}
+        </div>
       ) : null}
     </>
   );
+}
+
+async function ensureNotificationPermission(): Promise<void> {
+  try {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') await Notification.requestPermission();
+  } catch {
+    // 忽略
+  }
 }
 
 let metaCache: MetaResponse | null = null;
@@ -251,6 +285,12 @@ const newRoute = createRoute({
   }),
   component: NewSessionPage,
 });
+const providersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/providers',
+  component: ProvidersPage,
+});
+
 const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/s/$sid',
@@ -261,7 +301,7 @@ const sessionRoute = createRoute({
   component: SessionPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, newRoute, sessionRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, newRoute, providersRoute, sessionRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

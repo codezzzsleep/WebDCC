@@ -21,6 +21,7 @@ interface DockProps {
 
 export function Dock({ state, onClose, onPromote, onHandoff }: DockProps): React.ReactElement {
   useStoreVersion();
+  const sameAsMain = state.kind === 'session' && state.sessionId === currentMainSessionId();
   return (
     <aside className="dock" data-testid="dock">
       <div className="dock-tabs">
@@ -33,7 +34,8 @@ export function Dock({ state, onClose, onPromote, onHandoff }: DockProps): React
         </button>
       </div>
       <div className="dock-body">
-        {state.kind === 'session' ? <DockSession sessionId={state.sessionId} onPromote={onPromote} onHandoff={onHandoff} /> : null}
+        {sameAsMain ? <div className="dock-notice" data-testid="dock-same-session">已经在主栏里了</div> : null}
+        {state.kind === 'session' && !sameAsMain ? <DockSession sessionId={state.sessionId} onPromote={onPromote} onHandoff={onHandoff} /> : null}
         {state.kind === 'diff' ? <DiffView fileId={state.fileId} path={state.path} /> : null}
         {state.kind === 'files' ? <FilesView workspaceId={state.workspaceId} /> : null}
       </div>
@@ -146,4 +148,10 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
       ) : null}
     </div>
   );
+}
+
+
+function currentMainSessionId(): string | null {
+  const match = /^\/s\/([^/?+]+)/.exec(window.location.pathname);
+  return match?.[1] ?? null;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import type { MetaResponse, WorkspaceDto } from '@webdcc/protocol';
+import type { MetaResponse, ProviderDto, WorkspaceDto } from '@webdcc/protocol';
+import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
 import { agentInfo } from '../lib/format.js';
 
@@ -21,15 +22,32 @@ export function NewSession({ workspaces, meta }: NewSessionProps): React.ReactEl
   }, [workspaces, search.w, workspaceId]);
   const [agent, setAgent] = useState<string>(search.agent ?? 'dsh');
   const [text, setText] = useState('');
+  const [providers, setProviders] = useState<ProviderDto[]>([]);
+  const [providerId, setProviderId] = useState<string>('');
+  const [model, setModel] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api.providers().then(setProviders).catch(() => setProviders([]));
+  }, []);
+
+  const compatible = providers.filter((provider) =>
+    agent === 'codex' ? provider.protocols.includes('openai-responses') : agent === 'claude-code' ? provider.protocols.includes('anthropic-messages') : false,
+  );
+  const selectedProvider = compatible.find((provider) => provider.id === providerId);
 
   const submit = async (): Promise<void> => {
     if (workspaceId === '' || text.trim() === '' || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const sessionId = await store.createSession({ workspaceId, agent });
+      const sessionId = await store.createSession({
+        workspaceId,
+        agent,
+        ...(providerId === '' ? { providerId: null } : { providerId }),
+        ...(model === '' ? {} : { model }),
+      });
       if (sessionId === '') throw new Error('服务端没有返回会话 id');
       store.sendMessage(sessionId, text);
       await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
@@ -74,6 +92,44 @@ export function NewSession({ workspaces, meta }: NewSessionProps): React.ReactEl
             </button>
           );
         })}
+      </div>
+
+      <div className="provider-row">
+        <label className="field">
+          <span>Provider</span>
+          <select
+            className="text-input"
+            value={providerId}
+            onChange={(event) => {
+              setProviderId(event.target.value);
+              setModel('');
+            }}
+            data-testid="provider-select"
+          >
+            <option value="">原生登录 / 原生配置</option>
+            {compatible.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.name}
+              </option>
+            ))}
+            {providers.filter((provider) => !compatible.includes(provider)).map((provider) => (
+              <option key={provider.id} value={provider.id} disabled>
+                {provider.name}（与 {agent} 协议不兼容）
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>模型</span>
+          <select className="text-input" value={model} onChange={(event) => setModel(event.target.value)} data-testid="model-select" disabled={selectedProvider === undefined}>
+            {(selectedProvider?.models ?? []).map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+            {selectedProvider === undefined ? <option value="">（先选 Provider）</option> : null}
+          </select>
+        </label>
       </div>
 
       <div className="new-session-input">
