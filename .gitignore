@@ -2,3 +2,5 @@ node_modules/
 dist/
 .webdcc/
 .env*
+test-results/
+playwright-report/

@@ -37,6 +37,18 @@
 | A6a/6b/6e | **通过**（6a 慢网流式可见且界面可操作；6b 断网 30s 后时间线与服务端一致；6e 离线刷新应用外壳可用） |
 | A12 截图 | 已完成，`docs/acceptance/M2/`（11 张：新会话页、收起/展开轮次、轨迹、@ 菜单、停靠区文件/diff/会话、审批卡片、手机视图） |
 
+## M3 进度（进行中）
+
+| 项 | 状态 |
+|---|---|
+| CodexAdapter（app-server 子进程、JSON-RPC、thread/turn、审批回包、事件映射、resume/dispose/probe/buildLaunchSpec） | 已实现，`npx tsx scripts/test-codex-adapter.ts` 冒烟通过（29 条事件，含 turn.completed/usage/command/reasoning） |
+| 接入生产组装点 `packages/server/src/adapters.ts` | 已接入（`WDCC_ENABLE_CODEX=0` 可关闭） |
+| `model_catalog_json` 前置 | **已核实并否决**：自定义条目必须带 `base_instructions`/`instructions_template`，填它就是平台提供系统提示词 → 违反 R1。改用 Codex 自带元数据；代价是假模型下没有 `fileChange`/`turn/plan/updated`，adapter 按 5.2/6.3 两种情况处理。已写进 SPEC 13 与 protocol-notes §7.7 |
+| `native.spec.ts` 的 Codex 部分 | 完成（4 个断言：thread/start、turn/start、`-c` 白名单、访问模式映射），全绿 |
+| fixtures 重录 | 待做 |
+| A1（Codex） | **7/8 通过**（`scripts/accept-codex-a1.ts`：新建、流式、命令、工具、审批、一轮完成、打断）。**已修复并通过（8/8）**。根因：Codex 审批的 `id` 是 JSON-RPC 请求 id，每个 app-server 进程从 0 重新开始；resume 后新进程的 id 与上一进程重复，被我们的"已处理"去重逻辑跳过，那一轮就挂住了。修法：`approvalId = 进程token:请求id`。已写进 protocol-notes §7.8 |
+| A2（Codex） | **通过**（`scripts/accept-codex-a2.ts`）：直接 app-server 与 adapter 启动参数下 `skills/list`、`mcpServerStatus/list`、`instructionSources` 三者完全一致，AGENTS.md 被加载 |
+
 ## M1 偏差与说明
 
 - **真实 adapter 尚未接入**：M1 只注册 fake-adapter；`packages/server/src/adapters.ts` 是生产组装点，M3–M5 依次填入 Codex / Claude / DSH。
