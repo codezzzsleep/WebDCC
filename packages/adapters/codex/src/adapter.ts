@@ -47,6 +47,9 @@ const ACCESS_MODES = [
 
 function accessParams(mode: string | undefined): Record<string, unknown> {
   switch (mode) {
+    // 原生值，仅供验收脚本触发"每条命令都问"的审批；不作为界面档位
+    case 'untrusted':
+      return { approvalPolicy: 'untrusted', sandbox: 'workspace-write', approvalsReviewer: 'user' };
     case 'read-only':
       return { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' };
     case 'workspace':
@@ -225,19 +228,24 @@ export class CodexAdapter implements AgentAdapter {
 
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
     const runtime = this.startProcess(opts.sessionId, opts);
+    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resume process started');
     await this.handshake(runtime.rpc);
+    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] initialize done, resuming');
     const response = await runtime.rpc.request<{ thread: { id: string } }>('thread/resume', {
       threadId: opts.nativeId,
       ...(opts.model === undefined ? {} : { model: opts.model }),
       ...accessParams(opts.accessMode),
     });
     runtime.nativeId = response.thread.id;
+    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resumed', runtime.nativeId);
   }
 
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
     const startedAt = Date.now();
+    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId);
     const response = await runtime.rpc.request<{ turn: { id: string } }>('turn/start', buildTurnStartParams(runtime.nativeId, input.text));
+    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
     runtime.turnId = response.turn.id;
     runtime.turnStartedAt = startedAt;
   }
