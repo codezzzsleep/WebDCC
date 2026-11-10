@@ -16,10 +16,22 @@ export interface ModelOption {
   label: string;
 }
 
+export interface ProviderRuntimeConfig {
+  id: string;
+  name: string;
+  baseUrl: string;
+  protocols: string[];
+  /** 只在启动子进程/构造 SDK 环境时使用，绝不落库明文或返回给前端 */
+  apiKey?: string;
+  codexCatalogPath?: string;
+}
+
 export interface CreateOpts {
   sessionId: string;
   cwd: string;
   providerId: string | null;
+  /** providerId 对应的解析结果；null = 原生登录/原生配置 */
+  provider?: ProviderRuntimeConfig | null;
   model?: string;
   accessMode?: string;
 }

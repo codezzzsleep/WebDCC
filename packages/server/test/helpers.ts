@@ -10,6 +10,7 @@ import type { Config } from '../src/config.js';
 import { openDb, type Db } from '../src/db.js';
 import { FileStore } from '../src/files.js';
 import { SessionManager } from '../src/manager.js';
+import { ProviderRegistry } from '../src/providers.js';
 import { Store } from '../src/store.js';
 
 export const TEST_TOKEN = 'test-token-0123456789abcdef0123456789abcdef';
@@ -31,7 +32,9 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
   const store = new Store(db);
   const files = new FileStore(dataDir, store);
   await files.init();
-  const manager = new SessionManager(store, { idleDisposeMin: 0 });
+  const providers = new ProviderRegistry(store, dataDir);
+  await providers.init();
+  const manager = new SessionManager(store, { idleDisposeMin: 0, resolveProvider: (id) => providers.runtimeConfig(id) });
   manager.registerAdapter(new FakeAdapter(adapterOptions));
   manager.registerAdapter(new FakeAdapter({ ...adapterOptions, id: 'codex' }));
   manager.registerAdapter(new FakeAdapter({ ...adapterOptions, id: 'claude-code' }));
@@ -46,7 +49,7 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
     version: 'test',
   };
 
-  const { app, hub } = await buildApp({ config, store, files, manager });
+  const { app, hub } = await buildApp({ config, store, files, manager, providers });
   manager.setHooks({
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),

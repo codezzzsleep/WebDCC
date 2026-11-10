@@ -188,8 +188,20 @@ export class CodexAdapter implements AgentAdapter {
   buildLaunchSpec(opts: CreateOpts): LaunchSpec {
     const args = ['app-server'];
     for (const override of this.options.configOverrides ?? []) args.push('-c', override);
+    const env: Record<string, string> = {};
+    const provider = opts.provider;
+    if (provider !== null && provider !== undefined) {
+      const key = `wdcc_${provider.id}`;
+      args.push('-c', `model_provider=${key}`);
+      args.push('-c', `model_providers.${key}.name="${provider.name}"`);
+      args.push('-c', `model_providers.${key}.base_url="${provider.baseUrl}"`);
+      args.push('-c', `model_providers.${key}.wire_api="responses"`);
+      args.push('-c', `model_providers.${key}.env_key="WDCC_PROVIDER_KEY"`);
+      if (provider.codexCatalogPath !== undefined) args.push('-c', `model_catalog_json="${provider.codexCatalogPath}"`);
+      if (provider.apiKey !== undefined) env['WDCC_PROVIDER_KEY'] = provider.apiKey;
+    }
     if (opts.model !== undefined) args.push('-c', `model="${opts.model}"`);
-    return { command: this.options.command ?? 'codex', args, env: {} };
+    return { command: this.options.command ?? 'codex', args, env };
   }
 
   private startProcess(sessionId: string, opts: CreateOpts): SessionRuntime {

@@ -161,8 +161,16 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   buildLaunchSpec(opts: CreateOpts): LaunchSpec {
+    const providerEnv: Record<string, string> = {};
+    const provider = opts.provider;
+    if (provider !== null && provider !== undefined) {
+      providerEnv['ANTHROPIC_BASE_URL'] = provider.baseUrl;
+      providerEnv['ANTHROPIC_AUTH_TOKEN'] = provider.apiKey ?? '';
+      providerEnv['ANTHROPIC_API_KEY'] = '';
+      if (opts.model !== undefined) providerEnv['ANTHROPIC_MODEL'] = opts.model;
+    }
     return {
-      env: { ...(this.options.env ?? {}) },
+      env: { ...(this.options.env ?? {}), ...providerEnv },
       sdkOptions: {
         cwd: opts.cwd,
         systemPrompt: { type: 'preset', preset: 'claude_code' },

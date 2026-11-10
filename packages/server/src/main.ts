@@ -5,6 +5,7 @@ import { loadConfig, tokenUrl, type Config } from './config.js';
 import { openDb } from './db.js';
 import { FileStore } from './files.js';
 import { SessionManager } from './manager.js';
+import { ProviderRegistry } from './providers.js';
 import { Store } from './store.js';
 
 export interface ServerOptions {
@@ -28,7 +29,12 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   const store = new Store(db);
   const files = new FileStore(config.dataDir, store);
   await files.init();
-  const manager = new SessionManager(store, { idleDisposeMin: config.idleDisposeMin });
+  const providers = new ProviderRegistry(store, config.dataDir);
+  await providers.init();
+  const manager = new SessionManager(store, {
+    idleDisposeMin: config.idleDisposeMin,
+    resolveProvider: (id) => providers.runtimeConfig(id),
+  });
 
   for (const adapter of options.adapters ?? []) manager.registerAdapter(adapter);
 
@@ -37,6 +43,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     store,
     files,
     manager,
+    providers,
     webDist: options.webDist ?? join(process.cwd(), 'packages/web/dist'),
   });
 
