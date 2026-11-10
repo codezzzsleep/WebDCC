@@ -14,5 +14,9 @@ export async function adapters(): Promise<AgentAdapter[]> {
     const { ClaudeAdapter } = await import('@webdcc/adapter-claude');
     list.push(new ClaudeAdapter());
   }
+  if (process.env['WDCC_ENABLE_DSH'] !== '0') {
+    const { DshAdapter } = await import('@webdcc/adapter-dsh');
+    list.push(new DshAdapter());
+  }
   return list;
 }
