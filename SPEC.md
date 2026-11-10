@@ -1,6 +1,8 @@
 # WebDCC v1 SPEC：DeepSeek Harness / Codex / Claude Code 统一网页端
 
-> 版本：v2（取代旧版 agent-web SPEC）· 日期：2026-11-11 · 仓库：`WebDCC`
+> 版本：v2.1 · 日期：2026-11-11 · 仓库：`WebDCC`
+>
+> **v2.1 变更**（按 M0 核实结果修订，证据见 `docs/protocol-notes.md`）：重写 5.4 DSH 接口；5.2、5.3 写入 Codex、Claude Code 的实测结论；6.1、6.2 增加 `nativeSeq` 与内部事件规则，明确 seq 由我方自己连续编号；6.3 映射表按实测事件名重写；9.6 访问模式按三个 Agent 的原生枚举重写；3.2、3.3、10.3 去掉已证实不需要的备选方案；4.1、12.3 按实际锁定版本和硬件限制更新；13 按已实现的假模型服务更新；M3、M5 增加开工前置步骤；15、16、18 相应更新。
 
 ---
 
@@ -10,7 +12,7 @@
 2. **第 3 节"原装原则"是硬约束。** 任何需求、实现细节或"优化"与第 3 节冲突时，一律以第 3 节为准。
 3. **界面以 DeepSeek Harness（下称 DSH）为蓝本。** 第 9 节写了具体规则，`docs/reference/dsh/` 里有实测截图。DSH 只是界面和交互的参考，底层是我们自己的平台，三个 Agent 平级（第 1 节）。
 4. **标注【M0 核实】的接口细节**来自公开文档、社区资料或源码阅读。M0 要对照锁定版本逐条核实；有出入时以真实协议为准，把差异写进 `docs/protocol-notes.md`。原则和验收标准不因此改变。
-5. **标注【已实测】的事实**是写这份 SPEC 时在 DSH 0.2.2-rc.1 上实际跑出来的结果，可以直接采用，升级版本后要复核。
+5. **标注【已实测】的事实**已在锁定版本上实际跑通（写 SPEC 时或 M0 探针），可以直接采用，升级版本后要复核。**标注【M3 核实】【M4 核实】【M5 核实】的项**在对应里程碑开工时先确认，结论补进 `docs/protocol-notes.md`。
 6. 拿不准时选更简单的实现。不要添加本文没有要求的功能。
 
 ---
@@ -82,19 +84,19 @@ WebDCC 是一个部署在个人公网服务器上的网页端：在同一个页�
 |---|---|---|
 | Claude Code | Agent SDK 默认使用最小系统提示词，不是 Claude Code 自己的提示词 | `systemPrompt` 固定为 `{ type: 'preset', preset: 'claude_code' }`，**禁止** `append` 字段 |
 | Claude Code | SDK 默认不加载任何本地设置，CLAUDE.md、skills、斜杠命令都不会生效 | `settingSources` 固定为 `['user', 'project', 'local']` |
-| Claude Code | `claude -p --bare` 会跳过 hooks 和项目 MCP，官方说它将来会成为 `-p` 的默认值 | 不直接调用 `claude -p`，统一走 Agent SDK。【M0 核实】SDK 启动的会话确实加载了 hooks 和项目 `.mcp.json` |
+| Claude Code | `claude -p --bare` 会跳过 hooks 和项目 MCP，官方说它将来会成为 `-p` 的默认值 | 不直接调用 `claude -p`，统一走 Agent SDK。【已实测】SDK 启动的会话会加载项目 `.mcp.json` 与 hooks（`scripts/verify-claude-native.ts`） |
 | Claude Code | SDK 选项 `mcpServers`、`agents`、`hooks`、`allowedTools`、`disallowedTools` 会覆盖或增加能力 | 一律不传 |
 | Codex | `thread/start` 可以传 `baseInstructions`、`developerInstructions` | 永不传这两个字段 |
-| Codex | `model_provider` / `model_providers` 写在项目级 config 里会被忽略 | Provider 只通过 `codex app-server -c key=value` 覆盖；若 M0 发现 app-server 不接受 `-c`，改用 7.3 的备选方案，仍不得写用户配置 |
-| DSH | 不同 profile 的工具集不同，`sdk` profile 是精简版 | 用 DSH 默认的 `web` 启动方式，以"Web Host 侧车"驱动（5.4），不给用户的 profile 装插件、不改 DSH 设置 |
+| Codex | `model_provider` / `model_providers` 写在项目级 config 里会被忽略 | Provider 只通过 `codex app-server -c key=value` 覆盖（【已实测】接受点路径写法，见 10.3） |
+| DSH | 不同 profile 的工具集不同，`sdk` profile 是精简版 | 用 DSH 默认的 `web` 启动方式，以"Web Host 侧车"驱动（5.4），不给用户的 profile 装插件、不改 DSH 设置；访问模式只通过原生命令 `/permission <preset>` 切换（5.4.6） |
 
 ### 3.3 机器检查（必须实现）
 
 - 每个 adapter 暴露纯函数 `buildLaunchSpec(opts)`，返回将使用的命令、参数、环境变量和 SDK 选项。
 - `packages/adapters/test/native.spec.ts` 对三个 adapter 断言：
   - Claude：`systemPrompt` 深等于 `{ type: 'preset', preset: 'claude_code' }`；`settingSources` 深等于 `['user', 'project', 'local']`；不存在 `append`、`mcpServers`、`agents`、`hooks`、`allowedTools`、`disallowedTools` 键。
-  - Codex：所有发出的 `thread/start`、`thread/resume`、`turn/start` 参数中不出现 `baseInstructions`、`developerInstructions`；`-c` 覆盖只允许白名单键（`model_provider`、`model_providers.*`、`model_catalog_json`、`show_raw_agent_reasoning`，以及 M0 确认必需的登录方式字段）。
-  - DSH：只调用白名单内的 Host API 方法，不调用任何写入系统提示词、preset、插件或设置的方法。
+  - Codex：所有发出的 `thread/start`、`thread/resume`、`turn/start` 参数中不出现 `baseInstructions`、`developerInstructions`；`-c` 覆盖只允许白名单键（`model`、`model_provider`、`model_providers.*`、`model_catalog_json`、`show_raw_agent_reasoning`）。
+  - DSH：只调用 5.4.8 白名单里的端点；`commands/execute` 的 `line` 只允许 `/permission <preset>`。
 - 发送路径单元测试：adapter 收到的文本与输入框文本**逐字节相等**；"带到…"和 `@` 插入后的输入框文本与来源原文逐字节相等。
 
 ---
@@ -121,23 +123,26 @@ WebDCC server（Node 24，TypeScript，单进程）
   └─ Adapters
        ├─ CodexAdapter   每会话一个 `codex app-server` 子进程（stdio JSON-RPC）
        ├─ ClaudeAdapter  每会话一个 Agent SDK `query()`
-       └─ DshAdapter     平台托管一个 `dsh web` 侧车（只监听 127.0.0.1），走它的 Host API
+       └─ DshAdapter     平台托管一个 `dsh web` 侧车（只监听 127.0.0.1），走它的 Host API，
+                         所有流复用一条 /api/remote.mux WebSocket
 ```
 
 ### 4.1 技术栈
 
 | 层 | 选型 | 理由 |
 |---|---|---|
-| 运行时 | Node.js 24 LTS | DSH 要求 Node ^22.19 或 >=24；Claude Agent SDK、DSH 都是 TS 生态 |
-| 语言 | TypeScript（strict） | Codex 能从已安装版本直接导出 TS 类型 |
+| 运行时 | Node.js ≥ 24（当前锁定 26.13.0，见 deploy.md） | DSH 要求 Node ^22.19 或 >=24 |
+| 语言 | TypeScript 5.9.x（strict） | typescript-eslint 尚不支持 TS 7；Codex 能直接导出 TS 类型 |
 | 包管理 | pnpm workspace | 单仓多包 |
 | HTTP/WS | Fastify + @fastify/websocket（开启 permessage-deflate） | 轻量，同端口 |
 | 数据库 | SQLite（better-sqlite3），WAL | 单用户、单文件 |
-| 前端 | React 19 + Vite + TanStack Router + TanStack Virtual | URL 路由、虚拟列表 |
+| 前端 | React 19 + Vite + TanStack Router + TanStack Virtual | Vite 选不依赖 rolldown 原生二进制的版本（见下） |
 | 本地缓存 | IndexedDB（idb 库） | 事件缓存、发件箱 |
 | 离线外壳 | Workbox（vite-plugin-pwa） | Service Worker 预缓存 |
 | 渲染 | react-markdown + shiki；diff 用 diff2html | 与 DSH 观感接近 |
-| 测试 | Vitest + Playwright | Playwright 可模拟断网、限速 |
+| 测试 | Vitest 3.2.x + Playwright | Vitest 5 依赖 rolldown 原生二进制；Playwright 可模拟断网、限速 |
+
+**硬件限制【已实测】：** 开发机 CPU 没有 AVX2，依赖 rolldown 原生二进制的工具（Vitest 5 等）会直接 `Illegal instruction`。所有构建、测试工具都选不依赖它的版本，并在开发机和部署服务器上各跑一次 `pnpm build`、`pnpm test` 确认。
 
 ### 4.2 仓库结构
 
@@ -191,7 +196,7 @@ export interface CreateOpts {
   cwd: string;               // 工作区目录
   providerId: string | null; // null = Agent 原生登录/原生配置
   model?: string;
-  accessMode?: string;       // 原生枚举值；缺省 = 用户配置的默认值
+  accessMode?: string;       // 原生枚举值（9.6）；缺省 = 用户配置的默认值；DSH 在建会话后用 /permission 设置
 }
 
 export interface UserInput {
@@ -213,7 +218,7 @@ export type AdapterEvent =
   | { type: 'item.start'; itemKey: string; kind: EventKind; data: unknown; turnId?: string; native?: unknown }
   | { type: 'item.delta'; itemKey: string; field: 'text' | 'output'; append: string }
   | { type: 'item.update'; itemKey: string; data: unknown }
-  | { type: 'item.complete'; itemKey: string; kind: EventKind; data: unknown; turnId?: string; native?: unknown }
+  | { type: 'item.complete'; itemKey: string; kind: EventKind; data: unknown; turnId?: string; native?: unknown; nativeSeq?: number }
   | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error' };
 // itemKey：原生条目 id（Codex item id、Claude 的 message id + content block 序号、DSH 事件里的条目 id）。
 // 没有原生 id 的一次性事件由 adapter 生成 ULID，直接发 item.complete。
@@ -241,7 +246,7 @@ export interface AgentAdapter {
 - 会话进程归服务端所有，与浏览器连接无关。浏览器全部断开时，正在进行的 turn 继续跑。
 - 会话空闲超过 `WDCC_IDLE_DISPOSE_MIN`（默认 30 分钟）调用 `dispose()`；下次发送前自动 `resume()`。
 - 服务重启时，所有会话标记为 `idle`，下次发送前自动 `resume()`。
-- **Provider 在会话创建时锁定。** 同一 Provider 内可以换模型（Codex 在 `turn/start` 带 `model`，Claude 用 `setModel`，DSH 用 `session.selectModel`）。要换 Provider 就新建会话，再用"带到…"带内容过去。
+- **Provider 在会话创建时锁定。** 同一 Provider 内可以换模型（Codex 在 `turn/start` 带 `model`，Claude 用 `setModel`，DSH 用 `session/selectModel`）。要换 Provider 就新建会话，再用"带到…"带内容过去。
 
 ### 5.2 CodexAdapter
 
@@ -254,14 +259,16 @@ export interface AgentAdapter {
 2. 握手：`initialize`（clientInfo: `webdcc`）→ 收到响应后发 `initialized` 通知。握手前的其他请求会被拒绝。
 3. 新建：`thread/start`，参数只含 `cwd`、`model`（可选）、`approvalPolicy` / `sandbox`（仅当用户显式选了访问模式）。返回的 threadId 即 nativeId。
 4. 恢复：用与创建时相同的启动参数拉起进程，再 `thread/resume { threadId }`。社区录制样本显示它在全新进程里也能冷恢复。
-5. 发送：`turn/start { threadId, input: [...] }`；换过模型时附带 `model`（社区样本显示 `model`、`effort` 可逐轮传入）。图片字段【M0 核实】。
+5. 发送：`turn/start { threadId, input: [...] }`；换过模型时附带 `model`（社区样本显示 `model`、`effort` 可逐轮传入）。图片用 `{ type: 'localImage', path }`（【已实测】，定义见导出的 `v2/UserInput.ts`）。
 6. 打断：`turn/interrupt { threadId, turnId }`，以收到 `turn/completed`（status 为 `interrupted`）为准。
 7. 中途追加：turn 进行中发送调用 `turn/steer`；在 `turn/started` 之前或空闲时会被拒绝，退化为排队，等当前 turn 结束再 `turn/start`。
-8. 审批：服务端反向请求（`item/commandExecution/requestApproval`、`item/fileChange/requestApproval`、`item/permissions/requestApproval` 等）→ `approval.request` 事件；用户选择后按 schema 的决策枚举回复。
-9. 事件：`turn/started`、`item/started`、`item/completed`、各类 `item/*` 增量、`turn/plan/updated`、`thread/tokenUsage/updated`、`turn/completed`【M0 核实完整列表】。
+8. 审批（【已实测】）：服务端反向请求 → `approval.request` 事件；用户选择后直接回响应体。`item/commandExecution/requestApproval`、`item/fileChange/requestApproval` 回 `{ decision }`，枚举 `accept | acceptForSession | acceptWithExecpolicyAmendment | applyNetworkPolicyAmendment | decline | cancel`；旧版 `execCommandApproval` / `applyPatchApproval` 回 `{ decision }`（`ReviewDecision`，如 `approved`）；`item/tool/requestUserInput` 是提问，回 `{ answers }`。
+9. 事件：全集见 protocol-notes §2.3。主要用到 `turn/started`、`turn/completed`、`item/started`、`item/completed`、`item/agentMessage/delta`、`item/reasoning/summaryTextDelta`、`item/commandExecution/outputDelta`、`item/fileChange/patchUpdated`、`turn/diff/updated`、`turn/plan/updated`、`item/plan/delta`、`thread/tokenUsage/updated`、`thread/name/updated`。
 10. 模型列表：`model/list`。
 
-**认证注意：** 社区样本显示 `codex app-server` 忽略 `OPENAI_API_KEY` 环境变量；API Key 模式必须通过自定义 Provider（`env_key`）注入，见 10.3。
+**认证注意（【已实测】）：** `codex app-server` 忽略 `OPENAI_API_KEY` 环境变量；API Key 模式必须通过自定义 Provider（`env_key`）注入，见 10.3。
+
+**工具与模型元数据【M3 核实】：** M0 用的假模型没有模型元数据，Codex 只下发了 `exec_command`（参数 `cmd`）等工具，没有 `apply_patch` 和 `update_plan`，写文件走 shell 重定向。Codex 按模型元数据决定下发哪些工具；真实模型（以及 DeepSeek 官方 `models.json` 里的 `apply_patch_tool_type: "freeform"`）会用 `apply_patch` 改文件，产生 `fileChange` 条目。所以 M3 开工前先给假模型配 `model_catalog_json` 重录 fixtures（14 节 M3）。adapter 两种情况都要处理：有 `fileChange` 条目时生成 `file.change`；只有 `commandExecution` 时如实显示为命令，不去猜它改了哪些文件。
 
 ### 5.3 ClaudeAdapter
 
@@ -286,8 +293,9 @@ const options = {
 **流程：**
 - 新建：首条 `system`（subtype `init`）消息里的 `session_id` 即 nativeId；把 init 里的 tools、MCP servers、slash commands 存进会话元数据（A2 对比用，也用于输入框 `/` 菜单）。
 - 发送：向 AsyncIterable 推入 user message，content 为输入框原文；图片为 image content block（base64）。
-- 打断：`query.interrupt()`。换模型 / 访问模式：`setModel()` / `setPermissionMode()`【M0 核实】。
-- 审批：`canUseTool` 返回挂起的 Promise，等用户决策后 resolve 为 allow / deny。
+- 打断：`query.interrupt()`。【已实测】本轮以 `result`（`subtype: 'error_during_execution'`）结束，query 不关闭，可以继续推下一轮。
+- 换模型 / 访问模式：`setModel()` / `setPermissionMode()`（【已实测】存在）。
+- 审批：`canUseTool` 返回挂起的 Promise，等用户决策后 resolve 为 allow / deny。【已实测】`permissionMode: 'default'` 下 `Write` / `Edit` 触发 `canUseTool`，只读的 `Bash` 命令不触发（Claude Code 自带放行规则）。
 - 恢复：新建 `query()` 并传 `resume: nativeId`。
 
 ### 5.4 DshAdapter
@@ -296,26 +304,96 @@ const options = {
 
 **为什么不用其他接口：** 官方 ACP server 只面向自动化，只能收到已提交的回复文本，没有逐 token 流式输出；`--profile sdk` 是精简工具集，与网页端不一致。
 
-**【已实测】DSH 0.2.2-rc.1：**
-- 启动：`dsh web --no-open --port 3091`，stdout 打印一行 `dsh web: http://127.0.0.1:3091/?token=<token>`。从这一行解析 launch token，用 `GET /?token=` 换取会话 Cookie。
-- 模型请求：设置环境变量 `DEEPSEEK_BASE_URL`、`DEEPSEEK_API_KEY` 后，DSH 的 DeepSeek 路由调用 `POST {DEEPSEEK_BASE_URL}/v1/messages`（Anthropic Messages 流式格式），并调用 `GET {DEEPSEEK_BASE_URL 的 origin}/models` 获取模型列表。第 13 节的假模型就是靠这一点驱动 DSH。
-- 默认 preset 发给模型的工具名：`ask_user_question, bash, create_goal, edit, get_goal, glob, grep, interrupt_agent, job_kill, job_list, job_output, list_agents, list_subagent_models, plugin_manager, present, read, read_image, schedule_create, schedule_edit, schedule_list, schedule_view, send_message, skill, subagent, subagent_fork, todo_write, update_goal, web_fetch, web_search, workflow, working_directory, write`。
-- DSH 网页端的地址栏始终是 `/`，切换会话不改变 URL（这正是本项目要解决的问题之一）。
+本节全部来自 M0 对 DSH 0.2.2-rc.1 的源码阅读和探针实跑（【已实测】，个别标【M5 核实】的除外）。端点的完整参数定义见 `fixtures/dsh/host-api-catalog.json`（193 个端点，含 JSON Schema 和源码位置），证据见 `docs/protocol-notes.md` §1。v2 里依据社区插件写的接口描述（`POST /api/<method>`、`host.describe`、`/api/events.mux` 等）对应的是 DSH 早期接口，已作废。
 
-**Host API【M0 核实】**（来源：社区 IDE 插件与 DSH 源码 `packages/host/`、`packages/client/connection/`；DSH 仓库 MIT 开源，可直接读源码确认）：
-- 一元 RPC：`POST /api/<method>`，信封带 `rpcId`。已知方法：`host.describe`、`workspace.list`、`workspace.create`、`session.list`、`session.create`、`session.prompt`、`session.cancel`、`session.history`、`session.models`、`session.selectModel`。
-- 事件流：WebSocket 多路复用（社区插件用 `/api/events.mux`，官方文档提到 `/api/remote.mux`），事件含 `text-delta`、`reasoning-delta`、`tool-call-delta`、工具调用与结果、`approval/requested`、`approval/resolved`、`question/requested`，按 `sessionId` 路由。
-- 认证：所有 API 和 WebSocket 都要求上面换到的 Cookie；Host/Origin 必须是 loopback，平台以 `Host: 127.0.0.1:${port}` 访问。
+#### 5.4.1 启动与认证
 
-**映射：**
-- 我方工作区 ↔ DSH workspace：首次在工作区新建 DSH 会话时 `workspace.list` 按路径匹配，找不到再 `workspace.create`。
-- 我方会话 ↔ DSH session（`session.create` 返回的 id）。
-- DSH 工具 → 我方事件：`bash`→`command`；`read`、`read_image`、`glob`、`grep`→`file.read`；`write`、`edit`→`file.change`；`todo_write`→`plan`；`ask_user_question`→`question`；其余→`tool.call`。
+- 启动：`dsh web --no-open --port ${WDCC_DSH_PORT}`，使用服务器用户自己的 `DSH_HOME`（默认 `~/.dsh`）。
+- stdout 打印一行 `dsh web: http://127.0.0.1:<port>/?token=<43 字符 base64url>`，从中解析 token。
+- `GET /?token=<token>` 返回 303 和 `Set-Cookie`（名为 `dsh-auth-<base64url(sha256(authority))>`，HttpOnly，30 天）。之后所有请求带这个 Cookie，并以 `Host: 127.0.0.1:<port>` 访问。
+- token 只在进程内有效：侧车每次重启都要重新解析 token、重新换 Cookie。
+- **同一个 Cookie（API Peer）只允许一条 WebSocket，第二条返回 409。** 所以 adapter 只开一条 `/api/remote.mux`，所有流都复用它（5.4.3）。
 
-**运行规则：**
-- 平台启动时拉起侧车；健康检查失败自动重启（指数退避，最多 5 次后标红并停止）。
+#### 5.4.2 一元调用
+
+- `POST /api/<ns>/<method>`（恒为两段，单段 404），请求体：
+
+  ```json
+  {"type":"client-request","rpcId":"<uuid>","method":"<ns>/<method>","payload":{"args":{}}}
+  ```
+
+- `method` 必须等于 URL 里的端点；`payload` 只能有一个 `args` 键；`args` 的键必须与端点描述符的参数名完全一致，多一个键就报 `gateway/arguments-invalid`。多数端点要再包一层 `request`，例如 `workspace/create` 传 `{ request: { path } }`。
+- 响应总是 HTTP 200，结果在信封里：`{"type":"server-response","rpcId":"…","result":{"ok":true,"value":…}}`，或 `"result":{"ok":false,"error":{"code","message","details"}}`。adapter 必须检查 `ok`。
+
+#### 5.4.3 事件流 `/api/remote.mux`
+
+- 一条 WebSocket 上复用多条流。上行 `{"type":"open","streamId","endpoint","payload":{"args":{…}}}`、`{"type":"cancel","streamId"}`；下行 `{"type":"item","streamId","value":<帧>}`、`end`、`error`。
+- 一条流对应一次方法调用，不是按会话广播。adapter 维护两类流：
+  - **全局 `$events`（一条）**：帧有 `ready`（带 `clientId`）、`emit`、`waterfall`（审批、提问）、`cancel`。回复审批要用 `ready` 给的 `clientId`。
+  - **每个会话一条 `session/follow`**：args `{ request: { address: { kind: 'session', sessionId }, activate: true, assistantStream: true } }`。帧有三种：
+    - `snapshot`：打开时的完整快照；
+    - `event`：`{ event: { type, seq, time, data } }`，持久事件，seq 不跳号；
+    - `assistant-stream`：`{ frame: { type: 'chunk', index, time, chunk } }`，不持久的流式帧，`chunk.type` ∈ `block-start | text-delta | reasoning-delta | tool-call-delta | block-end | usage | finish`。
+- 会话正在运行，或有浏览器在看它，就保持它的 `session/follow`；空闲超过 `WDCC_IDLE_DISPOSE_MIN` 后关闭。再次打开时按 5.4.7 补齐。
+- WebSocket 断开时整体重连：重新换 Cookie（如侧车已重启）、重开 `$events` 和所有需要的 `session/follow`。
+
+#### 5.4.4 会话与工作区
+
+| 动作 | 端点 | args 与说明 |
+|---|---|---|
+| 建 / 取工作区 | `workspace/create` | `{ request: { path } }`；已存在时直接返回（`created: false`），记下 `workspaceId` |
+| 工作区列表 | `workspace/follow`（流，首帧 `baseline`） | 没有 `workspace/list` |
+| 新建会话 | `session/create` | `{ request: { workspaceId, agentPreset? } }`；返回的 `sessionId` 可能与请求的不同，以返回值为准 |
+| 会话列表 | `session/list` | `{ _request: { cursor? } }`；不含标题，标题来自 `session/title` 事件 |
+| 发送 | `session/prompt` | `{ request: { requestId, sessionId, mode, content: [{ type: 'text', text }], clientTimeZone? } }`；`mode` 普通发送用 `queue`，运行中追加用 `steer`（对应 `AgentAdapter.steer`） |
+| 打断 | `session/cancel` | `{ request: { sessionId } }` |
+| 历史分页 | `session/page` | `{ request: { address, throughSeq?, beforeSeq?, maxMessages? } }` |
+| 模型目录 | `session/modelCatalog` | `{}` |
+| 选模型 | `session/selectModel` | `{ request: { sessionId, provider, model, reasoningEffort? } }` |
+| 执行原生命令 | `commands/execute` | `{ agentId: <sessionId>, line: '/permission <preset>', submittedAttachments: [] }` |
+| 回复审批 / 提问 | `$events/result` | `{ clientId, eventId, outcome: { kind: 'result', value } }` |
+| 回答提问 | `userQuestions/answer` | `{ agentId, callId, answer }`【M5 核实：提问用它还是 `$events/result` 关闭，两者是否都要调】 |
+
+`session/create` 没有模型和访问模式参数：模型用 `session/selectModel`，访问模式用 `/permission`（5.4.6）。
+
+#### 5.4.5 审批与提问
+
+- 审批以 `$events` 上的 waterfall 到达：`{ type: 'waterfall', event: 'approval/request', eventId, agentId, request: { toolName, callId?, reason?, displayReason? } }`，`agentId` 即 sessionId。
+- 回复用 `$events/result`，`value` ∈ `allowed-once | rejected | cancelled`（另有 `unavailable`，我方不用）。界面按钮：允许一次 → `allowed-once`，拒绝 → `rejected`。
+- **每个 waterfall 都必须回复。** 没人回复，DSH 那一轮会一直挂着。会话被打断、侧车断开、adapter 释放会话时，对还没处理的 waterfall 回 `cancelled`。
+- 提问以 `user-questions/request` waterfall 到达，回答方式见 5.4.4 表。
+- 会话日志里的 `approval/asked`、`approval/decided` 是持久事件，用于刷新后重建审批卡片的历史状态；可操作的审批只来自 waterfall。
+- 触发条件（【已实测】）：默认 preset 下普通 `bash` 不会请求审批；只有模型显式传 `sandbox_permissions`（如 `danger-full-access`）和 `justification` 请求提权时才会。测试脚本据此设计（第 13 节）。开发机的 Landlock 只部分生效，沙箱是否拦截的结论要在部署服务器上复核。
+
+#### 5.4.6 访问模式 = permission preset
+
+| preset | 界面文字 | sandbox / 审批 |
+|---|---|---|
+| `read-only` | 仅可查看 | read-only / ask |
+| `workspace-write` | 工作区内修改 | workspace-write / ask |
+| `danger-full-access` | 完全权限 | danger-full-access / never |
+| `auto` | 自动审查（实验） | danger-full-access / ask，逐调用由模型审查 |
+
+- 切换方式：`commands/execute` 执行原生命令 `/permission <preset>`。DSH 的接口说明写明它"解析并执行已知命令，不发送给模型"，只在日志里追加 `command/run`、`command/done`。这与用户在 DSH 自己的界面里敲这条命令等价，符合原装原则。
+- 新建会话时若用户选了非默认模式：`session/create` 之后、第一条消息之前执行一次 `/permission`。会话中途也可以改。
+
+#### 5.4.7 seq 与补齐
+
+- 我方 `seq` 自己连续编号（第 6 节），**不直接使用 DSH 的 `event.seq`**：DSH 日志里有很多不进对话的事件，直接用会让我方日志跳号，而客户端靠 seq 连续来判断是否漏消息。
+- DSH 的 `event.seq` 存为 `nativeSeq`（`events.native_seq` 列），用于去重和补齐。
+- 服务重启、侧车重启或重新打开会话时：重新打开 `session/follow`，用快照和 `session/page`（`throughSeq` / `beforeSeq`）找出 `nativeSeq` 大于已存最大值的事件补进来，按 `nativeSeq` 去重。
+- `assistant-stream` 帧没有 seq，只用于实时显示；完成态以持久事件为准（`assistant/message`、`tool/call`、`tool/result` 等）。
+
+#### 5.4.8 端点白名单（3.3 的检查依据）
+
+`workspace/create`、`workspace/follow`、`session/create`、`session/list`、`session/follow`、`session/page`、`session/prompt`、`session/cancel`、`session/modelCatalog`、`session/selectModel`、`commands/execute`（`line` 只允许 `/permission <preset>`）、`userQuestions/answer`、`$events`、`$events/result`。需要新端点时，先更新本节和 protocol-notes。
+
+#### 5.4.9 运行规则
+
+- 平台启动时拉起侧车；健康检查失败自动重启（指数退避，最多 5 次后标红并停止）；每次重启都重新解析 token。
 - 侧车默认端口 3091，避开用户自己 `dsh web` 的默认端口 3080。
-- 【M0 核实】两个 `dsh web` 进程共用同一 `DSH_HOME` 是否安全。安全则两边看到同一批 DSH 会话；不安全则在 deploy.md 写明"运行 WebDCC 时不要再单独运行 dsh web"。
+- **运行 WebDCC 时不要再单独运行 `dsh web`（【已实测】）。** 会话日志有逐会话文件锁，但 `storages/workspace.json` 这类全局注册表跨进程没有锁，两个进程会互相覆盖工作区顺序、归档、置顶；而且审批 waterfall 会推给所有连着的客户端，两边会抢同一个审批。deploy.md 写明这一点。
+- `$events` 的 `ready` 帧里的 `host.home` 是操作系统家目录，不是 `DSH_HOME`，不要拿它定位 DSH 的数据目录。
 
 ---
 
@@ -334,6 +412,7 @@ export interface StoredEvent {
   kind: EventKind;
   data: EventData[EventKind];
   native?: unknown;         // 原始帧（unknown 卡片和排错用）
+  nativeSeq?: number;       // 原生日志序号（如 DSH 的 event.seq），只用于去重和补齐
 }
 
 export type EventKind =
@@ -352,35 +431,49 @@ export type EventKind =
   | 'turn.completed'    // { status: 'completed'|'interrupted'|'failed', durationMs, usage? }
   | 'usage'             // { inputTokens?, outputTokens?, cacheHitRatio?, contextRatio?, tokensPerSecond? }
   | 'error'             // { message }
-  | 'unknown';          // { nativeType }
+  | 'unknown'           // { nativeType }  不认识的原生事件：对话里显示为原始 JSON 卡片
+  | 'internal';         // { nativeType }  已知的原生簿记事件：只在轨迹标签显示
 ```
 
-`EventData` 是 kind 到 data 的映射类型，字段按上面的注释定义。`label` 是步骤行上显示的人话说明，取自原生字段（例如 DSH / Claude `bash` 的 `description`），没有就留空，平台不自己编。
+`EventData` 是 kind 到 data 的映射类型，字段按上面的注释定义。
+
+**内部事件：** 每个 Agent 都有一些对用户没有意义的簿记事件（例如 DSH 的 `request/header`、`step/start`、`step/end`、`agent/inbox/spliced`、`session/end-seed`、`job/registered`、`job/settled`、`command/run`、`command/done`）。它们照样存储（满足 R5），kind 记为 `internal`，只在轨迹标签显示，不进对话时间线。每个 Agent 的内部事件清单维护在 protocol-notes 里，不在清单里的一律按 `unknown` 处理。`label` 是步骤行上显示的人话说明，取自原生字段（例如 DSH / Claude `bash` 的 `description`），没有就留空，平台不自己编。
 
 ### 6.2 持久化规则
 
+- `seq` 由我方按会话连续分配，与原生序号无关；原生序号存 `nativeSeq`。
 - 收到 `item.complete` 才分配 seq 并写库；流式增量只走 WebSocket，不写库。
 - 进行中的条目按 `itemKey` 在内存里维护快照。订阅时先补发 `seq > afterSeq` 的已存事件，再发所有进行中条目的快照，之后接续增量。
 - 客户端收到 `event` 时，若本地有同 `itemKey` 的进行中条目，用它替换。
 - `command` 输出只在事件里保留末尾 200 行（`outputTail`），全文存 File Store，用 `outputFileId` 引用；`file.change` 的 diff 一律存 File Store。
 - `assistant.message.phase`：一轮里最后一条助手消息标为 `final`，其余为 `interim`（用于第 9.4 节的折叠显示）。原生协议有阶段信息时照搬（例如 Codex `agentMessage.phase`），没有时在 `turn.completed` 到达后把该轮最后一条标为 `final`。
 
-### 6.3 映射表（按 fixtures 补全）
+### 6.3 映射表
 
-| 我方 kind | Codex | Claude Code（SDK 消息） | DSH |
+按工具名判断的行，以 fixtures 和 protocol-notes 为准持续补全。
+
+| 我方 kind | Codex（app-server） | Claude Code（SDK 消息） | DSH（`session/follow` 与 `$events`） |
 |---|---|---|---|
-| assistant.message | `agentMessage` 条目 | assistant 消息的 text block | 回复文本（text-delta 累积） |
-| reasoning | `reasoning` 条目 | thinking block | reasoning-delta |
-| command | `commandExecution` 条目 | `Bash` tool_use + tool_result | `bash` |
-| file.read | （读文件类条目）【M0 核实】 | `Read` / `Glob` / `Grep` | `read` / `glob` / `grep` |
-| file.change | `fileChange` 条目 | `Edit` / `Write` / `MultiEdit`（由 input 生成 diff） | `write` / `edit` |
-| tool.call | `mcpToolCall`、`webSearch` 等 | 其余 tool_use | 其余工具 |
-| plan | `turn/plan/updated` | `TodoWrite` | `todo_write` |
-| approval.request | `item/*/requestApproval` | `canUseTool` | `approval/requested` |
-| question | — | — | `question/requested` / `ask_user_question` |
-| usage | `thread/tokenUsage/updated` | `result` 里的 usage | 会话统计【M0 核实】 |
-| turn.completed | `turn/completed` | `result` 消息 | 会话回到空闲 |
+| user.message | 我方发送时生成 | 我方发送时生成 | `user/message` |
+| assistant.message | `agentMessage` 条目；增量 `item/agentMessage/delta` | assistant 消息的 text block | 持久 `assistant/message`；增量 `assistant-stream` 的 `text-delta` |
+| reasoning | `reasoning` 条目；增量 `item/reasoning/summaryTextDelta` | thinking block | `assistant/message` 里的思考内容；增量 `reasoning-delta`【M5 核实完成态字段】 |
+| command | `commandExecution` 条目；输出 `item/commandExecution/outputDelta` | `Bash` tool_use + tool_result | `tool/call` + `tool/result`，工具名 `bash` |
+| file.read | M0 未出现独立条目，读文件走命令【M3 核实】 | `Read` / `Glob` / `Grep` | 工具名 `read`、`read_image`、`glob`、`grep` |
+| file.change | `fileChange` 条目；`item/fileChange/patchUpdated`、`turn/diff/updated` | `Edit` / `Write` / `MultiEdit`（由 input 生成 diff） | 工具名 `write`、`edit` |
+| tool.call | `mcpToolCall`、`webSearch` 等其余条目 | 其余 tool_use | 其余工具名 |
+| plan | `turn/plan/updated`、`item/plan/delta` | `TodoWrite` | `todo/write` 事件（工具名 `todo_write`，没有 `activeForm` 字段） |
+| approval.request | `item/commandExecution/requestApproval`、`item/fileChange/requestApproval` 等反向请求 | `canUseTool` | `$events` waterfall `approval/request` |
+| approval.resolved | 我方回复后生成 | 我方回复后生成 | `approval/decided`（历史）；我方回复后生成（实时） |
+| question | `item/tool/requestUserInput` | 【M4 核实是否有对应】 | `$events` waterfall `user-questions/request` |
+| usage | `thread/tokenUsage/updated` | `result` 里的 usage | `assistant-stream` 的 `usage` chunk |
+| turn.started | `turn/started` | 我方发送时生成 | `turn/start` |
+| turn.completed | `turn/completed`（`turn.status`） | `result` 消息 | `turn/end` |
+| internal | `thread/status/changed`、`account/rateLimits/updated`、`remoteControl/status/changed` 等 | 非 init 的 `system` 消息等 | `request/header`、`step/start`、`step/end`、`agent/inbox/spliced`、`session/end-seed`、`job/*`、`command/run`、`command/done` |
 | unknown | 其他 | 其他 | 其他 |
+
+- 标题类事件不进时间线，只用来更新会话标题（写侧边栏日志）：DSH `session/title`、Codex `thread/name/updated`。
+- Codex 的 `warning`、`configWarning`、`deprecationNotice` 显示为会话内提示条。
+- DSH 的 `ask_user_question` 工具调用不单独成卡：对应的提问卡片来自 `user-questions/request`，避免同一个提问出现两次。
 
 ---
 
@@ -572,11 +665,13 @@ export type EventKind =
 - 输入 `/`：只列出该 Agent 通过接口公开的原生命令（例如 Claude init 里的 slash commands），选中后原样插入；没有就不弹出。
 - 输入框下方一行统计（只显示 Agent 提供的字段）：轮数、步数、tok/s、总 token、缓存命中、上下文占用。
 
-| Agent | 访问模式（原生） |
-|---|---|
-| DSH | 仅可查看 / 工作区内修改 / 完全权限（DSH 界面上的原生选项，【已实测】） |
-| Codex | 按 `approvalPolicy` + `sandbox` 的原生组合【M0 核实】 |
-| Claude Code | 按 SDK `permissionMode` 的原生枚举【M0 核实】 |
+| Agent | 访问模式（原生） | 切换方式 |
+|---|---|---|
+| DSH | 仅可查看 `read-only` / 工作区内修改 `workspace-write` / 完全权限 `danger-full-access` / 自动审查（实验）`auto` | `/permission <preset>`（5.4.6），会话中途可改 |
+| Codex | `approvalPolicy`（`untrusted` / `on-request` / `never` / `granular`）× `sandbox`（`read-only` / `workspace-write` / `danger-full-access`）；界面提供与 Codex 自己的审批预设一致的几种组合【M3 核实确切组合】 | `thread/start` 参数；中途切换走 `thread/resume` 或 `turn/start` 的覆盖参数【M3 核实】 |
+| Claude Code | `default` 默认（每次询问）/ `acceptEdits` 自动接受编辑 / `plan` 计划模式 / `dontAsk` 不询问 / `auto` 自动 / `bypassPermissions` 跳过权限 | `setPermissionMode()`，会话中途可改 |
+
+界面显示中文名，旁边小字显示原生 id；默认值沿用各 Agent 用户配置里的设定。
 
 ### 9.7 停靠区（右侧）
 
@@ -650,13 +745,16 @@ DeepSeek 官方 API 同时原生支持 Responses API 和 Anthropic 格式（`htt
 
 ```bash
 WDCC_PROVIDER_KEY=<key> codex app-server \
-  -c 'model_provider="wdcc_<providerId>"' \
-  -c 'model_providers.wdcc_<providerId>={name="<名称>",base_url="<baseUrl>",wire_api="responses",env_key="WDCC_PROVIDER_KEY"}' \
-  -c 'model_catalog_json="<可选：模型元数据文件路径>"'
+  -c model_provider=wdcc_<providerId> \
+  -c 'model_providers.wdcc_<providerId>.name="<名称>"' \
+  -c 'model_providers.wdcc_<providerId>.base_url="<baseUrl>"' \
+  -c 'model_providers.wdcc_<providerId>.wire_api="responses"' \
+  -c 'model_providers.wdcc_<providerId>.env_key="WDCC_PROVIDER_KEY"' \
+  -c 'model_catalog_json="<模型元数据文件路径，非 OpenAI 模型必填>"'
 ```
 
-- 【M0 核实】app-server 是否接受 `-c` 及内联表的写法。不接受时的备选：`thread/start` 的 `modelProvider` 参数加配置覆盖参数（官方文档说明 thread/start 可以带配置覆盖），仍不得写用户的 config.toml。
-- 【M0 核实】是否还需要 DeepSeek 官方 Codex 配置里的 `preferred_auth_method`、`forced_login_method` 才能跳过 ChatGPT 登录检查；需要就加入 3.3 白名单。
+- 【已实测】app-server 接受上面的点路径写法；不需要 `preferred_auth_method`、`forced_login_method`，也不需要 `codex login`。
+- 非 OpenAI 模型务必提供 `model_catalog_json`，否则 Codex 用兜底元数据，下发的工具不同（5.2）。
 - DeepSeek 例：`base_url` 为 `https://api.deepseek.com/`，模型 `deepseek-flash`、`deepseek-v4-pro`；DeepSeek 官方提供的 `models.json` 由用户下载后在 Provider 里填路径，平台不编写其内容。
 
 **Claude Code**（SDK `options.env`）：
@@ -675,7 +773,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL=<model>
 
 ### 10.4 DSH 的 Provider
 
-- v1：DSH 的模型来自它自己（`session.models`），切换用 `session.selectModel`；Provider 在 DSH 自己的设置里管理。
+- v1：DSH 的模型来自它自己（`session/modelCatalog`），切换用 `session/selectModel`；Provider 在 DSH 自己的设置里管理，平台不调用 DSH 的 Provider、凭据相关端点。
 - 侧车是所有 DSH 会话共用的一个进程，所以不按会话注入环境变量。`DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY` 只在测试里用来接假模型（第 13 节）。
 
 ### 10.5 订阅登录与凭据
@@ -724,7 +822,7 @@ CREATE TABLE sessions (
 );
 CREATE TABLE events (
   session_id TEXT NOT NULL REFERENCES sessions(id), seq INTEGER NOT NULL,
-  turn_id TEXT NOT NULL, item_key TEXT NOT NULL, kind TEXT NOT NULL,
+  turn_id TEXT NOT NULL, item_key TEXT NOT NULL, kind TEXT NOT NULL, native_seq INTEGER,
   data TEXT NOT NULL, native TEXT, at TEXT NOT NULL,
   PRIMARY KEY (session_id, seq)
 ) WITHOUT ROWID;
@@ -763,7 +861,8 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 ### 12.3 部署
 
 - 单台 Linux 服务器，以用户自己的系统账号运行，各 Agent 读取该账号下的 `~/.codex`、`~/.claude`、`~/.dsh`。
-- 前置：Node 24；按 `docs/deploy.md` 锁定的版本全局安装 Codex CLI、`@deepseek-ai/dsh`；Claude Agent SDK 作为 npm 依赖随平台安装；需要原生登录的 CLI 在服务器上登录一次。
+- 前置：Node ≥ 24（锁定版本见 deploy.md）；按 deploy.md 锁定的版本全局安装 Codex CLI、`@deepseek-ai/dsh`；Claude Agent SDK 作为 npm 依赖随平台安装；需要原生登录的 CLI 在服务器上登录一次。
+- 部署前检查服务器：CPU 是否支持 AVX2（`grep -c avx2 /proc/cpuinfo`）；Landlock 是否完整生效。开发机上关于沙箱和审批触发的结论要在服务器上复核。
 - systemd unit 示例：`Restart=on-failure`，环境变量放 `EnvironmentFile`。
 - 启动：`pnpm build && node packages/server/dist/main.js`。
 
@@ -771,13 +870,15 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 
 ## 13. 测试设施：假模型服务
 
-为了不花 API 费用、又能端到端驱动三个原装 Agent，`packages/testing/mock-models` 提供两个按脚本回放的假模型服务。
+`packages/testing/mock-models`（M0 已实现）提供两个按脚本回放的假模型服务，不花 API 费用就能端到端驱动三个原装 Agent。
 
-- **mock-anthropic**：实现 `POST /v1/messages` 的 Anthropic Messages 流式格式（`message_start`、`content_block_start/delta/stop`（text / thinking / tool_use）、`message_delta`、`message_stop`），以及 `GET /models`（返回 `{ data: [{ id }] }`）。
-  - 驱动 DSH：侧车启动时设 `DEEPSEEK_BASE_URL=http://127.0.0.1:<port>`、`DEEPSEEK_API_KEY=任意值`。【已实测】DSH 0.2.2-rc.1 可这样驱动，能完整跑出思考、命令、读写文件、任务清单。
-  - 驱动 Claude Code：`ANTHROPIC_BASE_URL` 指向它。【M0 核实】Claude Code 还会请求哪些端点，未知端点记日志并返回 404。
-- **mock-responses**：实现 OpenAI Responses API 流式格式，供 Codex 自定义 Provider 使用【M0 核实事件类型】。
-- 脚本格式：`plan.json` 为数组，第 N 项是收到第 N 个工具结果之后要返回的内容块；按请求里的 `tools` 名称选工具（例如 DSH 的 `bash`、`read`、`write`、`edit`、`todo_write`）。
+- **mock-anthropic**：`POST /v1/messages`（Anthropic Messages 流式：`message_start`、`content_block_start/delta/stop`（thinking + `signature_delta`、text、tool_use + `input_json_delta`）、`message_delta`、`message_stop`），以及 `POST /v1/messages/count_tokens`、`GET /models`、`GET /v1/models`；未知端点返回 404 并记日志。
+  - 驱动 DSH：侧车启动时设 `DEEPSEEK_BASE_URL`、`DEEPSEEK_API_KEY`。【已实测】
+  - 驱动 Claude Code：`ANTHROPIC_BASE_URL`。【已实测】Claude Code 只请求 `POST /v1/messages` 和 `HEAD /api/hello`。
+- **mock-responses**：OpenAI Responses 流式事件（`response.created` … `response.completed`，序列见 protocol-notes §4.2），供 Codex 自定义 Provider 使用。【已实测】
+- **脚本格式**（`plans/*.json`）：数组，第 N 项是收到第 N 个工具结果后要回的内容块；`tool.kind` 只写语义（command / read / write / edit / todo / ask / patch），具体工具名按请求里的 `tools` 匹配；`alternatives` 处理不同 Agent 的同义工具，`inputByName` 处理同一工具在不同 Agent 下的不同参数名。
+- **审批用例**：DSH 要让脚本里的命令显式带 `sandbox_permissions` 和 `justification` 才会请求审批（5.4.5）；Codex 用 `approvalPolicy: 'untrusted'`；Claude Code 用 `permissionMode: 'default'` 下的 `Write` / `Edit`。
+- **Codex 模型元数据**：mock-responses 的模型要配 `model_catalog_json`（参照 DeepSeek 官方 Codex `models.json` 的格式，启用 `apply_patch` 和计划工具），否则 Codex 用兜底元数据，测不到 `fileChange` 和 `plan`。这是 M3 的前置步骤。
 - 所有 e2e 用例默认跑假模型；带真实 Key 的用例在没有 Key 时自动跳过。
 
 ---
@@ -786,7 +887,9 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 
 每个里程碑：新建分支 → 实现 → 跑对应验收 → `gh pr create`（描述里列出验收结果）→ 等用户合并。
 
-### M0 仓库、工具链与协议探针
+### M0 仓库、工具链与协议探针（已完成）
+
+结果见 `docs/protocol-notes.md`，v2.1 已据此修订本 SPEC。下面保留原步骤作记录。
 
 1. 确认 gh 已登录并创建仓库：
 
@@ -815,7 +918,8 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 1. `protocol` 包类型（第 5.1、6、7 节）；Fastify、Auth、SQLite 迁移（11.2）。
 2. 工作区、会话 CRUD；Event Store；侧边栏日志；命令日志与去重；Live Hub（hello、补差、快照、50 ms 合并增量、心跳）。
 3. File Store、可续传上传、`/files` 缓存头。
-4. `fake-adapter`：按 fixtures 回放，可注入延迟、乱序到达的增量、未知事件。
+4. `fake-adapter`：按 fixtures 回放，可注入延迟、乱序到达的增量、未知事件、内部事件。
+5. 确认前端构建链（Vite 等）不依赖 rolldown 原生二进制，在开发机上 `pnpm build` 能跑通（4.1 硬件限制）。
 
 **门槛：** A9、A10、A11 通过；A6 的服务端部分（6c、6d、6f）用脚本客户端通过。
 
@@ -830,7 +934,8 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 
 ### M3 CodexAdapter
 
-1. 实现 5.2，fixtures 单元测试，`native.spec.ts` 的 Codex 部分。
+1. 前置：给 mock-responses 配 `model_catalog_json`（第 13 节）重录 `fixtures/codex`，确认出现 `fileChange` 和 `turn/plan/updated`；核实 5.2、6.3、9.6 里标【M3 核实】的项，写进 protocol-notes。
+2. 实现 5.2，fixtures 单元测试，`native.spec.ts` 的 Codex 部分。
 
 **门槛：** 用 Codex 时 A1、A2 通过。
 
@@ -842,7 +947,8 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 
 ### M5 DshAdapter
 
-1. 侧车管理（启动、解析 token、健康检查、重启）与 5.4 的 Host API 驱动；`native.spec.ts` 的 DSH 部分。
+1. 前置：核实 5.4、6.3 里标【M5 核实】的项，写进 protocol-notes。
+2. 侧车管理（启动、解析 token、换 Cookie、健康检查、重启）；单条 `remote.mux` 复用 `$events` 和各会话的 `session/follow`；`$events/result` 回复审批，未处理的 waterfall 在打断、断开、释放时回 `cancelled`；`/permission` 访问模式；`nativeSeq` 去重与补齐（5.4.7）；`native.spec.ts` 的 DSH 部分。
 
 **门槛：** 用 DSH 时 A1、A2 通过。
 
@@ -866,8 +972,8 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 
 ## 15. 验收标准
 
-- [ ] **A1 三个 Agent 的基本能力（G1）**：DSH、Codex、Claude Code 各自都能：新建会话；逐字流式输出；看到命令、读文件、改文件、工具调用步骤；在网页上完成一次审批；打断一轮；重启平台后在同一会话继续，且 Agent 记得之前的上下文。先用假模型通过，再用真实模型各跑一遍。
-- [ ] **A2 原装（G1）**：`native.spec.ts` 全部通过；用结构化数据对比能力清单（Claude：init 里的 MCP servers 和 slash commands 与在同目录运行交互式 `claude` 时 `/mcp`、斜杠菜单一致；Codex：`skills/list`、`mcpServerStatus/list` 与同目录直接运行 `codex app-server` 的结果一致；DSH：与 DSH 自带网页端同一 workspace 新建会话的 preset、工具列表一致）；工作区放一个写有特殊约定的 AGENTS.md / CLAUDE.md，网页端里对应 Agent 遵守它。
+- [ ] **A1 三个 Agent 的基本能力（G1）**：DSH、Codex、Claude Code 各自都能：新建会话；逐字流式输出；看到命令、读文件、改文件、工具调用步骤；在网页上完成一次审批；打断一轮；重启平台后在同一会话继续，且 Agent 记得之前的上下文。先用假模型通过，再用真实模型各跑一遍。DSH 的审批用例按 5.4.5 由脚本显式请求提权；打断或关闭 DSH 会话时，未处理的审批都被回复 `cancelled`，DSH 不残留挂起的轮次。
+- [ ] **A2 原装（G1）**：`native.spec.ts` 全部通过；用结构化数据对比能力清单（Claude：init 里的 MCP servers 和 slash commands 与在同目录运行交互式 `claude` 时 `/mcp`、斜杠菜单一致；Codex：`skills/list`、`mcpServerStatus/list` 与同目录直接运行 `codex app-server` 的结果一致；DSH：平台建的会话所用 preset 与 Host API `agentPresets/read` 读到的一致，且模型拿到的工具列表与在 DSH 自带网页端同一 workspace 新建会话时一致；对比时先停掉 WebDCC 的侧车，避免两个 `dsh web` 同时运行）；工作区放一个写有特殊约定的 AGENTS.md / CLAUDE.md，网页端里对应 Agent 遵守它。
 - [ ] **A3 URL（G3）**：`/s/A`、`/s/A+B`、`/s/A?dock=diff:F`、`#e-{seq}` 在另一个已认证浏览器打开得到相同布局和内容；两个标签页同时打开同一会话，流式输出同步；流式中刷新不重复、不缺字；前进、后退能还原布局。
 - [ ] **A4 文件（G3）**：上传文件在刷新、服务重启、换设备后通过 `/files/{id}` 都能打开；响应带 `immutable` 缓存头和 ETag；无 Cookie 返回 401。
 - [ ] **A5 切换性能（G5）**：会话有 5,000 条事件。已缓存时，从另一个会话切过去到首屏内容出现 ≤ 150 ms；未缓存时首个请求只取 ≤ 200 条事件，首屏 ≤ 1 秒（RTT ≤ 100 ms）。Playwright 计时。
@@ -893,7 +999,9 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 | 风险 | 对策 |
 |---|---|
 | Codex app-server schema 不稳定 | 锁定版本；升级时重新 `generate-ts`，跑 fixtures；`probe()` 发现版本不一致时警告 |
-| DSH 处于开发者预览，Host API 是内部接口 | 锁定版本；fixtures；只调白名单方法；升级前先重跑 M0 探针 |
+| DSH 处于开发者预览，Host API 是内部接口且变化快（M0 发现早期社区资料已过时） | 以 `host-api-catalog.json` 为准；升级 DSH 时重新导出目录并与上一版 diff；只用 5.4.8 白名单；升级前重跑 M0 探针 |
+| DSH 每个 Cookie 只允许一条 WebSocket | adapter 只开一条 `remote.mux` 复用所有流；断开后整体重连并重开各流 |
+| 开发机或服务器 CPU 不支持 AVX2 | 构建、测试工具避开 rolldown 原生二进制；部署前检查 |
 | Claude Agent SDK 与 CLI 行为差异，`-p` 将来默认 bare 也可能波及 SDK | 3.2 固定选项 + A2 对比；锁定 SDK 版本；升级前重跑 A2 |
 | 访问 token 等同服务器 shell 权限 | 文档提示；token ≥ 32 字节；可随时更换 |
 | 多个会话同时改同一工作区 | v1 不加锁；侧边栏状态和"项目改动"让用户看清谁在改 |
@@ -932,6 +1040,7 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 | `dsh-running.png` | 运行中的轮次：步骤行、任务面板、目标条、右侧图片预览 |
 
 **接口与文档**
+- M0 核实笔记：`docs/protocol-notes.md`；DSH 端点目录：`fixtures/dsh/host-api-catalog.json`（本 SPEC 与它们冲突时以它们为准）
 - Codex app-server：https://developers.openai.com/codex/app-server
 - Codex app-server README：https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md
 - Codex app-server 协议录制样本（社区）：https://docs.rs/crate/anyagent/latest/source/tests/fixtures/codex/README.md
@@ -946,4 +1055,4 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 - DSH 界面框架尺寸规则：`packages/client/ui-layout/README.md`
 - DSH 浏览器连接层：`packages/client/connection/README.md`
 - DSH 文档基址与路由设计记录：`.agents/notes/implemented/architecture/2026-09-14-web-document-relative-app-routes.md`
-- 社区参考：通过 DSH Web Host API 接入 IDE：https://github.com/moshang-ca/deepseek-harness-for-ides
+- 社区参考：通过 DSH Web Host API 接入 IDE：https://github.com/moshang-ca/deepseek-harness-for-ides（描述的是 DSH 早期接口，已过时，以 host-api-catalog 为准）
