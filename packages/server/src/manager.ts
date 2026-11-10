@@ -1,5 +1,6 @@
 import type {
   AdapterEvent,
+  ProviderRuntimeConfig,
   AgentAdapter,
   AgentId,
   ApprovalDecision,
@@ -53,7 +54,10 @@ export class SessionManager {
 
   constructor(
     private readonly store: Store,
-    private readonly options: { idleDisposeMin: number },
+    private readonly options: {
+      idleDisposeMin: number;
+      resolveProvider?: (id: string | null) => ProviderRuntimeConfig | null;
+    },
   ) {}
 
   registerAdapter(adapter: AgentAdapter): void {
@@ -105,10 +109,12 @@ export class SessionManager {
       title: input.title ?? null,
     });
 
+    const provider = this.options.resolveProvider?.(input.providerId ?? null) ?? null;
     const created = await adapter.create({
       sessionId: session.id,
       cwd: workspace.path,
       providerId: input.providerId ?? null,
+      provider,
       ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
     });
@@ -161,6 +167,7 @@ export class SessionManager {
       sessionId: session.id,
       cwd: workspacePath,
       providerId: session.providerId ?? null,
+      provider: this.options.resolveProvider?.(session.providerId ?? null) ?? null,
       ...(session.model === undefined ? {} : { model: session.model }),
       ...(session.accessMode === undefined ? {} : { accessMode: session.accessMode }),
       nativeId: session.nativeId,

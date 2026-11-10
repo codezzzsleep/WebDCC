@@ -41,6 +41,41 @@ interface EventRow {
   at: string;
 }
 
+export interface ProviderRecord {
+  id: string;
+  name: string;
+  baseUrl: string;
+  protocols: string[];
+  models: string[];
+  codexCatalogPath: string | null;
+  secretRef: string;
+  createdAt: string;
+}
+
+interface ProviderDbRow {
+  id: string;
+  name: string;
+  base_url: string;
+  protocols: string;
+  models: string;
+  codex_catalog_path: string | null;
+  secret_ref: string;
+  created_at: string;
+}
+
+function toProviderRecord(row: ProviderDbRow): ProviderRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    baseUrl: row.base_url,
+    protocols: JSON.parse(row.protocols) as string[],
+    models: JSON.parse(row.models) as string[],
+    codexCatalogPath: row.codex_catalog_path,
+    secretRef: row.secret_ref,
+    createdAt: row.created_at,
+  };
+}
+
 interface FileRow {
   id: string;
   sha256: string;
@@ -210,6 +245,65 @@ export class Store {
     values.push(id);
     this.db.prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`).run(...values);
     return this.getSession(id);
+  }
+
+  // ---------- providers ----------
+  listProviders(): ProviderRecord[] {
+    return (this.db.prepare('SELECT * FROM providers ORDER BY created_at ASC').all() as ProviderDbRow[]).map(toProviderRecord);
+  }
+
+  getProvider(id: string): ProviderRecord | undefined {
+    const row = this.db.prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderDbRow | undefined;
+    return row === undefined ? undefined : toProviderRecord(row);
+  }
+
+  createProvider(input: {
+    id: string;
+    name: string;
+    baseUrl: string;
+    protocols: string[];
+    models: string[];
+    secretRef: string;
+    codexCatalogPath: string | null;
+  }): ProviderRecord {
+    const at = new Date().toISOString();
+    this.db
+      .prepare(
+        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(input.id, input.name, input.baseUrl, JSON.stringify(input.protocols), input.secretRef, JSON.stringify(input.models), input.codexCatalogPath, at);
+    return {
+      id: input.id,
+      name: input.name,
+      baseUrl: input.baseUrl,
+      protocols: input.protocols,
+      models: input.models,
+      codexCatalogPath: input.codexCatalogPath,
+      secretRef: input.secretRef,
+      createdAt: at,
+    };
+  }
+
+  updateProvider(
+    id: string,
+    patch: { name?: string; baseUrl?: string; protocols?: string[]; models?: string[]; codexCatalogPath?: string | null },
+  ): ProviderRecord | undefined {
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    if (patch.name !== undefined) { sets.push('name = ?'); values.push(patch.name); }
+    if (patch.baseUrl !== undefined) { sets.push('base_url = ?'); values.push(patch.baseUrl); }
+    if (patch.protocols !== undefined) { sets.push('protocols = ?'); values.push(JSON.stringify(patch.protocols)); }
+    if (patch.models !== undefined) { sets.push('models = ?'); values.push(JSON.stringify(patch.models)); }
+    if (patch.codexCatalogPath !== undefined) { sets.push('codex_catalog_path = ?'); values.push(patch.codexCatalogPath); }
+    if (sets.length > 0) {
+      values.push(id);
+      this.db.prepare(`UPDATE providers SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    }
+    return this.getProvider(id);
+  }
+
+  deleteProvider(id: string): void {
+    this.db.prepare('DELETE FROM providers WHERE id = ?').run(id);
   }
 
   // ---------- events ----------

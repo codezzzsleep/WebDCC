@@ -949,3 +949,110 @@ button {
     width: 100%;
   }
 }
+
+/* ---------- M6：Provider 页面 / 交接 / 提醒 ---------- */
+.page {
+  flex: 1;
+  overflow: auto;
+  padding: 32px 40px;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.page h1 {
+  font-size: 20px;
+  margin: 0 0 6px;
+}
+
+.page h2 {
+  font-size: 16px;
+  margin: 28px 0 10px;
+}
+
+.provider-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.provider-table th,
+.provider-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.provider-table .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.provider-form {
+  display: grid;
+  gap: 10px;
+  max-width: 620px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.modal.handoff {
+  width: 460px;
+}
+
+.handoff-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.handoff-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 7px 8px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 13.5px;
+}
+
+.handoff-item:hover {
+  background: #f0f2f5;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  background: #1f2328;
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  z-index: 80;
+  cursor: pointer;
+}
+
+.dock-notice {
+  padding: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.provider-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}

@@ -18,6 +18,7 @@ import type {
   WorkspaceDto,
 } from '@webdcc/protocol';
 import type { CommandDispatcher } from './dispatcher.js';
+import type { ProviderRegistry } from './providers.js';
 import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
@@ -25,6 +26,7 @@ import type { Store } from './store.js';
 
 export interface RouteDeps {
   store: Store;
+  providers: ProviderRegistry;
   files: FileStore;
   manager: SessionManager;
   hub: LiveHub;
@@ -227,6 +229,50 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const command = (body?.command ?? (body as unknown as Command)) as Command;
     if (typeof command?.clientCommandId !== 'string' || typeof command?.op !== 'string') throw badRequest('命令缺少 clientCommandId 或 op');
     return dispatcher.dispatch(command);
+  });
+
+  // ---------- providers / models ----------
+  app.get('/api/providers', async () => deps.providers.list());
+
+  app.post('/api/providers', async (request) => {
+    const body = request.body as { name?: string; baseUrl?: string; protocols?: string[]; models?: string[]; apiKey?: string; codexCatalogPath?: string };
+    if (typeof body?.name !== 'string' || typeof body?.baseUrl !== 'string') throw badRequest('需要 name 与 baseUrl');
+    return deps.providers.create({
+      name: body.name,
+      baseUrl: body.baseUrl,
+      protocols: Array.isArray(body.protocols) ? body.protocols : [],
+      models: Array.isArray(body.models) ? body.models : [],
+      ...(body.apiKey === undefined ? {} : { apiKey: body.apiKey }),
+      ...(body.codexCatalogPath === undefined ? {} : { codexCatalogPath: body.codexCatalogPath }),
+    });
+  });
+
+  app.patch('/api/providers/:id', async (request) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as Record<string, unknown>;
+    const updated = await deps.providers.update(id, {
+      ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
+      ...(typeof body['baseUrl'] === 'string' ? { baseUrl: body['baseUrl'] } : {}),
+      ...(Array.isArray(body['protocols']) ? { protocols: body['protocols'] as string[] } : {}),
+      ...(Array.isArray(body['models']) ? { models: body['models'] as string[] } : {}),
+      ...(typeof body['apiKey'] === 'string' ? { apiKey: body['apiKey'] } : {}),
+      ...(typeof body['codexCatalogPath'] === 'string' ? { codexCatalogPath: body['codexCatalogPath'] } : {}),
+    });
+    if (updated === undefined) throw Object.assign(new Error('Provider 不存在'), { statusCode: 404 });
+    return updated;
+  });
+
+  app.delete('/api/providers/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await deps.providers.remove(id);
+    return reply.status(204).send();
+  });
+
+  app.get('/api/models', async (request) => {
+    const query = request.query as { agent?: string; providerId?: string };
+    const agent = query.agent ?? '';
+    const providerId = query.providerId === undefined || query.providerId === '' ? null : query.providerId;
+    return { models: deps.providers.modelsFor(agent, providerId) };
   });
 
   // ---------- uploads ----------
