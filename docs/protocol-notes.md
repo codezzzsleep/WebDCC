@@ -331,6 +331,14 @@ Codex 侧的工具调用在 `input` 里以 `function_call_output` 项回传；�
 
 SPEC v2.1 把四项留给对应里程碑开工时核实。这一节把它们提前做完，结论可直接写回 SPEC。
 
+**证据文件**（都已入库，脚本可重跑当回归探针）：
+
+| 项 | 脚本 | 证据 |
+|---|---|---|
+| 7.1 Codex 访问模式 | `scripts/research-codex-presets.ts` | [fixtures/codex/permission-presets-research.json](../fixtures/codex/permission-presets-research.json) |
+| 7.2 / 7.3 DSH 提问与思考字段 | `scripts/research-dsh-question.ts` | [fixtures/dsh/question-research.json](../fixtures/dsh/question-research.json) |
+| 7.4 Claude 提问 | `scripts/research-claude-question.ts` | [fixtures/claude-code/question-research.json](../fixtures/claude-code/question-research.json) |
+
 ### 7.1 Codex 的访问模式（原【M3 核实】）
 
 **结构是三层，别混成一层。**

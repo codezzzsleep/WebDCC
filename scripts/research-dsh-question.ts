@@ -9,7 +9,7 @@
  *
  * 用法：npx tsx scripts/research-dsh-question.ts
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -17,7 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { startAnthropicMock } from '../packages/testing/mock-models/src/anthropic-server.js';
 import { DshHostClient, startSidecar, type StreamFrame } from './lib/dsh-host.js';
 import type { Plan } from '../packages/testing/mock-models/src/plan.js';
-import { createTempWorkspace, logLine, removeTempWorkspace } from './lib/fixtures.js';
+import { createTempWorkspace, logLine, removeTempWorkspace, sanitize } from './lib/fixtures.js';
 
 const PORT = 4131;
 
@@ -50,6 +50,8 @@ const PLAN: Plan = [
 
 interface Observation {
   waterfall?: Record<string, unknown>;
+  persistedAssistantMessage?: Record<string, unknown>;
+  persistedBlockTypes?: string[];
   resultOutcome?: unknown;
   answerOutcome?: unknown;
   toolCall?: Record<string, unknown>;
@@ -204,7 +206,14 @@ async function runOnce(mode: 'events-result' | 'answer-rpc', timed = false): Pro
     logLine(`[${mode}] session/page 里 assistant/message 条数：${persisted.length}`);
     if (persisted.length > 0) {
       const first = persisted[0] as { message?: { content?: unknown[] }; usage?: unknown };
-      const types = (first.message?.content ?? []).map((block) => (block as { type?: string }).type);
+      const types = (first.message?.content ?? [])
+        .map((block) => (block as { type?: string }).type)
+        .filter((type): type is string => type !== undefined);
+      obs.persistedBlockTypes = types;
+      obs.persistedAssistantMessage = {
+        message: first.message,
+        usage: first.usage,
+      };
       logLine(`[${mode}] 持久 assistant/message 的 content block 类型：${types.join(', ')}；usage=${JSON.stringify(first.usage)}`);
     }
 
@@ -221,6 +230,7 @@ async function runOnce(mode: 'events-result' | 'answer-rpc', timed = false): Pro
 }
 
 async function main(): Promise<void> {
+  const startedAt = new Date().toISOString();
   logLine('===== 实验 1：用 $events/result 回答提问 =====');
   const first = await runOnce('events-result');
   logLine(`tool/call: ${JSON.stringify(first.toolCall).slice(0, 400)}`);
@@ -241,6 +251,27 @@ async function main(): Promise<void> {
   logLine(`waterfall 带 wait：${JSON.stringify(third.waterfall?.['request']).slice(0, 400)}`);
   logLine(`userQuestions/answer 返回：${JSON.stringify(third.answerOutcome)}`);
   logLine(`tool/result: ${JSON.stringify(third.toolResult).slice(0, 500)}`);
+
+  // 证据落盘（脱敏后），供 spec 修订与回归对照
+  const artifact = {
+    generatedAt: startedAt,
+    environment: { dsh: '0.2.2-rc.1' },
+    question: 'user-questions/request 的关闭方式',
+    runs: [
+      { id: 'events-result', ...first },
+      { id: 'answer-rpc-legacy', ...second },
+      { id: 'answer-rpc-timed-patch-not-applied', ...third },
+    ],
+    conclusions: {
+      liveWaterfallHasWaitField: false,
+      closesViaEventsResult: true,
+      userQuestionsAnswerRequiresWaitCallId: true,
+      reasoningField: "assistant/message -> data.message.content[type='reasoning'].text",
+    },
+  };
+  await mkdir('fixtures/dsh', { recursive: true });
+  await writeFile('fixtures/dsh/question-research.json', `${JSON.stringify(sanitize(artifact), null, 2)}\n`, 'utf8');
+  logLine('证据已写入 fixtures/dsh/question-research.json');
 
   logLine('');
   logLine('===== 汇总 =====');

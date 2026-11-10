@@ -1,0 +1,1329 @@
+{
+  "generatedAt": "2026-11-10T20:57:09.765Z",
+  "environment": {
+    "dsh": "0.2.2-rc.1"
+  },
+  "question": "user-questions/request 的关闭方式",
+  "runs": [
+    {
+      "id": "events-result",
+      "assistantMessages": [
+        {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "reasoning",
+                "text": "需要问用户一个问题才能继续。"
+              },
+              {
+                "type": "text",
+                "text": "我需要确认一件事。"
+              },
+              {
+                "type": "tool-call",
+                "id": "toolu_mock_mwb687zm_1",
+                "name": "ask_user_question",
+                "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+              }
+            ],
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "replayState": {
+                "response": {
+                  "kind": "deepseek-messages",
+                  "version": 1,
+                  "model": "deepseek-flash"
+                },
+                "blocks": [
+                  {
+                    "type": "reasoning",
+                    "signature": "<redacted>"
+                  },
+                  {
+                    "type": "text"
+                  },
+                  {
+                    "type": "tool-call"
+                  }
+                ]
+              }
+            },
+            "id": "191d1a48-49eb-4d60-80c0-59de60df33a1"
+          },
+          "usage": {
+            "inputTokens": 128,
+            "outputTokens": 32,
+            "totalTokens": 160
+          },
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1794344234109,
+              "chunk": {
+                "type": "block-start",
+                "index": 0,
+                "blockType": "reasoning"
+              }
+            },
+            {
+              "type": "reasoning-chunks",
+              "time0": 1794344234110,
+              "index": 0,
+              "dt": [
+                0
+              ],
+              "texts": [
+                "需要问用户一个问题才能继",
+                "续。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234110,
+              "chunk": {
+                "type": "block-end",
+                "index": 0,
+                "block": {
+                  "type": "reasoning",
+                  "text": "需要问用户一个问题才能继续。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234110,
+              "chunk": {
+                "type": "block-start",
+                "index": 1,
+                "blockType": "text"
+              }
+            },
+            {
+              "type": "text-chunks",
+              "time0": 1794344234110,
+              "index": 1,
+              "dt": [],
+              "texts": [
+                "我需要确认一件事。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234110,
+              "chunk": {
+                "type": "block-end",
+                "index": 1,
+                "block": {
+                  "type": "text",
+                  "text": "我需要确认一件事。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234111,
+              "chunk": {
+                "type": "block-start",
+                "index": 2,
+                "blockType": "tool-call"
+              }
+            },
+            {
+              "type": "tool-call-chunks",
+              "time0": 1794344234111,
+              "index": 2,
+              "dt": [],
+              "id": "toolu_mock_mwb687zm_1",
+              "name": "ask_user_question",
+              "args": [
+                ""
+              ]
+            },
+            {
+              "type": "tool-call-chunks",
+              "time0": 1794344234111,
+              "index": 2,
+              "dt": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "id": "toolu_mock_mwb687zm_1",
+              "args": [
+                "{\"questions\":[{\"id\":\"q1\"",
+                ",\"header\":\"确认\",\"question",
+                "\":\"假模型在问：是否继续执行？\",\"optio",
+                "ns\":[{\"label\":\"继续\",\"desc",
+                "ription\":\"继续执行\"},{\"label",
+                "\":\"停止\",\"description\":\"停下",
+                "来\"}],\"multiSelect\":false",
+                "}]}"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234111,
+              "chunk": {
+                "type": "block-end",
+                "index": 2,
+                "block": {
+                  "type": "tool-call",
+                  "id": "toolu_mock_mwb687zm_1",
+                  "name": "ask_user_question",
+                  "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234112,
+              "chunk": {
+                "type": "usage",
+                "usage": {
+                  "inputTokens": 128,
+                  "outputTokens": 32,
+                  "totalTokens": 160
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234112,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "tool-calls"
+                },
+                "replayState": {
+                  "response": {
+                    "kind": "deepseek-messages",
+                    "version": 1,
+                    "model": "deepseek-flash"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "signature": "<redacted>"
+                    },
+                    {
+                      "type": "text"
+                    },
+                    {
+                      "type": "tool-call"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "turn": 1,
+          "step": 2,
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "收到答案，继续干活。"
+              }
+            ],
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "replayState": {
+                "response": {
+                  "kind": "deepseek-messages",
+                  "version": 1,
+                  "model": "deepseek-flash"
+                },
+                "blocks": [
+                  {
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "id": "f4e0e729-a856-4541-98b8-bf02ce21c768"
+          },
+          "usage": {
+            "inputTokens": 128,
+            "outputTokens": 32,
+            "totalTokens": 160
+          },
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1794344234183,
+              "chunk": {
+                "type": "block-start",
+                "index": 0,
+                "blockType": "text"
+              }
+            },
+            {
+              "type": "text-chunks",
+              "time0": 1794344234183,
+              "index": 0,
+              "dt": [],
+              "texts": [
+                "收到答案，继续干活。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234183,
+              "chunk": {
+                "type": "block-end",
+                "index": 0,
+                "block": {
+                  "type": "text",
+                  "text": "收到答案，继续干活。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234183,
+              "chunk": {
+                "type": "usage",
+                "usage": {
+                  "inputTokens": 128,
+                  "outputTokens": 32,
+                  "totalTokens": 160
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344234183,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                },
+                "replayState": {
+                  "response": {
+                    "kind": "deepseek-messages",
+                    "version": 1,
+                    "model": "deepseek-flash"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "toolCall": {
+        "turn": 1,
+        "step": 1,
+        "callId": "toolu_mock_mwb687zm_1",
+        "name": "ask_user_question",
+        "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+      },
+      "waterfall": {
+        "eventId": "723654dc-9007-4131-a32d-4724ee7760d6",
+        "agentId": "session-28202ccd-d50b-43b7-8929-ce0aa719a375",
+        "request": {
+          "questions": [
+            {
+              "id": "q1",
+              "question": "假模型在问：是否继续执行？",
+              "header": "确认",
+              "options": [
+                {
+                  "label": "继续",
+                  "description": "继续执行"
+                },
+                {
+                  "label": "停止",
+                  "description": "停下来"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "toolResult": {
+        "turn": 1,
+        "step": 1,
+        "message": {
+          "role": "tool",
+          "source": {
+            "kind": "tool",
+            "callId": "toolu_mock_mwb687zm_1"
+          },
+          "toolCallId": "toolu_mock_mwb687zm_1",
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"answers\":[{\"id\":\"q1\",\"selected\":[\"继续\"]}]}"
+            }
+          ],
+          "isError": false,
+          "id": "d01ce1b4-3c69-4ad3-9e0b-3b3620ab8ef5"
+        }
+      },
+      "resultOutcome": "ok",
+      "turnEnd": {
+        "turn": 1,
+        "reason": {
+          "kind": "completed"
+        }
+      },
+      "persistedBlockTypes": [
+        "reasoning",
+        "text",
+        "tool-call"
+      ],
+      "persistedAssistantMessage": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "reasoning",
+              "text": "需要问用户一个问题才能继续。"
+            },
+            {
+              "type": "text",
+              "text": "我需要确认一件事。"
+            },
+            {
+              "type": "tool-call",
+              "id": "toolu_mock_mwb687zm_1",
+              "name": "ask_user_question",
+              "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+            }
+          ],
+          "source": {
+            "kind": "model",
+            "provider": "deepseek-official",
+            "model": "deepseek-flash",
+            "replayState": {
+              "response": {
+                "kind": "deepseek-messages",
+                "version": 1,
+                "model": "deepseek-flash"
+              },
+              "blocks": [
+                {
+                  "type": "reasoning",
+                  "signature": "<redacted>"
+                },
+                {
+                  "type": "text"
+                },
+                {
+                  "type": "tool-call"
+                }
+              ]
+            }
+          },
+          "id": "191d1a48-49eb-4d60-80c0-59de60df33a1"
+        },
+        "usage": {
+          "inputTokens": 128,
+          "outputTokens": 32,
+          "totalTokens": 160
+        }
+      }
+    },
+    {
+      "id": "answer-rpc-legacy",
+      "assistantMessages": [
+        {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "reasoning",
+                "text": "需要问用户一个问题才能继续。"
+              },
+              {
+                "type": "text",
+                "text": "我需要确认一件事。"
+              },
+              {
+                "type": "tool-call",
+                "id": "toolu_mock_mwb68bje_4",
+                "name": "ask_user_question",
+                "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+              }
+            ],
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "replayState": {
+                "response": {
+                  "kind": "deepseek-messages",
+                  "version": 1,
+                  "model": "deepseek-flash"
+                },
+                "blocks": [
+                  {
+                    "type": "reasoning",
+                    "signature": "<redacted>"
+                  },
+                  {
+                    "type": "text"
+                  },
+                  {
+                    "type": "tool-call"
+                  }
+                ]
+              }
+            },
+            "id": "5533484e-de37-4fdf-8fce-f954c55c2804"
+          },
+          "usage": {
+            "inputTokens": 128,
+            "outputTokens": 32,
+            "totalTokens": 160
+          },
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1794344238707,
+              "chunk": {
+                "type": "block-start",
+                "index": 0,
+                "blockType": "reasoning"
+              }
+            },
+            {
+              "type": "reasoning-chunks",
+              "time0": 1794344238708,
+              "index": 0,
+              "dt": [
+                0
+              ],
+              "texts": [
+                "需要问用户一个问题才能继",
+                "续。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238709,
+              "chunk": {
+                "type": "block-end",
+                "index": 0,
+                "block": {
+                  "type": "reasoning",
+                  "text": "需要问用户一个问题才能继续。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238709,
+              "chunk": {
+                "type": "block-start",
+                "index": 1,
+                "blockType": "text"
+              }
+            },
+            {
+              "type": "text-chunks",
+              "time0": 1794344238709,
+              "index": 1,
+              "dt": [],
+              "texts": [
+                "我需要确认一件事。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238709,
+              "chunk": {
+                "type": "block-end",
+                "index": 1,
+                "block": {
+                  "type": "text",
+                  "text": "我需要确认一件事。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238709,
+              "chunk": {
+                "type": "block-start",
+                "index": 2,
+                "blockType": "tool-call"
+              }
+            },
+            {
+              "type": "tool-call-chunks",
+              "time0": 1794344238709,
+              "index": 2,
+              "dt": [],
+              "id": "toolu_mock_mwb68bje_4",
+              "name": "ask_user_question",
+              "args": [
+                ""
+              ]
+            },
+            {
+              "type": "tool-call-chunks",
+              "time0": 1794344238709,
+              "index": 2,
+              "dt": [
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "id": "toolu_mock_mwb68bje_4",
+              "args": [
+                "{\"questions\":[{\"id\":\"q1\"",
+                ",\"header\":\"确认\",\"question",
+                "\":\"假模型在问：是否继续执行？\",\"optio",
+                "ns\":[{\"label\":\"继续\",\"desc",
+                "ription\":\"继续执行\"},{\"label",
+                "\":\"停止\",\"description\":\"停下",
+                "来\"}],\"multiSelect\":false",
+                "}]}"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238710,
+              "chunk": {
+                "type": "block-end",
+                "index": 2,
+                "block": {
+                  "type": "tool-call",
+                  "id": "toolu_mock_mwb68bje_4",
+                  "name": "ask_user_question",
+                  "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238710,
+              "chunk": {
+                "type": "usage",
+                "usage": {
+                  "inputTokens": 128,
+                  "outputTokens": 32,
+                  "totalTokens": 160
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238711,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "tool-calls"
+                },
+                "replayState": {
+                  "response": {
+                    "kind": "deepseek-messages",
+                    "version": 1,
+                    "model": "deepseek-flash"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "signature": "<redacted>"
+                    },
+                    {
+                      "type": "text"
+                    },
+                    {
+                      "type": "tool-call"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "turn": 1,
+          "step": 2,
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "收到答案，继续干活。"
+              }
+            ],
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "replayState": {
+                "response": {
+                  "kind": "deepseek-messages",
+                  "version": 1,
+                  "model": "deepseek-flash"
+                },
+                "blocks": [
+                  {
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "id": "87c6bc78-eee9-4988-b632-809e82df5311"
+          },
+          "usage": {
+            "inputTokens": 128,
+            "outputTokens": 32,
+            "totalTokens": 160
+          },
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1794344238772,
+              "chunk": {
+                "type": "block-start",
+                "index": 0,
+                "blockType": "text"
+              }
+            },
+            {
+              "type": "text-chunks",
+              "time0": 1794344238772,
+              "index": 0,
+              "dt": [],
+              "texts": [
+                "收到答案，继续干活。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238772,
+              "chunk": {
+                "type": "block-end",
+                "index": 0,
+                "block": {
+                  "type": "text",
+                  "text": "收到答案，继续干活。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238772,
+              "chunk": {
+                "type": "usage",
+                "usage": {
+                  "inputTokens": 128,
+                  "outputTokens": 32,
+                  "totalTokens": 160
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344238772,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                },
+                "replayState": {
+                  "response": {
+                    "kind": "deepseek-messages",
+                    "version": 1,
+                    "model": "deepseek-flash"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "toolCall": {
+        "turn": 1,
+        "step": 1,
+        "callId": "toolu_mock_mwb68bje_4",
+        "name": "ask_user_question",
+        "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+      },
+      "waterfall": {
+        "eventId": "6ae8f868-d044-4e22-8f90-fcf30dfe1bba",
+        "agentId": "session-75d6d790-a152-4189-befd-3e2753dbec4e",
+        "request": {
+          "questions": [
+            {
+              "id": "q1",
+              "question": "假模型在问：是否继续执行？",
+              "header": "确认",
+              "options": [
+                {
+                  "label": "继续",
+                  "description": "继续执行"
+                },
+                {
+                  "label": "停止",
+                  "description": "停下来"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "answerOutcome": "waterfall 里没有 wait.callId，userQuestions/answer 无法定位这次提问",
+      "toolResult": {
+        "turn": 1,
+        "step": 1,
+        "message": {
+          "role": "tool",
+          "source": {
+            "kind": "tool",
+            "callId": "toolu_mock_mwb68bje_4"
+          },
+          "toolCallId": "toolu_mock_mwb68bje_4",
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"answers\":[{\"id\":\"q1\",\"selected\":[\"继续\"]}]}"
+            }
+          ],
+          "isError": false,
+          "id": "dbfff47a-2373-467a-9a03-35864cb7bc92"
+        }
+      },
+      "turnEnd": {
+        "turn": 1,
+        "reason": {
+          "kind": "completed"
+        }
+      },
+      "persistedBlockTypes": [
+        "reasoning",
+        "text",
+        "tool-call"
+      ],
+      "persistedAssistantMessage": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "reasoning",
+              "text": "需要问用户一个问题才能继续。"
+            },
+            {
+              "type": "text",
+              "text": "我需要确认一件事。"
+            },
+            {
+              "type": "tool-call",
+              "id": "toolu_mock_mwb68bje_4",
+              "name": "ask_user_question",
+              "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+            }
+          ],
+          "source": {
+            "kind": "model",
+            "provider": "deepseek-official",
+            "model": "deepseek-flash",
+            "replayState": {
+              "response": {
+                "kind": "deepseek-messages",
+                "version": 1,
+                "model": "deepseek-flash"
+              },
+              "blocks": [
+                {
+                  "type": "reasoning",
+                  "signature": "<redacted>"
+                },
+                {
+                  "type": "text"
+                },
+                {
+                  "type": "tool-call"
+                }
+              ]
+            }
+          },
+          "id": "5533484e-de37-4fdf-8fce-f954c55c2804"
+        },
+        "usage": {
+          "inputTokens": 128,
+          "outputTokens": 32,
+          "totalTokens": 160
+        }
+      }
+    },
+    {
+      "id": "answer-rpc-timed-patch-not-applied",
+      "assistantMessages": [
+        {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "reasoning",
+                "text": "需要问用户一个问题才能继续。"
+              },
+              {
+                "type": "text",
+                "text": "我需要确认一件事。"
+              },
+              {
+                "type": "tool-call",
+                "id": "toolu_mock_mwb68f19_7",
+                "name": "ask_user_question",
+                "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+              }
+            ],
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "replayState": {
+                "response": {
+                  "kind": "deepseek-messages",
+                  "version": 1,
+                  "model": "deepseek-flash"
+                },
+                "blocks": [
+                  {
+                    "type": "reasoning",
+                    "signature": "<redacted>"
+                  },
+                  {
+                    "type": "text"
+                  },
+                  {
+                    "type": "tool-call"
+                  }
+                ]
+              }
+            },
+            "id": "55c4df09-53ea-4553-9436-d1c9603e644e"
+          },
+          "usage": {
+            "inputTokens": 128,
+            "outputTokens": 32,
+            "totalTokens": 160
+          },
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1794344243238,
+              "chunk": {
+                "type": "block-start",
+                "index": 0,
+                "blockType": "reasoning"
+              }
+            },
+            {
+              "type": "reasoning-chunks",
+              "time0": 1794344243239,
+              "index": 0,
+              "dt": [
+                0
+              ],
+              "texts": [
+                "需要问用户一个问题才能继",
+                "续。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243240,
+              "chunk": {
+                "type": "block-end",
+                "index": 0,
+                "block": {
+                  "type": "reasoning",
+                  "text": "需要问用户一个问题才能继续。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243240,
+              "chunk": {
+                "type": "block-start",
+                "index": 1,
+                "blockType": "text"
+              }
+            },
+            {
+              "type": "text-chunks",
+              "time0": 1794344243240,
+              "index": 1,
+              "dt": [],
+              "texts": [
+                "我需要确认一件事。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243240,
+              "chunk": {
+                "type": "block-end",
+                "index": 1,
+                "block": {
+                  "type": "text",
+                  "text": "我需要确认一件事。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243240,
+              "chunk": {
+                "type": "block-start",
+                "index": 2,
+                "blockType": "tool-call"
+              }
+            },
+            {
+              "type": "tool-call-chunks",
+              "time0": 1794344243240,
+              "index": 2,
+              "dt": [],
+              "id": "toolu_mock_mwb68f19_7",
+              "name": "ask_user_question",
+              "args": [
+                ""
+              ]
+            },
+            {
+              "type": "tool-call-chunks",
+              "time0": 1794344243240,
+              "index": 2,
+              "dt": [
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "id": "toolu_mock_mwb68f19_7",
+              "args": [
+                "{\"questions\":[{\"id\":\"q1\"",
+                ",\"header\":\"确认\",\"question",
+                "\":\"假模型在问：是否继续执行？\",\"optio",
+                "ns\":[{\"label\":\"继续\",\"desc",
+                "ription\":\"继续执行\"},{\"label",
+                "\":\"停止\",\"description\":\"停下",
+                "来\"}],\"multiSelect\":false",
+                "}]}"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243241,
+              "chunk": {
+                "type": "block-end",
+                "index": 2,
+                "block": {
+                  "type": "tool-call",
+                  "id": "toolu_mock_mwb68f19_7",
+                  "name": "ask_user_question",
+                  "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243241,
+              "chunk": {
+                "type": "usage",
+                "usage": {
+                  "inputTokens": 128,
+                  "outputTokens": 32,
+                  "totalTokens": 160
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243241,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "tool-calls"
+                },
+                "replayState": {
+                  "response": {
+                    "kind": "deepseek-messages",
+                    "version": 1,
+                    "model": "deepseek-flash"
+                  },
+                  "blocks": [
+                    {
+                      "type": "reasoning",
+                      "signature": "<redacted>"
+                    },
+                    {
+                      "type": "text"
+                    },
+                    {
+                      "type": "tool-call"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "turn": 1,
+          "step": 2,
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "收到答案，继续干活。"
+              }
+            ],
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "replayState": {
+                "response": {
+                  "kind": "deepseek-messages",
+                  "version": 1,
+                  "model": "deepseek-flash"
+                },
+                "blocks": [
+                  {
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            "id": "6229c444-38b4-42b2-9135-98a2b08b8f44"
+          },
+          "usage": {
+            "inputTokens": 128,
+            "outputTokens": 32,
+            "totalTokens": 160
+          },
+          "stream": [
+            {
+              "type": "chunk",
+              "time": 1794344243310,
+              "chunk": {
+                "type": "block-start",
+                "index": 0,
+                "blockType": "text"
+              }
+            },
+            {
+              "type": "text-chunks",
+              "time0": 1794344243311,
+              "index": 0,
+              "dt": [],
+              "texts": [
+                "收到答案，继续干活。"
+              ]
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243311,
+              "chunk": {
+                "type": "block-end",
+                "index": 0,
+                "block": {
+                  "type": "text",
+                  "text": "收到答案，继续干活。"
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243311,
+              "chunk": {
+                "type": "usage",
+                "usage": {
+                  "inputTokens": 128,
+                  "outputTokens": 32,
+                  "totalTokens": 160
+                }
+              }
+            },
+            {
+              "type": "chunk",
+              "time": 1794344243311,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                },
+                "replayState": {
+                  "response": {
+                    "kind": "deepseek-messages",
+                    "version": 1,
+                    "model": "deepseek-flash"
+                  },
+                  "blocks": [
+                    {
+                      "type": "text"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "toolCall": {
+        "turn": 1,
+        "step": 1,
+        "callId": "toolu_mock_mwb68f19_7",
+        "name": "ask_user_question",
+        "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+      },
+      "waterfall": {
+        "eventId": "34412282-cb73-428b-9e9e-8f973db68bdf",
+        "agentId": "session-0f94adb7-91e2-4653-a24e-4f604489defe",
+        "request": {
+          "questions": [
+            {
+              "id": "q1",
+              "question": "假模型在问：是否继续执行？",
+              "header": "确认",
+              "options": [
+                {
+                  "label": "继续",
+                  "description": "继续执行"
+                },
+                {
+                  "label": "停止",
+                  "description": "停下来"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "answerOutcome": "waterfall 里没有 wait.callId，userQuestions/answer 无法定位这次提问",
+      "toolResult": {
+        "turn": 1,
+        "step": 1,
+        "message": {
+          "role": "tool",
+          "source": {
+            "kind": "tool",
+            "callId": "toolu_mock_mwb68f19_7"
+          },
+          "toolCallId": "toolu_mock_mwb68f19_7",
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"answers\":[{\"id\":\"q1\",\"selected\":[\"继续\"]}]}"
+            }
+          ],
+          "isError": false,
+          "id": "20185cd7-39cd-4470-8c14-ced0fde7d131"
+        }
+      },
+      "turnEnd": {
+        "turn": 1,
+        "reason": {
+          "kind": "completed"
+        }
+      },
+      "persistedBlockTypes": [
+        "reasoning",
+        "text",
+        "tool-call"
+      ],
+      "persistedAssistantMessage": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "reasoning",
+              "text": "需要问用户一个问题才能继续。"
+            },
+            {
+              "type": "text",
+              "text": "我需要确认一件事。"
+            },
+            {
+              "type": "tool-call",
+              "id": "toolu_mock_mwb68f19_7",
+              "name": "ask_user_question",
+              "arguments": "{\"questions\":[{\"id\":\"q1\",\"header\":\"确认\",\"question\":\"假模型在问：是否继续执行？\",\"options\":[{\"label\":\"继续\",\"description\":\"继续执行\"},{\"label\":\"停止\",\"description\":\"停下来\"}],\"multiSelect\":false}]}"
+            }
+          ],
+          "source": {
+            "kind": "model",
+            "provider": "deepseek-official",
+            "model": "deepseek-flash",
+            "replayState": {
+              "response": {
+                "kind": "deepseek-messages",
+                "version": 1,
+                "model": "deepseek-flash"
+              },
+              "blocks": [
+                {
+                  "type": "reasoning",
+                  "signature": "<redacted>"
+                },
+                {
+                  "type": "text"
+                },
+                {
+                  "type": "tool-call"
+                }
+              ]
+            }
+          },
+          "id": "55c4df09-53ea-4553-9436-d1c9603e644e"
+        },
+        "usage": {
+          "inputTokens": 128,
+          "outputTokens": 32,
+          "totalTokens": 160
+        }
+      }
+    }
+  ],
+  "conclusions": {
+    "liveWaterfallHasWaitField": false,
+    "closesViaEventsResult": true,
+    "userQuestionsAnswerRequiresWaitCallId": true,
+    "reasoningField": "assistant/message -> data.message.content[type='reasoning'].text"
+  }
+}
