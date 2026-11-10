@@ -304,12 +304,16 @@ Codex 侧的工具调用在 `input` 里以 `function_call_output` 项回传；�
 | 6 | §5.4 DSH | 两个 `dsh web` 共用 `DSH_HOME` 是否安全 | **不建议**：会话有 flock，全局注册表会互相覆盖 | §1.9 |
 | 7 | §6.3 | DSH `file.read` 条目类型 | 没有独立条目类型；按 `tool/call` 的 `data.name`（`read`/`read_image`/`glob`/`grep`）映射 | §1.8 |
 | 8 | §6.3 | DSH usage | `assistant-stream` 的 `chunk.type='usage'` | §1.8 |
-| 9 | §9.6 Codex | `approvalPolicy` + `sandbox` 原生组合 | `untrusted|on-request|never|granular` × `read-only|workspace-write|danger-full-access` | §2.4 |
+| 9 | §9.6 Codex | `approvalPolicy` + `sandbox` 原生组合 | 三层：`permissionProfile/list` 三档 × `approvalPolicy` × `approvalsReviewer`；注意 `turn/start` 的字段叫 `sandboxPolicy`（结构化） | §2.4、§7.1 |
 | 10 | §9.6 Claude | `permissionMode` 原生枚举 | `default|acceptEdits|bypassPermissions|plan|dontAsk|auto` | `sdk.d.ts:2599` |
 | 11 | §10.3 Codex | app-server 是否接受 `-c` 及内联表 | **接受**，主方案可用 | §2.1 |
 | 12 | §10.3 Codex | 是否需要 `preferred_auth_method`/`forced_login_method` | **不需要**（自定义 Provider + `env_key`） | §2.1 |
 | 13 | §13 | Claude Code 还会请求哪些端点 | 只有 `/v1/messages` 与 `HEAD /api/hello` | §3.3 |
 | 14 | §13 | mock-responses 需要实现哪些事件类型 | 见 §4.2 | 探针实跑 |
+| 15 | §9.6 Codex（原【M3 核实】） | 访问预设的确切组合 | 三层：`permissionProfile/list` 档位 × `approvalPolicy` × `approvalsReviewer`；`turn/start` 用 `sandboxPolicy`（对象） | §7.1 |
+| 16 | §5.4 / §6.3 DSH（原【M5 核实】） | 提问用哪个接口关闭 | 实时提问只能用 `$events/result`；`userQuestions/answer` 只用于计时模式的迟到作答 | §7.2 |
+| 17 | §6.3 DSH（原【M5 核实】） | 思考内容在完成态的字段 | `assistant/message` → `data.message.content[type='reasoning'].text` | §7.3 |
+| 18 | §5.3 / §6.3 Claude（原【M4 核实】） | 有没有和"提问"对应的消息 | 有：`AskUserQuestion` 走 `canUseTool`，答案写 `updatedInput.answers`（key=题干原文） | §7.4 |
 
 ---
 
@@ -319,3 +323,177 @@ Codex 侧的工具调用在 `input` 里以 `function_call_output` 项回传；�
 - **M5（DshAdapter）**：直接照 [host-api-catalog.json](../fixtures/dsh/host-api-catalog.json) 实现，`respond()` 走 `$events/result`，访问模式走 `commands/execute` 的 `/permission`。
 - **M6（Provider）**：Codex 只需 `-c`；Claude 只需 `env`；DSH 的 provider 走它自己的设置（`llm/listProviders`），平台不碰。
 - **A6 的审批用例**：DSH 必须让模型显式传 `sandbox_permissions` 才会 ask；本容器 Landlock 只 partial enforcement，靠沙箱拒绝触发审批不可靠。
+- **M3/M4/M5 的前置核实已提前完成**（见 §7）：Codex 访问模式改为"档位 × 审批策略 × 审批人"三层，热切换用 `turn/start` 覆盖；DSH 提问只用 `$events/result`；DSH 思考取 `assistant/message` 的 reasoning 块；Claude 提问走 `canUseTool('AskUserQuestion')`。SPEC 对应段落需要按 §7 修订。
+
+---
+
+## 7. 里程碑核实项（M3/M4/M5 的待核实项，已提前核实）
+
+SPEC v2.1 把四项留给对应里程碑开工时核实。这一节把它们提前做完，结论可直接写回 SPEC。
+
+### 7.1 Codex 的访问模式（原【M3 核实】）
+
+**结构是三层，别混成一层。**
+
+1. **权限档位（服务端权威）**：`permissionProfile/list` 返回 `data:[{id, description, allowed}]` + `nextCursor`。内置三档 `:read-only` / `:workspace` / `:danger-full-access`，`description` 恒为 `null`（描述文案是客户端硬编码的）。用户在 `config.toml` 写 `[permissions.<id>]` 会多出第四项（实测 `custom-web`），**所以 UI 不能把档位硬编码成三个**。
+2. **TUI 的三个快捷 preset**：内部 key 是 `read-only` / `auto` / `full-access`，分别落到上面三个档位。
+   ⚠️ **界面文案不叫 "Auto"**：0.167.0 的二进制里没有任何独立的 `Auto` 标签，`auto` 对应的用户可见文案是 **"Approve for me"**（来自 `approvals_reviewer="auto_review"`）。`Read Only`、`Full Access` 两个字面量存在。
+3. **两个正交轴**：`approvalPolicy`（要不要问）× `approvalsReviewer`（问谁）。
+
+**字段陷阱（最要命的一条）：**
+
+| 方法 | 沙箱字段 | 类型 |
+|---|---|---|
+| `thread/start` / `thread/resume` | `sandbox` | 字符串枚举 `read-only \| workspace-write \| danger-full-access` |
+| `turn/start` | **`sandboxPolicy`** | 结构化对象 `{type:'readOnly',networkAccess:boolean}` / `{type:'workspaceWrite',writableRoots,networkAccess,...}` / `{type:'dangerFullAccess'}` |
+
+在 `turn/start` 上写 `sandbox` 会被**静默忽略**（没有报错）。`TurnStartParams.ts` 的注释写明这三个覆盖是 "this turn and subsequent turns"。
+
+**实测矩阵**（线程初始 `never` + `workspace-write`，假模型每轮发一条 `exec_command`）：
+
+| 轮次 | turn/start 覆盖 | 收到的审批请求 | 命令是否执行 | 判定 |
+|---|---|---|---|---|
+| C1 | 无 | 0 | 是 | never 不问 |
+| C2 | `approvalPolicy:'untrusted'` | 1 | 是 | untrusted 会问 |
+| C3 | 无（继承） | 1 | 是 | **覆盖延续到后续轮** |
+| C4 | `approvalPolicy:'never'` | 0 | 是 | 可改回 |
+| C5 | `sandboxPolicy:{type:'readOnly'}` | 0 | 否（连 commandExecution 条目都没有） | 结构化覆盖生效 |
+
+**其他实测结论：**
+- **默认值**：不传任何访问模式字段时，`thread/start` 回显 `approvalPolicy='on-request'`、`approvalsReviewer='user'`、`sandbox={type:'readOnly',networkAccess:false}`。
+- **`untrusted` 已被配置层删除**：`-c approval_policy="untrusted"` 会让 Codex 直接启动失败（`approval_policy = "untrusted" is no longer supported`），`codex -a untrusted` 也只剩 `[on-request, never]`。但它作为 `thread/start` / `turn/start` 的**参数**仍被接受并真实生效（C2），所以只能走参数。
+- **`--full-auto` 已删除**（`codex --full-auto` → `unexpected argument`，二进制里零命中），替代品是 `--approve-for-me`（别名 `--not-so-yolo`）= `on-request` + `workspace-write` + `auto_review`。
+- **`thread/resume` 的覆盖只在冷恢复那一次有效**：线程已被当前 app-server 加载时，resume 会把参数静默丢弃、原样返回线程当前状态（实测 D1/D2 被忽略，F2a 冷启动生效、F2b 再次 resume 又被忽略）。**热切换一律用 `turn/start` 覆盖。**
+- **`granular` 需要实验能力**：`initialize` 必须声明 `capabilities:{experimentalApi:true}`，否则 `thread/start` 报 `askForApproval.granular requires experimentalApi capability`。当前 adapter 的 `capabilities` 是 `null`。
+- **`approvalsReviewer` 取值**：`user | auto_review | guardian_subagent`，默认 `user`。含义是"问谁"：`user` 发给我们的界面，`auto_review` 先交给一个审查子代理做风险判定（界面叫 "Approve for me"）。**如果用户自己在 `config.toml` 里配了 `auto_review`，我们又不显式传 `user`，审批请求会被子代理吞掉、弹窗永远收不到。**
+- `turn/settings/updated` 通知在这套流程里不会触发，**不能靠它确认模式已生效**，只能看 `turn/start` 的返回值或实际行为。
+
+**建议的界面映射（供拍板）：**
+
+| 中文名 | 原生 id | 组合 |
+|---|---|---|
+| 只读 | `:read-only` | `approvalPolicy:'on-request'` + `sandbox:'read-only'` |
+| 工作区可写 | `:workspace` | `approvalPolicy:'on-request'` + `sandbox:'workspace-write'` |
+| 工作区可写 + 自动审批 | `:workspace` + `auto_review` | 上一行 + `approvalsReviewer:'auto_review'` |
+| 完全访问 | `:danger-full-access` | `approvalPolicy:'never'` + `sandbox:'danger-full-access'` |
+
+**仍不确定的一点**：`full-access` 这个 TUI 快捷是否强制把 `approvalPolicy` 设成 `never`。字符串描述写的是"without asking for approval"，但只证明了档位本身不动审批策略。建议按 `never` 实现，M3 用真 TUI 目视核对一次。
+
+### 7.2 DSH 提问用哪个接口关闭（原【M5 核实】）
+
+**结论：默认配置下只有 `$events/result` 能关闭提问；`userQuestions/answer` 是"计时模式"下迟到作答用的，不能关闭实时提问。**
+
+证据：
+- 默认的 `ask_user_question` 工具（`$DSH/dsh-tool-ask-user/lib/index.js:296-320`）调用 `ctx.userQuestions.ask({questions, agent, signal})`，**不传 `wait`**；只有 `mode: timed` 的版本会传 `wait:{callId, timed:true}`（`dsh-user-questions/lib/index.js:631-638`）。
+- 实测（`scripts/research-dsh-question.ts`）：waterfall `user-questions/request` 的 request 里**没有 `wait` 字段**；用 `$events/result` 回 `{kind:'result', value:{answers:[{id:'q1',selected:['继续']}]}}` 后，`tool/result` 的 content 是 `{"answers":[{"id":"q1","selected":["继续"]}]}`、`isError:false`，`turn/end` 正常 `completed`。
+- `userQuestions/answer` 需要 `wait.callId` 定位（`{agentId, callId, answer}`），实时提问没有 `wait` → 该 RPC 报"定位不到这次提问"。
+- 计时模式下前台等待超时后，工具返回 `{pending:true, callId}`，此时用户仍可通过 `userQuestions/answer`（或 `userQuestions/attachWait` 认领）作答，答案以 `answer_to_pending_question` 用户消息回到会话。
+
+adapter 规则：
+- 收到 `user-questions/request` 就把它记成待办；用户作答后**一律**用 `$events/result` 回 `{answers:[{id, selected:[label], custom?}]}`。
+- 若 request 里带 `wait.callId`（用户开了计时模式），额外记住 `callId`：只有当我们的 UI 选择"稍后回答"时才走 `userQuestions/answer`。
+- 打断 / 断开 / 释放会话时，未回答的提问和审批一样要回 `cancelled`，否则 DSH 那一轮会一直挂着。
+
+### 7.3 DSH 完成态里的思考内容（原【M5 核实】）
+
+字段在**持久事件 `assistant/message` 的 `data.message.content[]`** 里，按块类型区分：
+
+```json
+{
+  "turn": 1, "step": 1,
+  "message": {
+    "role": "assistant",
+    "content": [
+      { "type": "reasoning", "text": "……思考……" },
+      { "type": "text", "text": "……正文……" },
+      { "type": "tool-call", "id": "toolu_…", "name": "bash", "arguments": "{\"command\":\"…\"}" }
+    ],
+    "source": { "kind": "model", "provider": "deepseek-official", "model": "deepseek-flash", "replayState": {…} },
+    "id": "…"
+  },
+  "usage": { "inputTokens": 128, "outputTokens": 32, "totalTokens": 160 },
+  "stream": [ … 压缩后的增量记录，仅回放用 … ]
+}
+```
+
+- 思考 = `content[]` 里 `type === 'reasoning'` 的 `text`。
+- 正文 = `content[]` 里 `type === 'text'` 的 `text`。
+- 工具调用也在这条消息的 `content[]` 里（`type === 'tool-call'`，`arguments` 是 **JSON 字符串**），与独立的 `tool/call` 事件内容一致。
+- `usage` 在 `data.usage`（camelCase：`inputTokens` / `outputTokens` / `totalTokens`）。
+- `session/page` 读到的持久记录与 `session/follow` 的帧**同形**（实测两处都是 `reasoning, text, tool-call`）。
+- 实时增量走 `assistant-stream` 的 `reasoning-delta` / `text-delta`；`assistant/message` 是完成态，用它覆盖增量累积。
+
+### 7.4 Claude Code 的提问机制（原【M4 核实】）
+
+**结论：有提问，但它走的是权限通道，不是独立回调。**
+
+`AskUserQuestion` 是内置工具（`sdk.d.ts:216` 的 `BUILTIN_TOOL_NAMES` 里有它）。模型发出后，CLI 调：
+
+```ts
+canUseTool('AskUserQuestion',
+  { questions: [{ question, header, options: [{ label, description, preview? }], multiSelect }] },
+  { toolUseID, requestId, requiresUserInteraction: true, signal, displayName: 'AskUserQuestion', suggestions: [] })
+```
+
+宿主把答案写回 `PermissionResult` 的 `updatedInput`，CLI 再生成 tool_result 给模型，结构化结果挂在 user 消息的 `tool_use_result`。
+
+- **`onUserDialog` / `request_user_dialog` 存在但不走这条**：即使挂了 `onUserDialog` 并在 `supportedDialogKinds` 里声明 `permission_ask_user_question`，14 个变体实测一次都没触发。它是给"远端渲染 client / worker"的总线（`sdk.d.ts:1589/1848/10445`）。
+- **必须传 `canUseTool`**：不传时 CLI 直接把 `AskUserQuestion` 从工具表摘掉（init 工具 27 → 24），模型调用得到 `No such tool available: AskUserQuestion. AskUserQuestion is disabled for this session`。
+
+**问题结构**（`sdk-tools.d.ts:1127` + 实测）：
+
+```
+questions: 1..4 题，每题 {
+  question: string        // 题干；同一次调用内唯一（CLI 强制）
+  header: string          // 短标签，≤12 字符
+  options: 2..4 × { label, description, preview? }
+  multiSelect: boolean
+}
+```
+
+**答案结构**（回填 `updatedInput`）：
+
+```ts
+{
+  behavior: 'allow',
+  updatedInput: {
+    ...原 input,                     // 必须带原 questions，否则 schema 校验失败（实测）
+    answers: { [题干原文]: string | string[] },
+    annotations?: { [题干原文]: { notes?: string; preview?: string; unanswered?: 'skipped'|'replied_in_chat'|'dismissed' } }
+  }
+}
+```
+
+实测踩到的两条硬规则：
+1. **`updatedInput` 必须带原 `questions`**，只回 `{answers}` 会被判 `updatedInput must satisfy the tool's input schema`。
+2. **不得改动 questions 文本**：改了不报错，但那道题的答案会被静默丢弃（answers 按原题干匹配）。
+
+**各访问模式**（全部实测）：
+
+| permissionMode | 工具在不在 | canUseTool | 模型结果 |
+|---|---|---|---|
+| `default` / `acceptEdits` / `plan` / `auto` | 在 | 调用 | 正常问答 |
+| `dontAsk` | 在 | **不调用** | 先 `system/permission_denied`，tool_result 是拒绝文案 + `is_error` |
+| 不传 `canUseTool` | **不在**（27→24） | — | `No such tool available` |
+
+**打断**：提问挂起时 `query.interrupt()` 会让 `options.signal` 立即 abort（实测 4ms），本轮以 `error_during_execution` 结束、没有 tool_result。
+
+**与另外两家对齐**：
+
+| 维度 | DSH | Codex | Claude |
+|---|---|---|---|
+| 到达方式 | `$events` waterfall `user-questions/request` | `item/tool/requestUserInput` 反向请求 | `canUseTool('AskUserQuestion', …)` |
+| 问题 id | 有 `id` | 有 | **没有 id**，我方自造（建议 `${requestId}:${index}`） |
+| 答案 | 选 label | `{answers}` | `updatedInput.answers`，**key 是题干原文** |
+| 跳过 | 有 | 有 | `annotations[题干].unanswered='skipped'`（本版本 capability `ask_user_question_unanswered_v1` 在） |
+| 取消整卡 | 有 | 有 | `{behavior:'deny'}`；`deny + interrupt:true` 才结束本轮 |
+
+**实现要点**：
+- 按题发 `question` 事件，`questionId = ${requestId}:${index}`，带 `header / options / multiSelect / toolCallId(=toolUseID)`；**不要为这个 tool_use 再发 `tool.call`**，否则同一提问出现两张卡（与 DSH `ask_user_question` 的去重规则一致）。
+- 一次调用的多道题要**攒齐再一次性 resolve**，不能一题一次 resolve。
+- 用户关闭卡片 → `deny`；`deny + interrupt` 才是"结束本轮"（`deny` 单独用时模型通常会换个说法再问）。
+- 自由文本答案被完全接受，不限于 options 里的 label → 三家都能做"其他"输入框。
+
+### 7.5 假模型的一个坑（对所有探针都适用）
+
+Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools: []`、只有 1 条 message），mock-anthropic 的 plan 第 0 步会回给它但被 CLI 丢弃；真正的对话请求是第 2 个（13 个工具，含 `AskUserQuestion`）。做"第 N 次模型调用"的断言时要跳过首包。DSH 与 Codex 没有这个现象（实测）。

@@ -1,0 +1,4264 @@
+{
+  "runs": [
+    {
+      "id": "default-answer",
+      "permissionMode": "default",
+      "decision": "answer",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb637ng_2",
+            "requestId": "08450d2e-fc48-4d53-b396-1256aaa2f27f",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb637ng_2",
+          "content": "The user answered: \"要用哪个库做日期格式化？\"=\"dayjs\" notes: 选 dayjs 因为体积小, \"要启用哪些能力？\"=\"i18n,timezone\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb637ng_2",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb637ng_2",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "dayjs",
+              "要启用哪些能力？": [
+                "i18n",
+                "timezone"
+              ]
+            },
+            "annotations": {
+              "要用哪个库做日期格式化？": {
+                "notes": "选 dayjs 因为体积小"
+              }
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "default-deny",
+      "permissionMode": "default",
+      "decision": "deny",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb638sf_5",
+            "requestId": "2aaebf13-6843-4449-9889-dd1d20d3fb10",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb638sf_5",
+          "is_error": true,
+          "content": "用户取消了这次提问（WebDCC 调研脚本）"
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb638sf_5",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb638sf_5",
+          "value": "Error: 用户取消了这次提问（WebDCC 调研脚本）"
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "no-canusetool",
+      "permissionMode": "default",
+      "decision": "answer",
+      "canUseToolCalls": [],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 12,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 12,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb639w3_8",
+          "is_error": true,
+          "content": "<tool_use_error>Error: No such tool available: AskUserQuestion. AskUserQuestion is disabled for this session, in subagents as well as here.</tool_use_error>"
+        }
+      ],
+      "notes": [
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb639w3_8",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb639w3_8",
+          "value": "Error: No such tool available: AskUserQuestion. AskUserQuestion is disabled for this session, in subagents as well as here."
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterWorktree",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "dontAsk",
+      "permissionMode": "dontAsk",
+      "decision": "answer",
+      "canUseToolCalls": [],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63az2_11",
+          "is_error": true,
+          "content": "Permission to use AskUserQuestion has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, e.g. do not use your ability to run tests to execute non-test actions. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed."
+        }
+      ],
+      "notes": [
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63az2_11",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63az2_11",
+          "value": "Error: Permission to use AskUserQuestion has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, e.g. do not use your ability to run tests to execute non-test actions. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed."
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "permission_denied",
+          "detail": {
+            "subtype": "permission_denied",
+            "tool_name": "AskUserQuestion",
+            "message": "Permission to use AskUserQuestion has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, e.g. do not use your ability to run tests to execute non-test actions. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.",
+            "tool_use_id": "toolu_mock_mwb63az2_11",
+            "__all": {
+              "type": "system",
+              "subtype": "permission_denied",
+              "tool_name": "AskUserQuestion",
+              "tool_use_id": "toolu_mock_mwb63az2_11",
+              "decision_reason_type": "mode",
+              "message": "Permission to use AskUserQuestion has been denied because Claude Code is running in don't ask mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, e.g. do not use your ability to run tests to execute non-test actions. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.",
+              "uuid": "3da3586a-b53e-43e2-bbee-cf55416c81c5",
+              "session_id": "0b7cd473-dc39-4bcb-bcef-380232ceea07"
+            }
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "system/permission_denied",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "auto",
+      "permissionMode": "auto",
+      "decision": "answer",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63c13_14",
+            "requestId": "8d2a0c6e-5e41-4ccb-b50c-1fdee3be0028",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63c13_14",
+          "content": "The user answered: \"要用哪个库做日期格式化？\"=\"dayjs\" notes: 选 dayjs 因为体积小, \"要启用哪些能力？\"=\"i18n,timezone\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63c13_14",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63c13_14",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "dayjs",
+              "要启用哪些能力？": [
+                "i18n",
+                "timezone"
+              ]
+            },
+            "annotations": {
+              "要用哪个库做日期格式化？": {
+                "notes": "选 dayjs 因为体积小"
+              }
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "informational",
+          "detail": {
+            "subtype": "informational",
+            "level": "warning",
+            "content": "We're changing auto mode to no longer charge for classifier requests in Claude Code. However, this session isn't eligible because your requests go through 127.0.0.1:4125, which isn't compatible with this update. Nothing breaks: auto mode keeps working, and its classifier requests are billed as before. To fix it and access the new version of auto mode, ask your gateway to implement: https://code.claude.com/docs/en/auto-mode-classifier-billing",
+            "__all": {
+              "type": "system",
+              "subtype": "informational",
+              "content": "We're changing auto mode to no longer charge for classifier requests in Claude Code. However, this session isn't eligible because your requests go through 127.0.0.1:4125, which isn't compatible with this update. Nothing breaks: auto mode keeps working, and its classifier requests are billed as before. To fix it and access the new version of auto mode, ask your gateway to implement: https://code.claude.com/docs/en/auto-mode-classifier-billing",
+              "isMeta": false,
+              "timestamp": "2026-11-10T20:53:26.092Z",
+              "uuid": "48fd1b14-87c7-43a2-8319-3b81bd801b03",
+              "level": "warning",
+              "session_id": "f300baa8-c51b-422e-9463-44d99f2ed2c5"
+            }
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "system/informational",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "allow-no-answers",
+      "permissionMode": "default",
+      "decision": "allow-no-answers",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63dax_17",
+            "requestId": "0d4245e1-b52b-42c8-9f24-9eb65871df79",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63dax_17",
+          "content": "The user did not answer the questions."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63dax_17",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63dax_17",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {}
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "answer-unanswered",
+      "permissionMode": "default",
+      "decision": "answer-with-unanswered",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63elu_20",
+            "requestId": "a89b2bef-cc27-4797-b74f-472df1516b4b",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63elu_20",
+          "content": "Your questions have been answered: \"要用哪个库做日期格式化？\"=\"dayjs\". You can now continue with these answers in mind."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63elu_20",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63elu_20",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "dayjs"
+            },
+            "annotations": {
+              "要启用哪些能力？": {
+                "unanswered": "skipped"
+              }
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "answer-unknown-key",
+      "permissionMode": "default",
+      "decision": "answer-unknown-key",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63fq8_23",
+            "requestId": "178d7737-91c6-4566-8ef9-7fa094ee131c",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63fq8_23",
+          "content": "Your questions have been answered: \"要用哪个库做日期格式化？\"=\"dayjs\", \"要启用哪些能力？\"=\"i18n,timezone\". You can now continue with these answers in mind."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63fq8_23",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63fq8_23",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "dayjs",
+              "要启用哪些能力？": [
+                "i18n",
+                "timezone"
+              ],
+              "这道题不存在": "x"
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "answer-custom-text",
+      "permissionMode": "default",
+      "decision": "answer-custom-text",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63gus_26",
+            "requestId": "9c7eee81-b311-440b-b5db-df5e1aed9c92",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63gus_26",
+          "content": "The user answered: \"要用哪个库做日期格式化？\"=\"用 Temporal，别用这两个库\", \"要启用哪些能力？\"=\"i18n\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63gus_26",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63gus_26",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "用 Temporal，别用这两个库",
+              "要启用哪些能力？": [
+                "i18n"
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "answer-without-questions",
+      "permissionMode": "default",
+      "decision": "answer-without-questions",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63hxp_29",
+            "requestId": "4f64d444-f43d-4a8c-8c54-f4f40b923258",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63hxp_29",
+          "is_error": true,
+          "content": "<tool_use_error>The permission handler returned updatedInput for AskUserQuestion that failed schema validation: AskUserQuestion failed due to the following issue:\nThe required parameter `questions` is missing\nThis is a configuration issue in your canUseTool callback, PermissionRequest hook, or permission-prompt tool — updatedInput must satisfy the tool's input schema. The tool input from the model was valid.</tool_use_error>"
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63hxp_29",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63hxp_29",
+          "value": "InputValidationError: permission handler updatedInput failed schema for AskUserQuestion"
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "answer-altered-question",
+      "permissionMode": "default",
+      "decision": "answer-altered-question",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63izu_32",
+            "requestId": "a7267ad2-21ba-4eb0-8296-26164875c736",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63izu_32",
+          "content": "Your questions have been answered: \"要启用哪些能力？\"=\"i18n,timezone\". You can now continue with these answers in mind."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63izu_32",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63izu_32",
+          "value": {
+            "questions": [
+              {
+                "question": "被改写的问题？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "dayjs",
+              "要启用哪些能力？": [
+                "i18n",
+                "timezone"
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "plan-mode",
+      "permissionMode": "plan",
+      "decision": "answer",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63k2y_35",
+            "requestId": "caea93a1-39c7-4e2f-960b-851f765b4659",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63k2y_35",
+          "content": "The user answered: \"要用哪个库做日期格式化？\"=\"dayjs\" notes: 选 dayjs 因为体积小, \"要启用哪些能力？\"=\"i18n,timezone\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63k2y_35",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63k2y_35",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "dayjs",
+              "要启用哪些能力？": [
+                "i18n",
+                "timezone"
+              ]
+            },
+            "annotations": {
+              "要用哪个库做日期格式化？": {
+                "notes": "选 dayjs 因为体积小"
+              }
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "informational",
+          "detail": {
+            "subtype": "informational",
+            "level": "warning",
+            "content": "We're changing auto mode to no longer charge for classifier requests in Claude Code. However, this session isn't eligible because your requests go through 127.0.0.1:4133, which isn't compatible with this update. Nothing breaks: auto mode keeps working, and its classifier requests are billed as before. To fix it and access the new version of auto mode, ask your gateway to implement: https://code.claude.com/docs/en/auto-mode-classifier-billing",
+            "__all": {
+              "type": "system",
+              "subtype": "informational",
+              "content": "We're changing auto mode to no longer charge for classifier requests in Claude Code. However, this session isn't eligible because your requests go through 127.0.0.1:4133, which isn't compatible with this update. Nothing breaks: auto mode keeps working, and its classifier requests are billed as before. To fix it and access the new version of auto mode, ask your gateway to implement: https://code.claude.com/docs/en/auto-mode-classifier-billing",
+              "isMeta": false,
+              "timestamp": "2026-11-10T20:53:36.523Z",
+              "uuid": "6709d7dd-4b9e-44a1-b892-1a860837fdce",
+              "level": "warning",
+              "session_id": "de7bb209-586b-4838-9c7f-d414a8bf8a6c"
+            }
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "system/informational",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "acceptEdits-mode",
+      "permissionMode": "acceptEdits",
+      "decision": "answer",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63l5s_38",
+            "requestId": "aa8a1802-f276-4944-bbf7-11bd3c8a9df8",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        },
+        {
+          "index": 2,
+          "tools": 13,
+          "messages": 4,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63l5s_38",
+          "content": "The user answered: \"要用哪个库做日期格式化？\"=\"dayjs\" notes: 选 dayjs 因为体积小, \"要启用哪些能力？\"=\"i18n,timezone\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say."
+        }
+      ],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63l5s_38",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63l5s_38",
+          "value": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "answers": {
+              "要用哪个库做日期格式化？": "dayjs",
+              "要启用哪些能力？": [
+                "i18n",
+                "timezone"
+              ]
+            },
+            "annotations": {
+              "要用哪个库做日期格式化？": {
+                "notes": "选 dayjs 因为体积小"
+              }
+            }
+          }
+        }
+      ],
+      "result": {
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2,
+        "result": "收到用户回答，继续。"
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "assistant",
+        "result/success"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    },
+    {
+      "id": "deny-interrupt",
+      "permissionMode": "default",
+      "decision": "deny-interrupt",
+      "canUseToolCalls": [
+        {
+          "toolName": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          },
+          "optionKeys": [
+            "signal",
+            "suggestions",
+            "blockedPath",
+            "decisionReason",
+            "title",
+            "displayName",
+            "description",
+            "defaultToNo",
+            "suppressAlwaysAllowRule",
+            "toolUseID",
+            "agentID",
+            "requestId",
+            "requiresUserInteraction"
+          ],
+          "options": {
+            "displayName": "AskUserQuestion",
+            "toolUseID": "toolu_mock_mwb63mfm_41",
+            "requestId": "2c020034-d441-4815-a52e-7f1c51a925dc",
+            "requiresUserInteraction": true,
+            "suggestions": 0
+          }
+        }
+      ],
+      "userDialogCalls": [],
+      "requestTools": [],
+      "firstRequestKeys": [
+        "model",
+        "messages",
+        "system",
+        "tools",
+        "metadata",
+        "max_tokens",
+        "output_config",
+        "stream"
+      ],
+      "firstToolsDebug": {
+        "type": "array",
+        "length": 0,
+        "sample": []
+      },
+      "requestSummaries": [
+        {
+          "index": 0,
+          "tools": 0,
+          "messages": 1,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.8e7; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": []
+        },
+        {
+          "index": 1,
+          "tools": 13,
+          "messages": 2,
+          "systemPrefix": "x-anthropic-billing-header: cc_version=2.1.322.f4c; cc_entrypoint=sdk-ts; You ar",
+          "toolNames": [
+            "Agent",
+            "AskUserQuestion",
+            "Bash",
+            "Edit",
+            "ListAgents",
+            "Read",
+            "ReportFindings",
+            "ScheduleWakeup",
+            "Skill",
+            "ToolSearch",
+            "Workflow",
+            "DeferredToolPlaceholder",
+            "Write"
+          ]
+        }
+      ],
+      "toolResults": [],
+      "notes": [
+        "canUseTool(AskUserQuestion) 被调用",
+        "未知端点：HEAD /api/hello",
+        "请求里的工具数=0，含 AskUserQuestion=false",
+        "没有录到 tool_result：模型可能没跑完一轮"
+      ],
+      "toolUses": [
+        {
+          "name": "AskUserQuestion",
+          "id": "toolu_mock_mwb63mfm_41",
+          "input": {
+            "questions": [
+              {
+                "question": "要用哪个库做日期格式化？",
+                "header": "Library",
+                "options": [
+                  {
+                    "label": "date-fns",
+                    "description": "函数式，按需引入"
+                  },
+                  {
+                    "label": "dayjs",
+                    "description": "体积小，API 接近 moment"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "question": "要启用哪些能力？",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "i18n",
+                    "description": "多语言"
+                  },
+                  {
+                    "label": "timezone",
+                    "description": "时区"
+                  },
+                  {
+                    "label": "iso",
+                    "description": "ISO 周"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      ],
+      "toolUseResults": [
+        {
+          "tool_use_id": "toolu_mock_mwb63mfm_41",
+          "value": "User rejected tool use"
+        }
+      ],
+      "result": {
+        "subtype": "error_during_execution",
+        "is_error": true,
+        "num_turns": 3
+      },
+      "systemEvents": [
+        {
+          "subtype": "init",
+          "detail": {
+            "subtype": "init"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        },
+        {
+          "subtype": "thinking_tokens",
+          "detail": {
+            "subtype": "thinking_tokens"
+          }
+        }
+      ],
+      "messageSequence": [
+        "system/init",
+        "system/thinking_tokens",
+        "system/thinking_tokens",
+        "assistant",
+        "assistant",
+        "user",
+        "user",
+        "result/error_during_execution"
+      ],
+      "initTools": [
+        "Task",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "DesignSync",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "ListAgents",
+        "Monitor",
+        "NotebookEdit",
+        "PushNotification",
+        "Read",
+        "ReportFindings",
+        "ScheduleWakeup",
+        "SendMessage",
+        "Skill",
+        "TaskStop",
+        "ToolSearch",
+        "WebFetch",
+        "WebSearch",
+        "Workflow",
+        "Write"
+      ],
+      "capabilities": [
+        "interrupt_receipt_v1",
+        "interrupt_cancel_queued_v1",
+        "interrupt_send_now_v1",
+        "interrupt_requeue_taken_v1",
+        "msg_lifecycle_v1",
+        "request_marker_lists_v1",
+        "ask_user_question_unanswered_v1",
+        "lifecycle_wakeup_source_v1",
+        "sdk_mcp_tools_list_changed",
+        "sdk_mcp_manifests",
+        "mcp_read_resource_v1",
+        "mcp_tool_ui_meta_v1",
+        "ui_surface_v1",
+        "mcp_call_result_not_for_model_v1",
+        "mcp_call_check_permissions_v1"
+      ]
+    }
+  ],
+  "interrupt": {
+    "called": true,
+    "toolName": "AskUserQuestion",
+    "toolUseID": "toolu_mock_mwb63nik_42",
+    "canUseToolCalled": true,
+    "signalAborted": true,
+    "abortReason": "AbortError: This operation was aborted",
+    "interruptTookMs": 4,
+    "result": {
+      "subtype": "error_during_execution",
+      "is_error": true
+    },
+    "toolResults": []
+  }
+}
