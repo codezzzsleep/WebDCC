@@ -41,7 +41,8 @@ for (let i = 0; i < 120; i += 1) {
     const { readFileSync: readTools } = await import('node:fs');
     try {
       const lines = readTools(mockRecord, 'utf8').trim().split('\n');
-      const first = JSON.parse(lines[0]) as { body?: { tools?: { name?: string; type?: string }[] } };
+      const firstLine = lines[0] ?? '{}';
+      const first = JSON.parse(firstLine) as { body?: { tools?: { name?: string; type?: string }[] } };
       console.log('模型拿到的工具:', (first.body?.tools ?? []).map((tool) => tool.name ?? tool.type).join(', '));
     } catch (error) {
       console.log('读取工具列表失败', String(error));

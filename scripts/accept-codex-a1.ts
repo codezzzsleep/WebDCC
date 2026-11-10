@@ -42,9 +42,7 @@ const server = await start(
 );
 
 /** 自动批准所有未处理的审批（untrusted 模式下每条命令都会问） */
-let autoApprove = true;
 const autoTimer = setInterval(() => {
-  if (!autoApprove) return;
   void (async () => {
     for (const event of server.store.allEvents(session.id)) {
       if (event.kind !== 'approval.request') continue;
