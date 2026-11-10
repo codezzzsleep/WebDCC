@@ -37,7 +37,7 @@
 | A6a/6b/6e | **通过**（6a 慢网流式可见且界面可操作；6b 断网 30s 后时间线与服务端一致；6e 离线刷新应用外壳可用） |
 | A12 截图 | 已完成，`docs/acceptance/M2/`（11 张：新会话页、收起/展开轮次、轨迹、@ 菜单、停靠区文件/diff/会话、审批卡片、手机视图） |
 
-## M4 进度（进行中）
+## M4 进度（完成，已合并 PR #5）
 
 | 项 | 状态 |
 |---|---|
@@ -46,6 +46,13 @@
 | A2（Claude） | ✅（`scripts/accept-claude-a2.ts`）：项目 `.mcp.json` 加载（wdccecho connected）、hooks 生效、51 个斜杠命令、28 个工具 |
 | native.spec（Claude 部分） | ✅ 4 个断言：preset 系统提示词、settingSources、无 mcpServers/hooks/agents/allowedTools、六档 permissionMode 透传 |
 | 接入生产组装点 | 已接入（`WDCC_ENABLE_CLAUDE=0` 可关闭） |
+
+## M5 进度（进行中）
+
+| 项 | 状态 |
+|---|---|
+| 侧车客户端（启动/解析 token/换 Cookie/RPC 信封/remote.mux 多路复用） | 已移植到 `packages/adapters/dsh/src/host.ts`，typecheck 通过 |
+| DshAdapter 本体（会话/工作区映射、session/follow、审批与提问、/permission、nativeSeq） | 待实现 |
 
 ## M3 进度（完成，已合并 PR #4）
 

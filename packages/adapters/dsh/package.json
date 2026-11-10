@@ -9,5 +9,12 @@
   },
   "scripts": {
     "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.22.2"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2",
+    "@webdcc/protocol": "workspace:*"
   }
 }

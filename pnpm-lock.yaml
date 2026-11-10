@@ -218,7 +218,18 @@ importers:
         specifier: workspace:*
         version: link:../../protocol
 
-  packages/adapters/dsh: {}
+  packages/adapters/dsh:
+    dependencies:
+      ws:
+        specifier: ^8.22.2
+        version: 8.22.2
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+      '@webdcc/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
 
   packages/protocol: {}
 
