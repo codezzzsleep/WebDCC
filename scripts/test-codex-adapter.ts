@@ -12,14 +12,15 @@ import { start } from '../packages/server/src/main.js';
 import type { Plan } from '../packages/testing/mock-models/src/plan.js';
 
 const plan = JSON.parse(readFileSync('packages/testing/mock-models/plans/probe.json', 'utf8')) as Plan;
-const mock = await startResponsesMock({ plan, port: 0, log: () => undefined });
+const mockRecord = '/tmp/wdcc-codex-tools.jsonl';
+const mock = await startResponsesMock({ plan, port: 0, log: () => undefined, recordPath: mockRecord });
 const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-codex-e2e-'));
 const workspace = await mkdtemp(join(tmpdir(), 'wdcc-codex-ws-'));
 const codexHome = await mkdtemp(join(tmpdir(), 'wdcc-codex-home-'));
 
 const configOverrides = [
   'model_provider=wdcc_mock',
-  'model="mock-responses-1"',
+  'model="gpt-5"',
   'model_providers.wdcc_mock.name="WDCC mock"',
   `model_providers.wdcc_mock.base_url="${mock.url}/v1"`,
   'model_providers.wdcc_mock.wire_api="responses"',
@@ -37,6 +38,14 @@ for (let i = 0; i < 120; i += 1) {
   if (done) {
     const kinds = [...new Set(events.map((event) => event.kind))];
     console.log('事件数', events.length, 'kind:', kinds.join(', '));
+    const { readFileSync: readTools } = await import('node:fs');
+    try {
+      const lines = readTools(mockRecord, 'utf8').trim().split('\n');
+      const first = JSON.parse(lines[0]) as { body?: { tools?: { name?: string; type?: string }[] } };
+      console.log('模型拿到的工具:', (first.body?.tools ?? []).map((tool) => tool.name ?? tool.type).join(', '));
+    } catch (error) {
+      console.log('读取工具列表失败', String(error));
+    }
     console.log('审批', events.filter((event) => event.kind === 'approval.request').length, '条');
     await server.close();
     await mock.close();

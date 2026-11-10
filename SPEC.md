@@ -946,7 +946,7 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 - **mock-responses**：OpenAI Responses 流式事件（`response.created` … `response.completed`，序列见 protocol-notes §4.2），供 Codex 自定义 Provider 使用。【已实测】
 - **脚本格式**（`plans/*.json`）：数组，第 N 项是收到第 N 个工具结果后要回的内容块；`tool.kind` 只写语义（command / read / write / edit / todo / ask / patch），具体工具名按请求里的 `tools` 匹配；`alternatives` 处理不同 Agent 的同义工具，`inputByName` 处理同一工具在不同 Agent 下的不同参数名。
 - **审批用例**：DSH 要让脚本里的命令显式带 `sandbox_permissions` 和 `justification` 才会请求审批（5.4.5）；Codex 用 `approvalPolicy: 'untrusted'`；Claude Code 用 `permissionMode: 'default'` 下的 `Write` / `Edit`。
-- **Codex 模型元数据**：mock-responses 的模型要配 `model_catalog_json`（参照 DeepSeek 官方 Codex `models.json` 的格式，启用 `apply_patch` 和计划工具），否则 Codex 用兜底元数据，测不到 `fileChange` 和 `plan`。这是 M3 的前置步骤。
+- **Codex 模型元数据【已实测】**：`model_catalog_json` 的自定义条目必须带 `base_instructions` 或 `model_messages.instructions_template`，否则 Codex 拒绝启动；填它等于平台提供系统提示词，违反 R1。因此 v1 不使用自定义 catalog，Codex 用自带元数据；`fileChange` / `turn/plan/updated` 在假模型下不会出现，相关映射仍按 6.3 实现，等真实模型或未来版本再验。
 - **一个坑【已实测】**：Claude Code 的第一个 `POST /v1/messages` 是预热/配额请求（`tools: []`、只有 1 条 message），plan 第 0 步会回给它但被 CLI 丢弃；真正的对话请求是第 2 个。做"第 N 次模型调用"的断言要跳过首包。
 - **审批用例**：DSH 要让脚本里的命令显式带 `sandbox_permissions` 和 `justification` 才触发审批；Codex 用 `approvalPolicy:'untrusted'`；Claude Code 用 `permissionMode:'default'` 下的 `Write` / `Edit`。
 - 所有 e2e 用例默认跑假模型；带真实 Key 的用例在没有 Key 时自动跳过。
@@ -1004,7 +1004,7 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 
 ### M3 CodexAdapter
 
-1. 前置：给 mock-responses 配 `model_catalog_json`（第 13 节）重录 `fixtures/codex`，确认出现 `fileChange` 和 `turn/plan/updated`。访问模式已提前核实（protocol-notes §7.1）：档位来自 `permissionProfile/list`、中途切换用 `turn/start` 的 `sandboxPolicy`（结构化）、`resume` 只在冷恢复生效、`untrusted` 只能作参数、`granular` 需要 `experimentalApi`（v1 不提供）。
+1. 前置【已实测，结论已修订】：`model_catalog_json` 的自定义模型条目**必须**带 `base_instructions` 或 `model_messages.instructions_template`，否则 Codex 拒绝启动（`model ... is missing both ...`）。填写这两个字段等于由平台提供系统提示词，违反 R1，因此**不使用自定义 catalog**；改用 Codex 自带模型元数据。代价是 Codex 只下发 `exec_command` 等工具，不产生 `fileChange` 与 `turn/plan/updated`，adapter 按 5.2/6.3 的"两种情况"处理（只有 `commandExecution` 时如实显示为命令）。重录 `fixtures/codex` 以确认真实条目集合。访问模式已提前核实（protocol-notes §7.1）：档位来自 `permissionProfile/list`、中途切换用 `turn/start` 的 `sandboxPolicy`（结构化）、`resume` 只在冷恢复生效、`untrusted` 只能作参数、`granular` 需要 `experimentalApi`（v1 不提供）。
 2. 实现 5.2，fixtures 单元测试，`native.spec.ts` 的 Codex 部分。
 
 **门槛：** 用 Codex 时 A1、A2 通过。

@@ -509,3 +509,11 @@ Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools
 ### 7.6 一条实现约定（M1 定下）
 
 `assistant.message.phase` 的归属：**adapter 负责**在 turn 结束前把该轮最后一条助手消息标为 `final`，manager 不修改已落库的事件（seq 日志保持不可变）。M3–M5 实现真实 adapter 时按此约定：无法判断"最后一条"时，把最后一条 `assistant.message` 的 `item.complete` 推迟到 `turn.completed` 之前发出。
+
+### 7.7 Codex `model_catalog_json` 与 R1 的冲突（M3 核实）
+
+- 自定义模型条目**必须**带 `base_instructions` 或 `model_messages.instructions_template`，否则 Codex 直接拒绝启动：
+  `failed to parse model_catalog_json ...: model "mock-responses-1" is missing both "base_instructions" and "model_messages.instructions_template"`。
+- 其他必填字段：`supported_in_api`、`priority`、`visibility`、`description`、`display_name`、`shell_type`、`apply_patch_tool_type`、`truncation_policy`、`input_modalities`、`context_window`、`max_context_window`、`default_reasoning_level`（字符串）、`supported_reasoning_levels`（`{effort, description}`）、`supports_reasoning_summaries`、`web_search_tool_type`、`experimental_supported_tools`（数组）。
+- 填 `base_instructions` 就是由平台提供系统提示词，违反 R1。**结论：v1 不用自定义 catalog**，用 Codex 内置模型元数据。
+- 用内置元数据（`gpt-5`）实测下发的工具：`exec_command`、`write_stdin`、`view_image`、`request_user_input`、`get_goal`/`create_goal`/`update_goal`、`spawn_agent`/`send_input`/`resume_agent`/`wait_agent`/`close_agent`、`web_search` —— **没有 `apply_patch`、没有 `update_plan`**，因此假模型下不会出现 `fileChange` 与 `turn/plan/updated`。
