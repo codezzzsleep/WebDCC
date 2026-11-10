@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export const TOKEN = 'e2e-token-0123456789abcdef0123456789';
 

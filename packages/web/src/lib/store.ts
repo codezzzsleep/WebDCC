@@ -85,11 +85,13 @@ export class AppStore {
   }
 
   async init(): Promise<void> {
+    performance.mark('wdcc:init-start');
     const cached = await cache.getSessions().catch(() => [] as CachedSession[]);
     for (const session of cached) this.sessions.set(session.id, session as SessionMeta);
     this.feedSeq = (await cache.getMeta<number>('feedSeq').catch(() => 0)) ?? 0;
     this.notify();
     this.connection.start();
+    performance.mark('wdcc:init-end');
   }
 
   subscribe(listener: () => void): () => void {
@@ -257,6 +259,7 @@ export class AppStore {
       for (const event of cached) map.set(event.seq, event);
       this.events.set(sessionId, map);
     }
+    performance.mark('wdcc:ensure-start');
     let serverLastSeq: number | undefined;
     if (this.sessions.has(sessionId) === false) {
       try {
@@ -268,6 +271,7 @@ export class AppStore {
         // 会话可能已删除；保持现状
       }
     }
+    performance.mark('wdcc:detail-done');
     const localMax = this.maxSeq(sessionId);
     // 没有缓存时只取最近 200 条，并从服务端最新的 seq 开始订阅：不整段重拉（SPEC 7.5 / A5）
     if ((this.events.get(sessionId)?.size ?? 0) === 0 && serverLastSeq !== undefined && serverLastSeq > 0) {
@@ -281,6 +285,7 @@ export class AppStore {
       const cursor = Math.max(serverLastSeq, localMax);
       this.cursors.set(sessionId, cursor);
       this.connection.subscribe(sessionId, cursor);
+      performance.mark('wdcc:events-done');
     } else {
       const cursor = Math.max(this.cursors.get(sessionId) ?? 0, localMax);
       this.cursors.set(sessionId, cursor);

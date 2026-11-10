@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRootRoute, createRoute, createRouter, Outlet, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import type { MetaResponse, WorkspaceDto } from '@webdcc/protocol';
+import type { AgentMeta, MetaResponse, WorkspaceDto } from '@webdcc/protocol';
 import { api } from './lib/api.js';
 import { useStoreVersion } from './lib/hooks.js';
 import { store } from './lib/store.js';
@@ -206,7 +206,6 @@ function SessionPage(): React.ReactElement {
             <Composer
               sessionId={mainId}
               workspaceId={session?.workspaceId ?? ''}
-              agent={session?.agent ?? 'dsh'}
               meta={metaFor(session?.agent ?? 'dsh')}
             />
           </>
@@ -232,7 +231,7 @@ function SessionPage(): React.ReactElement {
 }
 
 let metaCache: MetaResponse | null = null;
-function metaFor(agent: string): import('@webdcc/protocol').AgentMeta | undefined {
+function metaFor(agent: string): AgentMeta | undefined {
   if (metaCache === null) {
     void api.meta().then((meta) => {
       metaCache = meta;

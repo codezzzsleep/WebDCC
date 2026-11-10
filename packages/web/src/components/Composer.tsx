@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentMeta, FsListResponse, FsReadResponse } from '@webdcc/protocol';
+import type { AgentMeta } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
@@ -8,7 +8,6 @@ import { agentInfo } from '../lib/format.js';
 interface ComposerProps {
   sessionId: string;
   workspaceId: string;
-  agent: string;
   meta?: AgentMeta;
   onSend?: (text: string) => void;
 }
@@ -19,7 +18,7 @@ interface MentionState {
   start: number;
 }
 
-export function Composer({ sessionId, workspaceId, agent, meta, onSend }: ComposerProps): React.ReactElement {
+export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps): React.ReactElement {
   useStoreVersion();
   const session = store.getSession(sessionId);
   const [text, setText] = useState('');

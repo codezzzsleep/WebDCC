@@ -30,6 +30,12 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff }: Tim
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [stickToBottom, setStickToBottom] = useState(true);
 
+  useEffect(() => {
+    if (!performance.getEntriesByName('wdcc:first-turns').length && turns.length > 0) {
+      performance.mark('wdcc:first-turns');
+    }
+  }, [turns.length]);
+
   const virtualizer = useVirtualizer({
     count: turns.length,
     getScrollElement: () => scrollRef.current,

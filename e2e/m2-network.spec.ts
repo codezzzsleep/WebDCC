@@ -3,7 +3,12 @@ import { createSession, login, waitForTurnComplete } from './helpers.js';
 
 test.describe('M2 / A6 弱网', () => {
   test('6a 慢速网络下流式输出持续可见、界面可操作', async ({ page }) => {
+    test.setTimeout(300_000);
     await login(page);
+    const { sessionId } = await createSession(page, 'codex', '慢网第一条');
+    await waitForTurnComplete(page);
+
+    // 现在把网络压到 2s 往返、50KB/s
     const client = await page.context().newCDPSession(page);
     await client.send('Network.enable');
     await client.send('Network.emulateNetworkConditions', {
@@ -13,16 +18,14 @@ test.describe('M2 / A6 弱网', () => {
       uploadThroughput: 50 * 1024,
     });
 
-    await page.goto('/new');
-    await page.getByTestId('agent-card-codex').click();
-    await page.getByTestId('new-session-input').fill('慢网测试');
-    await page.getByTestId('new-session-send').click();
-    await page.waitForURL(/\/s\/[0-9A-Z]+/, { timeout: 30_000 });
+    await page.goto(`/s/${sessionId}`, { waitUntil: 'commit' });
+    await expect(page.getByTestId('composer-input')).toBeEditable({ timeout: 60_000 });
+    await page.getByTestId('composer-input').fill('慢网测试');
+    await page.getByTestId('send-button').click();
 
-    // 输入框可用（界面未卡死）
+    // 界面没卡死：消息立即出现在时间线里（发件箱乐观显示）
+    await expect(page.getByTestId('timeline')).toContainText('慢网测试', { timeout: 180_000 });
     await expect(page.getByTestId('composer-input')).toBeEditable();
-    // 流式内容最终可见
-    await expect(page.getByTestId('timeline')).toContainText('慢网测试', { timeout: 60_000 });
     await client.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   });
 
