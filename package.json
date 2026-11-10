@@ -1,0 +1,32 @@
+{
+  "name": "webdcc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r --parallel typecheck",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "mock:anthropic": "tsx packages/testing/mock-models/src/anthropic-server.ts",
+    "mock:responses": "tsx packages/testing/mock-models/src/responses-server.ts",
+    "probe:codex": "tsx scripts/probe-codex.ts",
+    "probe:claude": "tsx scripts/probe-claude.ts",
+    "probe:dsh": "tsx scripts/probe-dsh.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "tsx": "^4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}
