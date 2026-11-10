@@ -116,8 +116,16 @@ export class SessionManager {
     const updated = this.store.updateSession(session.id, { nativeId: created.nativeId });
     const runtime = this.ensureRuntime(updated as SessionDto, adapter, workspace.path, created.nativeId);
     this.touchIdle(runtime);
-    const feedSeq = this.store.appendFeed(session.id, { created: true, status: 'idle', title: updated?.title ?? undefined });
-    this.hooks.onFeed(session.id, { created: true, status: 'idle' }, feedSeq);
+    const createPatch: FeedPatch = {
+      created: true,
+      status: 'idle',
+      agent: updated?.agent ?? input.agent,
+      workspaceId: updated?.workspaceId ?? input.workspaceId,
+      createdAt: updated?.createdAt ?? new Date().toISOString(),
+      ...(updated?.title === undefined || updated.title === null ? {} : { title: updated.title }),
+    };
+    const feedSeq = this.store.appendFeed(session.id, createPatch);
+    this.hooks.onFeed(session.id, createPatch, feedSeq);
     return updated as SessionDto;
   }
 
@@ -262,7 +270,10 @@ export class SessionManager {
   private handleAdapterEvent(sessionId: string, event: AdapterEvent): void {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
-    const turnId = runtime.turnId ?? ulid();
+    // 一轮的 turnId 由 manager 在 send() 时分配；adapter 的原生 turn id 只作为参考，
+    // 否则 adapter 自造的 turnId 会让 user.message 和后续事件分到两个轮次里
+    const nativeTurnId = 'turnId' in event ? event.turnId : undefined;
+    const turnId = runtime.turnId ?? nativeTurnId ?? ulid();
 
     switch (event.type) {
       case 'item.start': {

@@ -25,6 +25,18 @@
 
 （暂无）
 
+## M2 进度（验收通过，待合并）
+
+| 项 | 状态 |
+|---|---|
+| 三列框架、侧边栏、会话头、时间线（轮次折叠/改动卡片/审批/提问/未知事件）、任务面板、输入框（@ 菜单、附件、发件箱状态）、轨迹、停靠区、新会话页 | 已实现 |
+| 路由（/s/{id}、?dock=files、?dock=diff:{id}、停靠区 URL 还原） | A3 通过（3 个 Playwright 用例） |
+| IndexedDB 缓存 + WebSocket 续传 + 心跳重连 + 发件箱 | 已实现 |
+| Service Worker（vite-plugin-pwa / Workbox） | 已生成，待 A6e 验证 |
+| A5 性能 | **通过**：未缓存首屏 195ms（≤1000），同一页面切换 3 次中位数 69ms（≤150）。根因是 `listEvents({before})` 用了 `ORDER BY seq ASC`，向前翻页时把**最旧的 200 条**返回，客户端还要等服务端全表扫描；改为 DESC 后反转，耗时从 3.2s 降到 ~10ms |
+| A6a/6b/6e | **通过**（6a 慢网流式可见且界面可操作；6b 断网 30s 后时间线与服务端一致；6e 离线刷新应用外壳可用） |
+| A12 截图 | 已完成，`docs/acceptance/M2/`（11 张：新会话页、收起/展开轮次、轨迹、@ 菜单、停靠区文件/diff/会话、审批卡片、手机视图） |
+
 ## M1 偏差与说明
 
 - **真实 adapter 尚未接入**：M1 只注册 fake-adapter；`packages/server/src/adapters.ts` 是生产组装点，M3–M5 依次填入 Codex / Claude / DSH。

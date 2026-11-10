@@ -274,9 +274,12 @@ export class Store {
       values.push(opts.before);
     }
     values.push(limit);
+    // 只给 before 时是"向前翻页"，要取紧邻 before 之前的 limit 条：先 DESC 再反转（SPEC 7.5）
+    const descending = opts.before !== undefined && opts.after === undefined;
     const rows = this.db
-      .prepare(`SELECT * FROM events WHERE ${clauses.join(' AND ')} ORDER BY seq ASC LIMIT ?`)
+      .prepare(`SELECT * FROM events WHERE ${clauses.join(' AND ')} ORDER BY seq ${descending ? 'DESC' : 'ASC'} LIMIT ?`)
       .all(...values) as EventRow[];
+    if (descending) rows.reverse();
     return rows.map(toEvent);
   }
 

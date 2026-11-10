@@ -57,12 +57,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/meta', async (): Promise<MetaResponse> => {
     const agents: MetaResponse['agents'] = {};
     for (const adapter of manager.adaptersList()) {
-      agents[adapter.id] = await adapter.probe().catch(() => ({
+      const probe = await adapter.probe().catch(() => ({
         installed: false,
         pinnedVersion: 'unknown',
         auth: 'unknown' as const,
         notes: ['probe 失败'],
       }));
+      agents[adapter.id] = {
+        ...probe,
+        accessModes: adapter.accessModes(),
+        models: await adapter.listModels(null).catch(() => []),
+      };
     }
     return { version: deps.version, agents };
   });

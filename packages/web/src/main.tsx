@@ -1,12 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App.js';
+import { RouterProvider } from '@tanstack/react-router';
+import { router } from './App.js';
 import './index.css';
 
+performance.mark('wdcc:module');
 const container = document.getElementById('root');
 if (container === null) throw new Error('缺少 #root 容器');
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <RouterProvider router={router} />
   </StrictMode>,
 );

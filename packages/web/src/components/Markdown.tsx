@@ -1,0 +1,78 @@
+import { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+type Highlighter = {
+  codeToHtml: (code: string, options: { lang: string; theme: string }) => string;
+};
+
+let highlighterPromise: Promise<Highlighter> | null = null;
+
+function getHighlighter(): Promise<Highlighter> | null {
+  if (highlighterPromise === null) {
+    highlighterPromise = import('shiki/bundle/web')
+      .then((shiki) =>
+        shiki.createHighlighter({
+          themes: ['github-light'],
+          langs: ['ts', 'tsx', 'js', 'json', 'bash', 'shell', 'markdown', 'python', 'css', 'html', 'yaml'],
+        }),
+      )
+      .then((highlighter) => ({ codeToHtml: (code, options) => highlighter.codeToHtml(code, options) }) as Highlighter)
+      .catch(() => null as unknown as Highlighter);
+  }
+  return highlighterPromise;
+}
+
+function CodeBlock({ code, language }: { code: string; language: string }): React.ReactElement {
+  const [html, setHtml] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const highlighter = getHighlighter();
+    if (highlighter === null) return undefined;
+    void highlighter.then((instance) => {
+      if (cancelled || instance.codeToHtml === undefined) return;
+      try {
+        setHtml(instance.codeToHtml(code, { lang: language === '' ? 'text' : language, theme: 'github-light' }));
+      } catch {
+        setHtml(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language]);
+
+  if (html !== null) return <div className="code-block" dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <pre className="code-block">
+      <code>{code}</code>
+    </pre>
+  );
+}
+
+export function Markdown({ text }: { text: string }): React.ReactElement {
+  return (
+    <div className="markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ className, children }) {
+            const match = /language-(\w+)/.exec(className ?? '');
+            const content = String(children).replace(/\n$/, '');
+            if (match !== null) return <CodeBlock code={content} language={match[1] ?? ''} />;
+            return <code className="inline-code">{content}</code>;
+          },
+          a({ href, children }) {
+            return (
+              <a href={href} target="_blank" rel="noreferrer">
+                {children}
+              </a>
+            );
+          },
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
