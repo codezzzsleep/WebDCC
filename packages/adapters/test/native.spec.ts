@@ -5,6 +5,7 @@ import {
   CodexAdapter,
 } from '../codex/src/adapter.js';
 import { ClaudeAdapter } from '../claude/src/adapter.js';
+import { ALLOWED_ENDPOINTS, DshAdapter, isAllowedCommandLine, isAllowedEndpoint } from '../dsh/src/adapter.js';
 
 const FORBIDDEN = ['baseInstructions', 'developerInstructions'];
 const ALLOWED_CONFIG_KEYS = [
@@ -102,5 +103,57 @@ describe('原装原则：Claude Code（SPEC 3.3）', () => {
       const spec = adapter.buildLaunchSpec({ ...opts, accessMode: mode });
       expect((spec.sdkOptions as Record<string, unknown>)['permissionMode']).toBe(mode);
     }
+  });
+});
+
+
+describe('原装原则：DSH（SPEC 5.4.8）', () => {
+  it('启动参数只有一个 loopback 侧车，不带 profile/plugin/config', () => {
+    const adapter = new DshAdapter({ port: 3091 });
+    const spec = adapter.buildLaunchSpec();
+    const args = [spec.command ?? '', ...(spec.args ?? [])].join(' ');
+    expect(args).toContain('dsh web --no-open --port 3091 --host 127.0.0.1');
+    expect(args).not.toContain('--profile');
+    expect(args).not.toContain('plugin');
+    expect(spec.env).toEqual({});
+  });
+
+  it('端点白名单就是 5.4.8 列出的那些', () => {
+    expect([...ALLOWED_ENDPOINTS].sort()).toEqual(
+      [
+        '$events',
+        '$events/result',
+        'commands/execute',
+        'session/cancel',
+        'session/create',
+        'session/follow',
+        'session/list',
+        'session/modelCatalog',
+        'session/page',
+        'session/prompt',
+        'session/selectModel',
+        'userQuestions/answer',
+        'workspace/create',
+        'workspace/follow',
+      ].sort(),
+    );
+    expect(isAllowedEndpoint('host/describe')).toBe(false);
+    expect(isAllowedEndpoint('settings/mutate')).toBe(false);
+    expect(isAllowedEndpoint('pluginManager/install')).toBe(false);
+  });
+
+  it('commands/execute 只允许 /permission 或用户原文', () => {
+    expect(isAllowedCommandLine('/permission workspace-write')).toBe(true);
+    expect(isAllowedCommandLine('/permission danger-full-access')).toBe(true);
+    expect(isAllowedCommandLine('/permission evil-mode')).toBe(false);
+    expect(isAllowedCommandLine('/compact')).toBe(false);
+    expect(isAllowedCommandLine('/compact', '/compact')).toBe(true);
+    // /permission 由访问模式界面生成，与用户文本无关
+    expect(isAllowedCommandLine('/permission read-only', '别的文本')).toBe(true);
+  });
+
+  it('四档访问模式与界面文字一致', () => {
+    const adapter = new DshAdapter();
+    expect(adapter.accessModes().map((mode) => mode.id)).toEqual(['read-only', 'workspace-write', 'danger-full-access', 'auto']);
   });
 });

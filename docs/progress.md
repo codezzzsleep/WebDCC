@@ -47,12 +47,15 @@
 | native.spec（Claude 部分） | ✅ 4 个断言：preset 系统提示词、settingSources、无 mcpServers/hooks/agents/allowedTools、六档 permissionMode 透传 |
 | 接入生产组装点 | 已接入（`WDCC_ENABLE_CLAUDE=0` 可关闭） |
 
-## M5 进度（进行中）
+## M5 进度（验收通过，待合并）
 
 | 项 | 状态 |
 |---|---|
-| 侧车客户端（启动/解析 token/换 Cookie/RPC 信封/remote.mux 多路复用） | 已移植到 `packages/adapters/dsh/src/host.ts`，typecheck 通过 |
-| DshAdapter 本体（会话/工作区映射、session/follow、审批与提问、/permission、nativeSeq） | 待实现 |
+| 侧车客户端 | `packages/adapters/dsh/src/host.ts`（启动/换 Cookie/RPC 信封/remote.mux） |
+| DshAdapter 本体 | 完成：workspace/create + session/create 映射、session/follow、`$events` 单条复用、审批/提问走 `$events/result`、`/permission` 访问模式、`nativeSeq` 去重、工具名映射 |
+| 端点白名单（3.3） | 适配器内强制校验（`ALLOWED_ENDPOINTS` + `isAllowedCommandLine`），native.spec 4 条断言 |
+| A1（DSH，假模型） | ✅ 8/8（`scripts/accept-dsh-a1.ts`）：新建、流式、命令、读文件、改文件、思考、审批、完成、打断、dispose 后 resume |
+| A2（DSH） | ✅（`scripts/accept-dsh-a2.ts`）：与直接 Host API 建会话的工具集完全一致（32 个），启动参数无 profile/plugin 注入 |
 
 ## M3 进度（完成，已合并 PR #4）
 

@@ -247,6 +247,9 @@ importers:
       '@webdcc/adapter-codex':
         specifier: workspace:*
         version: link:../adapters/codex
+      '@webdcc/adapter-dsh':
+        specifier: workspace:*
+        version: link:../adapters/dsh
       '@webdcc/protocol':
         specifier: workspace:*
         version: link:../protocol
