@@ -1,6 +1,8 @@
 # WebDCC v1 SPEC：DeepSeek Harness / Codex / Claude Code 统一网页端
 
-> 版本：v2.1 · 日期：2026-11-11 · 仓库：`WebDCC`
+> 版本：v2.2 · 日期：2026-11-11 · 仓库：`WebDCC`
+>
+> **v2.2 变更**：新增 0.1 节「无人值守执行规则」（PR 自动合并、必须停下的情况、默认方案）；把 Codex 访问模式、DSH 提问与思考字段、Claude 提问四项核实结论落入 5.2/5.3/5.4/6.3/9.6；补齐会话标题、改动 diff、附件、斜杠命令、添加工作区、导出、Agent 未安装等空白（9.2–9.9、11.1、7.7、13）；修正 16 节前后矛盾；M2/M7 门槛与第 15 节按无人值守调整。
 >
 > **v2.1 变更**（按 M0 核实结果修订，证据见 `docs/protocol-notes.md`）：重写 5.4 DSH 接口；5.2、5.3 写入 Codex、Claude Code 的实测结论；6.1、6.2 增加 `nativeSeq` 与内部事件规则，明确 seq 由我方自己连续编号；6.3 映射表按实测事件名重写；9.6 访问模式按三个 Agent 的原生枚举重写；3.2、3.3、10.3 去掉已证实不需要的备选方案；4.1、12.3 按实际锁定版本和硬件限制更新；13 按已实现的假模型服务更新；M3、M5 增加开工前置步骤；15、16、18 相应更新。
 
@@ -8,12 +10,41 @@
 
 ## 0. 给执行者的说明
 
-1. **严格按第 14 节的里程碑顺序执行。** 每个里程碑开一个分支，做完后先跑第 15 节对应的验收项，全部通过再用 `gh pr create` 提 PR，等用户看过、合并后才进入下一个里程碑。
+1. **严格按第 14 节的里程碑顺序执行，流程按 0.1 节（无人值守运行）。** 用户不在线，验收通过后自动合并，不等待确认。
 2. **第 3 节"原装原则"是硬约束。** 任何需求、实现细节或"优化"与第 3 节冲突时，一律以第 3 节为准。
 3. **界面以 DeepSeek Harness（下称 DSH）为蓝本。** 第 9 节写了具体规则，`docs/reference/dsh/` 里有实测截图。DSH 只是界面和交互的参考，底层是我们自己的平台，三个 Agent 平级（第 1 节）。
 4. **标注【M0 核实】的接口细节**来自公开文档、社区资料或源码阅读。M0 要对照锁定版本逐条核实；有出入时以真实协议为准，把差异写进 `docs/protocol-notes.md`。原则和验收标准不因此改变。
 5. **标注【已实测】的事实**已在锁定版本上实际跑通（写 SPEC 时或 M0 探针），可以直接采用，升级版本后要复核。**标注【M3 核实】【M4 核实】【M5 核实】的项**在对应里程碑开工时先确认，结论补进 `docs/protocol-notes.md`。
 6. 拿不准时选更简单的实现。不要添加本文没有要求的功能。
+
+### 0.1 无人值守执行规则
+
+用户不在线：从 M1 起连续执行到 M7，不等待用户确认。只有本节第 3 条列出的情况才停下。
+
+1. **每个里程碑的流程：** 新建分支 → 实现 → 跑该里程碑的验收 → `gh pr create`（描述里列出每条验收的结果和证据）→ `gh pr merge --squash --delete-branch` → 从最新的 main 开下一个分支。不直接向 main 推送其他提交，任何情况下都不 force push main。
+2. **依赖顺序：** M1 → M2 → {M3、M4、M5 互相独立} → M6 → M7。M3、M4、M5 中某一个受阻时，其余照常推进；M6、M7 用已完成的 Agent 继续，受阻的 Agent 在最终报告里列出。
+3. **必须停下的情况**（停在当前分支，写好 `docs/progress.md` 后结束运行）：
+   - 遵守第 3 节原装原则已经做不到（例如某个 Agent 只能靠改提示词、注入工具或改用户配置才能接入）。不得为了推进而放宽原则。
+   - 需要用户凭据、需要部署到远程服务器、或需要用户做选择，且下面的「默认方案」没有覆盖。
+   - 同一条验收连续 3 轮针对性修复后仍然失败，并且没有可以先推进的独立工作。
+4. **SPEC 与实测冲突：** 以实测为准。在同一个 PR 里更新 `docs/protocol-notes.md` 和 SPEC 的对应章节，然后继续。
+5. **不需要用户、也不阻塞的验收：**
+   - A12（界面对照 DSH 截图）和 M2 门槛里「用户看过截图」一项：在 1440×900 和 390×844 下截好图，放进 `docs/acceptance/<里程碑>/`，在 acceptance-report 里标「待用户确认」，继续推进。
+   - 需要真实模型的验收（A1、A7 的真实模型部分）：环境里有对应 Key 或登录时执行；没有时自动跳过，在 acceptance-report 里标「待真实模型验证」。
+6. **真实 API 花费控制：** 每个 Agent 在每个里程碑门槛上最多跑一次真实模型；所有自动重试、调试、回归都只用假模型。不在循环里调用真实 API。
+7. **进度记录：** 每次合并 PR 时更新 `docs/progress.md`：完成了什么、与 SPEC 的偏差、受阻项及证据。
+8. **安全：** 仓库是公开的。不提交任何 Key、token、Cookie、服务器地址；fixtures 一律脱敏。
+9. **范围：** 不做第 2 节非目标和第 17 节 Future 里的任何东西，不添加 SPEC 没有要求的功能。
+10. **结束：** M7 本地验收完成后，写好 `docs/acceptance-report.md` 与 `docs/progress.md` 的最终总结，停止运行。
+
+**默认方案（不需要停下来问）：**
+
+| 事项 | 默认方案 |
+|---|---|
+| PR 合并 | 验收通过后自动 squash 合并（第 1 条） |
+| 真实模型验收 | 有 Key 或登录才跑，否则标「待真实模型验证」，不阻塞 |
+| 远程部署 | M7 只做到「本机按生产方式运行」：`pnpm build`，以 `WDCC_HOST=0.0.0.0` 启动，写好 deploy.md 与 systemd unit 示例，在本机跑完全部验收；部署到用户服务器由用户自己做 |
+| 界面确认 | 截图存档并标「待用户确认」 |
 
 ---
 
@@ -96,7 +127,7 @@ WebDCC 是一个部署在个人公网服务器上的网页端：在同一个页�
 - `packages/adapters/test/native.spec.ts` 对三个 adapter 断言：
   - Claude：`systemPrompt` 深等于 `{ type: 'preset', preset: 'claude_code' }`；`settingSources` 深等于 `['user', 'project', 'local']`；不存在 `append`、`mcpServers`、`agents`、`hooks`、`allowedTools`、`disallowedTools` 键。
   - Codex：所有发出的 `thread/start`、`thread/resume`、`turn/start` 参数中不出现 `baseInstructions`、`developerInstructions`；`-c` 覆盖只允许白名单键（`model`、`model_provider`、`model_providers.*`、`model_catalog_json`、`show_raw_agent_reasoning`）。
-  - DSH：只调用 5.4.8 白名单里的端点；`commands/execute` 的 `line` 只允许 `/permission <preset>`。
+  - DSH：只调用 5.4.8 白名单里的端点；`commands/execute` 的 `line` 只允许两种来源：访问模式界面生成的 `/permission <preset>`，或用户本人输入并发送的命令原文。
 - 发送路径单元测试：adapter 收到的文本与输入框文本**逐字节相等**；"带到…"和 `@` 插入后的输入框文本与来源原文逐字节相等。
 
 ---
@@ -257,14 +288,18 @@ export interface AgentAdapter {
 **流程：**
 1. 启动：`codex app-server [-c 覆盖项...]`，`cwd` 为工作区目录，环境变量按第 10 节注入。
 2. 握手：`initialize`（clientInfo: `webdcc`）→ 收到响应后发 `initialized` 通知。握手前的其他请求会被拒绝。
-3. 新建：`thread/start`，参数只含 `cwd`、`model`（可选）、`approvalPolicy` / `sandbox`（仅当用户显式选了访问模式）。返回的 threadId 即 nativeId。
-4. 恢复：用与创建时相同的启动参数拉起进程，再 `thread/resume { threadId }`。社区录制样本显示它在全新进程里也能冷恢复。
+3. 新建：`thread/start`，参数只含 `cwd`、`model`（可选）、`approvalPolicy` / `sandbox` / `approvalsReviewer`（仅当用户显式选了访问模式）。返回的 threadId 即 nativeId。
+   - **字段名不对称（【已实测】）**：`thread/start` 的沙箱字段是 `sandbox`（字符串枚举 `read-only | workspace-write | danger-full-access`）；`turn/start` 的同义字段叫 **`sandboxPolicy`**（结构化对象 `{type:'readOnly'|'workspaceWrite'|'dangerFullAccess', ...}`）。写错字段会被静默忽略。
+   - 不传任何访问模式字段时，服务端默认 `approvalPolicy='on-request'`、`approvalsReviewer='user'`、`sandbox={type:'readOnly'}`（【已实测】）。
+4. 恢复：用与创建时相同的启动参数拉起进程，再 `thread/resume { threadId }`。社区录制样本显示它在全新进程里也能冷恢复。**【已实测】`thread/resume` 的访问模式覆盖只在冷恢复那一次生效**：线程已被当前 app-server 加载时，resume 会把参数静默丢弃、原样返回线程当前状态。
 5. 发送：`turn/start { threadId, input: [...] }`；换过模型时附带 `model`（社区样本显示 `model`、`effort` 可逐轮传入）。图片用 `{ type: 'localImage', path }`（【已实测】，定义见导出的 `v2/UserInput.ts`）。
 6. 打断：`turn/interrupt { threadId, turnId }`，以收到 `turn/completed`（status 为 `interrupted`）为准。
 7. 中途追加：turn 进行中发送调用 `turn/steer`；在 `turn/started` 之前或空闲时会被拒绝，退化为排队，等当前 turn 结束再 `turn/start`。
 8. 审批（【已实测】）：服务端反向请求 → `approval.request` 事件；用户选择后直接回响应体。`item/commandExecution/requestApproval`、`item/fileChange/requestApproval` 回 `{ decision }`，枚举 `accept | acceptForSession | acceptWithExecpolicyAmendment | applyNetworkPolicyAmendment | decline | cancel`；旧版 `execCommandApproval` / `applyPatchApproval` 回 `{ decision }`（`ReviewDecision`，如 `approved`）；`item/tool/requestUserInput` 是提问，回 `{ answers }`。
 9. 事件：全集见 protocol-notes §2.3。主要用到 `turn/started`、`turn/completed`、`item/started`、`item/completed`、`item/agentMessage/delta`、`item/reasoning/summaryTextDelta`、`item/commandExecution/outputDelta`、`item/fileChange/patchUpdated`、`turn/diff/updated`、`turn/plan/updated`、`item/plan/delta`、`thread/tokenUsage/updated`、`thread/name/updated`。
 10. 模型列表：`model/list`。
+
+**访问模式（【已实测】，详见 9.6）：** 三层结构——权限档位（`permissionProfile/list` 返回 `:read-only` / `:workspace` / `:danger-full-access`，用户 `[permissions.*]` 会多出自定义项，UI 不可硬编码） × `approvalPolicy` × `approvalsReviewer`。**会话中途切换一律用 `turn/start` 的覆盖参数**（`approvalPolicy` / `approvalsReviewer` / `sandboxPolicy`），作用域是"本轮及之后所有轮"；不要用 `thread/resume`。`approvalPolicy='untrusted'` 已被 Codex 配置层删除（写进 `-c` 会直接启动失败），只能作为 `thread/start` / `turn/start` 的参数使用。`granular` 需要 `initialize` 声明 `capabilities:{experimentalApi:true}`，v1 不提供该档。
 
 **认证注意（【已实测】）：** `codex app-server` 忽略 `OPENAI_API_KEY` 环境变量；API Key 模式必须通过自定义 Provider（`env_key`）注入，见 10.3。
 
@@ -296,6 +331,7 @@ const options = {
 - 打断：`query.interrupt()`。【已实测】本轮以 `result`（`subtype: 'error_during_execution'`）结束，query 不关闭，可以继续推下一轮。
 - 换模型 / 访问模式：`setModel()` / `setPermissionMode()`（【已实测】存在）。
 - 审批：`canUseTool` 返回挂起的 Promise，等用户决策后 resolve 为 allow / deny。【已实测】`permissionMode: 'default'` 下 `Write` / `Edit` 触发 `canUseTool`，只读的 `Bash` 命令不触发（Claude Code 自带放行规则）。
+- 提问（【已实测】，见 protocol-notes §7.4）：模型发出的 `AskUserQuestion` **不产生 `approval.request`**，而是从 `canUseTool('AskUserQuestion', { questions }, { requestId, toolUseID, requiresUserInteraction, signal })` 到达，一次 1–4 题。我方按题发 `question` 事件（`questionId = ${requestId}:${index}`），不要为这个 tool_use 再发 `tool.call`（与 DSH 的去重规则一致）。用户作答后把全部答案**攒齐一次性** resolve 为 `{ behavior: 'allow', updatedInput: { ...原 input, answers, annotations? } }`：`answers` 的 key 是**题干原文**，多选用 `string[]`；**必须带原 `questions` 且不得改动题干**（否则该题答案被静默丢弃）。跳过某题 → 不进 `answers`，置 `annotations[题干]={unanswered:'skipped'}`。用户关闭卡片 → `{ behavior: 'deny', message }`；要结束本轮用 `deny + interrupt: true`。提问挂起时 `query.interrupt()` 会让 `options.signal` 立即 abort，必须清理未决卡片。**不传 `canUseTool` 时 CLI 会把 `AskUserQuestion` 从工具表摘掉**；`dontAsk` 模式下工具在但直接拒绝。
 - 恢复：新建 `query()` 并传 `resume: nativeId`。
 
 ### 5.4 DshAdapter
@@ -352,7 +388,7 @@ const options = {
 | 选模型 | `session/selectModel` | `{ request: { sessionId, provider, model, reasoningEffort? } }` |
 | 执行原生命令 | `commands/execute` | `{ agentId: <sessionId>, line: '/permission <preset>', submittedAttachments: [] }` |
 | 回复审批 / 提问 | `$events/result` | `{ clientId, eventId, outcome: { kind: 'result', value } }` |
-| 回答提问 | `userQuestions/answer` | `{ agentId, callId, answer }`【M5 核实：提问用它还是 `$events/result` 关闭，两者是否都要调】 |
+| 回答提问 | `$events/result`（主力） | `{ clientId, eventId, outcome: { kind: 'result', value: { answers: [{ id, selected: [label], custom? }] } } }`。实时提问只能这样关。`userQuestions/answer`（`{ agentId, callId, answer }`）只用于计时模式（请求带 `wait.callId`）的迟到作答【已核实，见 protocol-notes §7.2】 |
 
 `session/create` 没有模型和访问模式参数：模型用 `session/selectModel`，访问模式用 `/permission`（5.4.6）。
 
@@ -386,7 +422,7 @@ const options = {
 
 #### 5.4.8 端点白名单（3.3 的检查依据）
 
-`workspace/create`、`workspace/follow`、`session/create`、`session/list`、`session/follow`、`session/page`、`session/prompt`、`session/cancel`、`session/modelCatalog`、`session/selectModel`、`commands/execute`（`line` 只允许 `/permission <preset>`）、`userQuestions/answer`、`$events`、`$events/result`。需要新端点时，先更新本节和 protocol-notes。
+`workspace/create`、`workspace/follow`、`session/create`、`session/list`、`session/follow`、`session/page`、`session/prompt`、`session/cancel`、`session/modelCatalog`、`session/selectModel`、`commands/execute`（`line` 只允许访问模式界面生成的 `/permission <preset>` 或用户本人输入的命令原文）、`$events`、`$events/result`、`userQuestions/answer`（仅计时模式的迟到作答）。需要新端点时，先更新本节和 protocol-notes。
 
 #### 5.4.9 运行规则
 
@@ -437,6 +473,11 @@ export type EventKind =
 
 `EventData` 是 kind 到 data 的映射类型，字段按上面的注释定义。
 
+**改动 diff 的取法（`file.change`）：** 按优先级取，不用工作区 `git diff` 推算（同一工作区可能有别的会话或用户本人在改文件，推算会混进别人的改动）。
+1. 原生提供的补丁或 diff：Codex 的 `fileChange` 条目、`item/fileChange/patchUpdated`、`turn/diff/updated`；Claude Code 工具结果里的结构化补丁（如有）【M4 核实】；DSH `tool/result` 里的 diff 数据（如有）【M5 核实】。
+2. `edit` 类调用：用 `old_string` / `new_string` 生成该处 hunk。
+3. 整文件写入且拿不到原内容：按"新文件"显示全部内容为新增，卡片注明"整文件写入，未取得原内容"，`+` 计新内容行数，`-` 为 0。
+
 **内部事件：** 每个 Agent 都有一些对用户没有意义的簿记事件（例如 DSH 的 `request/header`、`step/start`、`step/end`、`agent/inbox/spliced`、`session/end-seed`、`job/registered`、`job/settled`、`command/run`、`command/done`）。它们照样存储（满足 R5），kind 记为 `internal`，只在轨迹标签显示，不进对话时间线。每个 Agent 的内部事件清单维护在 protocol-notes 里，不在清单里的一律按 `unknown` 处理。`label` 是步骤行上显示的人话说明，取自原生字段（例如 DSH / Claude `bash` 的 `description`），没有就留空，平台不自己编。
 
 ### 6.2 持久化规则
@@ -456,15 +497,15 @@ export type EventKind =
 |---|---|---|---|
 | user.message | 我方发送时生成 | 我方发送时生成 | `user/message` |
 | assistant.message | `agentMessage` 条目；增量 `item/agentMessage/delta` | assistant 消息的 text block | 持久 `assistant/message`；增量 `assistant-stream` 的 `text-delta` |
-| reasoning | `reasoning` 条目；增量 `item/reasoning/summaryTextDelta` | thinking block | `assistant/message` 里的思考内容；增量 `reasoning-delta`【M5 核实完成态字段】 |
+| reasoning | `reasoning` 条目；增量 `item/reasoning/summaryTextDelta` | thinking block | 持久 `assistant/message` 的 `message.content[]` 里 `type='reasoning'` 的 `text`；增量 `assistant-stream` 的 `reasoning-delta` |
 | command | `commandExecution` 条目；输出 `item/commandExecution/outputDelta` | `Bash` tool_use + tool_result | `tool/call` + `tool/result`，工具名 `bash` |
-| file.read | M0 未出现独立条目，读文件走命令【M3 核实】 | `Read` / `Glob` / `Grep` | 工具名 `read`、`read_image`、`glob`、`grep` |
+| file.read | 有模型元数据时用独立的读文件条目；M0 的假模型没有元数据，表现为 `commandExecution`（M3 用 `model_catalog_json` 复核） | `Read` / `Glob` / `Grep` | 工具名 `read`、`read_image`、`glob`、`grep` |
 | file.change | `fileChange` 条目；`item/fileChange/patchUpdated`、`turn/diff/updated` | `Edit` / `Write` / `MultiEdit`（由 input 生成 diff） | 工具名 `write`、`edit` |
 | tool.call | `mcpToolCall`、`webSearch` 等其余条目 | 其余 tool_use | 其余工具名 |
 | plan | `turn/plan/updated`、`item/plan/delta` | `TodoWrite` | `todo/write` 事件（工具名 `todo_write`，没有 `activeForm` 字段） |
 | approval.request | `item/commandExecution/requestApproval`、`item/fileChange/requestApproval` 等反向请求 | `canUseTool` | `$events` waterfall `approval/request` |
 | approval.resolved | 我方回复后生成 | 我方回复后生成 | `approval/decided`（历史）；我方回复后生成（实时） |
-| question | `item/tool/requestUserInput` | 【M4 核实是否有对应】 | `$events` waterfall `user-questions/request` |
+| question | `item/tool/requestUserInput`，回 `{ answers }` | `AskUserQuestion` tool_use 走 **`canUseTool`**（不是 `onUserDialog`）；问题在 `input.questions`（1–4 题，每题 2–4 个 `{label,description,preview?}` + `multiSelect`），答案写回 `updatedInput.answers`（key = 题干原文，多选用 `string[]`），宿主侧结构化结果在 user 消息的 `tool_use_result` | `$events` waterfall `user-questions/request`，回 `$events/result` |
 | usage | `thread/tokenUsage/updated` | `result` 里的 usage | `assistant-stream` 的 `usage` chunk |
 | turn.started | `turn/started` | 我方发送时生成 | `turn/start` |
 | turn.completed | `turn/completed`（`turn.status`） | `result` 消息 | `turn/end` |
@@ -554,6 +595,13 @@ export type EventKind =
 - `POST /api/uploads/:uploadId/complete` → 服务端校验 sha256 → `{ fileId, url }`
 - 已有相同 sha256 的文件时，`POST /api/uploads` 直接返回现成的 `fileId`（秒传）。
 
+**附件：**
+
+- 图片按各 Agent 的原生图片输入传入：Codex 用 `{ type: 'localImage', path }` 指向 File Store 里的文件；Claude Code 用 base64 image block；DSH 是否支持图片见【M5 核实】，不支持时按"其他文件"处理。
+- 其他文件复制到 `<工作区>/.webdcc/uploads/<fileId>-<原文件名>`，把相对路径插入输入框（用户可见、可删改）。
+- 工作区是 git 仓库时，把 `.webdcc/` 写进 `.git/info/exclude`（本地 git 内部文件，不进版本库、不是项目配置，不违反 R3）。
+- 单个附件上限 100 MB。
+
 ### 7.8 离线外壳
 
 - Service Worker 预缓存 `index.html` 和所有带 hash 的静态资源；应用路由（`/s/*`、`/new`、`/settings/*`）的导航请求离线时返回缓存的 `index.html`。
@@ -629,9 +677,18 @@ export type EventKind =
   - 当前主栏会话高亮。
 - 底部：更多（账号、退出、版本）。
 
+**会话标题：**
+
+- 有原生标题时用原生标题：DSH 的 `session/title` 事件、Codex 的 `thread/name/updated`、Claude Code 若 SDK 提供【M4 核实】。
+- 没有原生标题时：取第一条用户消息的第一行，最多 40 个字符，超出加 `…`。
+- 用户手动改名后以用户的标题为准，后续原生标题事件不再覆盖。
+- 平台不调用任何模型来生成标题。
+
+**添加工作区：** 标题右侧的添加图标打开目录选择器，逐级浏览服务器目录（默认从服务器用户的家目录开始），也允许直接输入绝对路径；数据来自 `GET /api/fs/browse`（11.1）。
+
 ### 9.3 主栏会话头
 
-- 一行：会话标题（点击可改名）、Agent 徽标（标记 + 名称）、`···`（重命名、归档、导出、复制链接）、停靠区开关。
+- 一行：会话标题（点击可改名）、Agent 徽标（标记 + 名称）、`···`（重命名、归档、导出、复制链接）、停靠区开关。"导出"下载该会话全部事件（JSONL，每行一个 `StoredEvent`），接口 `GET /api/sessions/:id/export`。
 - 下方标签：对话 / 轨迹，当前标签蓝色下划线。
 
 ### 9.4 对话时间线（每一轮）
@@ -643,11 +700,12 @@ export type EventKind =
   - 默认收起：只显示 `phase: final` 的助手回复、改动汇总卡片、页脚。
   - 点开：按 seq 顺序显示所有步骤行和中间回复（`interim`）。
 - **步骤行**：图标 + 动词 + " · " + 说明，例如"运行命令 · 列出项目文件""读取文件 · SPEC.md""编辑文件 · package.json""思考 · 已完成分析"。点击展开详情：命令输出末尾（可"查看全文"打开 `outputFileId`）、文件路径、工具输入输出 JSON。
-- **改动汇总卡片**（一轮里有 `file.change` 时）：标题"已编辑 N 个文件 +a -d"（运行中为"已改动"），每个文件一行，显示 +/- 行数；悬停显示 diff 预览浮层；点击在停靠区打开 diff 标签；卡片标题栏右侧有"带到…"（带的是文件路径列表）。
+- **改动汇总卡片**（一轮里有 `file.change` 时）：标题"已编辑 N 个文件 +a -d"（运行中为"已改动"），每个文件一行，显示 +/- 行数；悬停显示 diff 预览浮层；点击在停靠区打开 diff 标签；卡片标题栏右侧有"带到…"（带的是文件路径列表）。diff 按 6.1 的优先级取；整文件写入且拿不到原内容时，卡片上注明"整文件写入，未取得原内容"。
 - **审批卡片**：出现在时间线里请求发生的位置，标题"{Agent} 请求运行命令"，展示命令或改动，按钮是原生选项（例如"允许一次 / 本会话都允许 / 拒绝"）；处理后变成一行结果说明。
 - **提问卡片**：按 schema 渲染简单表单，未知 schema 退化为文本输入。
 - **页脚**（已完成且有最终回复的轮次）：复制、"带到…"（带的是最终回复原文）、用量、时间。
 - **未知事件**：折叠的原始 JSON。
+- **出错**：Agent 启动失败或中途报错时出现 `error` 卡片，写明原因与处理方法（例如"服务器上没有安装 Codex CLI"）；侧边栏状态显示"出错"。
 - 虚拟列表渲染；流式增量渲染节流到 50 ms。
 
 ### 9.5 任务面板
@@ -657,21 +715,26 @@ export type EventKind =
 ### 9.6 输入框
 
 - 圆角输入框，占位文字"发消息或创建任务, / 调用指令, @ 文件或对话"；Enter 发送，Shift+Enter 换行；高度随内容增长。
-- 底栏左侧：`+`（添加文件、图片；粘贴图片也可）、访问模式（原生枚举，见下表）。
+- 底栏左侧：`+`（添加文件、图片；粘贴图片也可）、访问模式（原生枚举，见下表）。附件规则见 7.7：图片走原生图片输入；其他文件复制到 `<工作区>/.webdcc/uploads/` 并把相对路径插入输入框。
 - 底栏右侧：模型选择（只列出本会话 Provider 下的模型，菜单标题写"{Provider}（创建会话时选定）"）、发送按钮（运行中变为停止，即打断）。
 - 输入 `@`：弹出两组：
   - "文件与文件夹"：工作区内文件搜索，选中后插入相对路径；
   - "对话"：同一工作区的其他会话（带 Agent 标记和时间），选中后插入该会话最后一条 `final` 回复的原文。
-- 输入 `/`：只列出该 Agent 通过接口公开的原生命令（例如 Claude init 里的 slash commands），选中后原样插入；没有就不弹出。
+- 输入 `/`：按 Agent 的原生能力列出命令，选中后把命令文本原样插入输入框，由用户决定发送。
+  - Claude Code：列出 init 消息里的 slash commands，发送时作为普通用户消息交给 SDK【M4 核实 streaming input 模式下能识别斜杠命令】。
+  - DSH：列出 DSH 的命令目录（端点从 `host-api-catalog.json` 里找）【M5 核实】。用户发送的消息若第一行是已知的 DSH 命令，就用 `commands/execute` 执行用户输入的原文，不走 `session/prompt`——与 DSH 自己的网页端行为一致。
+  - Codex：v1 不提供 `/` 菜单（Codex 的斜杠命令属于 TUI），用户输入原样发送。
 - 输入框下方一行统计（只显示 Agent 提供的字段）：轮数、步数、tok/s、总 token、缓存命中、上下文占用。
 
 | Agent | 访问模式（原生） | 切换方式 |
 |---|---|---|
 | DSH | 仅可查看 `read-only` / 工作区内修改 `workspace-write` / 完全权限 `danger-full-access` / 自动审查（实验）`auto` | `/permission <preset>`（5.4.6），会话中途可改 |
-| Codex | `approvalPolicy`（`untrusted` / `on-request` / `never` / `granular`）× `sandbox`（`read-only` / `workspace-write` / `danger-full-access`）；界面提供与 Codex 自己的审批预设一致的几种组合【M3 核实确切组合】 | `thread/start` 参数；中途切换走 `thread/resume` 或 `turn/start` 的覆盖参数【M3 核实】 |
+| Codex | 四档：只读 `read-only`（`on-request` + `read-only`）/ 工作区可写 `workspace`（`on-request` + `workspace-write`）/ 工作区可写 + 自动审批（上一行 + `approvalsReviewer:'auto_review'`）/ 完全访问 `danger-full-access`（`never` + `danger-full-access`），档位来自 `permissionProfile/list` | 新建走 `thread/start` 的 `approvalPolicy` / `sandbox` / `approvalsReviewer`；**中途切换走 `turn/start` 的 `approvalPolicy` / `sandboxPolicy` / `approvalsReviewer` 覆盖**（本轮及之后所有轮），不用 `thread/resume` |
 | Claude Code | `default` 默认（每次询问）/ `acceptEdits` 自动接受编辑 / `plan` 计划模式 / `dontAsk` 不询问 / `auto` 自动 / `bypassPermissions` 跳过权限 | `setPermissionMode()`，会话中途可改 |
 
 界面显示中文名，旁边小字显示原生 id；默认值沿用各 Agent 用户配置里的设定。
+
+Codex 补充规则：始终显式传 `approvalsReviewer:'user'`（否则用户自配 `auto_review` 时审批请求会被审查子代理吞掉、我们的弹窗收不到）；"完全访问"档固定 `approvalPolicy:'never'`；`granular` 档 v1 不提供（需要 `experimentalApi` 能力）。
 
 ### 9.7 停靠区（右侧）
 
@@ -679,7 +742,7 @@ export type EventKind =
 - 标签类型：
   - **会话**：子标题行（Agent 标记、标题、状态、"移到主栏"），下面是该会话的时间线和它自己的输入框。"移到主栏"把它和主栏会话对调。
   - **改动 diff**：左右对比或合并视图、自动换行开关，标题"改动 · 文件名"，并注明来自哪个会话。
-  - **工作区文件**：目录树 + 只读预览（代码高亮、Markdown、图片）。
+  - **工作区文件**：目录树 + 只读预览（代码高亮、Markdown、图片）。图片与 PDF 用 `GET /api/workspaces/:id/raw?path=` 原样返回，路径检查与 `/fs` 相同（解析符号链接后必须仍在工作区内）。
 - 没有标签时显示"开始"页：工作区文件、打开另一个会话。
 - 同一个会话不能同时在主栏和停靠区；在停靠区打开主栏会话时提示"已经在主栏里了"。
 
@@ -691,6 +754,7 @@ export type EventKind =
 
 - 居中标题"新会话"；工作区选择；三张 Agent 卡片（DeepSeek Harness / Codex / Claude Code，各带一句"原装运行 …"）；Provider 选择（只列出与该 Agent 协议兼容的，见 10.2，不兼容的灰显并注明原因）；输入框（含模型选择）。
 - 发送第一条消息即创建会话，并跳到 `/s/{新ID}`。
+- `probe()` 报告未安装的 Agent，卡片灰显并写明原因（例如"服务器上没有安装 Codex CLI"）；未登录时只灰显"原生登录"这个 Provider，其他 Provider 照常可选。
 
 ### 9.10 交接规则
 
@@ -802,6 +866,9 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL=<model>
 | `GET /files/:id` | 文件（7.6） |
 | `GET` / `POST` / `PATCH` / `DELETE /api/providers[/:id]` | Provider 管理；不返回 Key 原文 |
 | `GET /api/models?agent=&providerId=` | 可选模型 |
+| `GET /api/fs/browse?path=` | 列出服务器某目录下的子目录（"添加工作区"用，默认从家目录开始） |
+| `GET /api/workspaces/:id/raw?path=` | 原样返回工作区内某个文件（图片、PDF 预览），路径检查同 `/fs` |
+| `GET /api/sessions/:id/export` | 导出该会话全部事件（JSONL，每行一个 `StoredEvent`） |
 
 ### 11.2 SQLite 表
 
@@ -865,6 +932,7 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 - 部署前检查服务器：CPU 是否支持 AVX2（`grep -c avx2 /proc/cpuinfo`）；Landlock 是否完整生效。开发机上关于沙箱和审批触发的结论要在服务器上复核。
 - systemd unit 示例：`Restart=on-failure`，环境变量放 `EnvironmentFile`。
 - 启动：`pnpm build && node packages/server/dist/main.js`。
+- 本次交付只做到「本机按生产方式运行」：`pnpm build`，以 `WDCC_HOST=0.0.0.0` 启动，systemd unit 示例写进 deploy.md，全部验收在本机跑完；部署到用户服务器由用户自己完成。
 
 ---
 
@@ -879,13 +947,15 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 - **脚本格式**（`plans/*.json`）：数组，第 N 项是收到第 N 个工具结果后要回的内容块；`tool.kind` 只写语义（command / read / write / edit / todo / ask / patch），具体工具名按请求里的 `tools` 匹配；`alternatives` 处理不同 Agent 的同义工具，`inputByName` 处理同一工具在不同 Agent 下的不同参数名。
 - **审批用例**：DSH 要让脚本里的命令显式带 `sandbox_permissions` 和 `justification` 才会请求审批（5.4.5）；Codex 用 `approvalPolicy: 'untrusted'`；Claude Code 用 `permissionMode: 'default'` 下的 `Write` / `Edit`。
 - **Codex 模型元数据**：mock-responses 的模型要配 `model_catalog_json`（参照 DeepSeek 官方 Codex `models.json` 的格式，启用 `apply_patch` 和计划工具），否则 Codex 用兜底元数据，测不到 `fileChange` 和 `plan`。这是 M3 的前置步骤。
+- **一个坑【已实测】**：Claude Code 的第一个 `POST /v1/messages` 是预热/配额请求（`tools: []`、只有 1 条 message），plan 第 0 步会回给它但被 CLI 丢弃；真正的对话请求是第 2 个。做"第 N 次模型调用"的断言要跳过首包。
+- **审批用例**：DSH 要让脚本里的命令显式带 `sandbox_permissions` 和 `justification` 才触发审批；Codex 用 `approvalPolicy:'untrusted'`；Claude Code 用 `permissionMode:'default'` 下的 `Write` / `Edit`。
 - 所有 e2e 用例默认跑假模型；带真实 Key 的用例在没有 Key 时自动跳过。
 
 ---
 
 ## 14. 执行步骤（里程碑）
 
-每个里程碑：新建分支 → 实现 → 跑对应验收 → `gh pr create`（描述里列出验收结果）→ 等用户合并。
+每个里程碑：新建分支 → 实现 → 跑对应验收 → `gh pr create`（描述里列出验收结果）→ `gh pr merge --squash --delete-branch` 自动合并 → 从最新 main 开下一个分支。详见 0.1 节。
 
 ### M0 仓库、工具链与协议探针（已完成）
 
@@ -930,11 +1000,11 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 3. 同步客户端：IndexedDB 缓存、WebSocket 续传、心跳与重连、发件箱、连接状态条（7.3–7.5、7.9）；Service Worker（7.8）。
 4. 全部基于 fake-adapter 开发和测试。
 
-**门槛：** A3、A5，以及 A6 的 6a、6b、6e 通过；用户对照 `docs/reference/dsh/` 看过截图（A12 的第一轮）。
+**门槛：** A3、A5，以及 A6 的 6a、6b、6e 通过；A12 的第一轮截图已存档到 `docs/acceptance/M2/`（标「待用户确认」）。
 
 ### M3 CodexAdapter
 
-1. 前置：给 mock-responses 配 `model_catalog_json`（第 13 节）重录 `fixtures/codex`，确认出现 `fileChange` 和 `turn/plan/updated`；核实 5.2、6.3、9.6 里标【M3 核实】的项，写进 protocol-notes。
+1. 前置：给 mock-responses 配 `model_catalog_json`（第 13 节）重录 `fixtures/codex`，确认出现 `fileChange` 和 `turn/plan/updated`。访问模式已提前核实（protocol-notes §7.1）：档位来自 `permissionProfile/list`、中途切换用 `turn/start` 的 `sandboxPolicy`（结构化）、`resume` 只在冷恢复生效、`untrusted` 只能作参数、`granular` 需要 `experimentalApi`（v1 不提供）。
 2. 实现 5.2，fixtures 单元测试，`native.spec.ts` 的 Codex 部分。
 
 **门槛：** 用 Codex 时 A1、A2 通过。
@@ -947,7 +1017,7 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 
 ### M5 DshAdapter
 
-1. 前置：核实 5.4、6.3 里标【M5 核实】的项，写进 protocol-notes。
+1. 前置已提前核实（protocol-notes §7.2、§7.3）：实时提问只能用 `$events/result` 关闭（`userQuestions/answer` 仅计时模式）；思考内容在 `assistant/message` 的 `message.content[type='reasoning'].text`；`commands/execute` 只能执行 `/permission` 或用户本人输入的命令。
 2. 侧车管理（启动、解析 token、换 Cookie、健康检查、重启）；单条 `remote.mux` 复用 `$events` 和各会话的 `session/follow`；`$events/result` 回复审批，未处理的 waterfall 在打断、断开、释放时回 `cancelled`；`/permission` 访问模式；`nativeSeq` 去重与补齐（5.4.7）；`native.spec.ts` 的 DSH 部分。
 
 **门槛：** 用 DSH 时 A1、A2 通过。
@@ -963,16 +1033,16 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 ### M7 弱网加固、部署与总验收
 
 1. 用 Playwright 网络模拟把 A6 全部场景跑通，修掉发现的问题。
-2. 写 `docs/deploy.md` 与 systemd 示例，在用户的服务器上部署。
+2. 写 `docs/deploy.md` 与 systemd 示例，并按「本机生产方式」（`pnpm build` + `WDCC_HOST=0.0.0.0`）在本机跑通；部署到用户自己的服务器由用户完成。
 3. 逐项跑第 15 节，结果与证据（截图、日志、测试输出）写进 `docs/acceptance-report.md`。
 
-**门槛：** A1–A13 全部通过。
+**门槛：** A1–A13 全部通过；其中 A12 可以是「待用户确认」，A1、A7 的真实模型部分可以是「待真实模型验证」，其余各项必须真实通过。
 
 ---
 
 ## 15. 验收标准
 
-- [ ] **A1 三个 Agent 的基本能力（G1）**：DSH、Codex、Claude Code 各自都能：新建会话；逐字流式输出；看到命令、读文件、改文件、工具调用步骤；在网页上完成一次审批；打断一轮；重启平台后在同一会话继续，且 Agent 记得之前的上下文。先用假模型通过，再用真实模型各跑一遍。DSH 的审批用例按 5.4.5 由脚本显式请求提权；打断或关闭 DSH 会话时，未处理的审批都被回复 `cancelled`，DSH 不残留挂起的轮次。
+- [ ] **A1 三个 Agent 的基本能力（G1）**：DSH、Codex、Claude Code 各自都能：新建会话；逐字流式输出；看到命令、读文件、改文件、工具调用步骤；在网页上完成一次审批；打断一轮；重启平台后在同一会话继续，且 Agent 记得之前的上下文。先用假模型通过，再用真实模型各跑一遍（没有 Key 或登录时真实模型部分标「待真实模型验证」）。DSH 的审批用例按 5.4.5 由脚本显式请求提权；打断或关闭 DSH 会话时，未处理的审批都被回复 `cancelled`，DSH 不残留挂起的轮次。
 - [ ] **A2 原装（G1）**：`native.spec.ts` 全部通过；用结构化数据对比能力清单（Claude：init 里的 MCP servers 和 slash commands 与在同目录运行交互式 `claude` 时 `/mcp`、斜杠菜单一致；Codex：`skills/list`、`mcpServerStatus/list` 与同目录直接运行 `codex app-server` 的结果一致；DSH：平台建的会话所用 preset 与 Host API `agentPresets/read` 读到的一致，且模型拿到的工具列表与在 DSH 自带网页端同一 workspace 新建会话时一致；对比时先停掉 WebDCC 的侧车，避免两个 `dsh web` 同时运行）；工作区放一个写有特殊约定的 AGENTS.md / CLAUDE.md，网页端里对应 Agent 遵守它。
 - [ ] **A3 URL（G3）**：`/s/A`、`/s/A+B`、`/s/A?dock=diff:F`、`#e-{seq}` 在另一个已认证浏览器打开得到相同布局和内容；两个标签页同时打开同一会话，流式输出同步；流式中刷新不重复、不缺字；前进、后退能还原布局。
 - [ ] **A4 文件（G3）**：上传文件在刷新、服务重启、换设备后通过 `/files/{id}` 都能打开；响应带 `immutable` 缓存头和 ETag；无 Cookie 返回 401。
@@ -984,12 +1054,12 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
   - 6d 离线时点审批：恢复后只生效一次；若已被处理，界面显示实际结果。
   - 6e HTTPS 部署下离线刷新页面：应用外壳能打开，已缓存会话可阅读，顶部显示离线状态。
   - 6f 上传 20 MB 文件，中途断网再恢复：从断点续传，最终 sha256 一致。
-- [ ] **A7 Provider（G6）**：登记 DeepSeek Provider 后，Codex（`deepseek-v4-pro`）和 Claude Code（Anthropic 兼容端点）都能完成 A1 的对话部分；不兼容组合灰显并写明原因；Key 不出现在日志、事件或 API 响应中。
+- [ ] **A7 Provider（G6）**：登记 DeepSeek Provider 后，Codex（`deepseek-v4-pro`）和 Claude Code（Anthropic 兼容端点）都能完成 A1 的对话部分；不兼容组合灰显并写明原因；Key 不出现在日志、事件或 API 响应中。真实模型部分没有 Key 时标「待真实模型验证」。
 - [ ] **A8 交接（G7）**：完整跑通 1.2 节流程。"带到…"和 `@` 插入后，目标输入框里的文本与来源原文逐字节一致；平台没有自动发送任何消息。
 - [ ] **A9 认证（G8）**：无 Cookie 时所有受保护路径返回 401；错误 token 不设 Cookie；更换 `WDCC_TOKEN` 后旧 Cookie 失效。
 - [ ] **A10 事件完整性**：fake-adapter 回放 10,000 帧，期间随机断开重连 WebSocket 20 次；客户端最终事件序列与数据库一致（seq 连续、无重复），侧边栏状态与服务端一致。
 - [ ] **A11 未知事件不丢**：注入一个未知类型的原生事件，它以 unknown 卡片出现在时间线里。
-- [ ] **A12 界面（G2）**：在 1440×900 和 390×844 下截图，覆盖：侧边栏、运行中轮次、已完成轮次（收起与展开）、改动卡片、审批卡片、任务面板、`@` 弹窗、停靠区（会话标签与 diff 标签）、新会话页。用户对照 `docs/reference/dsh/` 确认交互与 DSH 一致。
+- [ ] **A12 界面（G2）**：在 1440×900 和 390×844 下截图，覆盖：侧边栏、运行中轮次、已完成轮次（收起与展开）、改动卡片、审批卡片、任务面板、`@` 弹窗、停靠区（会话标签与 diff 标签）、新会话页。截图存档到 `docs/acceptance/M7/`，与 `docs/reference/dsh/` 的对照结论标「待用户确认」。
 - [ ] **A13 提醒**：后台会话完成或等待审批时，侧边栏状态、页面标题未读数、浏览器通知都出现，且没有任何消息被自动发给 Agent。
 
 ---
@@ -1004,7 +1074,7 @@ CREATE TABLE drafts (session_id TEXT PRIMARY KEY REFERENCES sessions(id), text T
 | 开发机或服务器 CPU 不支持 AVX2 | 构建、测试工具避开 rolldown 原生二进制；部署前检查 |
 | Claude Agent SDK 与 CLI 行为差异，`-p` 将来默认 bare 也可能波及 SDK | 3.2 固定选项 + A2 对比；锁定 SDK 版本；升级前重跑 A2 |
 | 访问 token 等同服务器 shell 权限 | 文档提示；token ≥ 32 字节；可随时更换 |
-| 多个会话同时改同一工作区 | v1 不加锁；侧边栏状态和"项目改动"让用户看清谁在改 |
+| 多个会话同时改同一工作区 | v1 不加锁；每轮的改动卡片标明本会话改了哪些文件，侧边栏显示哪些会话正在运行（v1 没有工作区级的「项目改动」面板） |
 | 纯 HTTP 部署时 Service Worker 不可用 | 离线外壳自动关闭，其余同步能力不受影响；文档建议 HTTPS |
 | 跨协议用模型效果下降 | 用户自行选择；兼容矩阵只保证协议正确 |
 
