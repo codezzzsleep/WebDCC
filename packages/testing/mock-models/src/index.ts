@@ -1,3 +1,4 @@
-// 假模型服务：mock-anthropic / mock-responses
-// 骨架占位：实现见 SPEC 对应里程碑。
-export const PACKAGE = '@webdcc/mock-models';
+export * from './plan.js';
+export * from './http-util.js';
+export * from './anthropic-server.js';
+export * from './responses-server.js';

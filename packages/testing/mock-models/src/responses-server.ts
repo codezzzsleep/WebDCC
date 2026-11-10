@@ -1,0 +1,345 @@
+/**
+ * mock-responses：OpenAI Responses API 流式格式的脚本化假模型（SPEC 第 13 节）。
+ *
+ * 用途：驱动 Codex 的自定义 Provider（`wire_api = "responses"`）。
+ * 回放规则与 mock-anthropic 相同：按"已收到的 function_call_output 个数"选 plan 的第 N 项。
+ */
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  JsonlRecorder,
+  chunkText,
+  delay,
+  defaultLogger,
+  readJsonBody,
+  sendJson,
+  startSse,
+  writeSse,
+  type MockLogger,
+} from './http-util.js';
+import { resolveTool, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { defaultToolInput } from './anthropic-server.js';
+
+export interface ResponsesMockOptions {
+  plan: Plan;
+  port?: number;
+  host?: string;
+  modelId?: string;
+  log?: MockLogger;
+  recordPath?: string;
+  chunkSize?: number;
+}
+
+export interface RunningResponsesMock {
+  server: Server;
+  port: number;
+  url: string;
+  close: () => Promise<void>;
+}
+
+interface ResponsesInputItem {
+  type?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 统计"当前这一轮"已回传的 function_call_output 个数 → 回放第几步。
+ * 从 input 末尾往前扫，遇到本轮的用户消息（role=user 的 message）就停。
+ */
+export function countFunctionCallOutputs(input: readonly ResponsesInputItem[] | undefined): number {
+  if (!input) return 0;
+  let count = 0;
+  for (let i = input.length - 1; i >= 0; i -= 1) {
+    const item = input[i];
+    if (item === undefined) continue;
+    if (item.type === 'function_call_output') {
+      count += 1;
+      continue;
+    }
+    if (item.type === 'message' && item['role'] === 'user') break;
+  }
+  return count;
+}
+
+let seq = 0;
+
+function newId(prefix: string): string {
+  seq += 1;
+  return `${prefix}_${Date.now().toString(36)}${String(seq).padStart(4, '0')}`;
+}
+
+function emptyResponse(id: string, model: string, status: string): Record<string, unknown> {
+  return {
+    id,
+    object: 'response',
+    created_at: Math.floor(Date.now() / 1000),
+    status,
+    model,
+    output: [],
+    parallel_tool_calls: false,
+    tool_choice: 'auto',
+    tools: [],
+    usage: null,
+  };
+}
+
+function usage(): Record<string, unknown> {
+  return {
+    input_tokens: 128,
+    input_tokens_details: { cached_tokens: 0 },
+    output_tokens: 32,
+    output_tokens_details: { reasoning_tokens: 0 },
+    total_tokens: 160,
+  };
+}
+
+export function createResponsesMock(options: ResponsesMockOptions): RunningResponsesMock {
+  const log = options.log ?? defaultLogger;
+  const modelId = options.modelId ?? 'mock-responses-1';
+  const recorder = options.recordPath ? new JsonlRecorder(options.recordPath) : null;
+  const chunkSize = options.chunkSize ?? 12;
+
+  const server = createServer((req, res) => {
+    void handle(req, res).catch((error: unknown) => {
+      log('handler error', String(error));
+      if (!res.headersSent) sendJson(res, 500, { error: { message: String(error), type: 'mock_error' } });
+      else res.end();
+    });
+  });
+
+  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const method = req.method ?? 'GET';
+    log(`${method} ${url.pathname}`);
+
+    if (method === 'POST' && (url.pathname === '/v1/responses' || url.pathname === '/responses')) {
+      const body = (await readJsonBody(req)) as Record<string, unknown>;
+      recorder?.record({ ts: new Date().toISOString(), direction: 'request', path: url.pathname, body });
+      await replyToResponse(res, body);
+      return;
+    }
+
+    if (method === 'GET' && (url.pathname === '/v1/models' || url.pathname === '/models')) {
+      sendJson(res, 200, { object: 'list', data: [{ id: modelId, object: 'model', created: 1767225600, owned_by: 'mock' }] });
+      return;
+    }
+
+    log('UNKNOWN endpoint', `${method} ${url.pathname}`);
+    recorder?.record({ ts: new Date().toISOString(), direction: 'unknown-request', method, path: url.pathname });
+    sendJson(res, 404, { error: { message: `mock-responses has no ${method} ${url.pathname}`, type: 'not_found' } });
+  }
+
+  async function replyToResponse(res: ServerResponse, body: Record<string, unknown>): Promise<void> {
+    const input = Array.isArray(body['input']) ? (body['input'] as ResponsesInputItem[]) : undefined;
+    const tools = Array.isArray(body['tools']) ? (body['tools'] as ToolDescriptor[]) : undefined;
+    const stepIndex = countFunctionCallOutputs(input);
+    const step: PlanStep = stepAt(options.plan, stepIndex);
+    const requestModel = typeof body['model'] === 'string' ? body['model'] : modelId;
+    const resolvedTool = resolveTool(step.tool, tools);
+    const toolName = resolvedTool?.name;
+    const toolInput = { ...defaultToolInput(resolvedTool?.kind ?? 'other'), ...(resolvedTool?.input ?? {}) };
+    if (!toolName && step.tool) log('plan wants a tool but request has no matching tool', step.tool.kind);
+
+    const responseId = newId('resp');
+    const callId = resolvedTool?.callId ?? newId('call');
+    const stepDelay = step.chunkDelayMs ?? 0;
+
+    recorder?.record({
+      ts: new Date().toISOString(),
+      direction: 'reply',
+      stepIndex,
+      toolName,
+      stream: body['stream'] !== false,
+    });
+
+    const outputItems: Record<string, unknown>[] = [];
+
+    if (body['stream'] === false) {
+      if (step.thinking) {
+        outputItems.push({
+          id: newId('rs'),
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: step.thinking }],
+        });
+      }
+      if (step.text) {
+        outputItems.push({
+          id: newId('msg'),
+          type: 'message',
+          status: 'completed',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: step.text, annotations: [] }],
+        });
+      }
+      if (toolName) {
+        outputItems.push({
+          id: newId('fc'),
+          type: 'function_call',
+          status: 'completed',
+          call_id: callId,
+          name: toolName,
+          arguments: JSON.stringify(toolInput),
+        });
+      }
+      sendJson(res, 200, { ...emptyResponse(responseId, requestModel, 'completed'), output: outputItems, usage: usage() });
+      return;
+    }
+
+    startSse(res);
+    writeSse(res, 'response.created', {
+      type: 'response.created',
+      response: emptyResponse(responseId, requestModel, 'in_progress'),
+    });
+    writeSse(res, 'response.in_progress', {
+      type: 'response.in_progress',
+      response: emptyResponse(responseId, requestModel, 'in_progress'),
+    });
+
+    let outputIndex = 0;
+
+    if (step.thinking) {
+      const itemId = newId('rs');
+      const index = outputIndex++;
+      writeSse(res, 'response.output_item.added', {
+        type: 'response.output_item.added',
+        output_index: index,
+        item: { id: itemId, type: 'reasoning', summary: [] },
+      });
+      writeSse(res, 'response.reasoning_summary_part.added', {
+        type: 'response.reasoning_summary_part.added',
+        item_id: itemId,
+        output_index: index,
+        summary_index: 0,
+        part: { type: 'summary_text', text: '' },
+      });
+      for (const chunk of chunkText(step.thinking, chunkSize)) {
+        await delay(stepDelay);
+        writeSse(res, 'response.reasoning_summary_text.delta', {
+          type: 'response.reasoning_summary_text.delta',
+          item_id: itemId,
+          output_index: index,
+          summary_index: 0,
+          delta: chunk,
+        });
+      }
+      writeSse(res, 'response.reasoning_summary_text.done', {
+        type: 'response.reasoning_summary_text.done',
+        item_id: itemId,
+        output_index: index,
+        summary_index: 0,
+        text: step.thinking,
+      });
+      writeSse(res, 'response.reasoning_summary_part.done', {
+        type: 'response.reasoning_summary_part.done',
+        item_id: itemId,
+        output_index: index,
+        summary_index: 0,
+        part: { type: 'summary_text', text: step.thinking },
+      });
+      const item = { id: itemId, type: 'reasoning', summary: [{ type: 'summary_text', text: step.thinking }] };
+      outputItems.push(item);
+      writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
+    }
+
+    if (step.text) {
+      const itemId = newId('msg');
+      const index = outputIndex++;
+      writeSse(res, 'response.output_item.added', {
+        type: 'response.output_item.added',
+        output_index: index,
+        item: { id: itemId, type: 'message', status: 'in_progress', role: 'assistant', content: [] },
+      });
+      writeSse(res, 'response.content_part.added', {
+        type: 'response.content_part.added',
+        item_id: itemId,
+        output_index: index,
+        content_index: 0,
+        part: { type: 'output_text', text: '', annotations: [] },
+      });
+      for (const chunk of chunkText(step.text, chunkSize)) {
+        await delay(stepDelay);
+        writeSse(res, 'response.output_text.delta', {
+          type: 'response.output_text.delta',
+          item_id: itemId,
+          output_index: index,
+          content_index: 0,
+          delta: chunk,
+        });
+      }
+      writeSse(res, 'response.output_text.done', {
+        type: 'response.output_text.done',
+        item_id: itemId,
+        output_index: index,
+        content_index: 0,
+        text: step.text,
+      });
+      const part = { type: 'output_text', text: step.text, annotations: [] };
+      writeSse(res, 'response.content_part.done', {
+        type: 'response.content_part.done',
+        item_id: itemId,
+        output_index: index,
+        content_index: 0,
+        part,
+      });
+      const item = { id: itemId, type: 'message', status: 'completed', role: 'assistant', content: [part] };
+      outputItems.push(item);
+      writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
+    }
+
+    if (toolName) {
+      const itemId = newId('fc');
+      const index = outputIndex;
+      writeSse(res, 'response.output_item.added', {
+        type: 'response.output_item.added',
+        output_index: index,
+        item: { id: itemId, type: 'function_call', status: 'in_progress', call_id: callId, name: toolName, arguments: '' },
+      });
+      const json = JSON.stringify(toolInput);
+      for (const chunk of chunkText(json, 24)) {
+        await delay(stepDelay);
+        writeSse(res, 'response.function_call_arguments.delta', {
+          type: 'response.function_call_arguments.delta',
+          item_id: itemId,
+          output_index: index,
+          delta: chunk,
+        });
+      }
+      writeSse(res, 'response.function_call_arguments.done', {
+        type: 'response.function_call_arguments.done',
+        item_id: itemId,
+        output_index: index,
+        arguments: json,
+      });
+      const item = { id: itemId, type: 'function_call', status: 'completed', call_id: callId, name: toolName, arguments: json };
+      outputItems.push(item);
+      writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
+    }
+
+    writeSse(res, 'response.completed', {
+      type: 'response.completed',
+      response: { ...emptyResponse(responseId, requestModel, 'completed'), output: outputItems, usage: usage() },
+    });
+    res.end();
+  }
+
+  return {
+    server,
+    port: options.port ?? 0,
+    url: '',
+    async close() {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    },
+  };
+}
+
+export async function startResponsesMock(options: ResponsesMockOptions): Promise<RunningResponsesMock> {
+  const mock = createResponsesMock(options);
+  await new Promise<void>((resolve, reject) => {
+    mock.server.once('error', reject);
+    mock.server.listen(options.port ?? 0, options.host ?? '127.0.0.1', () => resolve());
+  });
+  const address = mock.server.address();
+  if (address === null || typeof address === 'string') throw new Error('mock-responses: 无法确定监听端口');
+  mock.port = address.port;
+  mock.url = `http://${options.host ?? '127.0.0.1'}:${address.port}`;
+  return mock;
+}

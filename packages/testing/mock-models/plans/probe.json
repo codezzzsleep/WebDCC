@@ -1,0 +1,135 @@
+[
+  {
+    "chunkDelayMs": 20,
+    "thinking": "用户要我看一下工作区。先列目录，再读 SPEC.md，然后写一个文件并改它，最后收尾。",
+    "text": "我先看一下工作区里有什么。",
+    "tool": {
+      "kind": "command",
+      "input": {
+        "command": "ls -la",
+        "description": "列出工作区内容"
+      },
+      "inputByName": {
+        "exec_command": {
+          "cmd": "ls -la",
+          "yield_time_ms": 10000
+        }
+      }
+    }
+  },
+  {
+    "chunkDelayMs": 20,
+    "text": "工作区里有 SPEC.md。我读一下开头。",
+    "tool": {
+      "kind": "read",
+      "input": {
+        "file_path": "./SPEC.md"
+      },
+      "alternatives": [
+        {
+          "kind": "command",
+          "name": "exec_command",
+          "input": {
+            "cmd": "head -5 SPEC.md",
+            "yield_time_ms": 10000
+          }
+        }
+      ]
+    }
+  },
+  {
+    "chunkDelayMs": 20,
+    "text": "写一个文件确认写入链路可用。",
+    "tool": {
+      "kind": "write",
+      "input": {
+        "file_path": "./mock-model-output.txt",
+        "content": "written by mock model\n"
+      },
+      "alternatives": [
+        {
+          "kind": "command",
+          "name": "exec_command",
+          "input": {
+            "cmd": "printf 'written by mock model\\n' > mock-model-output.txt",
+            "yield_time_ms": 10000
+          }
+        },
+        {
+          "kind": "patch",
+          "input": {
+            "patch": "*** Begin Patch\n*** Add File: mock-model-output.txt\n+written by mock model\n*** End Patch"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "chunkDelayMs": 20,
+    "text": "把文件里的一行改掉。",
+    "tool": {
+      "kind": "edit",
+      "input": {
+        "file_path": "./mock-model-output.txt",
+        "old_string": "written by mock model",
+        "new_string": "edited by mock model"
+      },
+      "alternatives": [
+        {
+          "kind": "command",
+          "name": "exec_command",
+          "input": {
+            "cmd": "sed -i 's/written by mock model/edited by mock model/' mock-model-output.txt",
+            "yield_time_ms": 10000
+          }
+        },
+        {
+          "kind": "patch",
+          "input": {
+            "patch": "*** Begin Patch\n*** Update File: mock-model-output.txt\n@@\n-written by mock model\n+edited by mock model\n*** End Patch"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "chunkDelayMs": 20,
+    "thinking": "顺手更新任务清单。",
+    "tool": {
+      "kind": "todo",
+      "inputByName": {
+        "todo_write": {
+          "todos": [
+            {
+              "content": "读 SPEC",
+              "status": "completed"
+            },
+            {
+              "content": "跑假模型探针",
+              "status": "in_progress"
+            }
+          ]
+        },
+        "TodoWrite": {
+          "todos": [
+            {
+              "content": "读 SPEC",
+              "status": "completed",
+              "activeForm": "读 SPEC"
+            },
+            {
+              "content": "跑假模型探针",
+              "status": "in_progress",
+              "activeForm": "跑假模型探针"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "chunkDelayMs": 20,
+    "text": "全部动作已完成：列目录、读文件、写文件、改文件（任务清单类工具在本 Agent 上没有对应工具时会退化为纯文本）。",
+    "stopReason": "end_turn"
+  }
+]
