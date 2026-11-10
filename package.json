@@ -8,25 +8,28 @@
     "node": ">=24"
   },
   "scripts": {
-    "typecheck": "pnpm -r --parallel typecheck",
+    "typecheck": "pnpm -r --parallel typecheck && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "mock:anthropic": "tsx packages/testing/mock-models/src/anthropic-server.ts",
-    "mock:responses": "tsx packages/testing/mock-models/src/responses-server.ts",
+    "mock:anthropic": "tsx packages/testing/mock-models/src/anthropic-cli.ts",
+    "mock:responses": "tsx packages/testing/mock-models/src/responses-cli.ts",
     "probe:codex": "tsx scripts/probe-codex.ts",
     "probe:claude": "tsx scripts/probe-claude.ts",
     "probe:dsh": "tsx scripts/probe-dsh.ts"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.322",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
     "eslint": "^10.14.0",
     "tsx": "^4.23.15",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.72.2",
-    "vitest": "^5.1.0"
+    "vitest": "3.2.7",
+    "ws": "^8.22.2"
   }
 }
