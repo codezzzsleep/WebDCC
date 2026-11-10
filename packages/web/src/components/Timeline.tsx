@@ -119,13 +119,13 @@ function TurnView({
 
   return (
     <section className={`turn ${running ? 'turn-running' : ''}`} id={user === undefined ? undefined : `e-${user.seq}`}>
-      {user !== undefined ? (
+      {user !== undefined || turn.pending !== undefined ? (
         <div className="user-message" data-testid="user-message">
           <div className="user-bubble">
-            <Markdown text={(user.data as EventData['user.message']).text} />
+            <Markdown text={user !== undefined ? (user.data as EventData['user.message']).text : (turn.pending?.text ?? '')} />
           </div>
           <div className="user-meta">
-            <span>{new Date(user.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>{new Date(user?.at ?? turn.pending?.at ?? Date.now()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
             {turn.pending !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending.status)}</span> : null}
           </div>
         </div>

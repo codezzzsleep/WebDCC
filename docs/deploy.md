@@ -46,3 +46,57 @@ pnpm install
 - 构建：`pnpm build`；启动：`node packages/server/dist/main.js`
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
+
+
+## 本机按生产方式运行（M7 已验收）
+
+```bash
+pnpm install
+pnpm build                     # 生成 packages/web/dist 与 packages/server/dist/main.js
+WDCC_TOKEN=<至少 32 字节的随机串> \
+WDCC_HOST=0.0.0.0 WDCC_PORT=8787 \
+WDCC_DATA_DIR=~/.webdcc \
+node packages/server/dist/main.js
+# 启动后终端会打印：webdcc: http://<host>:8787/?token=<token>
+```
+
+- 首次打开用带 token 的链接，服务端换 HttpOnly Cookie 后跳到 `/`。
+- **HTTPS**：Service Worker 只在安全上下文可用。纯 HTTP 时离线外壳自动不生效（其余同步能力不受影响）；需要离线能力就把服务放在 HTTPS 反向代理后面（代理必须支持 WebSocket upgrade），或在本机用 `--tls-cert/--tls-key` 由 DSH 侧车之外的代理终结 TLS。
+
+## systemd unit 示例
+
+```ini
+[Unit]
+Description=WebDCC
+After=network.target
+
+[Service]
+Type=simple
+User=webdcc
+WorkingDirectory=/opt/webdcc
+EnvironmentFile=/etc/webdcc.env
+ExecStart=/usr/bin/node /opt/webdcc/packages/server/dist/main.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`/etc/webdcc.env`（权限 0600）：
+
+```
+WDCC_TOKEN=换成你自己的随机串
+WDCC_HOST=0.0.0.0
+WDCC_PORT=8787
+WDCC_DATA_DIR=/home/webdcc/.webdcc
+WDCC_DSH_PORT=3091
+WDCC_IDLE_DISPOSE_MIN=30
+```
+
+## 运行注意事项
+
+- **不要同时运行 DSH 自带的 `dsh web`**：两边共享全局注册表会互相覆盖（SPEC 5.4.9）。WebDCC 自己会在 127.0.0.1:${WDCC_DSH_PORT} 拉起侧车。
+- `codex`、`claude`、`dsh` 必须已按锁定版本安装在运行用户的 PATH 上，并完成各自的登录（或改用 Provider + API Key）。
+- Provider 的 Key 存在 `WDCC_DATA_DIR/secrets.json`（0600），不会出现在日志、事件或 API 响应里。
+- 备份 `WDCC_DATA_DIR`（SQLite + 文件 + secrets）即可完整恢复。
