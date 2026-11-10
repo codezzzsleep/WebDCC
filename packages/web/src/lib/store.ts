@@ -58,6 +58,8 @@ export class AppStore {
   private outbox = new Map<string, { command: Command; status: PendingMessage['status'] }>();
   private listeners = new Set<() => void>();
   private derived = new Map<string, { version: number; turns: TurnModel[] }>();
+  /** 每个会话的订阅游标：新浏览器打开大会话时从服务端最新 seq 开始，不整段重拉 */
+  private cursors = new Map<string, number>();
   private version = 0;
   private draftTimers = new Map<string, NodeJS.Timeout>();
 
@@ -99,13 +101,40 @@ export class AppStore {
     return this.version;
   }
 
+  private notifyScheduled = false;
+
+  /** 同一 tick 内合并重渲染（5000 条事件时这是关键） */
+  private cacheQueue: StoredEvent[] = [];
+  private cacheFlushTimer: NodeJS.Timeout | null = null;
+
+  private queueCache(event: StoredEvent): void {
+    this.cacheQueue.push(event);
+    if (this.cacheFlushTimer !== null) return;
+    this.cacheFlushTimer = setTimeout(() => {
+      const batch = this.cacheQueue.splice(0, this.cacheQueue.length);
+      this.cacheFlushTimer = null;
+      if (batch.length === 0) return;
+      void cache.putEvents(batch);
+      const last = batch[batch.length - 1];
+      if (last !== undefined) void cache.setMeta(`maxSeq:${last.sessionId}`, last.seq);
+    }, 100);
+  }
+
   private notify(): void {
-    this.version += 1;
-    for (const listener of this.listeners) listener();
+    if (this.notifyScheduled) return;
+    this.notifyScheduled = true;
+    queueMicrotask(() => {
+      this.notifyScheduled = false;
+      this.version += 1;
+      for (const listener of this.listeners) listener();
+    });
   }
 
   private subscriptions(): { sessionId: string; afterSeq: number }[] {
-    return [...this.sessions.keys()].map((sessionId) => ({ sessionId, afterSeq: this.maxSeq(sessionId) }));
+    return [...this.sessions.keys()].map((sessionId) => ({
+      sessionId,
+      afterSeq: Math.max(this.maxSeq(sessionId), this.cursors.get(sessionId) ?? 0),
+    }));
   }
 
   maxSeq(sessionId: string): number {
@@ -211,8 +240,7 @@ export class AppStore {
         this.pending.set(event.sessionId, list.filter((item) => item.clientCommandId !== clientCommandId));
       }
     }
-    void cache.putEvents([event]);
-    void cache.setMeta(`maxSeq:${event.sessionId}`, event.seq);
+    this.queueCache(event);
     this.notify();
   }
 
@@ -225,28 +253,36 @@ export class AppStore {
       for (const event of cached) map.set(event.seq, event);
       this.events.set(sessionId, map);
     }
+    let serverLastSeq: number | undefined;
     if (this.sessions.has(sessionId) === false) {
       try {
         const detail = await api.session(sessionId);
         this.sessions.set(sessionId, detail as SessionMeta);
+        serverLastSeq = detail.lastSeq;
         void cache.putSession(detail as CachedSession);
       } catch {
         // 会话可能已删除；保持现状
       }
     }
-    this.connection.subscribe(sessionId, this.maxSeq(sessionId));
-    this.notify();
-    // 缓存里没有的会话，拉第一页
-    if ((this.events.get(sessionId)?.size ?? 0) === 0) {
-      const page = await api.events(sessionId, { limit: 200 }).catch(() => undefined);
+    const localMax = this.maxSeq(sessionId);
+    // 没有缓存时只取最近 200 条，并从服务端最新的 seq 开始订阅：不整段重拉（SPEC 7.5 / A5）
+    if ((this.events.get(sessionId)?.size ?? 0) === 0 && serverLastSeq !== undefined && serverLastSeq > 0) {
+      const page = await api.events(sessionId, { before: serverLastSeq + 1, limit: 200 }).catch(() => undefined);
       if (page !== undefined) {
-        for (const event of page.events) {
-          this.events.get(sessionId)?.set(event.seq, event);
-        }
+        const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
+        for (const event of page.events) map.set(event.seq, event);
+        this.events.set(sessionId, map);
         void cache.putEvents(page.events);
-        this.notify();
       }
+      const cursor = Math.max(serverLastSeq, localMax);
+      this.cursors.set(sessionId, cursor);
+      this.connection.subscribe(sessionId, cursor);
+    } else {
+      const cursor = Math.max(this.cursors.get(sessionId) ?? 0, localMax);
+      this.cursors.set(sessionId, cursor);
+      this.connection.subscribe(sessionId, cursor);
     }
+    this.notify();
   }
 
   async loadOlder(sessionId: string): Promise<boolean> {

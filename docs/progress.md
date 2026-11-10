@@ -33,7 +33,9 @@
 | 路由（/s/{id}、?dock=files、?dock=diff:{id}、停靠区 URL 还原） | A3 通过（3 个 Playwright 用例） |
 | IndexedDB 缓存 + WebSocket 续传 + 心跳重连 + 发件箱 | 已实现 |
 | Service Worker（vite-plugin-pwa / Workbox） | 已生成，待 A6e 验证 |
-| A5 性能、A6a/6b、A12 截图 | 待跑 |
+| A5 性能 | **未通过**：未缓存首屏实测 8.8s（要求 ≤1s）。limit=200 正确、DOMContentLoaded 64ms、无 longtask，数据在 0.1s 内到齐，但 `.turn` 要到 8s 后才出现——说明首屏渲染被某个异步等待卡住，下一轮继续定位 |
+| A6a/6b/6e | 用例已写（`e2e/m2-network.spec.ts`），待跑 |
+| A12 截图 | 待跑 |
 
 ## M1 偏差与说明
 

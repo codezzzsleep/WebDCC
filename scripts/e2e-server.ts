@@ -9,7 +9,7 @@ import { start } from '../packages/server/src/main.js';
 
 const config = loadConfig();
 const adapters = [
-  new FakeAdapter({ id: 'dsh', delayMs: 4, itemsPerTurn: 5000, injectUnknown: true, injectInternal: true }),
+  new FakeAdapter({ id: 'dsh', delayMs: 2, itemsPerTurn: 95, injectUnknown: true, injectInternal: true }),
   new FakeAdapter({ id: 'codex', delayMs: 4, itemsPerTurn: 20 }),
   new FakeAdapter({ id: 'claude-code', delayMs: 20, itemsPerTurn: 4, injectApproval: true, injectQuestion: true }),
 ];
