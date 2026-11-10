@@ -116,8 +116,16 @@ export class SessionManager {
     const updated = this.store.updateSession(session.id, { nativeId: created.nativeId });
     const runtime = this.ensureRuntime(updated as SessionDto, adapter, workspace.path, created.nativeId);
     this.touchIdle(runtime);
-    const feedSeq = this.store.appendFeed(session.id, { created: true, status: 'idle', title: updated?.title ?? undefined });
-    this.hooks.onFeed(session.id, { created: true, status: 'idle' }, feedSeq);
+    const createPatch: FeedPatch = {
+      created: true,
+      status: 'idle',
+      agent: updated?.agent ?? input.agent,
+      workspaceId: updated?.workspaceId ?? input.workspaceId,
+      createdAt: updated?.createdAt ?? new Date().toISOString(),
+      ...(updated?.title === undefined || updated.title === null ? {} : { title: updated.title }),
+    };
+    const feedSeq = this.store.appendFeed(session.id, createPatch);
+    this.hooks.onFeed(session.id, createPatch, feedSeq);
     return updated as SessionDto;
   }
 

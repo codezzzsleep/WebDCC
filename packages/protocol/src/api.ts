@@ -2,9 +2,14 @@
 import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { ProbeResult } from './adapter.js';
 
+export interface AgentMeta extends ProbeResult {
+  accessModes?: { id: string; label: string }[];
+  models?: { id: string; label: string }[];
+}
+
 export interface MetaResponse {
   version: string;
-  agents: Record<string, ProbeResult>;
+  agents: Record<string, AgentMeta>;
 }
 
 export interface WorkspaceDto {

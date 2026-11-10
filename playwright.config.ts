@@ -1,16 +1,29 @@
 import { defineConfig } from '@playwright/test';
 
-// e2e 在 M2 起逐步落地；第 15 节 A6 的断网/限速场景用这里的网络模拟跑。
+const PORT = 8790;
+const TOKEN = 'e2e-token-0123456789abcdef0123456789';
+
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  timeout: 120_000,
+  expect: { timeout: 15_000 },
   fullyParallel: false,
+  workers: 1,
   retries: 0,
   reporter: [['list']],
   use: {
-    baseURL: process.env.WDCC_E2E_BASE_URL ?? 'http://127.0.0.1:8080',
+    baseURL: `http://127.0.0.1:${PORT}`,
+    viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  webServer: {
+    command: `rm -rf /tmp/wdcc-e2e && WDCC_TOKEN=${TOKEN} WDCC_PORT=${PORT} WDCC_HOST=127.0.0.1 WDCC_DATA_DIR=/tmp/wdcc-e2e WDCC_IDLE_DISPOSE_MIN=0 npx tsx scripts/e2e-server.ts`,
+    url: `http://127.0.0.1:${PORT}/api/meta`,
+    reuseExistingServer: false,
+    timeout: 120_000,
+    stdout: 'pipe',
+  },
 });
+
+export const E2E_TOKEN = TOKEN;

@@ -17,6 +17,9 @@ export interface RunningServer {
   close: () => Promise<void>;
   url: string;
   config: Config;
+  /** 供开发/e2e 播种数据；生产代码不要依赖 */
+  store: Store;
+  manager: SessionManager;
 }
 
 export async function start(config: Config = loadConfig(), options: ServerOptions = {}): Promise<RunningServer> {
@@ -51,6 +54,8 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   return {
     url: tokenUrl(config),
     config,
+    store,
+    manager,
     async close() {
       await manager.disposeAll();
       await app.close();

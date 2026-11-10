@@ -25,6 +25,16 @@
 
 （暂无）
 
+## M2 进度（进行中）
+
+| 项 | 状态 |
+|---|---|
+| 三列框架、侧边栏、会话头、时间线（轮次折叠/改动卡片/审批/提问/未知事件）、任务面板、输入框（@ 菜单、附件、发件箱状态）、轨迹、停靠区、新会话页 | 已实现 |
+| 路由（/s/{id}、?dock=files、?dock=diff:{id}、停靠区 URL 还原） | A3 通过（3 个 Playwright 用例） |
+| IndexedDB 缓存 + WebSocket 续传 + 心跳重连 + 发件箱 | 已实现 |
+| Service Worker（vite-plugin-pwa / Workbox） | 已生成，待 A6e 验证 |
+| A5 性能、A6a/6b、A12 截图 | 待跑 |
+
 ## M1 偏差与说明
 
 - **真实 adapter 尚未接入**：M1 只注册 fake-adapter；`packages/server/src/adapters.ts` 是生产组装点，M3–M5 依次填入 Codex / Claude / DSH。

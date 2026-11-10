@@ -103,6 +103,9 @@ export type ClientMessage = HelloMessage | SubscribeMessage | UnsubscribeMessage
 
 export interface FeedPatch {
   title?: string;
+  /** 创建事件里带上会话身份，便于新浏览器只靠 feed 重建侧边栏 */
+  agent?: string;
+  createdAt?: string;
   status?: 'idle' | 'running' | 'waiting' | 'error';
   updatedAt?: string;
   pinned?: boolean;
