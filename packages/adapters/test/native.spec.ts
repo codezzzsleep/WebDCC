@@ -4,6 +4,7 @@ import {
   buildTurnStartParams,
   CodexAdapter,
 } from '../codex/src/adapter.js';
+import { ClaudeAdapter } from '../claude/src/adapter.js';
 
 const FORBIDDEN = ['baseInstructions', 'developerInstructions'];
 const ALLOWED_CONFIG_KEYS = [
@@ -71,5 +72,35 @@ describe('原装原则：Codex（SPEC 3.3）', () => {
     expect(buildThreadStartParams({ ...opts, accessMode: 'workspace-auto' })).toMatchObject({
       approvalsReviewer: 'auto_review',
     });
+  });
+});
+
+
+describe('原装原则：Claude Code（SPEC 3.3）', () => {
+  const opts = { sessionId: 's2', cwd: '/tmp/ws', providerId: null };
+  const adapter = new ClaudeAdapter();
+  const sdkOptions = adapter.buildLaunchSpec(opts).sdkOptions as Record<string, unknown>;
+
+  it('systemPrompt 深等于 claude_code preset，且没有 append', () => {
+    expect(sdkOptions['systemPrompt']).toEqual({ type: 'preset', preset: 'claude_code' });
+    expect(sdkOptions).not.toHaveProperty('append');
+    expect(JSON.stringify(sdkOptions)).not.toContain('"append"');
+  });
+
+  it('settingSources 深等于 user/project/local', () => {
+    expect(sdkOptions['settingSources']).toEqual(['user', 'project', 'local']);
+  });
+
+  it('不存在 mcpServers / agents / hooks / allowedTools / disallowedTools', () => {
+    for (const key of ['mcpServers', 'agents', 'hooks', 'allowedTools', 'disallowedTools']) {
+      expect(sdkOptions, key).not.toHaveProperty(key);
+    }
+  });
+
+  it('六种原生 permissionMode 都原样透传', () => {
+    for (const mode of ['default', 'acceptEdits', 'plan', 'dontAsk', 'auto', 'bypassPermissions']) {
+      const spec = adapter.buildLaunchSpec({ ...opts, accessMode: mode });
+      expect((spec.sdkOptions as Record<string, unknown>)['permissionMode']).toBe(mode);
+    }
   });
 });

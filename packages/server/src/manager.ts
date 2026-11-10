@@ -113,7 +113,10 @@ export class SessionManager {
       ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
     });
 
-    const updated = this.store.updateSession(session.id, { nativeId: created.nativeId });
+    const updated =
+      created.nativeId === ''
+        ? session
+        : this.store.updateSession(session.id, { nativeId: created.nativeId });
     const runtime = this.ensureRuntime(updated as SessionDto, adapter, workspace.path, created.nativeId);
     this.touchIdle(runtime);
     const createPatch: FeedPatch = {
@@ -324,6 +327,11 @@ export class SessionManager {
       }
       case 'status': {
         this.setStatus(runtime, event.status);
+        break;
+      }
+      case 'native-id': {
+        runtime.nativeId = event.nativeId;
+        this.store.updateSession(sessionId, { nativeId: event.nativeId });
         break;
       }
     }

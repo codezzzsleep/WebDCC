@@ -523,3 +523,9 @@ Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools
 `item/*/requestApproval` 的 `id` 是 **JSON-RPC 请求 id**，每个 `codex app-server` 进程都从 0/1 重新开始。会话 `dispose` 后 `resume` 会拉起新进程，新进程的审批 id 又与上一进程重复；若我方直接用 `String(id)` 当 `approvalId`，去重逻辑（`approval.resolved` 里已有同名 id）会把 resume 之后的审批当成"已处理"而跳过，那一轮就会永远挂着。
 
 **修法**：`approvalId = `${进程 token}:${id}``（进程 token 在每次 `startProcess` 时生成），`PendingApproval` 里另存原始 `requestId` 用于回包。实测修好后 A1 的 8 项全过。
+
+### 7.9 Claude Code 的两条实测（M4）
+
+- **`permissionMode: 'bypassPermissions'` 在 root 下不可用**：SDK 会传 `--dangerously-skip-permissions`，CLI 直接退出并报 `cannot be used with root/sudo privileges for security reasons`。以 root 运行时要避开这一档（部署到普通用户账号时不受影响）。
+- **`bypassPermissions` 下 `canUseTool` 不会被调用**：SDK 打警告 `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`，审批与提问都收不到。所以"跳过权限"档不能用来做审批验收。
+- 通过 adapter 启动的会话仍然加载项目 `.mcp.json` 与 hooks（A2 实测：`mcp_servers=[{name:'wdccecho',status:'connected',source:'project'}]`、hook 标记文件生成、51 个斜杠命令、28 个工具）。
