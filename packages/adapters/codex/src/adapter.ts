@@ -121,6 +121,20 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
   }
 }
 
+/** 纯函数：thread/start 参数（3.3 的机器检查用；永不包含 baseInstructions/developerInstructions） */
+export function buildThreadStartParams(opts: CreateOpts): Record<string, unknown> {
+  return {
+    cwd: opts.cwd,
+    ...(opts.model === undefined ? {} : { model: opts.model }),
+    ...accessParams(opts.accessMode),
+  };
+}
+
+/** 纯函数：turn/start 参数 */
+export function buildTurnStartParams(threadId: string, text: string): Record<string, unknown> {
+  return { threadId, input: [{ type: 'text', text, text_elements: [] }] };
+}
+
 export class CodexAdapter implements AgentAdapter {
   readonly id = 'codex' as const;
   private readonly listeners: ((sessionId: string, event: AdapterEvent) => void)[] = [];
@@ -204,11 +218,7 @@ export class CodexAdapter implements AgentAdapter {
   async create(opts: CreateOpts): Promise<{ nativeId: string }> {
     const runtime = this.startProcess(opts.sessionId, opts);
     await this.handshake(runtime.rpc);
-    const response = await runtime.rpc.request<{ thread: { id: string } }>('thread/start', {
-      cwd: opts.cwd,
-      ...(opts.model === undefined ? {} : { model: opts.model }),
-      ...accessParams(opts.accessMode),
-    });
+    const response = await runtime.rpc.request<{ thread: { id: string } }>('thread/start', buildThreadStartParams(opts));
     runtime.nativeId = response.thread.id;
     return { nativeId: runtime.nativeId };
   }
@@ -227,10 +237,7 @@ export class CodexAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
     const startedAt = Date.now();
-    const response = await runtime.rpc.request<{ turn: { id: string } }>('turn/start', {
-      threadId: runtime.nativeId,
-      input: [{ type: 'text', text: input.text, text_elements: [] }],
-    });
+    const response = await runtime.rpc.request<{ turn: { id: string } }>('turn/start', buildTurnStartParams(runtime.nativeId, input.text));
     runtime.turnId = response.turn.id;
     runtime.turnStartedAt = startedAt;
   }

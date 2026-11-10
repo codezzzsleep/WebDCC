@@ -43,8 +43,10 @@
 |---|---|
 | CodexAdapter（app-server 子进程、JSON-RPC、thread/turn、审批回包、事件映射、resume/dispose/probe/buildLaunchSpec） | 已实现，`npx tsx scripts/test-codex-adapter.ts` 冒烟通过（29 条事件，含 turn.completed/usage/command/reasoning） |
 | 接入生产组装点 `packages/server/src/adapters.ts` | 已接入（`WDCC_ENABLE_CODEX=0` 可关闭） |
-| `model_catalog_json` 前置与 fixtures 重录 | 待做 |
-| `native.spec.ts` 的 Codex 部分、A1/A2 | 待做 |
+| `model_catalog_json` 前置 | **已核实并否决**：自定义条目必须带 `base_instructions`/`instructions_template`，填它就是平台提供系统提示词 → 违反 R1。改用 Codex 自带元数据；代价是假模型下没有 `fileChange`/`turn/plan/updated`，adapter 按 5.2/6.3 两种情况处理。已写进 SPEC 13 与 protocol-notes §7.7 |
+| `native.spec.ts` 的 Codex 部分 | 完成（4 个断言：thread/start、turn/start、`-c` 白名单、访问模式映射），全绿 |
+| fixtures 重录 | 待做 |
+| A1/A2（Codex） | 部分：冒烟脚本已跑通一轮（29 条事件、turn.completed）；A2 的结构化对比待做 |
 
 ## M1 偏差与说明
 
