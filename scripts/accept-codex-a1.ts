@@ -19,7 +19,8 @@ function check(name: string, ok: boolean, detail = ''): void {
 }
 
 const plan = JSON.parse(readFileSync('packages/testing/mock-models/plans/probe.json', 'utf8')) as Plan;
-const mock = await startResponsesMock({ plan, port: 0, log: () => undefined });
+const mockRecord = '/tmp/wdcc-a1-mock.jsonl';
+const mock = await startResponsesMock({ plan, port: 0, log: () => undefined, recordPath: mockRecord });
 const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-a1-'));
 const workspace = await mkdtemp(join(tmpdir(), 'wdcc-a1-ws-'));
 const codexHome = await mkdtemp(join(tmpdir(), 'wdcc-a1-home-'));
@@ -100,8 +101,20 @@ const events = server.store.allEvents(session.id);
 for (const event of events.filter((item) => item.kind === 'turn.completed' || item.kind === 'error')) {
   console.log('  ·', event.kind, JSON.stringify(event.data).slice(0, 160));
 }
+const counts = new Map<string, number>();
+for (const event of events) counts.set(event.kind, (counts.get(event.kind) ?? 0) + 1);
+console.log('  事件计数：' + [...counts].map(([kind, count]) => `${kind}=${count}`).join(' '));
 console.log(`\n事件总数 ${events.length}；kind：${[...new Set(events.map((event) => event.kind))].join(', ')}`);
 clearInterval(autoTimer);
+try {
+  const lines = readFileSync(mockRecord, 'utf8').trim().split('\n');
+  const replies = lines.map((line) => JSON.parse(line) as { direction?: string; stepIndex?: number; toolName?: string });
+  const requests = replies.filter((entry) => entry.direction === 'request').length;
+  const answerReplies = replies.filter((entry) => entry.direction === 'reply');
+  console.log(`mock：请求 ${requests} 次；回复步骤 ${answerReplies.map((entry) => `${entry.stepIndex}/${entry.toolName ?? '-'}`).join(' ')}`);
+} catch (error) {
+  console.log('mock 记录读取失败', String(error));
+}
 console.log(`通过 ${pass.length} 项，失败 ${fail.length} 项`);
 await server.close();
 await mock.close();

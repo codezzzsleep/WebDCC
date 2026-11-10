@@ -46,7 +46,7 @@
 | `model_catalog_json` 前置 | **已核实并否决**：自定义条目必须带 `base_instructions`/`instructions_template`，填它就是平台提供系统提示词 → 违反 R1。改用 Codex 自带元数据；代价是假模型下没有 `fileChange`/`turn/plan/updated`，adapter 按 5.2/6.3 两种情况处理。已写进 SPEC 13 与 protocol-notes §7.7 |
 | `native.spec.ts` 的 Codex 部分 | 完成（4 个断言：thread/start、turn/start、`-c` 白名单、访问模式映射），全绿 |
 | fixtures 重录 | 待做 |
-| A1（Codex） | **7/8 通过**（`scripts/accept-codex-a1.ts`：新建、流式、命令、工具、审批、一轮完成、打断）。**未通过**：`dispose` 后 `resume` 的新一轮不完成——日志显示 `thread/resume` 成功、`turn/start` 返回了 turnId，但该轮不再产生任何事件，下一次 `turn/start` 还被当成 steer 到同一 turn。已定位到这一步，待修 |
+| A1（Codex） | **7/8 通过**（`scripts/accept-codex-a1.ts`：新建、流式、命令、工具、审批、一轮完成、打断）。**未通过**：`dispose` 后 `resume` 的新一轮卡住。证据链：`thread/resume` 成功 → `turn/start` 返回 turnId → mock 收到第 6 次请求并回了 `exec_command` → 事件计数 `approval.request=5 / approval.resolved=4`，**有 1 个审批请求没被解决**，所以这一轮一直挂着。下一步查"resume 后的审批请求为什么没有被 auto-approve 处理"（可能是 `approvalId` 映射或 `hasApprovalResolved` 判定） |
 | A2（Codex） | 待做（`skills/list`、`mcpServerStatus/list` 结构化对比） |
 
 ## M1 偏差与说明

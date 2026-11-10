@@ -30,6 +30,8 @@ interface PendingApproval {
 
 interface SessionRuntime {
   nativeId: string;
+  /** resume 之后等线程真正挂上（thread/started）再发首轮 */
+  ready: Promise<void>;
   rpc: JsonRpcStdio;
   cwd: string;
   turnId: string | null;
@@ -195,8 +197,13 @@ export class CodexAdapter implements AgentAdapter {
       cwd: opts.cwd,
       env: { ...(this.options.env ?? process.env), ...spec.env },
     });
+    let markReady: () => void = () => undefined;
+    const ready = new Promise<void>((resolve) => {
+      markReady = resolve;
+    });
     const runtime: SessionRuntime = {
       nativeId: '',
+      ready,
       rpc,
       cwd: opts.cwd,
       turnId: null,
@@ -204,7 +211,10 @@ export class CodexAdapter implements AgentAdapter {
       approvals: new Map(),
       lastAssistantText: '',
     };
-    rpc.onNotification((frame) => this.onNotification(sessionId, frame));
+    rpc.onNotification((frame) => {
+      if (frame['method'] === 'thread/started') markReady();
+      this.onNotification(sessionId, frame);
+    });
     rpc.onServerRequest((frame) => this.onServerRequest(sessionId, frame));
     this.sessions.set(sessionId, runtime);
     return runtime;
@@ -237,12 +247,15 @@ export class CodexAdapter implements AgentAdapter {
       ...accessParams(opts.accessMode),
     });
     runtime.nativeId = response.thread.id;
+    // thread/resume 返回后线程可能还没挂上；等 thread/started 或最多 2 秒
+    await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resumed', runtime.nativeId);
   }
 
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
     const startedAt = Date.now();
+    await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId);
     const response = await runtime.rpc.request<{ turn: { id: string } }>('turn/start', buildTurnStartParams(runtime.nativeId, input.text));
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
