@@ -309,6 +309,19 @@ export class DshAdapter implements AgentAdapter {
     this.booting = null;
   }
 
+  debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
+    const pid = this.sidecar?.child.pid ?? 0;
+    return [...this.sessions.keys()].map((sessionId) => ({
+      sessionId,
+      pid,
+      dirs: {
+        HOME: process.env['HOME'] ?? '',
+        DSH_HOME: this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? '',
+        WDCC_DSH_MODE: 'spawn',
+      },
+    }));
+  }
+
   async dispose(sessionId: string): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;

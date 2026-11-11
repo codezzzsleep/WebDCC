@@ -30,6 +30,7 @@ interface PendingApproval {
 
 interface SessionRuntime {
   nativeId: string;
+  pid: number;
   /** 每个 app-server 进程一个 token：JSON-RPC 的 request id 在每个进程里从 0/1 开始，
    *  resume 后会与上一进程的 id 重复，必须拼上 token 才能全局唯一 */
   processToken: string;
@@ -218,6 +219,7 @@ export class CodexAdapter implements AgentAdapter {
     });
     const runtime: SessionRuntime = {
       nativeId: '',
+      pid: rpc.child.pid ?? 0,
       processToken: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       ready,
       rpc,
@@ -295,6 +297,17 @@ export class CodexAdapter implements AgentAdapter {
       ? (decision.optionId === 'accept' ? 'approved' : decision.optionId === 'acceptForSession' ? 'approved_for_session' : 'denied')
       : decision.optionId;
     runtimeRpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
+  }
+
+  debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
+    return [...this.sessions].map(([sessionId, runtime]) => ({
+      sessionId,
+      pid: runtime.pid,
+      dirs: {
+        HOME: process.env['HOME'] ?? '',
+        CODEX_HOME: this.options.env?.['CODEX_HOME'] ?? process.env['CODEX_HOME'] ?? '',
+      },
+    }));
   }
 
   async dispose(sessionId: string): Promise<void> {

@@ -110,14 +110,21 @@ export class SessionManager {
     });
 
     const provider = this.options.resolveProvider?.(input.providerId ?? null) ?? null;
-    const created = await adapter.create({
-      sessionId: session.id,
-      cwd: workspace.path,
-      providerId: input.providerId ?? null,
-      provider,
-      ...(input.model === undefined ? {} : { model: input.model }),
-      ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
-    });
+    let created: { nativeId: string };
+    try {
+      created = await adapter.create({
+        sessionId: session.id,
+        cwd: workspace.path,
+        providerId: input.providerId ?? null,
+        provider,
+        ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
+      });
+    } catch (error) {
+      // 建会话失败就回滚，不留 native_id 为空的孤儿记录（SPEC-M8 F1）
+      this.store.deleteSession(session.id);
+      throw error;
+    }
 
     const updated =
       created.nativeId === ''

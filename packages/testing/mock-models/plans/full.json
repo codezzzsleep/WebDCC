@@ -1,0 +1,146 @@
+[
+  {
+    "chunkDelayMs": 80,
+    "text": "先看一下工作区里有哪些文件。",
+    "tool": {
+      "kind": "command",
+      "input": {
+        "command": "ls -la",
+        "description": "列出目录"
+      },
+      "inputByName": {
+        "exec_command": {
+          "cmd": "ls -la",
+          "yield_time_ms": 10000
+        }
+      }
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "读取 README.md。",
+    "tool": {
+      "kind": "read",
+      "input": {
+        "file_path": "./README.md"
+      },
+      "alternatives": [
+        {
+          "kind": "command",
+          "name": "exec_command",
+          "input": {
+            "cmd": "cat ./README.md",
+            "yield_time_ms": 10000
+          }
+        }
+      ]
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "新建 notes.txt，写两行内容。",
+    "tool": {
+      "kind": "write",
+      "input": {
+        "file_path": "./notes.txt",
+        "content": "第一行\n第二行\n"
+      },
+      "alternatives": [
+        {
+          "kind": "command",
+          "name": "exec_command",
+          "input": {
+            "cmd": "printf '第一行\\n第二行\\n' > ./notes.txt",
+            "yield_time_ms": 10000
+          }
+        },
+        {
+          "kind": "patch",
+          "input": {
+            "patch": "*** Begin Patch\n*** Add File: notes.txt\n+第一行\n+第二行\n*** End Patch"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "修改 README.md 里的一行。",
+    "tool": {
+      "kind": "edit",
+      "input": {
+        "file_path": "./README.md",
+        "old_string": "line to modify: ORIGINAL",
+        "new_string": "line to modify: UPDATED"
+      },
+      "alternatives": [
+        {
+          "kind": "command",
+          "name": "exec_command",
+          "input": {
+            "cmd": "sed -i 's/line to modify: ORIGINAL/line to modify: UPDATED/' ./README.md",
+            "yield_time_ms": 10000
+          }
+        },
+        {
+          "kind": "patch",
+          "input": {
+            "patch": "*** Begin Patch\n*** Update File: README.md\n@@\n-line to modify: ORIGINAL\n+line to modify: UPDATED\n*** End Patch"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "更新任务清单。",
+    "tool": {
+      "kind": "todo",
+      "inputByName": {
+        "todo_write": {
+          "todos": [
+            {
+              "content": "读 README",
+              "status": "completed"
+            },
+            {
+              "content": "写 notes.txt",
+              "status": "in_progress"
+            }
+          ]
+        },
+        "TodoWrite": {
+          "todos": [
+            {
+              "content": "读 README",
+              "status": "completed",
+              "activeForm": "读 README"
+            },
+            {
+              "content": "写 notes.txt",
+              "status": "in_progress",
+              "activeForm": "写 notes.txt"
+            }
+          ]
+        },
+        "update_plan": {
+          "plan": [
+            {
+              "step": "读 README",
+              "status": "completed"
+            },
+            {
+              "step": "写 notes.txt",
+              "status": "in_progress"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "全部完成：列目录、读 README、写 notes.txt、改 README、更新任务清单。",
+    "stopReason": "end_turn"
+  }
+]

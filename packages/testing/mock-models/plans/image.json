@@ -1,0 +1,6 @@
+[
+  {
+    "text": "收到图片 {{imageCount}} 张",
+    "stopReason": "end_turn"
+  }
+]

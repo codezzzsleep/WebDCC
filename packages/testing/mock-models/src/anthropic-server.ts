@@ -17,9 +17,13 @@ import {
   type MockLogger,
 } from './http-util.js';
 import { resolveTool, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { HELPER_REPLY, MockControl, countAnthropic } from './mock-control.js';
 
 export interface AnthropicMockOptions {
   plan: Plan;
+  /** 控制面（请求记录、切换计划）；测试套件用 */
+  control?: MockControl;
+  plansDir?: string;
   port?: number;
   host?: string;
   /** 返回给客户端的模型 id */
@@ -129,11 +133,42 @@ function nextToolUseId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${toolUseSeq}`;
 }
 
+async function replyHelper(res: ServerResponse, body: Record<string, unknown>, seq: number): Promise<void> {
+  const model = typeof body['model'] === 'string' ? body['model'] : 'mock-anthropic-1';
+  const messageId = `msg_helper_${seq}`;
+  if (body['stream'] === false) {
+    sendJson(res, 200, {
+      id: messageId,
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text: HELPER_REPLY }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 8, output_tokens: 4 },
+    });
+    return;
+  }
+  startSse(res);
+  writeSse(res, 'message_start', {
+    type: 'message_start',
+    message: { id: messageId, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 8, output_tokens: 1 } },
+  });
+  writeSse(res, 'content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+  writeSse(res, 'content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: HELPER_REPLY } });
+  writeSse(res, 'content_block_stop', { type: 'content_block_stop', index: 0 });
+  writeSse(res, 'message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { input_tokens: 8, output_tokens: 4 } });
+  writeSse(res, 'message_stop', { type: 'message_stop' });
+  res.end();
+}
+
 export function createAnthropicMock(options: AnthropicMockOptions): RunningMock {
   const log = options.log ?? defaultLogger;
   const modelId = options.modelId ?? 'mock-anthropic-1';
   const recorder = options.recordPath ? new JsonlRecorder(options.recordPath) : null;
   const chunkSize = options.chunkSize ?? 12;
+  const control =
+    options.control ?? new MockControl(options.plan, options.plansDir ?? 'packages/testing/mock-models/plans');
   let messageSeq = 0;
 
   const server = createServer((req, res) => {
@@ -163,6 +198,30 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
       return;
     }
 
+    if (url.pathname === '/__requests' && method === 'GET') {
+      sendJson(res, 200, { requests: control.requests });
+      return;
+    }
+    if (url.pathname === '/__reset' && method === 'POST') {
+      control.reset();
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+    if (url.pathname === '/__plan' && method === 'POST') {
+      const body = (await readJsonBody(req)) as { name?: string };
+      if (typeof body.name !== 'string') {
+        sendJson(res, 400, { error: 'name required' });
+        return;
+      }
+      try {
+        control.setPlan(body.name);
+        sendJson(res, 200, { ok: true, name: body.name });
+      } catch (error) {
+        sendJson(res, 404, { error: String(error) });
+      }
+      return;
+    }
+
     if (method === 'GET' && (url.pathname === '/models' || url.pathname === '/v1/models')) {
       sendJson(res, 200, {
         data: [{ id: modelId, display_name: modelId, type: 'model', created_at: '2026-01-01T00:00:00Z' }],
@@ -182,10 +241,33 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
   async function replyToMessages(res: ServerResponse, body: Record<string, unknown>): Promise<void> {
     const messages = Array.isArray(body['messages']) ? (body['messages'] as AnthropicMessage[]) : [];
     const tools = Array.isArray(body['tools']) ? (body['tools'] as ToolDescriptor[]) : undefined;
+    const vars = countAnthropic(body);
     const toolResultCount = countToolResults(messages);
-    const step: PlanStep = stepAt(options.plan, toolResultCount);
+    const helper = tools === undefined || tools.length === 0;
+    control.record({
+      at: new Date().toISOString(),
+      path: '/v1/messages',
+      headers: {},
+      body,
+      ...(helper ? { helper: true } : {}),
+    });
+    if (helper) {
+      await replyHelper(res, body, messageSeq);
+      return;
+    }
+    const step: PlanStep = stepAt(control.currentPlan as Plan, toolResultCount);
     const resolved = resolveTool(step.tool, tools);
     const toolName = resolved?.name;
+    if (step.tool !== undefined && toolName === undefined) {
+      const last = control.requests.at(-1);
+      if (last !== undefined) last.failed = true;
+      log('工具不匹配：计划需要', step.tool.kind);
+      sendJson(res, 500, {
+        type: 'error',
+        error: { type: 'mock_tool_mismatch', message: `plan wants tool kind ${step.tool.kind} but request has none` },
+      });
+      return;
+    }
     const requestModel = typeof body['model'] === 'string' ? body['model'] : modelId;
 
     messageSeq += 1;
@@ -211,8 +293,8 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
 
     if (!stream) {
       const content: unknown[] = [];
-      if (step.thinking) content.push({ type: 'thinking', thinking: step.thinking, signature: 'mock-signature' });
-      if (step.text) content.push({ type: 'text', text: step.text });
+      if (step.thinking) content.push({ type: 'thinking', thinking: control.render(step.thinking, vars), signature: 'mock-signature' });
+      if (step.text) content.push({ type: 'text', text: control.render(step.text, vars) });
       if (toolName) content.push({ type: 'tool_use', id: toolUseId, name: toolName, input: toolInput });
       sendJson(res, 200, {
         id: messageId,
@@ -252,7 +334,7 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
         index: blockIndex,
         content_block: { type: 'thinking', thinking: '' },
       });
-      for (const chunk of chunkText(step.thinking, chunkSize)) {
+      for (const chunk of chunkText(control.render(step.thinking, vars), chunkSize)) {
         await delay(stepDelay);
         writeSse(res, 'content_block_delta', {
           type: 'content_block_delta',
@@ -275,7 +357,7 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
         index: blockIndex,
         content_block: { type: 'text', text: '' },
       });
-      for (const chunk of chunkText(step.text, chunkSize)) {
+      for (const chunk of chunkText(control.render(step.text, vars), chunkSize)) {
         await delay(stepDelay);
         writeSse(res, 'content_block_delta', {
           type: 'content_block_delta',

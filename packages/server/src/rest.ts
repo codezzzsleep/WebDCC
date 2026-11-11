@@ -67,6 +67,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       }));
       agents[adapter.id] = {
         ...probe,
+        adapterKind: adapter.kind ?? 'real',
         accessModes: adapter.accessModes(),
         models: await adapter.listModels(null).catch(() => []),
       };
@@ -230,6 +231,58 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (typeof command?.clientCommandId !== 'string' || typeof command?.op !== 'string') throw badRequest('命令缺少 clientCommandId 或 op');
     return dispatcher.dispatch(command);
   });
+
+  // ---------- 测试钩子（只在 WDCC_TEST_HOOKS=1 时存在，SPEC-M8 6.4） ----------
+  if (process.env['WDCC_TEST_HOOKS'] === '1') {
+    app.post('/api/__test/inject-event', async (request) => {
+      const body = request.body as { sessionId?: string; events?: { turnId?: string; itemKey?: string; kind?: string; data?: unknown; native?: unknown; nativeSeq?: number }[] };
+      if (typeof body?.sessionId !== 'string' || !Array.isArray(body.events)) throw badRequest('需要 sessionId 与 events');
+      if (body.events.length > 1000) throw badRequest('一次最多 1000 条');
+      const stored = [];
+      for (const event of body.events) {
+        stored.push(
+          store.appendEvent({
+            sessionId: body.sessionId,
+            turnId: event.turnId ?? 'injected',
+            itemKey: event.itemKey ?? `injected-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            kind: (event.kind ?? 'unknown') as never,
+            data: (event.data ?? { nativeType: 'injected' }) as never,
+            ...(event.native === undefined ? {} : { native: event.native }),
+            ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
+          }),
+        );
+      }
+      for (const event of stored) deps.hub.broadcastEvent(event);
+      return { ok: true, count: stored.length };
+    });
+
+    app.post('/api/__test/dispose', async (request) => {
+      const body = request.body as { sessionId?: string };
+      if (typeof body?.sessionId !== 'string') throw badRequest('需要 sessionId');
+      await manager.dispose(body.sessionId);
+      return { ok: true };
+    });
+
+    app.get('/api/__test/processes', async () => {
+      const processes = manager.adaptersList().flatMap((adapter) =>
+        (adapter.debugProcesses?.() ?? []).map((info) => ({ ...info, agent: adapter.id })),
+      );
+      return {
+        server: {
+          pid: process.pid,
+          port: Number(process.env['WDCC_PORT'] ?? 0),
+          dirs: {
+            HOME: process.env['HOME'] ?? '',
+            CODEX_HOME: process.env['CODEX_HOME'] ?? '',
+            CLAUDE_CONFIG_DIR: process.env['CLAUDE_CONFIG_DIR'] ?? '',
+            DSH_HOME: process.env['DSH_HOME'] ?? '',
+            WDCC_DATA_DIR: process.env['WDCC_DATA_DIR'] ?? '',
+          },
+        },
+        processes,
+      };
+    });
+  }
 
   // ---------- providers / models ----------
   app.get('/api/providers', async () => deps.providers.list());

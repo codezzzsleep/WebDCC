@@ -18,9 +18,12 @@ import {
 } from './http-util.js';
 import { resolveTool, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
 import { defaultToolInput } from './anthropic-server.js';
+import { HELPER_REPLY, MockControl, countResponses } from './mock-control.js';
 
 export interface ResponsesMockOptions {
   plan: Plan;
+  control?: MockControl;
+  plansDir?: string;
   port?: number;
   host?: string;
   modelId?: string;
@@ -92,11 +95,33 @@ function usage(): Record<string, unknown> {
   };
 }
 
+function replyHelper(res: ServerResponse, body: Record<string, unknown>, fallbackModel: string): void {
+  const model = typeof body['model'] === 'string' ? body['model'] : fallbackModel;
+  const responseId = newId('resp');
+  const item = { id: newId('msg'), type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text: HELPER_REPLY, annotations: [] }] };
+  if (body['stream'] === false) {
+    sendJson(res, 200, { ...emptyResponse(responseId, model, 'completed'), output: [item], usage: usage() });
+    return;
+  }
+  startSse(res);
+  writeSse(res, 'response.created', { type: 'response.created', response: emptyResponse(responseId, model, 'in_progress') });
+  writeSse(res, 'response.output_item.added', { type: 'response.output_item.added', output_index: 0, item: { id: item.id, type: 'message', status: 'in_progress', role: 'assistant', content: [] } });
+  writeSse(res, 'response.content_part.added', { type: 'response.content_part.added', item_id: item.id, output_index: 0, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } });
+  writeSse(res, 'response.output_text.delta', { type: 'response.output_text.delta', item_id: item.id, output_index: 0, content_index: 0, delta: HELPER_REPLY });
+  writeSse(res, 'response.output_text.done', { type: 'response.output_text.done', item_id: item.id, output_index: 0, content_index: 0, text: HELPER_REPLY });
+  writeSse(res, 'response.content_part.done', { type: 'response.content_part.done', item_id: item.id, output_index: 0, content_index: 0, part: { type: 'output_text', text: HELPER_REPLY, annotations: [] } });
+  writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: 0, item });
+  writeSse(res, 'response.completed', { type: 'response.completed', response: { ...emptyResponse(responseId, model, 'completed'), output: [item], usage: usage() } });
+  res.end();
+}
+
 export function createResponsesMock(options: ResponsesMockOptions): RunningResponsesMock {
   const log = options.log ?? defaultLogger;
   const modelId = options.modelId ?? 'mock-responses-1';
   const recorder = options.recordPath ? new JsonlRecorder(options.recordPath) : null;
   const chunkSize = options.chunkSize ?? 12;
+  const control =
+    options.control ?? new MockControl(options.plan, options.plansDir ?? 'packages/testing/mock-models/plans');
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -118,6 +143,30 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       return;
     }
 
+    if (url.pathname === '/__requests' && method === 'GET') {
+      sendJson(res, 200, { requests: control.requests });
+      return;
+    }
+    if (url.pathname === '/__reset' && method === 'POST') {
+      control.reset();
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+    if (url.pathname === '/__plan' && method === 'POST') {
+      const body = (await readJsonBody(req)) as { name?: string };
+      if (typeof body.name !== 'string') {
+        sendJson(res, 400, { error: 'name required' });
+        return;
+      }
+      try {
+        control.setPlan(body.name);
+        sendJson(res, 200, { ok: true, name: body.name });
+      } catch (error) {
+        sendJson(res, 404, { error: String(error) });
+      }
+      return;
+    }
+
     if (method === 'GET' && (url.pathname === '/v1/models' || url.pathname === '/models')) {
       sendJson(res, 200, { object: 'list', data: [{ id: modelId, object: 'model', created: 1767225600, owned_by: 'mock' }] });
       return;
@@ -131,10 +180,30 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
   async function replyToResponse(res: ServerResponse, body: Record<string, unknown>): Promise<void> {
     const input = Array.isArray(body['input']) ? (body['input'] as ResponsesInputItem[]) : undefined;
     const tools = Array.isArray(body['tools']) ? (body['tools'] as ToolDescriptor[]) : undefined;
+    const vars = countResponses(body);
     const stepIndex = countFunctionCallOutputs(input);
-    const step: PlanStep = stepAt(options.plan, stepIndex);
+    const helper = tools === undefined || tools.length === 0;
+    control.record({
+      at: new Date().toISOString(),
+      path: '/v1/responses',
+      headers: {},
+      body,
+      ...(helper ? { helper: true } : {}),
+    });
+    if (helper) {
+      replyHelper(res, body, modelId);
+      return;
+    }
+    const step: PlanStep = stepAt(control.currentPlan as Plan, stepIndex);
     const requestModel = typeof body['model'] === 'string' ? body['model'] : modelId;
     const resolvedTool = resolveTool(step.tool, tools);
+    if (step.tool !== undefined && resolvedTool === undefined) {
+      const last = control.requests.at(-1);
+      if (last !== undefined) last.failed = true;
+      log('工具不匹配：计划需要', step.tool.kind);
+      sendJson(res, 500, { error: { type: 'mock_tool_mismatch', message: `plan wants tool kind ${step.tool.kind} but request has none` } });
+      return;
+    }
     const toolName = resolvedTool?.name;
     const toolInput = { ...defaultToolInput(resolvedTool?.kind ?? 'other'), ...(resolvedTool?.input ?? {}) };
     if (!toolName && step.tool) log('plan wants a tool but request has no matching tool', step.tool.kind);
@@ -158,7 +227,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         outputItems.push({
           id: newId('rs'),
           type: 'reasoning',
-          summary: [{ type: 'summary_text', text: step.thinking }],
+          summary: [{ type: 'summary_text', text: control.render(step.thinking, vars) }],
         });
       }
       if (step.text) {
@@ -167,7 +236,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
           type: 'message',
           status: 'completed',
           role: 'assistant',
-          content: [{ type: 'output_text', text: step.text, annotations: [] }],
+          content: [{ type: 'output_text', text: control.render(step.text, vars), annotations: [] }],
         });
       }
       if (toolName) {
@@ -211,7 +280,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         summary_index: 0,
         part: { type: 'summary_text', text: '' },
       });
-      for (const chunk of chunkText(step.thinking, chunkSize)) {
+      for (const chunk of chunkText(control.render(step.thinking, vars), chunkSize)) {
         await delay(stepDelay);
         writeSse(res, 'response.reasoning_summary_text.delta', {
           type: 'response.reasoning_summary_text.delta',
@@ -235,7 +304,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         summary_index: 0,
         part: { type: 'summary_text', text: step.thinking },
       });
-      const item = { id: itemId, type: 'reasoning', summary: [{ type: 'summary_text', text: step.thinking }] };
+      const item = { id: itemId, type: 'reasoning', summary: [{ type: 'summary_text', text: control.render(step.thinking, vars) }] };
       outputItems.push(item);
       writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
     }
@@ -255,7 +324,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         content_index: 0,
         part: { type: 'output_text', text: '', annotations: [] },
       });
-      for (const chunk of chunkText(step.text, chunkSize)) {
+      for (const chunk of chunkText(control.render(step.text, vars), chunkSize)) {
         await delay(stepDelay);
         writeSse(res, 'response.output_text.delta', {
           type: 'response.output_text.delta',
@@ -272,7 +341,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         content_index: 0,
         text: step.text,
       });
-      const part = { type: 'output_text', text: step.text, annotations: [] };
+      const part = { type: 'output_text', text: control.render(step.text, vars), annotations: [] };
       writeSse(res, 'response.content_part.done', {
         type: 'response.content_part.done',
         item_id: itemId,

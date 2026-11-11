@@ -3,6 +3,7 @@ import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { ProbeResult } from './adapter.js';
 
 export interface AgentMeta extends ProbeResult {
+  adapterKind?: 'real' | 'fake';
   accessModes?: { id: string; label: string }[];
   models?: { id: string; label: string }[];
 }

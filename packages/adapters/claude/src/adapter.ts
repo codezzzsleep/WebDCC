@@ -277,6 +277,17 @@ export class ClaudeAdapter implements AgentAdapter {
     pending.resolve({ approved: true, optionId: 'answer', answers: { [questionId]: value } });
   }
 
+  debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
+    return [...this.sessions.keys()].map((sessionId) => ({
+      sessionId,
+      pid: 0,
+      dirs: {
+        HOME: process.env['HOME'] ?? '',
+        CLAUDE_CONFIG_DIR: this.options.env?.['CLAUDE_CONFIG_DIR'] ?? process.env['CLAUDE_CONFIG_DIR'] ?? '',
+      },
+    }));
+  }
+
   async dispose(sessionId: string): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
