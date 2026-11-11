@@ -16,7 +16,7 @@ import {
   writeSse,
   type MockLogger,
 } from './http-util.js';
-import { resolveStep, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { resolveStep, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
 import { defaultToolInput } from './anthropic-server.js';
 import { HELPER_REPLY, MockControl, countResponses } from './mock-control.js';
 
