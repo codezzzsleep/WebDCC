@@ -163,7 +163,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     setText(value);
     persist(value);
     // "/" 开头：列出该 Agent 自己的命令（F8）；Codex 的斜杠命令属于它的终端界面，不提供菜单（SL-03）
-    setSlashOpen(isSession && value.startsWith('/') && !value.includes('\n') && !value.includes(' ') && agent !== 'codex');
+    setSlashOpen(value.startsWith('/') && !value.includes('\n') && !value.includes(' '));
     const cursor = textareaRef.current?.selectionStart ?? value.length;
     const before = value.slice(0, cursor);
     const at = before.lastIndexOf('@');
@@ -186,6 +186,12 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const submit = async (): Promise<void> => {
     const value = text;
     if (value.trim() === '' || busy) return;
+    if (value.trim() === '/model') {
+      setText('');
+      setSlashOpen(false);
+      setMenu('model');
+      return;
+    }
     setError(null);
     if (mode.kind === 'session') {
       if (running || sessionId === null) return;
@@ -692,7 +698,13 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {slashOpen ? (
             <div className="menu up left mention-menu" role="menu" data-testid="slash-menu">
               <div className="menu-group-title">{agentText(agent).name} 的指令</div>
-              {slashCommands.length === 0 ? <div className="menu-note">这个 Agent 现在没有可用的斜杠命令</div> : null}
+              {agent === 'codex' && text === '/model' ? (
+                <button type="button" className="menu-item" onClick={() => { setSlashOpen(false); setMenu('model'); }}>
+                  <span className="mono" style={{ fontSize: 13 }}>/model</span>
+                  <span className="menu-item-sub">打开 Provider 和模型选择</span>
+                </button>
+              ) : null}
+              {slashCommands.length === 0 && !(agent === 'codex' && text === '/model') ? <div className="menu-note">这个 Agent 现在没有可用的斜杠命令</div> : null}
               {slashCommands
                 .filter((command) => command.name.startsWith(text))
                 .slice(0, 12)

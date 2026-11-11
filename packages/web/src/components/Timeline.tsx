@@ -121,6 +121,8 @@ function TurnView({
   const finalMessage = [...turn.events]
     .reverse()
     .find((event) => event.kind === 'assistant.message' && (event.data as EventData['assistant.message']).phase !== 'interim');
+  const anyAssistantMessage = [...turn.events].reverse().find((event) => event.kind === 'assistant.message');
+  const displayedFinalMessage = finalMessage ?? anyAssistantMessage;
   const changes = collectChanges(steps);
   const usage = [...turn.events].reverse().find((event) => event.kind === 'usage');
   // 运行中、或用户展开时显示全部步骤；完成后默认只显示摘要和最终回答（DSH 的做法）
@@ -137,7 +139,7 @@ function TurnView({
       const approvalId = (event.data as EventData['approval.request']).approvalId;
       return !turn.events.some((item) => item.kind === 'approval.resolved' && (item.data as EventData['approval.resolved']).approvalId === approvalId);
     });
-  const finalText = finalMessage === undefined ? '' : (finalMessage.data as EventData['assistant.message']).text;
+  const finalText = displayedFinalMessage === undefined ? '' : (displayedFinalMessage.data as EventData['assistant.message']).text;
 
   const headLabel =
     completedData === undefined
@@ -183,7 +185,7 @@ function TurnView({
       )}
 
       <div className="turn-body">
-        {!showAll && completedData !== undefined && steps.some((event) => event !== finalMessage && !INTERACTIVE_KINDS.has(event.kind)) ? (
+        {!showAll && completedData !== undefined && steps.some((event) => event !== displayedFinalMessage && !INTERACTIVE_KINDS.has(event.kind)) ? (
           <button type="button" className="turn-summary" onClick={onToggle}>
             <Icon name="listChecks" size={15} />
             {summarize(steps)}
@@ -197,14 +199,14 @@ function TurnView({
               </ErrorBoundary>
             ))
           : steps
-              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || event === finalMessage)
+              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || event === displayedFinalMessage)
               .map((event) => (
                 <ErrorBoundary key={`always-${event.itemKey}-${event.seq}`} label="timeline-item">
                   <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
                 </ErrorBoundary>
               ))}
 
-        {turn.hot.map((item) => (
+        {turn.hot.filter((item, index, items) => item.kind !== 'reasoning' || index === items.map((candidate) => candidate.kind).lastIndexOf('reasoning')).map((item) => (
           <HotRow key={item.itemKey} item={item} />
         ))}
 
