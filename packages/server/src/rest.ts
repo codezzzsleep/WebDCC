@@ -307,7 +307,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       }
     }
     return {
-      mode: process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn',
+      mode: connection !== null || process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn',
       url: connection?.url ?? process.env['WDCC_DSH_URL'] ?? null,
       connected: connection !== null,
       ...(connection?.connectedAt === undefined ? {} : { connectedAt: connection.connectedAt }),
@@ -318,8 +318,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.post('/api/dsh/connect', async (request) => {
     const body = request.body as { link?: string };
     if (typeof body?.link !== 'string') throw badRequest('需要 link（DSH 的访问链接）');
-    const { url, port, token } = parseDshLink(body.link);
-    const cookie = await attachToDsh(port, token);
+    const { url, token } = parseDshLink(body.link);
+    const cookie = await attachToDsh(url, token);
     await deps.dsh.save({ url, cookie, connectedAt: new Date().toISOString() });
     for (const adapter of manager.adaptersList()) {
       if (adapter.id === 'dsh') {

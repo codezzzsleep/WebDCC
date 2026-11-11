@@ -106,10 +106,14 @@ export interface StreamFrame {
 }
 
 /** attach 模式：用启动 token 换一个 operator Cookie（SPEC-M8 2.2） */
-export async function attachToDsh(port: number, token: string): Promise<string> {
-  const response = await fetch(`http://127.0.0.1:${port}/connect?token=${encodeURIComponent(token)}&interactions=answer`, {
+export async function attachToDsh(endpoint: string | number, token: string): Promise<string> {
+  const origin = typeof endpoint === 'number' ? `http://127.0.0.1:${endpoint}` : new URL(endpoint).origin;
+  const target = new URL('/connect', origin);
+  target.searchParams.set('token', token);
+  target.searchParams.set('interactions', 'answer');
+  const response = await fetch(target, {
     redirect: 'manual',
-    headers: { host: `127.0.0.1:${port}` },
+    headers: { host: new URL(origin).host },
   });
   const setCookies = response.headers.getSetCookie();
   const first = setCookies[0];
@@ -120,14 +124,16 @@ export async function attachToDsh(port: number, token: string): Promise<string> 
 
 export class DshHostClient {
   private readonly base: string;
+  private readonly websocketBase: string;
   private cookie = '';
   private counter = 0;
   private ws: WebSocket | null = null;
   private readonly streamHandlers = new Map<string, (frame: StreamFrame) => void>();
   private readonly allFrames: unknown[] = [];
 
-  constructor(readonly port: number) {
-    this.base = `http://127.0.0.1:${port}`;
+  constructor(endpoint: string | number) {
+    this.base = typeof endpoint === 'number' ? `http://127.0.0.1:${endpoint}` : new URL(endpoint).origin;
+    this.websocketBase = this.base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
   }
 
   /** attach 模式：直接注入已换到的 operator Cookie */
@@ -173,7 +179,7 @@ export class DshHostClient {
 
   /** 连上 `/api/remote.mux`（多路复用事件流） */
   async connect(): Promise<void> {
-    const socket = new WebSocket(`ws://127.0.0.1:${this.port}/api/remote.mux`, { headers: { cookie: this.cookie } });
+    const socket = new WebSocket(`${this.websocketBase}/api/remote.mux`, { headers: { cookie: this.cookie } });
     this.ws = socket;
     socket.on('message', (data: WebSocket.RawData) => {
       let frame: StreamFrame;

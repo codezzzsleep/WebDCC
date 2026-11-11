@@ -233,7 +233,7 @@ export class DshAdapter implements AgentAdapter {
         const url = new URL(this.options.attachUrl ?? 'http://127.0.0.1:3080');
         const cookie = this.options.attachCookie ?? '';
         if (cookie === '') throw Object.assign(new Error('需要重新连接 DSH：请粘贴 DSH 当前的访问链接'), { code: 'dsh-needs-link' });
-        const client = new DshHostClient(Number(url.port || 80));
+        const client = new DshHostClient(url.origin);
         client.useCookie(cookie);
         await client.connect();
         client.openStream('$events', {}, (frame) => this.onEventFrame('', frame));

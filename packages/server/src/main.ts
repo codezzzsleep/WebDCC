@@ -9,6 +9,8 @@ import { ProviderRegistry } from './providers.js';
 import { DshConnectionStore } from './dsh-connection.js';
 import { Store } from './store.js';
 import { assertTestIsolation } from './test-isolation.js';
+import { discoverRunningDsh } from './dsh-discovery.js';
+import { attachToDsh } from '@webdcc/adapter-dsh';
 
 export interface ServerOptions {
   /** 注册到服务端的 adapter；测试注入 fake-adapter，生产由 adapters.ts 组装 */
@@ -46,10 +48,35 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   let adapters = options.adapters;
   if (adapters === undefined) {
     const { adapters: build } = await import('./adapters.js');
-    const connection = dshStore.connection;
+    let connection = dshStore.connection;
+    const requestedMode = process.env['WDCC_DSH_MODE'] ?? 'auto';
+    let dshMode: 'attach' | 'spawn' = requestedMode === 'spawn' ? 'spawn' : 'attach';
+
+    // DSH's launch token exists only in its process memory. For a local
+    // systemd-managed DSH, discover the startup URL from its journal and
+    // exchange it immediately; the user only sees the manual fallback when
+    // discovery is unavailable.
+    if (process.env['WDCC_ENABLE_DSH'] !== '0' && requestedMode !== 'spawn') {
+      const discovered = await discoverRunningDsh({ service: process.env['WDCC_DSH_SERVICE'] }).catch(() => null);
+      if (discovered !== null) {
+        try {
+          const cookie = await attachToDsh(discovered.origin, discovered.token);
+          connection = {
+            url: discovered.origin,
+            cookie,
+            connectedAt: new Date().toISOString(),
+          };
+          await dshStore.save(connection);
+        } catch (error) {
+          process.stderr.write(`webdcc: 自动连接 DSH 失败：${error instanceof Error ? error.message : String(error)}\n`);
+        }
+      } else if (connection === null && requestedMode === 'auto') {
+        dshMode = 'spawn';
+      }
+    }
     adapters = await build({
       dsh: {
-        mode: (process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn') as 'attach' | 'spawn',
+        mode: dshMode,
         ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie }),
       },
     });

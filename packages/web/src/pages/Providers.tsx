@@ -128,45 +128,49 @@ export function ProvidersPage(): React.ReactElement {
             </div>
             <div className="panel-pad">
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                WebDCC 连接你已经在运行的 DSH，和 DSH 原版界面共用同一个进程。首次连接或 DSH 重启后，粘贴 DSH 启动时打印的访问链接。
+                WebDCC 会自动发现本机正在运行的 DSH，和 DSH 原版界面共用同一个进程。WebDCC 重启后会自动恢复连接；自动发现失败时才需要手动恢复。
               </p>
-              <div className="row-actions">
-                <label className="visually-hidden" htmlFor="dsh-link">
-                  DSH 访问链接
-                </label>
-                <input
-                  id="dsh-link"
-                  className="text-input"
-                  style={{ flex: '1 1 320px', width: 'auto' }}
-                  placeholder="http://127.0.0.1:3080/?token=…"
-                  value={dshLink}
-                  onChange={(event) => setDshLink(event.target.value)}
-                  data-testid="dsh-link"
-                />
-                <button
-                  type="button"
-                  className="btn primary"
-                  data-testid="dsh-connect"
-                  disabled={dshLink.trim() === ''}
-                  onClick={() => {
-                    setDshError(null);
-                    void api
-                      .dshConnect(dshLink.trim())
-                      .then(() => {
-                        setDshLink('');
-                        reload();
-                      })
-                      .catch((cause: unknown) => setDshError(cause instanceof Error ? cause.message : String(cause)));
-                  }}
-                >
-                  连接 DSH
-                </button>
-                {dsh?.url !== null && dsh?.url !== undefined ? (
-                  <a className="btn" href={dsh.url} target="_blank" rel="noreferrer">
-                    打开 DSH 原版界面
-                  </a>
-                ) : null}
-              </div>
+              {dsh?.connected === true ? <div className="kv" style={{ marginTop: 10 }}><span>自动连接</span><span>已连接当前 DSH</span></div> : null}
+              <details style={{ marginTop: 12 }}>
+                <summary className="link-button">自动发现失败？手动连接</summary>
+                <div className="row-actions" style={{ marginTop: 10 }}>
+                  <label className="visually-hidden" htmlFor="dsh-link">
+                    DSH 访问链接
+                  </label>
+                  <input
+                    id="dsh-link"
+                    className="text-input"
+                    style={{ flex: '1 1 320px', width: 'auto' }}
+                    placeholder="粘贴 DSH 启动时打印的访问链接"
+                    value={dshLink}
+                    onChange={(event) => setDshLink(event.target.value)}
+                    data-testid="dsh-link"
+                  />
+                  <button
+                    type="button"
+                    className="btn primary"
+                    data-testid="dsh-connect"
+                    disabled={dshLink.trim() === ''}
+                    onClick={() => {
+                      setDshError(null);
+                      void api
+                        .dshConnect(dshLink.trim())
+                        .then(() => {
+                          setDshLink('');
+                          reload();
+                        })
+                        .catch((cause: unknown) => setDshError(cause instanceof Error ? cause.message : String(cause)));
+                    }}
+                  >
+                    连接 DSH
+                  </button>
+                </div>
+              </details>
+              {dsh?.url !== null && dsh?.url !== undefined ? (
+                <a className="btn" href={dsh.url} target="_blank" rel="noreferrer" style={{ marginTop: 10 }}>
+                  打开 DSH 原版界面
+                </a>
+              ) : null}
               {dshError !== null ? (
                 <div className="error-card" role="alert">
                   {dshError}

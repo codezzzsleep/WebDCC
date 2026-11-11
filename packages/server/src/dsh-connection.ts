@@ -48,5 +48,5 @@ export function parseDshLink(link: string): { url: string; port: number; token: 
   const token = parsed.searchParams.get('token');
   if (token === null || token === '') throw Object.assign(new Error('链接里没有 token'), { statusCode: 400 });
   const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
-  return { url: `http://127.0.0.1:${port}`, port, token };
+  return { url: parsed.origin, port, token };
 }
