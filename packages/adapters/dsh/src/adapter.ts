@@ -15,7 +15,7 @@ import type {
   UserInput,
 } from '@webdcc/protocol';
 import { isValidEventData, ulid } from '@webdcc/protocol';
-import { DshHostClient, attachToDsh, startSidecar, type Sidecar, type StreamFrame } from './host.js';
+import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
 
@@ -204,7 +204,7 @@ export class DshAdapter implements AgentAdapter {
     if ((this.options.mode ?? 'spawn') === 'attach') {
       this.booting ??= (async () => {
         const url = new URL(this.options.attachUrl ?? 'http://127.0.0.1:3080');
-        let cookie = this.options.attachCookie ?? '';
+        const cookie = this.options.attachCookie ?? '';
         if (cookie === '') throw Object.assign(new Error('需要重新连接 DSH：请粘贴 DSH 当前的访问链接'), { code: 'dsh-needs-link' });
         const client = new DshHostClient(Number(url.port || 80));
         client.useCookie(cookie);
