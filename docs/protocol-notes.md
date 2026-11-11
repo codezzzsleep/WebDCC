@@ -538,3 +538,9 @@ Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools
   —— **没有 `TodoWrite`，也没有 `TaskCreate/TaskUpdate`**，所以同样没有任务面板。
 - **DSH 0.2.2-rc.1**：默认 preset 有 `todo_write`，任务面板由 `todo/write` 事件产生（AG-dsh-04 通过）。
 - 结论：`AG-codex-04` 与 `AG-claude-04` 的"2 项、1 完成 1 进行中"断言与本机原生行为冲突，按 SPEC-M8 1.2 改为"该 Agent 不出现任务面板、且这一轮没有错误卡片"；DSH 的断言保持不变。
+
+### 7.11 Claude 的 settings.json env 会覆盖 options.env（F16 实测）
+
+- 现象：给 Claude 会话选了 Provider 后，SDK `options.env` 注入的 `ANTHROPIC_AUTH_TOKEN` 不生效，实际请求仍用 `settings.json` 里的 token（NEW-07 首轮失败，mock 收到的授权头是 `sk-wdcc-test-claude-*` 而不是手动 Provider 的 Key）。
+- 修法：Provider 的 env 同时放进 **flag 级 settings**：`options.settings = { env: { ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY: '' } }`。SDK 类型里 `Options.settings` 等价于 `--settings`，优先级高于用户设置，且不需要修改 `settings.json`（满足 R3）。
+- 实测：修好后同一个用例里 mock 收到 6 次请求，授权头全部是手动 Provider 的 Key。

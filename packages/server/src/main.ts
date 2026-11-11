@@ -6,7 +6,11 @@ import { openDb } from './db.js';
 import { FileStore } from './files.js';
 import { SessionManager } from './manager.js';
 import { ProviderRegistry } from './providers.js';
+import { DshConnectionStore } from './dsh-connection.js';
 import { Store } from './store.js';
+import { assertTestIsolation } from './test-isolation.js';
+import { discoverRunningDsh } from './dsh-discovery.js';
+import { attachToDsh } from '@webdcc/adapter-dsh';
 
 export interface ServerOptions {
   /** 注册到服务端的 adapter；测试注入 fake-adapter，生产由 adapters.ts 组装 */
@@ -24,6 +28,8 @@ export interface RunningServer {
 }
 
 export async function start(config: Config = loadConfig(), options: ServerOptions = {}): Promise<RunningServer> {
+  // 测试模式下先检查家目录隔离，必须在任何配置扫描之前（SPEC-M8 1.6.2 / S-04）
+  assertTestIsolation();
   const file = config.dataDir === ':memory:' ? ':memory:' : join(config.dataDir, 'webdcc.db');
   const db = openDb(file);
   const store = new Store(db);
@@ -31,12 +37,51 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   await files.init();
   const providers = new ProviderRegistry(store, config.dataDir);
   await providers.init();
+  const dshStore = new DshConnectionStore(config.dataDir);
+  await dshStore.init();
   const manager = new SessionManager(store, {
     idleDisposeMin: config.idleDisposeMin,
     resolveProvider: (id) => providers.runtimeConfig(id),
+    saveDiff: (name, diff) => files.putBufferSync(Buffer.from(diff, 'utf8'), name, 'text/x-diff').id,
   });
 
-  for (const adapter of options.adapters ?? []) manager.registerAdapter(adapter);
+  let adapters = options.adapters;
+  if (adapters === undefined) {
+    const { adapters: build } = await import('./adapters.js');
+    let connection = dshStore.connection;
+    const requestedMode = process.env['WDCC_DSH_MODE'] ?? 'auto';
+    let dshMode: 'attach' | 'spawn' = requestedMode === 'spawn' ? 'spawn' : 'attach';
+
+    // DSH's launch token exists only in its process memory. For a local
+    // systemd-managed DSH, discover the startup URL from its journal and
+    // exchange it immediately; the user only sees the manual fallback when
+    // discovery is unavailable.
+    if (process.env['WDCC_ENABLE_DSH'] !== '0' && requestedMode !== 'spawn') {
+      const discovered = await discoverRunningDsh({ service: process.env['WDCC_DSH_SERVICE'] }).catch(() => null);
+      if (discovered !== null) {
+        try {
+          const cookie = await attachToDsh(discovered.origin, discovered.token);
+          connection = {
+            url: discovered.origin,
+            cookie,
+            connectedAt: new Date().toISOString(),
+          };
+          await dshStore.save(connection);
+        } catch (error) {
+          process.stderr.write(`webdcc: 自动连接 DSH 失败：${error instanceof Error ? error.message : String(error)}\n`);
+        }
+      } else if (connection === null && requestedMode === 'auto') {
+        dshMode = 'spawn';
+      }
+    }
+    adapters = await build({
+      dsh: {
+        mode: dshMode,
+        ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie }),
+      },
+    });
+  }
+  for (const adapter of adapters) manager.registerAdapter(adapter);
 
   const { app, hub } = await buildApp({
     config,
@@ -44,6 +89,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     files,
     manager,
     providers,
+    dsh: dshStore,
     webDist: options.webDist ?? join(process.cwd(), 'packages/web/dist'),
   });
 
@@ -51,11 +97,14 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),
     onDelta: (sessionId, itemKey, field, append) => hub.broadcastDelta(sessionId, itemKey, field, append),
-    onUpdate: (sessionId, itemKey, data) => hub.broadcastUpdate(sessionId, itemKey, data),
+    onUpdate: (sessionId, itemKey, data, turnId) => hub.broadcastUpdate(sessionId, itemKey, data, turnId),
     onStatus: () => undefined,
   });
 
   await app.listen({ host: config.host, port: config.port });
+  // F16：启动时只读扫描一次本机配置并导入 Provider
+  const scan = await providers.scanLocal().catch(() => ({ imported: 0, skipped: 0 }));
+  if (scan.imported > 0) process.stdout.write(`webdcc: 从本机导入了 ${scan.imported} 个 Provider\n`);
   store.pruneCommands();
 
   return {
@@ -78,9 +127,13 @@ const isEntrypoint = ((): boolean => {
 })();
 
 if (isEntrypoint) {
-  const config = loadConfig();
-  const { adapters } = await import('./adapters.js');
-  const server = await start(config, { adapters: await adapters() });
+  let server: RunningServer;
+  try {
+    server = await start(loadConfig());
+  } catch (error) {
+    process.stderr.write(`webdcc: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  }
   process.stdout.write(`webdcc: ${server.url}\n`);
   const stop = (): void => {
     void server.close().then(() => process.exit(0));

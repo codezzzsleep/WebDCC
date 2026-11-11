@@ -1,9 +1,8 @@
 # WebDCC M8 SPEC：修复、补齐与强制验收
 
-> **交给本地执行模型。** 本文件完全替代此前所有 M8 草稿。
+> **交给本地执行模型。** 这是 **v2**，用它原样替换仓库里的 `docs/specs/SPEC-M8.md`（验收脚本从这个文件解析用例 ID，见 6.6）。
 >
-> - 从最新的 main 开分支（当前为 3cc36ec，已修好根路由的 `Invariant failed`）。
-> - 第一个 PR 把本文件原样提交到 `docs/specs/SPEC-M8.md`。验收脚本从这个文件里解析用例 ID（见 6.6）。
+> v2 包含审查方对 PR #11 的全部答复（见 0.1）。答复都是确定的，不需要再请示。
 
 ---
 
@@ -26,6 +25,48 @@ M1–M7 的自动化检查全部通过：typecheck、lint、48 个单测、16 �
 
 所以 M8 做两件事：**修复和补齐**，以及**一套强制的真实界面验收**。M8 是否完成，只由这套验收决定。
 
+**目标不是演示，而是用户每天用来跑真实任务的工具。** 三个 Agent 各自原有的功能（工具、计划/任务/目标、提问、审批、访问模式、警告）都必须在网页里完整可用、看得见，WebDCC 不许替它们删减或改变行为。
+
+### 0.1 对 PR #11 的答复（v2 新增，全部是确定的决定）
+
+**方案：** A、B、C 都不按原样采用。范围不缩减（B 否决），不暂停（C 否决），按本 v2 执行。
+
+**立刻要做的三件事（写任何新功能之前，见 1.6）：** 清理测试泄漏的真实凭据副本；所有测试入口统一隔离并加启动守卫；打开 main 的分支保护。
+
+| # | 问题 | 决定 | 落实位置 |
+|---|---|---|---|
+| Q1 | Codex 用 `gpt-5` 还是做 code mode 的 mock | **两条路径都测，code mode 为主。** 用户用 GPT 模型（ChatGPT 登录）时，Codex 0.167 走的就是 code mode；用户通过 Codex 用 DeepSeek 时，走的是直接工具。审查方已实测：mock 只需返回一个 `custom_tool_call`（`name: "exec"`，`input` 为 JavaScript），Codex 就会执行其中的 `tools.exec_command`、`tools.apply_patch`，并照常发出 commandExecution 和 fileChange 条目，工作量不大。直接工具路径用 `deepseek-v4-pro` 这个 slug（审查方实测：它的工具集与 `gpt-5` 完全相同，而且正是用户实际会用的模型名），不用 `gpt-5` | 6.2、6.3、7.4 的 `AG-codexd-*` |
+| Q2 | 接受 AG-codex-04 / AG-claude-04 的断言修改吗 | **Claude：接受，另加 04b。** 审查方在干净环境里分别抓取了交互式 `claude` 和 `claude -p` 的请求，工具清单相同，都没有 TodoWrite 或 Task* 工具，这就是原生行为。但用户的 Claude Code 可能开启了任务工具，所以新增 AG-claude-04b：开启后，任务面板必须正常显示。**Codex：不接受"不显示任何东西"。** Codex 0.167 没有 `update_plan`，但两条路径下都有 `create_goal`、`update_goal`、`get_goal`，Codex 用"目标"来代替任务清单。AG-codex-04 改为显示目标 | F12、F19、7.4 |
+| Q3 | Provider 用例的隔离 | **不用 REST 重置。** 每个 PRV / NEW 用例启动自己的服务实例，使用自己的配置副本和自己的浏览器上下文；先关闭上下文，再停服务。之前独立实例失败，根因是 WebDCC 的 Cookie 名不区分端口，同一个浏览器上下文里的两个实例会互相覆盖 Cookie。产品本身也要修这个问题（F18） | 6.2、F18 |
+| Q4 | mock 的 optional 步骤 | **删除 optional。** 每个 Agent 用自己的计划变体，步骤按 6.3 的对照表解析成该 Agent 的原生工具。缺少必需的工具一律返回 500 | 6.3 |
+| Q5 | 轮询式自动批准 | **可以用条件等待实现，但规则改严。** 只点击 `data-state="pending"` 的卡片，每次点击都记录工具名。每个用例结束时，实际发生的审批必须**完全等于**该 Agent 在该访问模式下的预期列表（预期列表实测后写进 protocol-notes）。多一个、少一个都算失败 | 第 7 节开头 |
+| Q6 | F16 的 DSH 导入是否必须 | **必须，而且在 PR 2b 里做，不放到最后。** 用户的 DeepSeek Key 很可能就存在 DSH 里，这是 Codex 和 Claude 使用 DeepSeek 的来源，也是真实模型冒烟的来源 | F16、PRV-01 |
+| Q7 | 部署时机 | **分两步。** ① 现在就把 main（已含 F1、F2、F3、F5）部署到 :80，DSH 保持关闭。M7 的生产构建里 Claude Code 根本启动不了，现在部署 main 可以让 Codex 和 Claude 先用起来。② DSHX 全部通过、PR 2b 合并后，再切换到 attach。DSH 访问链接由用户自己在 WebDCC 设置页粘贴，**不要向用户索取，也不要让用户发给你** | 9.0、9.2 |
+| Q8 | `endpoints` 是否取代 `baseUrl` | **是，在 PR 2b 里完成，不留双轨。** 写数据库迁移，API 和数据库里都去掉 `baseUrl` | F16、PRV-09 |
+| Q9 | 27/125 的增量推进 | **不接受原样。** PR 2a 里第 7 节的全部 ID 都必须落成测试。还没实现的，用例体里显式 `throw new Error('NOT IMPLEMENTED: <ID>')`（这算失败，不算跳过）。status.json 记录三种状态：通过、失败、未实现。棘轮规则：通过的集合和已实现的集合都只能增加，不能减少 | 6.6、第 8 节 |
+| Q10 | MOB / NAT / ROB 标"待用户确认" | **不允许。** 只有 A12 的"与 DSH 截图对照"一项由用户确认，其余全部是硬验收 | 1.1 |
+
+**PR #11 第三节"妥协"的答复：**
+1. `baseUrl` 与 `endpoints` 双轨：见 Q8。
+2. Codex 的 `approvalId = 进程token:请求id`：保留，这是正确的做法。
+3. 流式条目在第一个增量到达时才创建：保留，但要补单测，覆盖"没有 started / block-start 事件"的情况。
+4. `inject-event` 使用 `turnId='injected'`：改掉。钩子按原样写入事件（turnId 可以是 null），由用例自己构造真实形状的轮次（6.4）。
+5. 只实现了 27/125 个用例：见 Q9。
+6. `spawnServer` 写死了 `node` 和仓库路径：改用 `process.execPath`，仓库根目录从 `import.meta.url` 推出。审查方会在另一台机器上复跑。
+7. 以 root 运行时 Claude 不能用 `bypassPermissions`：部署保持现状（用户现在就是这样运行的），但 UI 要如实反映：在 root 下这一档灰显，并写明"以 root 运行时 Claude Code 不允许此模式"（MODE-claude-01）。
+
+**PR #11 之外，审查方新发现的问题（已并入本 v2）：**
+- **Codex 原生内容被丢掉了：**
+  - `thread/goal/updated`（目标）被当成 unknown；
+  - `turn/plan/updated`（计划）和 `turn/diff/updated`（本轮改动）被归为 internal；
+  - `warning`、`configWarning`、`deprecationNotice` 也被归为 internal。例如 Codex 会警告"模型元数据缺失，使用兜底配置，可能影响效果"，用户在终端里能看到，在网页里却看不到。
+
+  直接工具路径下（也就是 DeepSeek）没有 `apply_patch`，文件是通过命令修改的，这时 `turn/diff/updated` 是改动卡片**唯一**的数据来源。见 F12。
+- **Claude 的映射不完整：** adapter 只认 `TodoWrite`，不认 Claude Code 2.1 的 `TaskCreate` / `TaskUpdate`；计划模式下 `ExitPlanMode` 带来的计划没有显示出来。见 F19。
+- **提问功能缺用例：** Codex 的 `request_user_input` 和 DSH 的提问功能都是原生功能，之前没有用例。新增 AG-codex-14、AG-dsh-14。
+- **真实模型冒烟的 Key：** "环境里没有 Key"不成立。部署实例会从用户本机的配置导入（F16）；用户的 `~/.claude` 里就有真实的端点和凭据（这次泄漏事件本身就说明了这一点），DSH 也能在 attach 后直接使用。见 9.3。
+- **报告没有入库：** `report.json`、`status.json` 和截图都没有提交到仓库，棘轮规则因此无从执行。见 1.1。
+
 ---
 
 ## 1. 硬性规则（违反任何一条，M8 视为未完成）
@@ -34,7 +75,7 @@ M1–M7 的自动化检查全部通过：typecheck、lint、48 个单测、16 �
 
 1. 在干净的检出上执行 `pnpm accept:m8`，退出码为 0。"干净"指 `git clean -xfd && pnpm install --frozen-lockfile`。
 2. `accept:m8` 依次执行：typecheck、lint、单测、原有的 FakeAdapter e2e（含 A10），然后把**真实界面验收套件连续完整跑 2 遍**（每遍使用全新的临时目录和全新的服务进程）。全部通过才算通过。
-3. 报告由脚本生成：`docs/acceptance/M8/report.json`、`docs/acceptance/M8/index.html`（截图总览）和 `docs/acceptance-report.md` 的 M8 一节。**不许手写或手改任何"通过"标记。**
+3. 报告由脚本生成：`docs/acceptance/M8/report.json`、`docs/acceptance/M8/status.json`、`docs/acceptance/M8/index.html`（截图总览）和 `docs/acceptance-report.md` 的 M8 一节。**这些文件连同截图都要提交到仓库。不许手写或手改任何"通过"标记。**
 4. 第 7 节里的每一个用例 ID 都必须执行并通过。漏执行、跳过，或者执行了不在第 7 节里的 ID，`accept:m8` 都判失败。
 5. 第 9 节的部署和真实模型冒烟已经完成。没有 Key 的部分按规则标"待真实模型验证"。
 6. 最终汇报必须原样包含报告器输出的汇总行，格式为 `M8 ACCEPTANCE: <通过数>/<总数> passed ×2 @ <commit>`。没有这一行，不许宣布完成。
@@ -77,6 +118,18 @@ PR 描述里要贴出修复前的失败输出（用例 ID 和失败原因）和�
 - 无人值守执行；每组改动一个 PR，squash 合并，不 force push。
 - 不提交任何真实的 Key、token、Cookie 或服务器地址。测试用的假 Key 一律以 `sk-wdcc-test-` 开头。
 - **停止条件：** 同一个用例经过 3 轮针对性修复仍然失败，并且没有其他可以先推进的独立工作时，停在当前分支，把失败的用例、证据和你的判断写进 `docs/progress.md`，然后结束。
+
+### 1.6 立刻要做的三件事（PR 2a 的第一批提交，在任何新功能之前）
+
+1. **清理泄漏的真实凭据副本。** 之前的 fake e2e 没有隔离家目录，F16 把用户真实的 `~/.claude` 端点和凭据导入了测试实例，所以测试数据目录里的 `secrets.json` 存着真实 Key。
+   - 删除 `/tmp/wdcc-e2e*`、所有 `wdcc-*` 临时目录、`test-results/`、`playwright-report/` 和所有 trace 文件。
+   - 写一个只在本机运行的脚本：从用户真实配置里读出 Key 和端点主机名（**不许打印**），在以下位置搜索，**只输出命中的次数**：git 历史（所有分支，`git log -p --all`）、当前工作区、`/tmp`。
+   - 审查方已经扫描了公开仓库的所有分支，没有发现 `sk-` 开头的真实 Key，也没有非本地的地址，但仍然要以本机扫描的结果为准。
+   - 命中次数都是 0：在 progress.md 里写一行"已清理，扫描命中 0"。只要有一处命中 git 历史：**停下来报告**，用户需要更换这个 Key。
+2. **统一隔离，加启动守卫。**
+   - 所有会启动服务端的测试入口（单测、fake e2e 的 `e2e-server.ts`、真实套件、`spawnServer`）都使用同一个 `isolatedEnv()`，同时隔离 `HOME`、`CODEX_HOME`、`CLAUDE_CONFIG_DIR`、`DSH_HOME`。现在的 fake e2e 漏掉了 `DSH_HOME`，等 F16 的 DSH 导入做完，它就会读到用户真实的 `~/.dsh`。
+   - 服务端在 `WDCC_TEST_HOOKS=1` 时，启动前先检查这四个目录是否落在运行用户的真实家目录里。真实家目录从系统用户数据库读取（`os.userInfo().homedir`），不依赖 `HOME` 环境变量。落在里面就拒绝启动（用例 S-04）。
+3. **打开 main 的分支保护。** 用 `gh api` 设置：必须通过 PR 合并、禁止直接推送、禁止 force push、禁止删除分支，并且 `enforce_admins=true`。以后误推到 main 会被 GitHub 直接拒绝。
 
 ---
 
@@ -275,13 +328,20 @@ DSH 0.2.2-rc.1 本身就支持这种接入方式，下面几点是审查时读 D
   - 空的 reasoning 不显示。
   - `usage` 从 `thread/tokenUsage/updated` 读取。
   - turnId 的处理与 F4 一起改。
-- **用例：** AG-codex-13、ROB-04。
+  - **归类原则：原生界面会显示给用户的内容，WebDCC 也必须显示，不许归为 internal。** 具体包括：
+    - `thread/goal/updated` / `thread/goal/cleared`：会话的"目标"面板，显示目标内容和状态（AG-codex-04）。
+    - `turn/plan/updated`：任务面板，与 DSH 的任务清单使用同一个组件。`item/plan/*`（计划模式产生的计划条目）：计划卡片，以 Markdown 显示。这两项用单测加夹具覆盖，因为本版 Codex 默认配置下不会产生它们。
+    - `turn/diff/updated`：本轮改动卡片的第一数据来源（C2 第 1 级）。直接工具路径下没有 `apply_patch`，文件是通过命令修改的，只能靠它得到改动（AG-codexd-03）。
+    - `warning`、`configWarning`、`deprecationNotice`：显示为提示卡片。例如模型元数据缺失时 Codex 发出的"使用兜底元数据，可能影响效果"。
+  - **code mode：** 模型通过 `exec`（JavaScript）调用嵌套工具时，Codex 照常发出 commandExecution 和 fileChange 条目，WebDCC 照常显示。`exec` 本身如果作为条目出现，显示为"脚本"步骤，可以展开查看源码。
+- **用例：** AG-codex-04、AG-codex-13、`AG-codexd-*`、ROB-04。
 
 ### F14 Codex 的模型目录
 
 - **现象：** 在界面里跑 Codex 时，假模型报 `plan wants a tool but request has no matching tool command`。A1 脚本之所以能通过，是因为它把模型固定成了 `model="gpt-5"`。
 - **修法：**
-  - 验收环境里，Codex 用的模型取 Codex 内置的 slug（见 6.2）。
+  - 验收环境里，Codex 的模型按 6.2 设置：code mode 路径用 `model/list` 里的 slug，直接工具路径用 `deepseek-v4-pro`。
+  - `model_catalog_json` 的说明：如果用户自己的 Codex 配置里引用了模型目录文件，F16 导入时照样带上，这属于用户的原生配置，不违反 R1。R1 禁止的是 WebDCC 自己编写目录或提示词内容。
   - 非 OpenAI 模型的 Provider 如果没有填模型目录路径，在新会话页的 Codex 选项旁提示"需要模型目录，否则工具可能不可用"。
   - 实测"模型 slug 不在目录里时，Codex 会给模型哪些工具"，写进 `protocol-notes.md`。
 - **用例：** PRV-08。
@@ -320,6 +380,11 @@ DSH 0.2.2-rc.1 本身就支持这种接入方式，下面几点是审查时读 D
 - 【M8 核实】Web Host 提供 `llm/listProviders`、`llm/listConfigurableProviders`、`settings/describe`、`credentials/describe`。先用这些接口读取地址、模型和 Key 的引用。RPC 拿不到 Key 原文时，只读地读取 DSH 当前 profile 的配置和 `.credentials.yaml`。读取方式写进 `protocol-notes.md`。
 - 导入 DeepSeek 官方 Provider 时，同时填上两种协议的地址：Responses 用 `https://api.deepseek.com/`，Anthropic 用 `https://api.deepseek.com/anthropic`。
 - DSH 会话本身仍然使用 DSH 自己设置里的 Provider（10.4 不变）。
+- **按凭据类型区分：**
+  - DSH 里保存的 API Key（`dsh-llm-deepseek-api-key`）：复制。
+  - DSH 用 DeepSeek **账号登录**得到的凭据（`dsh-llm-deepseek-account`）：不复制。它属于 DSH 的登录，标"DSH 使用账号登录，不能给其他 Agent 使用"。
+  - DSH 从环境变量读取的 Key：WebDCC 进程的环境里有这个变量就复制，没有就标"缺少 Key（DSH 从环境变量 X 读取）"。
+- 读取方式和这三种情况都写进 `protocol-notes.md`，各配一个单测夹具。
 
 **粘贴导入**
 - Provider 页可以粘贴 Codex 的 `config.toml` 片段或 Claude 的 `settings.json` 片段，按上面同样的规则解析。
@@ -328,6 +393,7 @@ DSH 0.2.2-rc.1 本身就支持这种接入方式，下面几点是审查时读 D
 **数据模型（修改 10.1）**
 - Provider 新增 `source` 字段：取值为 `manual`、`codex-config`、`claude-settings`、`dsh`、`paste` 之一，并记录来源里的标识（例如 Codex 的 provider id）。
 - 单个的 `baseUrl` 改为 `endpoints`，按协议分别记录地址：`{ 'openai-responses'?: url, 'anthropic-messages'?: url }`。
+- **不留双轨：** 在 PR 2b 里写数据库迁移，把已有记录的 `baseUrl` 按它声明的协议转成 `endpoints`，然后从 API 和数据库中删除 `baseUrl`（用例 PRV-09）。
 
 **导入规则**
 - **时机：** 服务启动时自动扫描一次，打开 Provider 页时再扫描一次，另外提供"重新扫描"按钮。新发现的 Provider 直接导入，不弹确认框；页面顶部提示"从本机导入了 N 个 Provider"。
@@ -358,6 +424,18 @@ DSH 0.2.2-rc.1 本身就支持这种接入方式，下面几点是审查时读 D
   - 此后不再发送 `$events/result`。如果两边几乎同时操作，导致 DSH 返回错误，也按"已处理"显示，不报错。
 - **用例：** AG-dsh-13、NET-05。
 
+### F18 同一台机器上多个实例的 Cookie 互相覆盖
+
+- **原因：** WebDCC 的 Cookie 名是固定的，而浏览器的 Cookie 不区分端口，所以同一主机上不同端口的两个实例会互相覆盖 Cookie，导致 WebSocket 鉴权失败。PR #11 的问题 1 中"独立实例方案失败"就是这个原因。
+- **修法：** Cookie 名由请求的 Host（含端口）派生，做法与 DSH 的 `cookieName(authority)` 相同。旧名称的 Cookie 在过渡期内仍然接受，并换发新名称的 Cookie。
+- **用例：** AUTH-05。
+
+### F19 Claude Code 的任务、计划模式和工具搜索
+
+- **任务：** `TaskCreate`、`TaskUpdate`、`TaskList`、`TaskGet`（Claude Code 2.1）和 `TodoWrite`（旧版本）都映射到任务面板。按会话维护任务列表：根据创建和更新调用，以及它们的工具结果计算当前状态。用例 AG-claude-04b。
+- **计划模式：** 访问模式选"计划模式"（permissionMode `plan`）时，Claude 用 `ExitPlanMode` 提交计划。审批卡片要把计划以 Markdown 完整显示，按钮用原生选项。批准后的模式变化以 SDK 回报的为准。用例 AG-claude-15。
+- **工具搜索：** Claude Code 2.1 的很多工具是延迟加载的，模型先调用 `ToolSearch`，再调用加载出来的工具（例如 `WebFetch`）。两者都显示为普通的工具步骤，`ToolSearch` 的卡片写明加载了哪些工具。用例 AG-claude-16。
+
 ---
 
 ## 5. 同步修改 SPEC.md
@@ -372,6 +450,8 @@ DSH 0.2.2-rc.1 本身就支持这种接入方式，下面几点是审查时读 D
 - 5.4.9：按 D1 改写，增加 attach 和 spawn 两种模式、spawn 模式的冲突检查，以及"只处理自己创建的会话"这条规则。
 - 12.2：新增配置项 `WDCC_DSH_MODE`、`WDCC_DSH_URL`。
 - 6.1：`approval.resolved.by` 增加 `'other'`。
+- 11.1 和认证一节：Cookie 名按 Host（含端口）派生（F18）。
+- 第 7 节新增的工具映射（F12、F19）写进 6.1 的映射表。
 - C8：F1 中会话创建失败时的处理方式。
 - 第 15 节：M7 门槛里"本机按生产方式运行"一项，以后只能以本文件的验收套件为证据。
 
@@ -422,9 +502,21 @@ env_key = "WDCC_TEST_MOCKR2_KEY_MISSING"
 [profiles.alt]
 model_provider = "mockr"
 model = "<SLUG_B>"
+
+[profiles.ds]
+model_provider = "mockr"
+model = "deepseek-v4-pro"
 ```
 
-- `<SLUG_A>` 和 `<SLUG_B>` 必须是 Codex 0.167.0 `model/list`（`includeHidden: true`）返回结果中的两个 slug。优先使用 A1 脚本里验证过的 `gpt-5`。实际选用哪两个，写进 `protocol-notes.md`。
+- **`<SLUG_A>`、`<SLUG_B>`（code mode 路径）：** Codex 0.167.0 `model/list` 返回的两个 slug，例如 `gpt-6-sol`。审查方实测，列表里的模型全部走 code mode：
+  - 请求里的 `tools` 为空；
+  - 工具放在 `input[]` 的 `additional_tools` 中，以 `functions` 命名空间下的自定义工具 `exec` 的形式提供；
+  - 模型写 JavaScript，调用 `tools.exec_command`、`tools.apply_patch`、`tools.create_goal` 等嵌套工具。
+
+  这是用户用 GPT 模型（ChatGPT 登录）时 Codex 的真实路径。
+- **`deepseek-v4-pro`（直接工具路径）：** 不在 Codex 目录里，Codex 使用兜底元数据，并警告"可能影响效果"。工具为 `exec_command`、`write_stdin`、`view_image`、`request_user_input`、`create_goal`、`update_goal`、`get_goal`、`web_search`、`multi_agent_v1`，没有 `apply_patch`，也没有 `update_plan`。审查方实测，这个工具集与 `gpt-5` 完全相同。这是用户通过 Codex 使用 DeepSeek 时的真实路径。
+- 实际选用的 slug 和抓到的工具清单写进 `protocol-notes.md`。
+- **独立实例：** PRV 和 NEW 用例各自启动服务实例。每个实例使用复制出来的 `CODEX_HOME` 和 `CLAUDE_CONFIG_DIR`、独立的数据目录，以及独立的浏览器上下文。用例结束时先关闭浏览器上下文，再停止服务实例（见 F18）。
 - mock-responses 同时接受 `/v1` 和 `/v2` 两个前缀。
 
 `CLAUDE_CONFIG_DIR/settings.json` 的 `env` 段：
@@ -435,6 +527,7 @@ model = "<SLUG_B>"
 DSH（模拟用户自己在运行的那个 DSH）：
 - 套件自己用临时的 `DSH_HOME` 启动一个 `dsh web --no-open --port <P_DSH>`，称为"外部 DSH"，并从它的 stdout 读取启动链接。
 - 外部 DSH 通过 `DEEPSEEK_BASE_URL=http://127.0.0.1:<P_ANTH_DSH>` 和 `DEEPSEEK_API_KEY=sk-wdcc-test-dsh-<runId>` 指向 mock（SPEC 10.4 允许在测试中这样做）。
+- 套件准备环境时，再通过外部 DSH 自己的设置界面或 RPC，往它的凭据存储里保存一个 Key `sk-wdcc-test-dshcred-<runId>`，用来覆盖 F16 读取"DSH 保存的 Key"这条路径（PRV-01）。只操作临时的外部 DSH。
 - 主服务实例以 attach 模式连接外部 DSH（`WDCC_DSH_MODE=attach`、`WDCC_DSH_URL=http://127.0.0.1:<P_DSH>`）。套件在设置页粘贴启动链接，完成首次连接，这一步本身也是用例 DSHX-00。
 - 套件用浏览器打开外部 DSH 的原版界面（启动链接），在里面创建一个"外部会话"，代表用户自己（以及执行本 SPEC 的 Agent）在 DSH 里的会话。DSHX 用例围绕这个会话检查 WebDCC 不会干扰它。
 - spawn 模式只在 DSHX-06、DSHX-07 中，用单独的服务实例测试。
@@ -462,7 +555,23 @@ DSH（模拟用户自己在运行的那个 DSH）：
   - `{{imageCount}}`：图片块的数量；
   - `{{model}}`：请求里的模型名。
 - **辅助请求：** 完全没有 tools 的请求（例如生成标题）返回一段固定的短文本，不推进计划。
-- **工具不匹配：** 请求里有 tools，但找不到计划要用的工具时，返回 **HTTP 500**，并在 `/__requests` 里标记。不允许悄悄结束这一轮。
+- **工具不匹配：** 计划步骤需要的工具在请求里找不到时，返回 **HTTP 500**，并在 `/__requests` 里标记。不允许悄悄结束这一轮。**计划里不许有 optional 步骤。**
+- **Codex code mode：** 如果请求的 `input` 里有 `additional_tools`，并且其中包含 `functions` 命名空间下的 `exec`，mock 就用一个 `custom_tool_call`（`name: "exec"`，`input` 为 JavaScript 源码）完成这一步。例如：
+  - 执行命令：`const r = await tools.exec_command({cmd: "ls"}); text(JSON.stringify(r));`
+  - 写文件：`await tools.apply_patch("*** Begin Patch\n*** Add File: notes.txt\n+…\n*** End Patch\n");`
+
+  下一个请求里出现 `custom_tool_call_output` 时，进入计划的下一步。审查方已用 `codex exec --json` 实测过这种方式：一次 `exec` 里的 `exec_command` 和 `apply_patch` 分别产生了 `command_execution` 和 `file_change` 条目，文件也确实写入了。
+- **各 Agent 使用的原生工具：** 计划里的每一步，按下表解析成该 Agent 的原生工具。"—"表示该 Agent 的计划变体不包含这一步。
+
+  | 步骤 | DSH | Claude Code | Codex code mode | Codex 直接工具 |
+  |---|---|---|---|---|
+  | 列目录 / 执行命令 | `bash` | `Bash` | `tools.exec_command` | `exec_command` |
+  | 读文件 | `read` | `Read` | `tools.exec_command`（`cat`） | `exec_command`（`cat`） |
+  | 写新文件 | `write` | `Write` | `tools.apply_patch`（Add File） | `exec_command`（heredoc） |
+  | 改一行 | `edit` | `Edit` | `tools.apply_patch`（Update File） | `exec_command`（`sed -i`） |
+  | 任务 / 目标 | `todo_write` | 默认 —；04b 实例用 `TaskCreate` ×2 + `TaskUpdate` | `tools.create_goal` + `tools.update_goal` | `create_goal` + `update_goal` |
+  | 提问 | DSH 的提问工具（名称以实测为准） | `AskUserQuestion` | `tools.request_user_input` | `request_user_input` |
+  | 需要审批的命令 | `bash` + 提权参数（5.4.5） | `Bash`（默认模式下写工作区外） | `tools.exec_command` + 提权参数（以实测为准） | `exec_command` + 提权参数（以实测为准） |
 - **新增计划**（放在 `packages/testing/mock-models/plans/`）：
   - `full`：依次执行：
     1. 列出目录；
@@ -475,7 +584,9 @@ DSH（模拟用户自己在运行的那个 DSH）：
     文本按每块 20 个字、每块间隔 80ms 流式输出。
   - `approval`：执行一条需要审批的命令（写入工作区之外的 `$TMP/approval-<runId>.txt`；DSH 按 5.4.5 显式请求提权），然后给出最终回答。
   - `slow`：一段 60 块的长回答，每块间隔 200ms。
-  - `question`（Claude Code）：调用 AskUserQuestion，带 2 个选项。
+  - `question`（三个 Agent 都有）：调用该 Agent 的提问工具，带 2 个选项。
+  - `plan-mode`（Claude Code）：调用 `ExitPlanMode`，提交一份 Markdown 计划。
+  - `tool-search`（Claude Code）：先调用 `ToolSearch` 加载 `WebFetch`，再调用 `WebFetch` 访问 mock 提供的一个本地地址。
   - `echo-context`：最终回答为"历史用户消息 {{userMessageCount}} 条"。
   - `image`：最终回答为"收到图片 {{imageCount}} 张"。
 
@@ -485,7 +596,7 @@ DSH（模拟用户自己在运行的那个 DSH）：
 
 | 钩子 | 作用 | 用于 |
 |---|---|---|
-| `POST /api/__test/inject-event {sessionId, events: [...]}` | 直接写入若干条事件（一次最多 1,000 条） | ROB-01、ROB-04、NET-07 |
+| `POST /api/__test/inject-event {sessionId, events: [...]}` | 原样写入若干条事件（一次最多 1,000 条），包括事件自带的 turnId（可以是 null），不许替换成特殊值。用例自己构造真实形状的轮次：`user.message`、`turn.started`、若干条目、`turn.completed` | ROB-01、ROB-04、NET-07 |
 | `POST /api/__test/dispose {sessionId}` | 立即回收该会话的 Agent 进程 | `AG-*-11` |
 | `GET /api/__test/processes` | 列出 WebDCC 启动的 Agent 进程及其 PID 和环境中的目录变量 | S-02、ROB-02、ROB-03 |
 
@@ -517,7 +628,11 @@ DSH（模拟用户自己在运行的那个 DSH）：
 - **视口：** 默认 1440×900。MOB-01 至 MOB-03、DOCK-02 和 A12 的截图另用 390×844；MOB-04 用 900×800。
 - **Agent 写法：** `<a>` 表示 dsh、codex、claude 三者之一。
 - **默认 Provider：** 没有特别说明时，Codex 和 Claude Code 使用 NEW-02 的默认选择，DSH 使用它自己的设置。
-- **审批：** 用例里遇到预期之外的审批，一律点"允许一次"，并把次数记进报告。05 和 06 两个审批用例除外。
+- **审批：** 除 05、06 和 MODE 用例外，fixture 会自动点击"允许一次"，规则如下：
+  - 用条件等待实现，只点击 `data-state="pending"` 的审批卡片。卡片必须带有 `data-state` 属性，取值为 `pending` 或 `resolved`。
+  - 每次点击都记录工具名。
+  - 每个用例结束时，实际发生的审批列表（工具名和次数）必须**完全等于**该 Agent 在该访问模式下执行该计划时的预期列表，多一个、少一个都算失败。
+  - 预期列表来自原生行为的实测，写成 `protocol-notes.md` 里的一张表（Agent × 访问模式 × 计划）。
 - **执行顺序（7.4）：** 每个 Agent 的 01、02、03、04、07、08、10、11、12 依次在同一个会话里执行；05、06、09 和各 Agent 的 13 各自新建会话。
 
 ### 7.1 环境与认证
@@ -527,22 +642,25 @@ DSH（模拟用户自己在运行的那个 DSH）：
 | S-01 | 调用 `GET /api/meta` | 三个 Agent 都是 `installed: true`、`adapterKind: 'real'`，版本等于锁定版本 |
 | S-02 | 调用 `GET /api/__test/processes` | 服务端和各 Agent 进程的 `HOME`、`CODEX_HOME`、`CLAUDE_CONFIG_DIR`、`DSH_HOME` 都在临时目录里；所用端口不是 3080、3091、8787 |
 | S-03 | 不设 `WDCC_TEST_HOOKS`，另外启动一个服务实例 | 该实例上 `/api/__test/*` 全部返回 404 |
+| S-04 | 设置 `WDCC_TEST_HOOKS=1`，但让 `CODEX_HOME`（以及另外三个目录，分别测一次）指向运行用户的真实家目录，然后启动服务 | 服务在扫描任何配置之前就退出，报"测试模式下不允许使用真实家目录"，服务日志里没有任何导入扫描的记录；单测、fake e2e、真实套件和 `spawnServer` 都调用同一个 `isolatedEnv()`（用代码检查断言） |
 | AUTH-01 | 打开 `/?token=错误值` | 不设置 Cookie，页面显示未授权；`/api/sessions` 返回 401 |
 | AUTH-02 | 打开 `/?token=正确值` | 跳转到 `/`，地址栏里不再有 token；Cookie 带 HttpOnly |
 | AUTH-03 | 用一个不带 Cookie 的新浏览器上下文打开 `/s/<已有会话>` 和 `/files/<已有文件>` | 都返回未授权，不泄露任何会话内容 |
 | AUTH-04 | 复制一份数据目录，另外启动一个服务实例；登录后，修改该实例的 `WDCC_TOKEN` 并重启它 | 旧的 Cookie 失效（A9）；主服务实例不受影响 |
+| AUTH-05 | 在**同一个**浏览器上下文里，分别登录同一主机上不同端口的两个实例，然后交替操作两个实例的页面 | 两个实例都保持登录，WebSocket 都正常，控制台没有错误（F18） |
 
 ### 7.2 Provider
 
 | ID | 步骤 | 断言 |
 |---|---|---|
-| PRV-01 | 首次打开 Provider 页，事先不做任何手动操作 | 列出以下几项：`mockr`（来源"Codex 配置"，Key 后 4 位与 `WDCC_TEST_MOCKR_KEY` 一致）；`mockr2`（"缺少 Key"，原因里写出变量名 `WDCC_TEST_MOCKR2_KEY_MISSING`）；Claude 设置中的端点（来源"Claude 设置"）；DSH 的 Provider（来源"DSH"，显示 Key 后 4 位，或者写明为什么没有 Key）。页面顶部提示"从本机导入了 N 个 Provider"，N 与列表一致 |
+| PRV-01 | 首次打开 Provider 页，事先不做任何手动操作 | 列出以下几项：`mockr`（来源"Codex 配置"，Key 后 4 位与 `WDCC_TEST_MOCKR_KEY` 一致）；`mockr2`（"缺少 Key"，原因里写出变量名 `WDCC_TEST_MOCKR2_KEY_MISSING`）；Claude 设置中的端点（来源"Claude 设置"）；DSH 的 Provider（来源"DSH"，Key 后 4 位与 `sk-wdcc-test-dshcred-<runId>` 一致）。页面顶部提示"从本机导入了 N 个 Provider"，N 与列表一致 |
 | PRV-02 | 重启服务，再打开 Provider 页 | Provider 的数量和内容都没有变化，没有重复 |
 | PRV-03 | 删除 `mockr2` → 重启服务 → 点"恢复已忽略的导入" | 重启后 `mockr2` 没有回来；点恢复后它重新出现 |
 | PRV-04 | 在 WebDCC 里把 `mockr` 改名为"我的 Mock" → 修改临时 `config.toml` 里 `profiles.alt.model` → 点"重新扫描" → 点"更新" | 显示"本机配置已变化"；更新后模型列表包含新的模型；名称仍然是"我的 Mock" |
 | PRV-05 | 粘贴一段 `config.toml`，里面带注释 `# WDCC-PASTE-MARKER-<runId>`，然后导入 | 导入得到的 Provider 正确；在数据目录（包括 SQLite 文件）里搜索不到这个标记 |
 | PRV-06 | 用表单手动新增一个 Provider：依次点击并填写名称、两种协议的地址、Key（`sk-wdcc-test-manual-<runId>`）和模型 | 列表里出现这个 Provider，来源为"手动"；全局断言确认之后所有响应里都不含这个 Key |
 | PRV-07 | 给 `mockr2` 补填 Key → 用 `mockr2` 新建一个 Codex 会话，跑 `full` | mock 收到的请求里，`Authorization` 是补填的 Key，路径前缀为 `/v2` |
+| PRV-09 | 用 M7 / PR1 格式的数据目录启动新版本（仓库里保存一份脱敏的旧版数据目录作为夹具） | Provider 被迁移为 `endpoints`；API 响应和数据库里都不再有 `baseUrl`；旧会话能打开，并能继续对话 |
 | PRV-08 | 新增一个模型名不在 Codex 目录里、也没有填模型目录路径的 Provider，然后在新会话页选择 Codex | Codex 选项旁显示"需要模型目录"的提示 |
 
 ### 7.3 新会话
@@ -564,7 +682,10 @@ DSH（模拟用户自己在运行的那个 DSH）：
 | AG-{dsh,codex,claude}-01 | 新建会话，发送 `full` | 地址变为 `/s/<id>`；**不刷新页面**，侧边栏和会话头的 Agent 标识就是正确的（DS、CX、CC）；访问模式按钮显示的是该 Agent 自己的模式名 |
 | AG-{dsh,codex,claude}-02 | 同上一轮，观察流式输出 | 发送后 5 秒内出现第一个字；完成之前，至少 3 次观察到助手文本的长度在增加 |
 | AG-{dsh,codex,claude}-03 | 展开这一轮，点改动卡片中的 `README.md` | 步骤依次为列目录、读取 `README.md`、写入、修改、任务清单；改动卡片显示"2 个文件"，其中 `notes.txt` 为 `+2 -0` 并标"新文件"或"整文件写入"，`README.md` 为 `+1 -1`；停靠区的 diff 能看到改动前后的那一行；工作区里两个文件的内容与预期一致 |
-| AG-{dsh,codex,claude}-04 | 查看任务面板 | 显示 2 项，1 项已完成、1 项进行中；页面没有错误（F2 的回归测试） |
+| AG-dsh-04 | 查看任务面板 | 显示 2 项，1 项已完成、1 项进行中；页面没有错误（F2 的回归测试） |
+| AG-codex-04 | 查看会话的"目标" | 显示 Codex 的目标：内容与计划中 `create_goal` 的参数一致，状态与 `update_goal` 的参数一致（来自 `thread/goal/updated`）；页面没有错误 |
+| AG-claude-04 | 查看这一轮 | 不出现任务面板，也没有错误卡片。这是 Claude Code 2.1.322 在第三方端点下的原生行为：审查方在干净环境里抓取了交互式 `claude` 和 `claude -p` 的请求，工具清单相同，都没有 TodoWrite 或 Task* |
+| AG-claude-04b | 另外启动一个服务实例，它的临时 `settings.json` 的 `env` 里加上 `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`（审查方环境中，这个变量会让 `TaskCreate` 和 `TaskUpdate` 出现；以实测为准）；新建 Claude 会话，发送 `full` | Claude 的请求里出现了 `TaskCreate` 和 `TaskUpdate`；任务面板显示 2 项，1 项已完成、1 项进行中 |
 | AG-{dsh,codex,claude}-05 | 新建会话，发送 `approval`，点"允许一次" | 审批卡片的标题包含命令原文；原因是中文（DSH 取 `displayReason.zh`）；按钮文字与原生选项一致；正文里没有原始 JSON（JSON 在"详情"里折叠）；等待审批时侧边栏显示"待批准"；点击后卡片显示"已允许一次"，命令真的执行了（目标文件存在） |
 | AG-{dsh,codex,claude}-06 | 新建会话，发送 `approval`，点"拒绝" | 卡片显示"已拒绝"；目标文件不存在；mock 收到的下一个请求里带有"被拒绝"的工具结果；这一轮正常结束 |
 | AG-{dsh,codex,claude}-07 | 在 01 的会话里，等这一轮结束 | 轮头显示"已完成，用时 …"；整个时间线里没有"运行中…"；用户气泡位于这一轮的顶部；底栏显示"1 轮" |
@@ -573,7 +694,12 @@ DSH（模拟用户自己在运行的那个 DSH）：
 | AG-{dsh,codex,claude}-10 | 在 01 的会话里再发送一次 `full` | 出现第二轮，底栏显示"2 轮"，第一轮自动收起 |
 | AG-{dsh,codex,claude}-11 | 调用 `/api/__test/dispose` → 发送 `echo-context` | dispose 之后，`/api/__test/processes` 里已经没有这个会话的进程（DSH 则是这个会话已取消关注）；回答为"历史用户消息 3 条" |
 | AG-{dsh,codex,claude}-12 | 在输入框的模型菜单里换成同一 Provider 下的另一个模型（DSH 用它目录里的另一个模型），然后发送 | mock 收到的下一个请求里，`model` 是新选的模型 |
+| AG-codexd-{01,03,05,09,11} | 与 AG-codex 的同号用例相同，只是新会话里选择模型 `deepseek-v4-pro`（直接工具路径） | 与同号用例的断言相同。其中 03：这条路径没有 `apply_patch`，文件是通过命令修改的，改动卡片的数据来自 `turn/diff/updated`，仍然必须显示 2 个文件，分别为 `+2 -0` 和 `+1 -1`；时间线里还要出现 Codex 的"兜底元数据"警告提示卡片 |
 | AG-codex-13 | 查看 01 的会话 | 对话里没有"userMessage"、没有 `summaryPartAdded` 的未知事件卡片、没有内容为空的思考卡片；底栏的 token 用量不为 0 |
+| AG-codex-14 | 新建 Codex 会话，发送 `question`（Codex 用 `request_user_input` 提问） | 出现提问卡片，两个选项的文字正确；选第 2 项提交后，mock 收到的工具结果里包含第 2 个选项 |
+| AG-dsh-14 | 新建 DSH 会话，发送 `question`（DSH 用自己的提问工具） | 出现提问卡片，两个选项的文字正确；选第 2 项提交后，mock 收到的工具结果里包含第 2 个选项 |
+| AG-claude-15 | 新建 Claude 会话，把访问模式切换为"计划模式"，发送 `plan-mode` | 审批卡片里以 Markdown 完整显示计划，按钮用原生选项的文字；批准后这一轮继续执行，访问模式按钮显示 SDK 回报的新模式 |
+| AG-claude-16 | 新建 Claude 会话，发送 `tool-search` | 先出现一个 `ToolSearch` 步骤，卡片写明加载了 `WebFetch`；接着出现一个 `WebFetch` 步骤，显示目标地址和结果；这一轮正常完成 |
 | AG-claude-13 | 新建会话，发送 `question`，选第 2 个选项后提交 | 出现提问卡片，两个选项的文字正确；mock 收到的工具结果里包含第 2 个选项 |
 | AG-dsh-13 | 在 WebDCC 的 DSH 会话里发送 `approval`，然后在外部 DSH 的原版界面里批准它；再发送一次 `approval`，这次在 WebDCC 里批准 | 第一次：WebDCC 的卡片在 2 秒内显示"已在其他界面处理：已允许一次"，这一轮继续执行并完成。第二次：原版界面上的审批在 2 秒内消失 |
 
@@ -581,7 +707,7 @@ DSH（模拟用户自己在运行的那个 DSH）：
 
 | ID | 步骤 | 断言 |
 |---|---|---|
-| MODE-{dsh,codex,claude}-01 | 打开访问模式菜单 | DSH 列出 4 个 preset；Claude 列出 SDK 的 permissionMode 取值；Codex 列出的选项与直接调用 app-server `permissionProfile/list` 的结果一致 |
+| MODE-{dsh,codex,claude}-01 | 打开访问模式菜单 | DSH 列出 4 个 preset；Claude 列出 SDK 的 permissionMode 取值；Codex 列出的选项与直接调用 app-server `permissionProfile/list` 的结果一致。以 root 运行时，Claude 的 `bypassPermissions` 一项灰显，写明"以 root 运行时 Claude Code 不允许此模式"；以普通用户运行时，这一项可以选择 |
 | MODE-{dsh,codex,claude}-02 | 切换到只读，发送 `full`，遇到审批点"拒绝" | 写文件被拒绝，或者触发审批（审批被拒绝）；工作区里的文件没有变化；按钮显示 Agent 回报的当前模式；轨迹里有这次切换的事件 |
 | MODE-{dsh,codex,claude}-03 | 切换到不需要审批的可写模式，发送 `full` | 写文件成功，并且没有出现审批卡片 |
 
@@ -688,36 +814,43 @@ DSH（模拟用户自己在运行的那个 DSH）：
 ## 8. 执行顺序与 PR
 
 **棘轮规则：**
-- 每个 PR 都运行 `pnpm accept:m8 --ratchet`，并把 `docs/acceptance/M8/status.json`（每个 ID 是否通过）提交进去。
-- `--ratchet` 模式下，只允许失败"在 main 上的 status.json 里本来就没有通过"的用例。**之前通过的用例变成失败，PR 不许合并。**
+- 每个 PR 都运行 `pnpm accept:m8 --ratchet`，并把 `docs/acceptance/M8/status.json` 提交进去。status.json 记录每个 ID 的状态：`passed`、`failed` 或 `not-implemented`。
+- 从 PR 2a 起，第 7 节的全部 ID 都必须有对应的测试。还没实现的，用例体里显式 `throw new Error('NOT IMPLEMENTED: <ID>')`（这算失败，不算跳过）。
+- `--ratchet` 模式下：`passed` 的集合只能增加，已实现（`passed` 加 `failed`）的集合也只能增加。**之前通过的用例变成失败，PR 不许合并。**
 - PR 描述里贴出本次由失败变为通过的 ID 列表，以及 1.3 要求的修复前失败输出。
 
 **PR 顺序：**
 1. **PR 1：** 验收套件的框架（6.1–6.6，包括 mock 的扩展和测试钩子），把第 7 节的全部用例都写出来（这时大部分预期会失败）；同时修 F1、F2、F3。合并时，S、AUTH，以及三个 Agent 的 01、02、04 必须通过。
-2. **PR 2：** D1（attach 模式、spawn 模式的冲突检查、设置页的"DSH 连接"一节）和 F16。
-3. **PR 3：** F4、F5、F12、F17。
-4. **PR 4：** F6。
-5. **PR 5：** F7、F8。
-6. **PR 6：** F9、F10、F11、F14、F15。
-7. **PR 7：** 剩余的失败用例。最后在干净检出上跑 `pnpm accept:m8`（严格模式，2 遍），生成报告，更新 `docs/progress.md`。
+2. **PR 2a（基础，先做）：** 1.6 的三件事；第 7 节全部 ID 落成测试，未实现的显式失败；status.json 和报告入库；F18，以及 PRV / NEW 用例使用独立实例；`spawnServer` 改为可移植；`inject-event` 原样写入；按第 7 节开头的规则实现自动批准；mock 的 code mode 和各 Agent 的计划变体（6.3）。
+3. **PR 2b：** D1（attach 模式、spawn 模式的冲突检查、设置页的"DSH 连接"一节）和 F16（包括 DSH 导入和 `endpoints` 迁移）。
+4. **PR 3：** F4、F5、F12（包括目标、计划、diff、警告的映射和 code mode）、F17、F19。
+5. **PR 4：** F6。
+6. **PR 5：** F7、F8。
+7. **PR 6：** F9、F10、F11、F14、F15。
+8. **PR 7：** 剩余的失败用例。最后在干净检出上跑 `pnpm accept:m8`（严格模式，2 遍），生成报告，更新 `docs/progress.md`。
 
 ---
 
 ## 9. 部署与真实模型冒烟（M8 的最后一步）
 
-1. **部署前：** 在 `docs/progress.md` 记录当前部署的版本和启动方式，以便回退。
+0. **临时部署（现在就做，不等 M8 完成）：**
+   - 记录当前部署的版本和启动方式，备份数据目录 `WDCC_DATA_DIR`（完整复制一份，留作回退）。
+   - 把当前 main 构建后部署到 :80，`WDCC_ENABLE_DSH=0`，只重启 WebDCC。
+   - 部署后用浏览器确认：新建 Codex 会话和 Claude Code 会话都能正常完成一轮（用户本机已有的配置或登录）；M7 时期的旧会话能打开。
+   - 结果写进 progress.md。之后每合并一个 PR，就按同样的步骤重新部署一次（先备份），让用户一直用上最新的修复。
+1. **部署前：** 在 `docs/progress.md` 记录当前部署的版本和启动方式，并备份数据目录，以便回退。
 2. **按 D1 部署（attach 模式）：**
    - **不许停止或重启用户 3080 端口的 DSH。** 执行本 SPEC 的 Agent 就运行在它里面。
    - 只有 7.13 的 `DSHX-*` 用例全部通过后，才允许让 WebDCC 连接用户的 DSH。
    - 设置 `WDCC_ENABLE_DSH=1`、`WDCC_DSH_MODE=attach`、`WDCC_DSH_URL=http://127.0.0.1:3080`，然后只重启 WebDCC。
-   - 首次连接需要 DSH 的访问链接 `http://127.0.0.1:3080/?token=…`。如果用户已经提供了这个链接，在 WebDCC 设置页粘贴它；如果用户没有提供，就在最终汇报里写明"需要用户在 WebDCC 设置页粘贴 DSH 访问链接"，DSH 的真实模型冒烟标为"待用户连接 DSH"。链接里的 token 不许写进任何文件、日志、提交或汇报。
+   - 首次连接需要 DSH 的访问链接 `http://127.0.0.1:3080/?token=…`，**由用户自己在 WebDCC 设置页粘贴**。不要向用户索取这个链接，也不要让用户把它发给你。在汇报里写明"请在 WebDCC 设置页粘贴 DSH 访问链接"；用户粘贴之后，再执行 DSH 的真实模型冒烟。
    - 连接后，确认执行本 SPEC 的这个会话仍然正常：它的审批仍由原版界面处理，WebDCC 里看不到它。
 3. **真实模型冒烟：** `pnpm accept:live`，对部署好的实例运行：
    - **工作区：** 新建一个专用目录 `~/webdcc-smoke`（执行 `git init`），在部署的实例里把它添加为工作区。不许用用户的任何项目目录。
    - **每个 Agent 跑一轮：** 使用 F16 导入的真实 Provider（DSH 用它自己的设置），访问模式为只读，消息为"列出当前目录下的文件名，不要修改任何文件"。断言这一轮正常完成、没有页面错误、截图。
    - **跑完后：** 把这几个冒烟会话归档。
    - **费用控制：** 每个 Agent 只运行这一次，不重试，不放进循环。
-   - **没有 Key：** 某个 Agent 没有可用的 Key 或登录时，标"待真实模型验证"。
+   - **Key 的来源：** 部署实例从用户本机的配置导入（F16），用户的 `~/.claude` 里就有真实的端点和凭据；Codex 用用户本机的配置或登录；DSH 在 attach 之后直接使用。**不许以"环境里没有 Key"为由跳过。** 只有当部署实例的新会话页上，某个 Agent 确实没有任何可用的 Provider 或登录时，才把它标为"待真实模型验证"，并附上新会话页的截图作为证据。
    - 脚本不许打印部署实例的 token。
 4. **生成报告：** 运行结果写进 `docs/acceptance/M8/live.json` 和 `docs/acceptance-report.md`。
 

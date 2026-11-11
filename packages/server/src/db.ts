@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   agent TEXT NOT NULL, native_id TEXT, title TEXT,
   provider_id TEXT REFERENCES providers(id), model TEXT, access_mode TEXT,
   status TEXT NOT NULL DEFAULT 'idle', pinned INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
-  last_seq INTEGER NOT NULL DEFAULT 0, native_meta TEXT,
+  last_seq INTEGER NOT NULL DEFAULT 0, native_meta TEXT, title_source TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS events (
@@ -57,5 +57,17 @@ export function openDb(file: string): Db {
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = NORMAL');
   db.exec(SCHEMA);
+  // M8 F16：Provider 增加来源与按协议的多端点
+  const columns = db.prepare('PRAGMA table_info(providers)').all() as { name: string }[];
+  const has = (name: string): boolean => columns.some((column) => column.name === name);
+  if (!has('source')) db.exec("ALTER TABLE providers ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
+  if (!has('source_key')) db.exec('ALTER TABLE providers ADD COLUMN source_key TEXT');
+  if (!has('endpoints')) db.exec('ALTER TABLE providers ADD COLUMN endpoints TEXT');
+  if (!has('note')) db.exec('ALTER TABLE providers ADD COLUMN note TEXT');
+  // M8 C1：用户改过名字的会话不被原生标题覆盖
+  const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  if (!sessionColumns.some((column) => column.name === 'title_source')) db.exec('ALTER TABLE sessions ADD COLUMN title_source TEXT');
+  // 接续会话：记录上一棒（"在另一个 Agent 中继续"）
+  if (!sessionColumns.some((column) => column.name === 'parent_id')) db.exec('ALTER TABLE sessions ADD COLUMN parent_id TEXT');
   return db;
 }

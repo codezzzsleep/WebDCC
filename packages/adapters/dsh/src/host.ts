@@ -105,16 +105,40 @@ export interface StreamFrame {
   error?: unknown;
 }
 
+/** attach 模式：用启动 token 换一个 operator Cookie（SPEC-M8 2.2） */
+export async function attachToDsh(endpoint: string | number, token: string): Promise<string> {
+  const origin = typeof endpoint === 'number' ? `http://127.0.0.1:${endpoint}` : new URL(endpoint).origin;
+  const target = new URL('/connect', origin);
+  target.searchParams.set('token', token);
+  target.searchParams.set('interactions', 'answer');
+  const response = await fetch(target, {
+    redirect: 'manual',
+    headers: { host: new URL(origin).host },
+  });
+  const setCookies = response.headers.getSetCookie();
+  const first = setCookies[0];
+  if (first === undefined) throw new Error(`DSH /connect 失败：HTTP ${response.status}，没有 Set-Cookie`);
+  // v2 Cookie 形如 dsh-auth-<hash>=v2…，是 operator Cookie，可用于 /api 与 remote.mux
+  return first.split(';')[0] ?? '';
+}
+
 export class DshHostClient {
   private readonly base: string;
+  private readonly websocketBase: string;
   private cookie = '';
   private counter = 0;
   private ws: WebSocket | null = null;
   private readonly streamHandlers = new Map<string, (frame: StreamFrame) => void>();
   private readonly allFrames: unknown[] = [];
 
-  constructor(readonly port: number) {
-    this.base = `http://127.0.0.1:${port}`;
+  constructor(endpoint: string | number) {
+    this.base = typeof endpoint === 'number' ? `http://127.0.0.1:${endpoint}` : new URL(endpoint).origin;
+    this.websocketBase = this.base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+  }
+
+  /** attach 模式：直接注入已换到的 operator Cookie */
+  useCookie(cookie: string): void {
+    this.cookie = cookie;
   }
 
   /** `GET /?token=` 换会话 Cookie */
@@ -155,7 +179,7 @@ export class DshHostClient {
 
   /** 连上 `/api/remote.mux`（多路复用事件流） */
   async connect(): Promise<void> {
-    const socket = new WebSocket(`ws://127.0.0.1:${this.port}/api/remote.mux`, { headers: { cookie: this.cookie } });
+    const socket = new WebSocket(`${this.websocketBase}/api/remote.mux`, { headers: { cookie: this.cookie } });
     this.ws = socket;
     socket.on('message', (data: WebSocket.RawData) => {
       let frame: StreamFrame;

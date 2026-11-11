@@ -3,6 +3,9 @@ import type { FsListResponse, FsReadResponse } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
+import { agentText } from '../lib/agents.js';
+import { AgentMark } from './AgentMark.js';
+import { Icon } from './Icon.js';
 import { Markdown } from './Markdown.js';
 import { Timeline } from './Timeline.js';
 
@@ -13,51 +16,68 @@ export type DockState =
 
 interface DockProps {
   state: DockState;
+  mainSessionId: string;
   onClose: () => void;
   onPromote: (sessionId: string) => void;
-  onOpenDiff?: (fileId: string, path: string) => void;
   onHandoff: (text: string) => void;
 }
 
-export function Dock({ state, onClose, onPromote, onHandoff }: DockProps): React.ReactElement {
+/** 右侧停靠区：并排对照另一个会话，或查看 diff、工作区文件。手机上全屏打开 */
+export function Dock({ state, mainSessionId, onClose, onPromote, onHandoff }: DockProps): React.ReactElement {
   useStoreVersion();
-  const sameAsMain = state.kind === 'session' && state.sessionId === currentMainSessionId();
+  const session = state.kind === 'session' ? store.getSession(state.sessionId) : undefined;
+  const sameAsMain = state.kind === 'session' && state.sessionId === mainSessionId;
+
+  useEffect(() => {
+    if (state.kind === 'session') void store.ensureSession(state.sessionId);
+  }, [state]);
+
   return (
-    <aside className="dock" data-testid="dock">
-      <div className="dock-tabs">
-        <span className="dock-tab active">
-          {state.kind === 'session' ? '会话' : state.kind === 'diff' ? `改动 · ${state.path}` : '工作区文件'}
-        </span>
+    <aside className="dock" data-testid="dock" aria-label="停靠区">
+      <div className="dock-head">
+        <button type="button" className="icon-btn dock-back" data-testid="dock-back" aria-label="返回主栏" onClick={onClose}>
+          <Icon name="arrowLeft" size={18} />
+        </button>
+        {state.kind === 'session' ? (
+          <>
+            <AgentMark agent={session?.agent ?? ''} />
+            <span className="title">{session?.title ?? '会话'}</span>
+            <span className="sub">{agentText(session?.agent ?? '').name}</span>
+          </>
+        ) : state.kind === 'diff' ? (
+          <>
+            <Icon name="fileCode" />
+            <span className="title">{state.path}</span>
+            <span className="sub">改动</span>
+          </>
+        ) : (
+          <>
+            <Icon name="folder" />
+            <span className="title">工作区文件</span>
+          </>
+        )}
         <span className="spacer" />
-        <button type="button" className="icon-button" onClick={onClose} title="关闭停靠区">
-          ×
+        {state.kind === 'session' && !sameAsMain ? (
+          <button type="button" className="btn small" onClick={() => onPromote(state.sessionId)}>
+            移到主栏
+          </button>
+        ) : null}
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭停靠区" title="关闭" data-testid="dock-close">
+          <Icon name="x" size={16} />
         </button>
       </div>
       <div className="dock-body">
-        {sameAsMain ? <div className="dock-notice" data-testid="dock-same-session">已经在主栏里了</div> : null}
-        {state.kind === 'session' && !sameAsMain ? <DockSession sessionId={state.sessionId} onPromote={onPromote} onHandoff={onHandoff} /> : null}
+        {sameAsMain ? (
+          <div className="dock-notice" data-testid="dock-same-session">
+            已经在主栏里了
+          </div>
+        ) : null}
+        {state.kind === 'session' && !sameAsMain ? <Timeline sessionId={state.sessionId} onOpenDiff={() => undefined} onHandoff={onHandoff} compact /> : null}
         {state.kind === 'diff' ? <DiffView fileId={state.fileId} path={state.path} /> : null}
         {state.kind === 'files' ? <FilesView workspaceId={state.workspaceId} /> : null}
       </div>
+      {state.kind === 'session' && !sameAsMain ? <div className="dock-foot">并排只是对照着看；要给它发消息，就"移到主栏"。</div> : null}
     </aside>
-  );
-}
-
-function DockSession({ sessionId, onPromote, onHandoff }: { sessionId: string; onPromote: (id: string) => void; onHandoff: (text: string) => void }): React.ReactElement {
-  const session = store.getSession(sessionId);
-  useEffect(() => {
-    void store.ensureSession(sessionId);
-  }, [sessionId]);
-  return (
-    <div className="dock-session">
-      <div className="dock-session-header">
-        <span className="session-title">{session?.title ?? '会话'}</span>
-        <button type="button" className="link-button" onClick={() => onPromote(sessionId)}>
-          移到主栏
-        </button>
-      </div>
-      <Timeline sessionId={sessionId} onOpenDiff={() => undefined} onHandoff={onHandoff} />
-    </div>
   );
 }
 
@@ -71,7 +91,7 @@ function DiffView({ fileId, path }: { fileId: string; path: string }): React.Rea
       .then(async (text) => {
         const { html: renderDiff } = await import('diff2html');
         if (cancelled) return;
-        setHtml(renderDiff(text, { drawFileList: false, matching: 'lines', outputFormat: 'side-by-side' }));
+        setHtml(renderDiff(text, { drawFileList: false, matching: 'lines', outputFormat: 'line-by-line' }));
       })
       .catch((cause: unknown) => {
         if (!cancelled) setError(String(cause));
@@ -80,11 +100,10 @@ function DiffView({ fileId, path }: { fileId: string; path: string }): React.Rea
       cancelled = true;
     };
   }, [fileId]);
-  if (error !== null) return <div className="muted">无法加载 diff：{error}</div>;
-  if (html === null) return <div className="muted">加载中…</div>;
+  if (error !== null) return <div className="dock-notice">无法加载 diff：{error}</div>;
+  if (html === null) return <div className="dock-notice">加载中…</div>;
   return (
-    <div className="diff-view">
-      <div className="muted">{path}</div>
+    <div className="diff-view" aria-label={`${path} 的改动`}>
       <div dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
@@ -93,7 +112,7 @@ function DiffView({ fileId, path }: { fileId: string; path: string }): React.Rea
 function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement {
   const [path, setPath] = useState('');
   const [listing, setListing] = useState<FsListResponse | FsReadResponse | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ path: string; content: string } | null>(null);
   useEffect(() => {
     void api
       .fs(workspaceId, path)
@@ -109,14 +128,17 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
         <button type="button" className="link-button" onClick={() => setPath('')}>
           工作区
         </button>
-        {path.split('/').filter(Boolean).map((part, index, all) => (
-          <span key={index}>
-            /{' '}
-            <button type="button" className="link-button" onClick={() => setPath(all.slice(0, index + 1).join('/'))}>
-              {part}
-            </button>
-          </span>
-        ))}
+        {path
+          .split('/')
+          .filter(Boolean)
+          .map((part, index, all) => (
+            <span key={index}>
+              /{' '}
+              <button type="button" className="link-button" onClick={() => setPath(all.slice(0, index + 1).join('/'))}>
+                {part}
+              </button>
+            </span>
+          ))}
       </div>
       {listing !== null && 'entries' in listing ? (
         <ul className="file-list">
@@ -124,17 +146,16 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
             <li key={entry.path}>
               <button
                 type="button"
-                className="link-button"
                 onClick={() => {
                   if (entry.type === 'dir') setPath(entry.path);
                   else
                     void api
                       .fs(workspaceId, entry.path)
-                      .then((result) => setPreview('content' in result ? result.content : ''))
-                      .catch(() => setPreview('（无法预览）'));
+                      .then((result) => setPreview({ path: entry.path, content: 'content' in result ? result.content : '' }))
+                      .catch(() => setPreview({ path: entry.path, content: '（无法预览）' }));
                 }}
               >
-                {entry.type === 'dir' ? '▸ ' : '· '}
+                <Icon name={entry.type === 'dir' ? 'folder' : 'fileText'} />
                 {entry.name}
               </button>
             </li>
@@ -143,15 +164,12 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
       ) : null}
       {preview !== null ? (
         <div className="file-preview">
-          <Markdown text={`\`\`\`\n${preview}\n\`\`\``} />
+          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+            {preview.path}
+          </div>
+          <Markdown text={`\`\`\`\n${preview.content}\n\`\`\``} />
         </div>
       ) : null}
     </div>
   );
-}
-
-
-function currentMainSessionId(): string | null {
-  const match = /^\/s\/([^/?+]+)/.exec(window.location.pathname);
-  return match?.[1] ?? null;
 }

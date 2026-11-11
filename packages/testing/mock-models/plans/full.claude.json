@@ -1,0 +1,30 @@
+[
+  {
+    "chunkDelayMs": 80,
+    "text": "先看一下工作区里有哪些文件。",
+    "tool": { "kind": "command", "input": { "command": "ls -la", "description": "列出目录" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "读取 README.md。",
+    "tool": { "kind": "read", "input": { "file_path": "./README.md" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "新建 notes.txt，写两行内容。",
+    "tool": { "kind": "write", "input": { "file_path": "./notes.txt", "content": "第一行\n第二行\n" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "修改 README.md 里的一行。",
+    "tool": {
+      "kind": "edit",
+      "input": { "file_path": "./README.md", "old_string": "line to modify: ORIGINAL", "new_string": "line to modify: UPDATED" }
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "全部完成：列目录、读 README、写 notes.txt、改 README。",
+    "stopReason": "end_turn"
+  }
+]

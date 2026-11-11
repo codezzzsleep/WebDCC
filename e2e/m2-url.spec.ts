@@ -29,7 +29,7 @@ test.describe('M2 / A3 URL 与布局还原', () => {
 
     await page.goto(`/s/${sessionId}?dock=files`);
     await expect(page.getByTestId('dock')).toBeVisible();
-    await page.getByRole('button', { name: '×' }).click();
+    await page.getByTestId('dock-close').click();
     await expect(page.getByTestId('dock')).toBeHidden();
 
     // 后退能回到带停靠区的状态

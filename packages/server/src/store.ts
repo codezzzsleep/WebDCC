@@ -25,6 +25,7 @@ interface SessionRow {
   archived: number;
   last_seq: number;
   native_meta: string | null;
+  parent_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +46,10 @@ export interface ProviderRecord {
   id: string;
   name: string;
   baseUrl: string;
+  source: string;
+  sourceKey: string | null;
+  endpoints: string | null;
+  note: string | null;
   protocols: string[];
   models: string[];
   codexCatalogPath: string | null;
@@ -61,6 +66,10 @@ interface ProviderDbRow {
   codex_catalog_path: string | null;
   secret_ref: string;
   created_at: string;
+  source: string | null;
+  source_key: string | null;
+  endpoints: string | null;
+  note: string | null;
 }
 
 function toProviderRecord(row: ProviderDbRow): ProviderRecord {
@@ -73,6 +82,10 @@ function toProviderRecord(row: ProviderDbRow): ProviderRecord {
     codexCatalogPath: row.codex_catalog_path,
     secretRef: row.secret_ref,
     createdAt: row.created_at,
+    source: row.source ?? 'manual',
+    sourceKey: row.source_key,
+    endpoints: row.endpoints,
+    note: row.note,
   };
 }
 
@@ -97,7 +110,7 @@ interface UploadRow {
 
 export interface AppendEventInput {
   sessionId: string;
-  turnId: string;
+  turnId: string | null;
   itemKey: string;
   kind: EventKind;
   data: EventData[EventKind];
@@ -112,6 +125,7 @@ export interface CreateSessionInput {
   model?: string | null;
   accessMode?: string | null;
   title?: string | null;
+  parentId?: string | null;
 }
 
 function toSessionDto(row: SessionRow): SessionDto {
@@ -124,6 +138,7 @@ function toSessionDto(row: SessionRow): SessionDto {
     providerId: row.provider_id,
     ...(row.model === null ? {} : { model: row.model }),
     ...(row.access_mode === null ? {} : { accessMode: row.access_mode }),
+    ...(row.parent_id === null || row.parent_id === undefined ? {} : { parentId: row.parent_id }),
     status: row.status as SessionDto['status'],
     pinned: row.pinned === 1,
     archived: row.archived === 1,
@@ -137,7 +152,7 @@ function toEvent(row: EventRow): StoredEvent {
   return {
     sessionId: row.session_id,
     seq: row.seq,
-    turnId: row.turn_id,
+    turnId: row.turn_id === '' ? null : row.turn_id,
     itemKey: row.item_key,
     at: row.at,
     kind: row.kind as EventKind,
@@ -203,10 +218,10 @@ export class Store {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, access_mode, status, title, last_seq, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, 0, ?, ?)`,
+        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, access_mode, status, title, parent_id, last_seq, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, ?, ?)`,
       )
-      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.accessMode ?? null, input.title ?? null, at, at);
+      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, at, at);
     return this.getSession(id) as SessionDto;
   }
 
@@ -272,13 +287,30 @@ export class Store {
     models: string[];
     secretRef: string;
     codexCatalogPath: string | null;
+    source?: string;
+    sourceKey?: string | null;
+    endpoints?: string | null;
+    note?: string | null;
   }): ProviderRecord {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at, source, source_key, endpoints, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run(input.id, input.name, input.baseUrl, JSON.stringify(input.protocols), input.secretRef, JSON.stringify(input.models), input.codexCatalogPath, at);
+      .run(
+        input.id,
+        input.name,
+        input.baseUrl,
+        JSON.stringify(input.protocols),
+        input.secretRef,
+        JSON.stringify(input.models),
+        input.codexCatalogPath,
+        at,
+        input.source ?? 'manual',
+        input.sourceKey ?? null,
+        input.endpoints ?? null,
+        input.note ?? null,
+      );
     return {
       id: input.id,
       name: input.name,
@@ -288,6 +320,10 @@ export class Store {
       codexCatalogPath: input.codexCatalogPath,
       secretRef: input.secretRef,
       createdAt: at,
+      source: input.source ?? 'manual',
+      sourceKey: input.sourceKey ?? null,
+      endpoints: input.endpoints ?? null,
+      note: input.note ?? null,
     };
   }
 
@@ -309,7 +345,20 @@ export class Store {
     return this.getProvider(id);
   }
 
+  /** 用户改过名字的会话不会被原生标题覆盖（C1 / SES-01） */
+  setTitleSource(sessionId: string, source: 'user' | 'native'): void {
+    this.db.prepare('UPDATE sessions SET title_source = ? WHERE id = ?').run(source, sessionId);
+  }
+
+  titleSource(sessionId: string): 'user' | 'native' | null {
+    const row = this.db.prepare('SELECT title_source FROM sessions WHERE id = ?').get(sessionId) as { title_source: string | null } | undefined;
+    if (row === undefined || row.title_source === null) return null;
+    return row.title_source === 'user' ? 'user' : 'native';
+  }
+
   deleteProvider(id: string): void {
+    // sessions.provider_id 有外键引用：先解绑再删（PRV-03）
+    this.db.prepare('UPDATE sessions SET provider_id = NULL WHERE provider_id = ?').run(id);
     this.db.prepare('DELETE FROM providers WHERE id = ?').run(id);
   }
 
@@ -338,7 +387,7 @@ export class Store {
         .run(
           event.sessionId,
           seq,
-          event.turnId,
+          event.turnId ?? '',
           event.itemKey,
           event.kind,
           event.nativeSeq ?? null,

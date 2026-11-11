@@ -12,7 +12,7 @@ import type {
   StoredEvent,
   UpdateMessage,
 } from '@webdcc/protocol';
-import { isAuthenticated } from './auth.js';
+import { isAuthenticated, requestAuthority } from './auth.js';
 import type { CommandDispatcher, DispatchResult } from './dispatcher.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
@@ -41,11 +41,12 @@ export class LiveHub {
     private readonly manager: SessionManager,
     private readonly dispatcher: CommandDispatcher,
     private readonly token: string,
+    private readonly fallbackAuthority = '127.0.0.1:0',
   ) {}
 
   attach(app: FastifyInstance): void {
     app.get('/api/ws', { websocket: true }, (socket, request) => {
-      const authorized = isAuthenticated(this.token, request.headers.cookie);
+      const authorized = isAuthenticated(this.token, request.headers.cookie, requestAuthority(request.headers, this.fallbackAuthority));
       const client: ClientState = {
         id: '',
         socket,
@@ -186,8 +187,8 @@ export class LiveHub {
     }
   }
 
-  broadcastUpdate(sessionId: string, itemKey: string, data: unknown): void {
-    const message: UpdateMessage = { op: 'update', sessionId, itemKey, data };
+  broadcastUpdate(sessionId: string, itemKey: string, data: unknown, turnId?: string | null): void {
+    const message: UpdateMessage = { op: 'update', sessionId, itemKey, data, ...(turnId === undefined ? {} : { turnId }) };
     for (const client of this.clients) {
       if (client.subs.has(sessionId)) this.send(client, message);
     }

@@ -6,6 +6,7 @@ test.describe('M6：Provider / 交接 / 提醒 / 文件', () => {
     await login(page);
     await page.goto('/settings/providers');
     await expect(page.getByTestId('providers-page')).toBeVisible();
+    await page.getByTestId('provider-form-toggle').click();
     await page.getByTestId('provider-name').fill('测试 Provider');
     await page.getByTestId('provider-baseurl').fill('http://127.0.0.1:9/v1');
     await page.getByTestId('provider-key').fill('super-secret-key');
@@ -13,21 +14,28 @@ test.describe('M6：Provider / 交接 / 提醒 / 文件', () => {
     await page.getByText('OpenAI Responses（Codex 用）').click();
     await page.getByTestId('provider-create').click();
     await expect(page.getByTestId('provider-list')).toContainText('测试 Provider');
-    await expect(page.getByTestId('provider-list')).toContainText('已保存');
+    // 新 UI：Key 只显示后 4 位（不显示"已保存"）
+    await expect(page.getByTestId('provider-list')).toContainText('…-key');
 
     // 接口响应里不能出现 Key 原文
     const providers = await page.evaluate(async () => (await fetch('/api/providers', { credentials: 'same-origin' })).text());
     expect(providers).not.toContain('super-secret-key');
     expect(providers).toContain('测试 Provider');
 
-    // 新建会话页：Codex 可选这个 Provider，Claude 不可选（灰显）
+    // 新建会话页：Codex 可选这个 Provider 的模型，Claude 那边同一 Provider 灰显并写明原因
     await page.goto('/new');
     await page.getByTestId('agent-card-codex').click();
-    await page.getByTestId('provider-select').selectOption({ label: '测试 Provider' });
-    await expect(page.getByTestId('model-select')).toBeEnabled();
+    await page.getByTestId('model-menu').click();
+    const codexOption = page.locator('[data-testid="model-option"][data-provider-name="测试 Provider"][data-model="mock-b"]');
+    await expect(codexOption).toBeEnabled();
+    await codexOption.click();
+    await expect(page.getByTestId('model-menu')).toHaveAttribute('data-provider', '测试 Provider');
+    await expect(page.getByTestId('model-menu')).toHaveAttribute('data-model', 'mock-b');
     await page.getByTestId('agent-card-claude-code').click();
-    const claudeOptions = await page.getByTestId('provider-select').locator('option:disabled').allTextContents();
-    expect(claudeOptions.join(' ')).toContain('不兼容');
+    await page.getByTestId('model-menu').click();
+    const claudeGroup = page.getByRole('group', { name: '测试 Provider' });
+    await expect(claudeGroup).toContainText('Claude Code 用不了');
+    await expect(claudeGroup.getByTestId('model-option').first()).toBeDisabled();
     void request;
   });
 

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -19,7 +20,7 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import { isValidEventData } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData } from '@webdcc/protocol';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -39,7 +40,7 @@ const ACCESS_MODES = [
 ];
 
 interface InputQueue {
-  push: (text: string) => void;
+  push: (text: string, images?: { media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }[]) => void;
   end: () => void;
   iterable: AsyncIterable<SDKUserMessage>;
 }
@@ -65,8 +66,15 @@ function createInputQueue(): InputQueue {
   };
   return {
     iterable,
-    push(text: string) {
-      queue.push({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null });
+    push(text: string, images?: { media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }[]) {
+      const content =
+        images === undefined || images.length === 0
+          ? text
+          : [
+              ...images.map((image) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: image.media_type, data: image.data } })),
+              { type: 'text' as const, text },
+            ];
+      queue.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null });
       wake?.();
       wake = null;
     },
@@ -96,8 +104,13 @@ interface SessionRuntime {
   pump: Promise<void>;
   turnStartedAt: number;
   pending: Map<string, PendingInteraction>;
-  toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind] }>;
+  toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
   messageSeq: number;
+  /** 会话的任务列表（F19：由 TaskCreate / TaskUpdate 及其结果算出） */
+  tasks: Map<string, { text: string; status: 'pending' | 'in_progress' | 'completed' }>;
+  taskOrder: string[];
+  /** init 消息里的斜杠命令（F8） */
+  slashCommands: string[];
   /** 这一块是否已经发过 item.start（SDK 不一定给 block-start，按首个 delta 兜底） */
   liveStarted: boolean;
   ready: Promise<void>;
@@ -119,7 +132,14 @@ export function toolKind(name: string): EventKind {
     case 'NotebookEdit':
       return 'file.change';
     case 'TodoWrite':
-      return 'plan';
+    case 'TaskCreate':
+    case 'TaskUpdate':
+    case 'TaskList':
+    case 'TaskGet':
+      // 任务工具本身显示为普通工具步骤，同时更新任务面板（F19）
+      return 'tool.call';
+    case 'ToolSearch':
+      return 'tool.call';
     case 'AskUserQuestion':
       return 'question';
     default:
@@ -167,6 +187,11 @@ export class ClaudeAdapter implements AgentAdapter {
     };
   }
 
+  /** 斜杠命令目录：Claude 的 init 消息里就有（F8 / SL-01） */
+  async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
+    return (this.sessions.get(sessionId)?.slashCommands ?? []).map((name) => ({ name: name.startsWith('/') ? name : `/${name}` }));
+  }
+
   async listModels(): Promise<ModelOption[]> {
     return [{ id: this.options.model ?? 'claude-sonnet-4-5', label: this.options.model ?? 'claude-sonnet-4-5' }];
   }
@@ -179,7 +204,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const providerEnv: Record<string, string> = {};
     const provider = opts.provider;
     if (provider !== null && provider !== undefined) {
-      providerEnv['ANTHROPIC_BASE_URL'] = provider.baseUrl;
+      providerEnv['ANTHROPIC_BASE_URL'] = provider.endpoints?.['anthropic-messages'] ?? provider.baseUrl;
       providerEnv['ANTHROPIC_AUTH_TOKEN'] = provider.apiKey ?? '';
       providerEnv['ANTHROPIC_API_KEY'] = '';
       if (opts.model !== undefined) providerEnv['ANTHROPIC_MODEL'] = opts.model;
@@ -191,6 +216,8 @@ export class ClaudeAdapter implements AgentAdapter {
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
         includePartialMessages: true,
+        // settings.json 的 env 会覆盖 options.env；用 flag 级 settings 注入 Provider 才能生效（F16 实测）
+        ...(Object.keys(providerEnv).length === 0 ? {} : { settings: { env: providerEnv } }),
         ...(opts.model === undefined ? {} : { model: opts.model }),
         ...(opts.accessMode === undefined ? {} : { permissionMode: opts.accessMode }),
         ...(this.options.model === undefined ? {} : { model: this.options.model }),
@@ -229,6 +256,9 @@ export class ClaudeAdapter implements AgentAdapter {
       pending: new Map(),
       toolItems: new Map(),
       messageSeq: 0,
+      tasks: new Map(),
+      taskOrder: [],
+      slashCommands: [],
       liveStarted: false,
       ready,
     };
@@ -266,7 +296,26 @@ export class ClaudeAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
     runtime.turnStartedAt = Date.now();
-    runtime.input.push(input.text);
+    const images = (input.images ?? []).flatMap((image) => {
+      try {
+        const mediaType = (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime) ? image.mime : 'image/png') as
+          | 'image/png'
+          | 'image/jpeg'
+          | 'image/gif'
+          | 'image/webp';
+        return [{ media_type: mediaType, data: readFileSync(image.path).toString('base64') }];
+      } catch {
+        return [];
+      }
+    });
+    runtime.input.push(input.text, images.length === 0 ? undefined : images);
+  }
+
+  /** 切换访问模式（F6）：Claude Code 用 SDK 的 setPermissionMode */
+  async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
+    const runtime = this.require(sessionId);
+    await runtime.q.setPermissionMode(mode as never);
+    return { accessMode: mode };
   }
 
   async interrupt(sessionId: string): Promise<void> {
@@ -281,6 +330,16 @@ export class ClaudeAdapter implements AgentAdapter {
     if (runtime === undefined || pending === undefined) return;
     runtime.pending.delete(decision.approvalId);
     pending.resolve({ approved: decision.optionId === 'allow', optionId: decision.optionId });
+  }
+
+  /** 打断时把挂起的审批按拒绝处理（回调必须被 resolve，否则 SDK 一直等） */
+  async cancelPending(sessionId: string): Promise<void> {
+    const runtime = this.sessions.get(sessionId);
+    if (runtime === undefined) return;
+    for (const [key, pending] of runtime.pending) {
+      runtime.pending.delete(key);
+      pending.resolve({ approved: false, optionId: 'cancelled' });
+    }
   }
 
   async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
@@ -321,6 +380,21 @@ export class ClaudeAdapter implements AgentAdapter {
 
   // ---------- canUseTool：审批与提问都从这里来 ----------
 
+  /** 把当前任务列表发给前端（F19：任务面板） */
+  private emitTaskPanel(sessionId: string, runtime: SessionRuntime): void {
+    const items = runtime.taskOrder
+      .map((key) => runtime.tasks.get(key))
+      .filter((task): task is { text: string; status: 'pending' | 'in_progress' | 'completed' } => task !== undefined)
+      .map((task) => ({ text: task.text, status: task.status }));
+    if (items.length === 0) return;
+    this.emit(sessionId, {
+      type: 'item.complete',
+      itemKey: `plan-tasks-${Date.now().toString(36)}`,
+      kind: 'plan',
+      data: { items },
+    });
+  }
+
   private async handleCanUseTool(
     sessionId: string,
     toolName: string,
@@ -359,6 +433,7 @@ export class ClaudeAdapter implements AgentAdapter {
       return { behavior: 'allow', updatedInput: { ...input, answers } } as PermissionResult;
     }
 
+    const isPlanMode = toolName === 'ExitPlanMode';
     const approvalId = `${sessionId}:${options.toolUseID ?? Date.now().toString(36)}`;
     const decisionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
       runtime.pending.set(approvalId, { kind: 'approval', toolName, input, resolve });
@@ -369,8 +444,16 @@ export class ClaudeAdapter implements AgentAdapter {
       kind: 'approval.request',
       data: {
         approvalId,
-        title: `Claude Code 请求使用 ${toolName}`,
+        title: isPlanMode
+          ? 'Claude Code 提交计划'
+          : String(input['command'] ?? input['file_path'] ?? input['path'] ?? '') === ''
+            ? toolName
+            : `${toolName} · ${String(input['command'] ?? input['file_path'] ?? input['path'])}`,
         detail: JSON.stringify(input, null, 2).slice(0, 2000),
+        tool: toolName,
+        ...(isPlanMode
+          ? { planMarkdown: String(input['plan'] ?? input['planMarkdown'] ?? input['content'] ?? JSON.stringify(input, null, 2)) }
+          : {}),
         options: [
           { id: 'allow', label: '允许一次' },
           { id: 'deny', label: '拒绝' },
@@ -393,6 +476,8 @@ export class ClaudeAdapter implements AgentAdapter {
     switch (message.type) {
       case 'system': {
         if (message.subtype === 'init') {
+          const initMessage = message as unknown as { slash_commands?: string[]; slashCommands?: string[] };
+          runtime.slashCommands = initMessage.slash_commands ?? initMessage.slashCommands ?? [];
           this.emit(sessionId, {
             type: 'item.complete',
             itemKey: `internal-init`,
@@ -464,8 +549,9 @@ export class ClaudeAdapter implements AgentAdapter {
           const toolId = String(block['id'] ?? '');
           const name = String(block['name'] ?? '');
           const kind = toolKind(name);
+          const rawInput = (block['input'] ?? {}) as Record<string, unknown>;
           if (name === 'TodoWrite') {
-            const todos = ((block['input'] as Record<string, unknown>)?.['todos'] as { content?: string; status?: string }[] | undefined) ?? [];
+            const todos = (rawInput['todos'] as { content?: string; status?: string }[] | undefined) ?? [];
             this.emit(sessionId, {
               type: 'item.complete',
               itemKey: `plan-${toolId}`,
@@ -477,16 +563,36 @@ export class ClaudeAdapter implements AgentAdapter {
                 })),
               },
             });
-            runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind: 'tool.call', data: { name, input: block['input'], status: 'running' } });
+            runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind: 'tool.call', data: { name, input: rawInput, status: 'running' }, name, input: rawInput });
             continue;
+          }
+          if (name === 'TaskCreate') {
+            const key = String(runtime.taskOrder.length + 1);
+            runtime.tasks.set(key, {
+              text: String(rawInput['subject'] ?? rawInput['description'] ?? ''),
+              status: 'pending',
+            });
+            runtime.taskOrder.push(key);
+          } else if (name === 'TaskUpdate') {
+            const key = String(rawInput['taskId'] ?? '');
+            const existing = runtime.tasks.get(key);
+            const status = rawInput['status'] === 'completed' ? 'completed' : rawInput['status'] === 'in_progress' ? 'in_progress' : 'pending';
+            if (existing !== undefined) existing.status = status;
+            else if (key !== '') {
+              runtime.tasks.set(key, { text: `任务 ${key}`, status });
+              runtime.taskOrder.push(key);
+            }
+          }
+          if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TodoWrite') {
+            this.emitTaskPanel(sessionId, runtime);
           }
           const data: EventData[EventKind] =
             kind === 'command'
-              ? { command: String((block['input'] as Record<string, unknown>)?.['command'] ?? ''), status: 'running' }
+              ? { command: String(rawInput['command'] ?? ''), status: 'running' }
               : kind === 'file.read'
-                ? { path: String((block['input'] as Record<string, unknown>)?.['file_path'] ?? (block['input'] as Record<string, unknown>)?.['pattern'] ?? '') }
-                : { name, input: block['input'], status: 'running' };
-          runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind, data });
+                ? { path: String(rawInput['file_path'] ?? rawInput['pattern'] ?? '') }
+                : { name, input: rawInput, status: 'running' };
+          runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind, data, name, input: rawInput });
           this.emit(sessionId, { type: 'item.start', itemKey: `tool-${toolId}`, kind, data });
         }
         return;
@@ -514,7 +620,7 @@ export class ClaudeAdapter implements AgentAdapter {
               type: 'item.complete',
               itemKey: item.itemKey,
               kind: 'file.change',
-              data: { changes: [], status: block['is_error'] === true ? 'failed' : 'completed' },
+              data: { changes: buildFileChanges(item.name, item.input), status: block['is_error'] === true ? 'failed' : 'completed' },
             });
           } else {
             this.emit(sessionId, {

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -8,6 +8,8 @@ import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 
 export const CHUNK_SIZE = 1024 * 1024;
+/** 单个文件上限 100 MB（SPEC-M8 F7 / ATT-04） */
+export const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 /** 内容寻址文件存储（SPEC 7.6、7.7） */
 export class FileStore {
@@ -44,6 +46,17 @@ export class FileStore {
     return this.store.insertFile({ id: ulid(), sha256, name, mime, size: buffer.byteLength });
   }
 
+  /** 同步版本：manager 在处理事件时同步写入 diff 文本（C2 / F10） */
+  putBufferSync(buffer: Buffer, name: string, mime: string): FileDto {
+    const sha256 = createHash('sha256').update(buffer).digest('hex');
+    const existing = this.store.getFileBySha(sha256);
+    if (existing !== undefined) return existing;
+    const dir = join(this.objectsDir, sha256.slice(0, 2));
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(this.objectPath(sha256), buffer);
+    return this.store.insertFile({ id: ulid(), sha256, name, mime, size: buffer.byteLength });
+  }
+
   async readAll(id: string): Promise<{ file: FileDto; buffer: Buffer } | undefined> {
     const file = this.store.getFile(id);
     if (file === undefined) return undefined;
@@ -60,6 +73,9 @@ export class FileStore {
   // ---------- 可续传上传 ----------
 
   async initUpload(input: { name: string; size: number; sha256: string; mime: string }): Promise<UploadInitResponse & { existingFileId?: string }> {
+    if (input.size > MAX_FILE_SIZE) {
+      throw Object.assign(new Error(`文件超过 100 MB 上限（${Math.round(input.size / 1024 / 1024)} MB）`), { statusCode: 413 });
+    }
     const existing = this.store.getFileBySha(input.sha256);
     if (existing !== undefined) {
       return { uploadId: '', chunkSize: CHUNK_SIZE, received: [], existingFileId: existing.id };

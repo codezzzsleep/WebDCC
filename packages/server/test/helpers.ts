@@ -12,6 +12,7 @@ import { FileStore } from '../src/files.js';
 import { SessionManager } from '../src/manager.js';
 import { ProviderRegistry } from '../src/providers.js';
 import { Store } from '../src/store.js';
+import { isolatedEnv, assertTestIsolation } from '../src/test-isolation.js';
 
 export const TEST_TOKEN = 'test-token-0123456789abcdef0123456789abcdef';
 
@@ -25,6 +26,14 @@ export interface TestApp {
   cookie: string;
   close: () => Promise<void>;
 }
+
+// 单测也走同一套隔离（SPEC-M8 1.6.2）：绝不读取用户真实的 ~/.codex、~/.claude、~/.dsh
+const isolated = isolatedEnv(process.env, 'wdcc-unit-test');
+for (const key of ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'DSH_HOME'] as const) {
+  process.env[key] = isolated.env[key];
+}
+process.env['WDCC_TEST_HOOKS'] = '1';
+assertTestIsolation(process.env);
 
 export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN): Promise<TestApp> {
   const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-test-'));
@@ -54,7 +63,7 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),
     onDelta: (sessionId, itemKey, field, append) => hub.broadcastDelta(sessionId, itemKey, field, append),
-    onUpdate: (sessionId, itemKey, data) => hub.broadcastUpdate(sessionId, itemKey, data),
+    onUpdate: (sessionId, itemKey, data, turnId) => hub.broadcastUpdate(sessionId, itemKey, data, turnId),
     onStatus: () => undefined,
   });
   await app.ready();

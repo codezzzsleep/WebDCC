@@ -9,6 +9,8 @@ export type EventKind =
   | 'file.change'
   | 'tool.call'
   | 'plan'
+  | 'goal'
+  | 'notice'
   | 'approval.request'
   | 'approval.resolved'
   | 'question'
@@ -33,6 +35,10 @@ export interface FileChangeEntry {
   added: number;
   removed: number;
   diffFileId?: string;
+  /** 原生提供的 diff 文本或按 old/new 生成的 hunk（C2 第 1/2 级） */
+  diff?: string;
+  /** 整文件写入、拿不到原内容时的说明（C2 第 3 级） */
+  note?: string;
 }
 
 export interface ApprovalOption {
@@ -70,10 +76,30 @@ export interface EventData {
     status: 'running' | 'completed' | 'failed';
   };
   'file.read': { path: string; label?: string };
-  'file.change': { changes: FileChangeEntry[]; status: 'running' | 'completed' | 'failed' };
+  'file.change': {
+    changes: FileChangeEntry[];
+    status: 'running' | 'completed' | 'failed';
+    /** 累计快照（例如 Codex 的 turn/diff/updated）：后到的覆盖前面的，不累加 */
+    snapshot?: boolean;
+  };
   'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' };
   plan: { items: PlanItem[] };
-  'approval.request': { approvalId: string; title: string; detail: string; options: ApprovalOption[] };
+  /** Codex 的"目标"（thread/goal/updated）：原生界面会显示，WebDCC 也必须显示 */
+  goal: { objective: string; status: 'active' | 'completed' | 'paused' | 'cleared'; tokensUsed?: number };
+  /** 原生提示（warning / configWarning / deprecationNotice），例如"使用兜底元数据，可能影响效果" */
+  notice: { level: 'info' | 'warning'; text: string; nativeType?: string };
+  'approval.request': {
+    approvalId: string;
+    title: string;
+    detail: string;
+    options: ApprovalOption[];
+    /** 原生工具名（自动批准与验收断言用） */
+    tool?: string;
+    /** 原因：DSH 取 displayReason.zh，没有时取 reason（F11） */
+    reason?: string;
+    /** 计划模式下提交的计划（Markdown） */
+    planMarkdown?: string;
+  };
   'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' | 'other' };
   question: QuestionItem;
   'turn.started': Record<string, never>;
@@ -87,7 +113,8 @@ export interface EventData {
 export interface StoredEvent<K extends EventKind = EventKind> {
   sessionId: string;
   seq: number;
-  turnId: string;
+  /** 轮次 id；轮次之外的事件为 null（不构成一轮，只进轨迹） */
+  turnId: string | null;
   itemKey: string;
   at: string;
   kind: K;
