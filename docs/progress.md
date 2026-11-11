@@ -126,7 +126,22 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 | PR | 状态 | 内容 |
 |---|---|---|
 | PR1 | ✅ 已合并（#10） | 验收框架 + mock 扩展 + 测试钩子 + F1/F2/F3/F5；`M8 ACCEPTANCE: 15/125 passed`，棘轮通过 |
-| PR2 | 进行中（分支 m8/pr2-d1） | D1 已完成：attachToDsh（/connect 换 operator Cookie）、adapter attach/spawn、spawn 冲突检查、DshConnectionStore、/api/dsh、设置页 DSH 连接。**F16 与 DSHX-* 用例待做**。注：一次误提交到 main 已用 revert 恢复（未 force push） |
-| PR3–PR7 | 待做 | 按 SPEC 8 的顺序 |
+| PR2 | 进行中（分支 m8/pr2-d1） | D1 attach 模式（/connect、adapter attach/spawn、spawn 冲突检查、DshConnectionStore、/api/dsh、设置页）+ F16（Codex config/read、Claude settings.json、Provider 来源/endpoints/粘贴导入/扫描去重/忽略恢复）+ F18（Cookie 按 Host 派生） |
+| PR2a 剩余 | 已做 | 统一 isolatedEnv + 启动守卫 S-04；spawnServer 可移植；inject-event 原样写入；自动批准按"只点 pending 卡片并记录工具名"实现；mock code mode + 按 Agent 分变体计划 |
+| PR3 | 已做 | F4、F5、F12（目标/计划/diff/警告/code mode）、F17、F19 |
+| PR4 | 已做 | F6 访问模式（三端 + Codex profile 列表 + root 灰显） |
+| PR5 | 已做（待用例验证） | F7 附件、F8 斜杠命令 |
+| PR6 | 部分 | F9 窄屏、F10 改动卡片、F11 审批卡片、F14；**F15 界面打磨未做** |
+| PR7 | 进行中 | 用例补齐中；严格模式两遍从未全绿 |
+
+### 2026-11-11 收尾快照
+
+- 真实界面用例：**已实现 80/138 个 ID**，其余为显式 `NOT IMPLEMENTED` 占位（算失败，不算跳过）。
+- 最近一次快照的通过数见 `docs/acceptance/M8/report.json`（脚本生成）；**未达到 M8 完成标准**。
+- 已实现且稳定的用例：AG-{dsh,codex,claude}-01/02/03/04/05/06/07/08/09/10/11/12、S-01..03、AUTH-01..03、PRV-01/02/03/06/07/08、NEW-02/03/07、DSHX-00/01/06。
+- 已知不稳定：AG-codex-* 偶发因审批时序失败（已加"轮次结束后迟到 status 不生效"的守卫，仍在观察）。
+- 未实现：AG-claude-04b/13/15/16、AG-codex-13/14、AG-dsh-13/14、AG-codexd-*、ATT-*、NAT-*、ROB-*、DSHX-02..08、PRV-04/05/09、NEW-01/04/05/06、AUTH-04/05、FIN-01..04、DOCK/MOB/UI 截图、NET-*、NOTIF-01、MODE-*-02/03 的端到端断言、SES/HO/SL 的若干断言。
+- **界面方向待用户确认**：当前是自绘三栏 UI，没有复用 DSH 原版视觉；F15（对照 `docs/reference/dsh/` 打磨）未做。review 材料见 `docs/review/m8-current/README.md`。
+- 部署（第 9 节）与真实模型冒烟未做；`main` 分支保护未开。
 
 实时统计：`docs/acceptance/M8/report.json`（每次 `pnpm accept:m8 --ratchet` 覆盖）。
