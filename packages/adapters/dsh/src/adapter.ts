@@ -1,7 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -15,7 +12,7 @@ import type {
   UserInput,
 } from '@webdcc/protocol';
 import { isValidEventData, ulid } from '@webdcc/protocol';
-import { DshHostClient, attachToDsh, startSidecar, type Sidecar, type StreamFrame } from './host.js';
+import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
 
@@ -24,32 +21,6 @@ export interface DshAdapterOptions {
   host?: string;
   env?: Record<string, string>;
   command?: string;
-  /** attach：连接用户已经在运行的 DSH；spawn：自己拉起侧车（默认） */
-  mode?: 'attach' | 'spawn';
-  attachUrl?: string;
-  attachCookie?: string;
-}
-
-/** 扫描 /proc，找同一 DSH_HOME 上已在运行的 dsh 进程（spawn 模式的冲突检查） */
-export function findDshProcessOn(home: string): number | undefined {
-  for (const entry of readdirSync('/proc')) {
-    if (!/^\d+$/.test(entry)) continue;
-    const pid = Number(entry);
-    if (pid === process.pid) continue;
-    let argv: string[];
-    let env: string[];
-    try {
-      argv = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-      env = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').filter(Boolean);
-    } catch {
-      continue;
-    }
-    if (!argv.some((arg) => arg === 'dsh' || arg.endsWith('/dsh'))) continue;
-    if (!argv.includes('web')) continue;
-    const dshHome = env.find((item) => item.startsWith('DSH_HOME='))?.slice('DSH_HOME='.length) ?? join(homedir(), '.dsh');
-    if (dshHome === home) return pid;
-  }
-  return undefined;
 }
 
 /** SPEC 5.4.8 的端点白名单（3.3 的机器检查依据） */
@@ -152,7 +123,7 @@ export class DshAdapter implements AgentAdapter {
   private client: DshHostClient | null = null;
   private clientId = '';
   private booting: Promise<void> | null = null;
-  private options: DshAdapterOptions;
+  private readonly options: DshAdapterOptions;
 
   constructor(options: DshAdapterOptions = {}) {
     this.options = options;
@@ -201,26 +172,6 @@ export class DshAdapter implements AgentAdapter {
 
   private async ensureSidecar(): Promise<DshHostClient> {
     if (this.client !== null) return this.client;
-    if ((this.options.mode ?? 'spawn') === 'attach') {
-      this.booting ??= (async () => {
-        const url = new URL(this.options.attachUrl ?? 'http://127.0.0.1:3080');
-        let cookie = this.options.attachCookie ?? '';
-        if (cookie === '') throw Object.assign(new Error('需要重新连接 DSH：请粘贴 DSH 当前的访问链接'), { code: 'dsh-needs-link' });
-        const client = new DshHostClient(Number(url.port || 80));
-        client.useCookie(cookie);
-        await client.connect();
-        client.openStream('$events', {}, (frame) => this.onEventFrame('', frame));
-        this.client = client;
-      })();
-      await this.booting;
-      if (this.client === null) throw new Error('dsh: 连接 DSH 失败');
-      return this.client;
-    }
-    const dshHome = this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? join(homedir(), '.dsh');
-    const running = findDshProcessOn(dshHome);
-    if (running !== undefined) {
-      throw Object.assign(new Error(`检测到已有 DSH 在使用 ${dshHome}，请改用 attach 模式`), { code: 'dsh-home-in-use' });
-    }
     this.booting ??= (async () => {
       const spec = this.buildLaunchSpec();
       this.sidecar = await startSidecar({
@@ -348,12 +299,6 @@ export class DshAdapter implements AgentAdapter {
       eventId: questionId,
       outcome: { kind: 'result', value: { answers } },
     });
-  }
-
-  /** 运行期切换连接（设置页粘贴 DSH 链接后调用） */
-  async setAttach(url: string, cookie: string): Promise<void> {
-    await this.shutdown();
-    this.options = { ...this.options, mode: 'attach', attachUrl: url, attachCookie: cookie };
   }
 
   /** 关闭侧车（进程级清理，测试与平台退出时调用） */

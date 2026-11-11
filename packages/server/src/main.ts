@@ -6,7 +6,6 @@ import { openDb } from './db.js';
 import { FileStore } from './files.js';
 import { SessionManager } from './manager.js';
 import { ProviderRegistry } from './providers.js';
-import { DshConnectionStore } from './dsh-connection.js';
 import { Store } from './store.js';
 
 export interface ServerOptions {
@@ -32,25 +31,12 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   await files.init();
   const providers = new ProviderRegistry(store, config.dataDir);
   await providers.init();
-  const dshStore = new DshConnectionStore(config.dataDir);
-  await dshStore.init();
   const manager = new SessionManager(store, {
     idleDisposeMin: config.idleDisposeMin,
     resolveProvider: (id) => providers.runtimeConfig(id),
   });
 
-  let adapters = options.adapters;
-  if (adapters === undefined) {
-    const { adapters: build } = await import('./adapters.js');
-    const connection = dshStore.connection;
-    adapters = await build({
-      dsh: {
-        mode: (process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn') as 'attach' | 'spawn',
-        ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie }),
-      },
-    });
-  }
-  for (const adapter of adapters) manager.registerAdapter(adapter);
+  for (const adapter of options.adapters ?? []) manager.registerAdapter(adapter);
 
   const { app, hub } = await buildApp({
     config,
@@ -58,7 +44,6 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     files,
     manager,
     providers,
-    dsh: dshStore,
     webDist: options.webDist ?? join(process.cwd(), 'packages/web/dist'),
   });
 
@@ -94,7 +79,8 @@ const isEntrypoint = ((): boolean => {
 
 if (isEntrypoint) {
   const config = loadConfig();
-  const server = await start(config);
+  const { adapters } = await import('./adapters.js');
+  const server = await start(config, { adapters: await adapters() });
   process.stdout.write(`webdcc: ${server.url}\n`);
   const stop = (): void => {
     void server.close().then(() => process.exit(0));

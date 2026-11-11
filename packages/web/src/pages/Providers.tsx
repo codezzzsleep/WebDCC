@@ -9,15 +9,11 @@ const PROTOCOLS = [
 
 export function ProvidersPage(): React.ReactElement {
   const [providers, setProviders] = useState<ProviderDto[]>([]);
-  const [dsh, setDsh] = useState<{ mode: string; url: string | null; connected: boolean; version?: string } | null>(null);
-  const [dshLink, setDshLink] = useState('');
-  const [dshError, setDshError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', baseUrl: '', apiKey: '', models: '', protocols: [] as string[], codexCatalogPath: '' });
   const [error, setError] = useState<string | null>(null);
 
   const reload = (): void => {
     void api.providers().then(setProviders).catch((cause: unknown) => setError(String(cause)));
-    void api.dshStatus().then(setDsh).catch(() => undefined);
   };
   useEffect(reload, []);
 
@@ -42,44 +38,6 @@ export function ProvidersPage(): React.ReactElement {
   return (
     <div className="page" data-testid="providers-page">
       <h1>Provider 与模型</h1>
-
-      <section className="dsh-section" data-testid="dsh-section">
-        <h2>DSH 连接</h2>
-        <p className="muted">
-          模式：{dsh?.mode ?? 'spawn'}；状态：
-          {dsh?.connected === true ? `已连接${dsh.version === undefined ? '' : ` · ${dsh.version}`}` : '未连接'}
-          {dsh?.url === null || dsh?.url === undefined ? '' : ` · ${dsh.url}`}
-        </p>
-        <div className="provider-row">
-          <input
-            className="text-input"
-            placeholder="粘贴 DSH 的访问链接（http://127.0.0.1:3080/?token=…）"
-            value={dshLink}
-            onChange={(event) => setDshLink(event.target.value)}
-            data-testid="dsh-link"
-          />
-          <button
-            type="button"
-            className="button primary"
-            data-testid="dsh-connect"
-            onClick={() => {
-              setDshError(null);
-              void api
-                .dshConnect(dshLink)
-                .then(() => reload())
-                .catch((cause: unknown) => setDshError(String(cause)));
-            }}
-          >
-            连接 DSH
-          </button>
-        </div>
-        {dshError !== null ? <div className="error-card">{dshError}</div> : null}
-        {dsh?.url !== null && dsh?.url !== undefined ? (
-          <a className="link-button" href={dsh.url} target="_blank" rel="noreferrer">
-            打开 DSH 原版界面
-          </a>
-        ) : null}
-      </section>
       <p className="muted">Provider 只保存名称、端点、协议与模型列表；Key 存在服务器本地（0600），永远不会出现在接口响应里。</p>
 
       <table className="provider-table" data-testid="provider-list">

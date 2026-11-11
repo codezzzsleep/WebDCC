@@ -19,8 +19,6 @@ import type {
 } from '@webdcc/protocol';
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
-import { parseDshLink, type DshConnectionStore } from './dsh-connection.js';
-import { attachToDsh } from '@webdcc/adapter-dsh';
 import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
@@ -29,7 +27,6 @@ import type { Store } from './store.js';
 export interface RouteDeps {
   store: Store;
   providers: ProviderRegistry;
-  dsh: DshConnectionStore;
   files: FileStore;
   manager: SessionManager;
   hub: LiveHub;
@@ -286,45 +283,6 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       };
     });
   }
-
-  // ---------- DSH 连接（attach 模式） ----------
-  app.get('/api/dsh', async () => {
-    const connection = deps.dsh.connection;
-    let version: string | undefined;
-    for (const adapter of manager.adaptersList()) {
-      if (adapter.id === 'dsh') {
-        const probe = await adapter.probe().catch(() => undefined);
-        version = probe?.version;
-      }
-    }
-    return {
-      mode: process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn',
-      url: connection?.url ?? process.env['WDCC_DSH_URL'] ?? null,
-      connected: connection !== null,
-      ...(connection?.connectedAt === undefined ? {} : { connectedAt: connection.connectedAt }),
-      ...(version === undefined ? {} : { version }),
-    };
-  });
-
-  app.post('/api/dsh/connect', async (request) => {
-    const body = request.body as { link?: string };
-    if (typeof body?.link !== 'string') throw badRequest('需要 link（DSH 的访问链接）');
-    const { url, port, token } = parseDshLink(body.link);
-    const cookie = await attachToDsh(port, token);
-    await deps.dsh.save({ url, cookie, connectedAt: new Date().toISOString() });
-    for (const adapter of manager.adaptersList()) {
-      if (adapter.id === 'dsh') {
-        const dshAdapter = adapter as unknown as { setAttach?: (u: string, c: string) => Promise<void> };
-        await dshAdapter.setAttach?.(url, cookie);
-      }
-    }
-    return { ok: true, url };
-  });
-
-  app.delete('/api/dsh', async () => {
-    await deps.dsh.clear();
-    return { ok: true };
-  });
 
   // ---------- providers / models ----------
   app.get('/api/providers', async () => deps.providers.list());

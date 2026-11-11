@@ -105,19 +105,6 @@ export interface StreamFrame {
   error?: unknown;
 }
 
-/** attach 模式：用启动 token 换一个 operator Cookie（SPEC-M8 2.2） */
-export async function attachToDsh(port: number, token: string): Promise<string> {
-  const response = await fetch(`http://127.0.0.1:${port}/connect?token=${encodeURIComponent(token)}&interactions=answer`, {
-    redirect: 'manual',
-    headers: { host: `127.0.0.1:${port}` },
-  });
-  const setCookies = response.headers.getSetCookie();
-  const first = setCookies[0];
-  if (first === undefined) throw new Error(`DSH /connect 失败：HTTP ${response.status}，没有 Set-Cookie`);
-  // v2 Cookie 形如 dsh-auth-<hash>=v2…，是 operator Cookie，可用于 /api 与 remote.mux
-  return first.split(';')[0] ?? '';
-}
-
 export class DshHostClient {
   private readonly base: string;
   private cookie = '';
@@ -128,11 +115,6 @@ export class DshHostClient {
 
   constructor(readonly port: number) {
     this.base = `http://127.0.0.1:${port}`;
-  }
-
-  /** attach 模式：直接注入已换到的 operator Cookie */
-  useCookie(cookie: string): void {
-    this.cookie = cookie;
   }
 
   /** `GET /?token=` 换会话 Cookie */

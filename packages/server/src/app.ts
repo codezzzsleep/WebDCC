@@ -10,7 +10,6 @@ import type { FileStore } from './files.js';
 import { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
 import type { ProviderRegistry } from './providers.js';
-import type { DshConnectionStore } from './dsh-connection.js';
 import { registerRoutes, sendJsonError } from './rest.js';
 import type { Store } from './store.js';
 
@@ -20,7 +19,6 @@ export interface BuildAppOptions {
   files: FileStore;
   manager: SessionManager;
   providers: ProviderRegistry;
-  dsh: DshConnectionStore;
   webDist?: string;
 }
 
@@ -82,7 +80,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     });
   }
 
-  registerRoutes(app, { store, files, manager, hub, dispatcher, version: config.version, providers: options.providers, dsh: options.dsh });
+  registerRoutes(app, { store, files, manager, hub, dispatcher, version: config.version, providers: options.providers });
   hub.attach(app);
 
   app.setErrorHandler((error, _request, reply) => sendJsonError(reply, error));
