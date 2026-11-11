@@ -12,6 +12,7 @@ import type { FullConfig } from '@playwright/test';
 import { startAnthropicMock } from '../packages/testing/mock-models/src/anthropic-server.js';
 import { startResponsesMock } from '../packages/testing/mock-models/src/responses-server.js';
 import { MockControl } from '../packages/testing/mock-models/src/mock-control.js';
+import { DshHostClient, startSidecar } from '../packages/adapters/dsh/src/host.js';
 
 export interface RunInfo {
   runId: string;
@@ -22,6 +23,7 @@ export interface RunInfo {
   mocks: { responses: string; anthClaude: string; anthDsh: string };
   slugs: { a: string; b: string };
   serverPid: number;
+  externalDsh?: { url: string; port: number; home: string; sessionId: string; workspaceId: string; pid: number };
 }
 
 const PLANS_DIR = join(process.cwd(), 'packages/testing/mock-models/plans');
@@ -94,7 +96,23 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     ),
   );
 
-  // 服务端
+  // 外部 DSH（模拟用户自己正在跑的那个），用临时 DSH_HOME
+  const externalHome = join(root, 'external-dsh');
+  await mkdir(externalHome, { recursive: true });
+  const external = await startSidecar({
+    port: await freePort(),
+    env: { ...process.env, DSH_HOME: externalHome, DEEPSEEK_BASE_URL: anthDsh.url, DEEPSEEK_API_KEY: `sk-wdcc-test-dsh-${runId}` },
+  });
+  const externalToken = external.tokenUrl.split('token=')[1] ?? '';
+  const externalClient = new DshHostClient(external.port);
+  await externalClient.authenticate(external.tokenUrl);
+  const externalWorkspace = await externalClient.rpc<{ workspace: { workspaceId: string } }>('workspace/create', { request: { path: repo } });
+  const externalSession = await externalClient.rpc<{ sessionId: string }>('session/create', {
+    request: { workspaceId: externalWorkspace.workspace.workspaceId },
+  });
+  await externalClient.close();
+
+  // 服务端（attach 模式连外部 DSH）
   const port = await freePort();
   const dshPort = await freePort();
   const token = `t${createHash('sha256').update(runId).digest('hex').slice(0, 24)}`;
@@ -108,7 +126,8 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     WDCC_HOST: '127.0.0.1',
     WDCC_PORT: String(port),
     WDCC_TOKEN: token,
-    WDCC_DSH_MODE: 'spawn',
+    WDCC_DSH_MODE: 'attach',
+    WDCC_DSH_URL: `http://127.0.0.1:${external.port}`,
     WDCC_DSH_PORT: String(dshPort),
     WDCC_TEST_HOOKS: '1',
     WDCC_TEST_MOCKR_KEY: `sk-wdcc-test-mockr-${runId}`,
@@ -136,6 +155,13 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   // 把工作区注册进 WebDCC
   const authResponse = await fetch(`${baseURL}/?token=${token}`, { redirect: 'manual' });
   const cookie = (authResponse.headers.getSetCookie()[0] ?? '').split(';')[0] ?? '';
+  // 首次连接外部 DSH（DSHX-00 里也会再走一遍设置页）
+  const connectResponse = await fetch(`${baseURL}/api/dsh/connect`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ link: external.tokenUrl }),
+  });
+  if (!connectResponse.ok) throw new Error(`连接外部 DSH 失败：${connectResponse.status} ${await connectResponse.text()}`);
   const created = await fetch(`${baseURL}/api/workspaces`, {
     method: 'POST',
     headers: { cookie, 'content-type': 'application/json' },
@@ -150,7 +176,16 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     dshProfile: await hashFile(join(homedir(), '.dsh/cordis.patch.yml')),
     dshCreds: await hashFile(join(homedir(), '.dsh/.credentials.yaml')),
   };
-  const info: RunInfo = { runId, baseURL, token, dirs, mocks: { responses: responses.url, anthClaude: anthClaude.url, anthDsh: anthDsh.url }, slugs, serverPid: child.pid ?? 0 };
+  const info: RunInfo = {
+    runId,
+    baseURL,
+    token,
+    dirs,
+    mocks: { responses: responses.url, anthClaude: anthClaude.url, anthDsh: anthDsh.url },
+    slugs,
+    serverPid: child.pid ?? 0,
+    externalDsh: { url: external.tokenUrl, port: external.port, home: externalHome, sessionId: externalSession.sessionId, workspaceId: externalWorkspace.workspace.workspaceId, pid: external.child.pid ?? 0 },
+  };
   await writeFile(join(root, 'run.json'), JSON.stringify({ ...info, userHashes }, null, 2));
   await writeFile(join(process.cwd(), 'e2e-real/.run.json'), JSON.stringify({ root, ...info, userHashes }, null, 2));
   process.env['WDCC_ACCEPT_ROOT'] = root;
