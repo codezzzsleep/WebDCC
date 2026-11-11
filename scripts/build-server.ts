@@ -14,7 +14,8 @@ await build({
   format: 'esm',
   target: 'node24',
   sourcemap: true,
-  external: ['better-sqlite3'],
+  // SDK 用 createRequire(import.meta.url) 找平台子包，打包后找不到（SPEC-M8 F1）
+  external: ['better-sqlite3', '@anthropic-ai/claude-agent-sdk'],
   banner: {
     js: "import { createRequire as __wdccCreateRequire } from 'node:module'; const require = __wdccCreateRequire(import.meta.url);",
   },

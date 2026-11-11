@@ -210,6 +210,13 @@ export class Store {
     return this.getSession(id) as SessionDto;
   }
 
+  deleteSession(id: string): void {
+    this.db.prepare('DELETE FROM events WHERE session_id = ?').run(id);
+    this.db.prepare('DELETE FROM feed WHERE session_id = ?').run(id);
+    this.db.prepare('DELETE FROM drafts WHERE session_id = ?').run(id);
+    this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+  }
+
   updateSession(
     id: string,
     patch: {

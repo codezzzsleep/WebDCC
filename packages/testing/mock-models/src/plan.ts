@@ -46,6 +46,8 @@ export interface PlanStep {
   stopReason?: string;
   /** 每个增量之间的人为延迟，用来模拟慢速流（毫秒） */
   chunkDelayMs?: number;
+  /** 该步骤的工具在某个 Agent 上不存在时直接跳过（不算错误） */
+  optional?: boolean;
 }
 
 export type Plan = PlanStep[];
@@ -155,4 +157,19 @@ export function resolveTool(
     };
   }
   return undefined;
+}
+
+
+/** 找到第一个可用的步骤：可选步骤的工具缺失时继续往后找 */
+export function resolveStep(plan: Plan, index: number, tools: readonly ToolDescriptor[] | undefined): { step: PlanStep; toolName?: string; toolInput?: Record<string, unknown>; kind?: ToolKind } {
+  for (let i = index; i < plan.length; i += 1) {
+    const step = plan[i];
+    if (step === undefined) break;
+    if (step.tool === undefined) return { step };
+    const resolved = resolveTool(step.tool, tools);
+    if (resolved !== undefined) return { step, toolName: resolved.name, toolInput: { ...(resolved.input ?? {}) }, kind: resolved.kind };
+    if (step.optional === true) continue;
+    return { step };
+  }
+  return { step: EXHAUSTED_STEP };
 }

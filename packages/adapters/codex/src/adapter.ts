@@ -11,6 +11,7 @@ import type {
   ProbeResult,
   UserInput,
 } from '@webdcc/protocol';
+import { isValidEventData } from '@webdcc/protocol';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 
 export const PINNED_VERSION = '0.167.0';
@@ -30,6 +31,7 @@ interface PendingApproval {
 
 interface SessionRuntime {
   nativeId: string;
+  pid: number;
   /** 每个 app-server 进程一个 token：JSON-RPC 的 request id 在每个进程里从 0/1 开始，
    *  resume 后会与上一进程的 id 重复，必须拼上 token 才能全局唯一 */
   processToken: string;
@@ -41,6 +43,8 @@ interface SessionRuntime {
   turnStartedAt: number;
   approvals: Map<string, PendingApproval>;
   lastAssistantText: string;
+  /** 已经发过 item.start 的条目（Codex 的 agentMessage 不一定有 item/started） */
+  started: Set<string>;
 }
 
 const ACCESS_MODES = [
@@ -158,6 +162,17 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   private emit(sessionId: string, event: AdapterEvent): void {
+    if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
+      const degraded: AdapterEvent = {
+        type: 'item.complete',
+        itemKey: event.itemKey,
+        kind: 'unknown',
+        data: { nativeType: event.kind },
+        native: event.native ?? event.data,
+      };
+      for (const listener of this.listeners) listener(sessionId, degraded);
+      return;
+    }
     for (const listener of this.listeners) listener(sessionId, event);
   }
 
@@ -218,6 +233,7 @@ export class CodexAdapter implements AgentAdapter {
     });
     const runtime: SessionRuntime = {
       nativeId: '',
+      pid: rpc.child.pid ?? 0,
       processToken: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       ready,
       rpc,
@@ -226,6 +242,7 @@ export class CodexAdapter implements AgentAdapter {
       turnStartedAt: 0,
       approvals: new Map(),
       lastAssistantText: '',
+      started: new Set(),
     };
     rpc.onNotification((frame) => {
       if (frame['method'] === 'thread/started') markReady();
@@ -295,6 +312,17 @@ export class CodexAdapter implements AgentAdapter {
       ? (decision.optionId === 'accept' ? 'approved' : decision.optionId === 'acceptForSession' ? 'approved_for_session' : 'denied')
       : decision.optionId;
     runtimeRpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
+  }
+
+  debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
+    return [...this.sessions].map(([sessionId, runtime]) => ({
+      sessionId,
+      pid: runtime.pid,
+      dirs: {
+        HOME: process.env['HOME'] ?? '',
+        CODEX_HOME: this.options.env?.['CODEX_HOME'] ?? process.env['CODEX_HOME'] ?? '',
+      },
+    }));
   }
 
   async dispose(sessionId: string): Promise<void> {
@@ -373,11 +401,21 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'item/agentMessage/delta': {
-        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'text', append: String(params['delta'] ?? '') });
+        const itemId = String(params['itemId'] ?? '');
+        if (!runtime.started.has(itemId)) {
+          runtime.started.add(itemId);
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'assistant.message', data: { text: '' } });
+        }
+        this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
         return;
       }
       case 'item/reasoning/summaryTextDelta': {
-        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'text', append: String(params['delta'] ?? '') });
+        const itemId = String(params['itemId'] ?? '');
+        if (!runtime.started.has(itemId)) {
+          runtime.started.add(itemId);
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'reasoning', data: { text: '' } });
+        }
+        this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
         return;
       }
       case 'item/commandExecution/outputDelta': {

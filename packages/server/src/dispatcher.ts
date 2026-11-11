@@ -68,6 +68,9 @@ export class CommandDispatcher {
           return { ok: true };
         }
         case 'create-session': {
+          if (command.providerId !== null && command.providerId !== undefined && (command.model === undefined || command.model === '')) {
+            return { ok: false, error: '选择 Provider 时必须指定模型', code: 'model-required' };
+          }
           const session = await this.manager.createSession({
             workspaceId: command.workspaceId,
             agent: command.agent as never,

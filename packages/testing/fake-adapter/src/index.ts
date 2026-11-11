@@ -63,6 +63,7 @@ const ACCESS_MODES: Record<AgentId, { id: string; label: string }[]> = {
 /** 按脚本回放的假 adapter：给 M1/M2 的前后端联调用，不依赖任何真实 Agent */
 export class FakeAdapter implements AgentAdapter {
   readonly id: AgentId;
+  readonly kind = 'fake' as const;
   private readonly options: FakeAdapterOptions;
   private readonly listeners: ((sessionId: string, event: AdapterEvent) => void)[] = [];
   private readonly sessions = new Map<string, SessionState>();

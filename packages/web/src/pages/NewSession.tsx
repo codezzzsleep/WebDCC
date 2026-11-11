@@ -39,6 +39,12 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
   );
   const selectedProvider = compatible.find((provider) => provider.id === providerId);
 
+  useEffect(() => {
+    if (selectedProvider !== undefined && (model === '' || !selectedProvider.models.includes(model))) {
+      setModel(selectedProvider.models[0] ?? '');
+    }
+  }, [selectedProvider, model]);
+
   const submit = async (): Promise<void> => {
     if (workspaceId === '' || text.trim() === '' || busy) return;
     setBusy(true);
@@ -104,8 +110,10 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
             className="text-input"
             value={providerId}
             onChange={(event) => {
-              setProviderId(event.target.value);
-              setModel('');
+              const nextId = event.target.value;
+              setProviderId(nextId);
+              const next = providers.find((provider) => provider.id === nextId);
+              setModel(next?.models[0] ?? '');
             }}
             data-testid="provider-select"
           >

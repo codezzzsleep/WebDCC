@@ -3,7 +3,9 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { EventData, StoredEvent } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store, type HotItem, type TurnModel } from '../lib/store.js';
+import { isValidEventData } from '@webdcc/protocol';
 import { duration, shortNumber } from '../lib/format.js';
+import { ErrorBoundary } from './ErrorBoundary.js';
 import { Markdown } from './Markdown.js';
 
 function useTurns(sessionId: string): TurnModel[] {
@@ -146,15 +148,16 @@ function TurnView({
       <div className={`turn-body ${expanded ? 'expanded' : 'collapsed'}`}>
         {expanded
           ? steps.map((event) => (
-              <StepRow
-                key={`${event.itemKey}-${event.seq}`}
-                event={event}
-                highlight={highlightSeq === event.seq}
-                onOpenDiff={onOpenDiff}
-              />
+              <ErrorBoundary key={`${event.itemKey}-${event.seq}`} label="timeline-item">
+                <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
+              </ErrorBoundary>
             ))
           : finalMessage !== undefined
-            ? <StepRow event={finalMessage} highlight={highlightSeq === finalMessage.seq} onOpenDiff={onOpenDiff} />
+            ? (
+                <ErrorBoundary label="timeline-final">
+                  <StepRow event={finalMessage} highlight={highlightSeq === finalMessage.seq} onOpenDiff={onOpenDiff} />
+                </ErrorBoundary>
+              )
             : null}
 
         {turn.hot.map((item) => (
@@ -289,6 +292,10 @@ function HotRow({ item }: { item: HotItem }): React.ReactElement {
 function StepRow({ event, highlight, onOpenDiff }: { event: StoredEvent; highlight?: boolean; onOpenDiff: (fileId: string, path: string) => void }): React.ReactElement | null {
   const [open, setOpen] = useState(false);
   const className = `step-row ${highlight === true ? 'highlight' : ''}`;
+  // 渲染前再校验一次：不合格的事件显示占位，而不是让组件崩掉（F2）
+  if (!isValidEventData(event.kind, event.data)) {
+    return <div className={`${className} render-fallback`}>这条内容无法显示 · 在轨迹中查看</div>;
+  }
 
   switch (event.kind) {
     case 'assistant.message': {
@@ -401,7 +408,29 @@ function StepRow({ event, highlight, onOpenDiff }: { event: StoredEvent; highlig
 }
 
 function ApprovalCard({ event, data, className }: { event: StoredEvent; data: EventData['approval.request']; className: string }): React.ReactElement {
+  useStoreVersion();
   const [resolved, setResolved] = useState(false);
+  // 处理过的审批要显示结果、不再显示按钮（F11 / F17）；结果也来自其他界面
+  const resolution = [...store.getEvents(event.sessionId)]
+    .reverse()
+    .find((item) => item.kind === 'approval.resolved' && (item.data as EventData['approval.resolved']).approvalId === data.approvalId);
+  const resolvedText = (() => {
+    if (resolution === undefined) return null;
+    const dataResolved = resolution.data as EventData['approval.resolved'];
+    if (dataResolved.by === 'other') return '已在其他界面处理';
+    if (dataResolved.optionId === 'allow' || dataResolved.optionId === 'accept' || dataResolved.optionId === 'allowed-once' || dataResolved.optionId === 'approved') return '已允许一次';
+    if (dataResolved.optionId === 'reject' || dataResolved.optionId === 'rejected' || dataResolved.optionId === 'deny') return '已拒绝';
+    if (dataResolved.optionId === 'cancelled' || dataResolved.optionId === 'cancel') return '已取消';
+    return '已处理';
+  })();
+  if (resolvedText !== null) {
+    return (
+      <div className={`${className} approval-card resolved`} data-testid="approval-card" data-resolved="true">
+        <div className="approval-title">{data.title}</div>
+        <div className="muted">{resolvedText}</div>
+      </div>
+    );
+  }
   return (
     <div className={`${className} approval-card`} data-testid="approval-card" id={`e-${event.seq}`}>
       <div className="approval-title">{data.title}</div>

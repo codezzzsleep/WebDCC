@@ -11,7 +11,7 @@ import type {
   ProbeResult,
   UserInput,
 } from '@webdcc/protocol';
-import { ulid } from '@webdcc/protocol';
+import { isValidEventData, ulid } from '@webdcc/protocol';
 import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
@@ -72,7 +72,8 @@ export function toolKind(name: string): EventKind {
     case 'edit':
       return 'file.change';
     case 'todo_write':
-      return 'plan';
+      // 任务清单只由 todo/write 事件生成；工具调用本身按 tool.call 处理（SPEC-M8 F2）
+      return 'tool.call';
     default:
       return 'tool.call';
   }
@@ -161,7 +162,7 @@ export class DshAdapter implements AgentAdapter {
 
   /** 3.3 的机器检查入口：只启动一个只监听 127.0.0.1 的侧车 */
   buildLaunchSpec(): LaunchSpec {
-    const port = String(this.options.port ?? 3091);
+    const port = String(this.options.port ?? process.env['WDCC_DSH_PORT'] ?? 3091);
     return {
       command: this.options.command ?? 'dsh',
       args: ['web', '--no-open', '--port', port, '--host', '127.0.0.1'],
@@ -174,7 +175,7 @@ export class DshAdapter implements AgentAdapter {
     this.booting ??= (async () => {
       const spec = this.buildLaunchSpec();
       this.sidecar = await startSidecar({
-        port: Number((spec.args ?? [])[3] ?? 3091),
+        port: Number((spec.args ?? [])[3] ?? process.env['WDCC_DSH_PORT'] ?? 3091),
         env: { ...process.env, ...spec.env },
         ...(spec.command === undefined ? {} : { command: spec.command }),
       });
@@ -309,6 +310,19 @@ export class DshAdapter implements AgentAdapter {
     this.booting = null;
   }
 
+  debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
+    const pid = this.sidecar?.child.pid ?? 0;
+    return [...this.sessions.keys()].map((sessionId) => ({
+      sessionId,
+      pid,
+      dirs: {
+        HOME: process.env['HOME'] ?? '',
+        DSH_HOME: this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? '',
+        WDCC_DSH_MODE: 'spawn',
+      },
+    }));
+  }
+
   async dispose(sessionId: string): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
@@ -356,7 +370,6 @@ export class DshAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     if (seq > 0 && seq <= runtime.lastSeq) return; // nativeSeq 去重
     if (seq > 0) runtime.lastSeq = seq;
-    if (process.env['WDCC_DEBUG_DSH'] === '1' && type !== 'step/start' && type !== 'step/end') console.error('[dsh]', seq, type);
     this.onDshEvent(sessionId, runtime, type, data, seq, event);
   }
 
@@ -368,12 +381,26 @@ export class DshAdapter implements AgentAdapter {
     nativeSeq: number,
     native: unknown,
   ): void {
-    const complete = (itemKey: string, kind: EventKind, eventData: EventData[EventKind]): void => {
+    const complete = (itemKey: string, kind: EventKind, eventData: EventData[EventKind], fallbackNative?: unknown): void => {
+      // 数据不合格就降级为 unknown 并保留原始帧，绝不让前端拿到错的形状（F2）
+      if (!isValidEventData(kind, eventData)) {
+        this.emit(sessionId, {
+          type: 'item.complete',
+          itemKey,
+          kind: 'unknown',
+          data: { nativeType: type },
+          native: fallbackNative ?? { type, data },
+          nativeSeq,
+        });
+        return;
+      }
       this.emit(sessionId, { type: 'item.complete', itemKey, kind, data: eventData, nativeSeq, native });
     };
 
     switch (type) {
       case 'turn/start': {
+        runtime.assistantKey = '';
+        runtime.reasoningKey = '';
         this.emit(sessionId, { type: 'status', status: 'running' });
         this.emit(sessionId, {
           type: 'item.complete',
@@ -506,16 +533,26 @@ export class DshAdapter implements AgentAdapter {
       const blockType = String(chunk['blockType'] ?? '');
       if (blockType === 'reasoning') {
         runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
       } else {
         runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
       }
       return;
     }
-    if (kind === 'text-delta' && runtime.assistantKey !== '') {
+    if (kind === 'text-delta') {
+      if (runtime.assistantKey === '') {
+        runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
+      }
       this.emit(sessionId, { type: 'item.delta', itemKey: runtime.assistantKey, field: 'text', append: String(chunk['text'] ?? '') });
       return;
     }
-    if (kind === 'reasoning-delta' && runtime.reasoningKey !== '') {
+    if (kind === 'reasoning-delta') {
+      if (runtime.reasoningKey === '') {
+        runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
+      }
       this.emit(sessionId, { type: 'item.delta', itemKey: runtime.reasoningKey, field: 'text', append: String(chunk['text'] ?? '') });
       return;
     }

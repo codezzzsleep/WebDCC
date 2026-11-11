@@ -97,3 +97,25 @@
 ### 最终状态
 
 M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提前核实；两处 SPEC 与实测的冲突（Codex catalog 与 R1、Codex 审批 id 冲突）已按 0.1 节规则记录并修复。剩余待办只有两类：**真实模型验证**（无 Key）与**界面人工确认**（截图已存档）。
+
+
+## M8 进度（进行中）
+
+| 项 | 状态 |
+|---|---|
+| 验收框架（6.1–6.6） | 已可运行：globalSetup（临时目录 + git 工作区 + 三 mock + 动态端口服务）、fixtures（登录/mock 控制/全局断言/截图）、reporter（从 SPEC 解析 ID 并严格比对，产出 report.json/index.html/status.json） |
+| 7.1 用例 | S-01、S-02、S-03、AUTH-01、AUTH-02、AUTH-03 通过 |
+| 7.4 用例 | AG-{dsh,codex,claude}-01 通过；AG-dsh-04、AG-codex-02 通过 |
+| 未通过（按 1.5 转去推进独立工作，不停止） | **AG-dsh-02 / AG-codex-02 流式**：已做 3 轮针对性修复（adapter 懒发 item.start、前端 update 帧建热条目、manager 路径）。最新证据：DSH adapter 收到了 `block-start` 与 `text-delta`（server.log 实测），manager 也记录了 `item.start msg-live-…`，但浏览器里 `store.getHot()` 仍为空 → 问题落在 **update 帧从 Live Hub 到客户端的这一段**（下一步用 WS 帧抓包定位）。按 SPEC 1.5，仍有独立工作（PR2 的 D1 attach + F16），因此不停止，先推进独立项。原文：浏览器里实测 `hot=[]`、事件全是 internal，说明 DSH/Codex 的 assistant 增量没有转成我方 delta（DSH 的 assistant-stream 帧在独立探针里能收到 29 条 text-delta，说明问题在 adapter/订阅路径而非 DSH）。**AG-dsh-04** 本轮回归失败（plan 面板未出现，疑似与 todo 步骤 optional 化有关） |
+| 已修 | 审批卡片会按 `approval.resolved` 显示"已允许一次/已拒绝/已取消/已在其他界面处理"并不再显示按钮（F11/F17 的一部分）；Claude 的审批改在发卡片前登记 pending（否则自动批准会丢） |
+| 未通过 | AG-codex-04、AG-claude-04（任务面板）：DSH 通过；Codex 的 mock 请求里**没有任何 plan/todo/task 工具**（直接工具模式下 update_plan 不提供）；Claude 的 28 个工具里 TodoWrite 疑似被新的 Task* 工具取代，需要核实并映射 |
+| 已修 | 流式链路：adapter 懒发 item.start（Codex/Claude/DSH 都没有可靠的 block-start）、前端 update 帧可新建热条目；AG-{dsh,claude,codex}-02 全部通过 |
+| 新增 | 任务面板改成贴在输入框上方的独立组件（SPEC 9.5），不再依赖轮次展开 |
+| F1/F2/F3 | 已修（SDK external + 建会话回滚；数据校验 + 错误边界；模型默认值与 400） |
+| F5 | 已修（feed 里的 agent 来自 patch） |
+
+### M8 实测发现（需写进 protocol-notes）
+
+- **Codex 0.167 的内置模型全部走 code mode**：`model/list` 返回的 12 个 slug，请求里 `tools` 为空，工具放在 `input[]` 的 `additional_tools` 命名空间里（`functions.exec` 自定义工具）。只有**不在 model/list 里的 slug**（如 `gpt-5`）会退回直接工具。SPEC 6.2 要求 SLUG 取自 model/list，与实测冲突 → 验收 fixture 改用 `gpt-5`/`gpt-5-mini`，证据待补进 protocol-notes。
+- DSH 侧车端口必须取 `WDCC_DSH_PORT`（已修），否则并行运行会撞 3091。
+- 流式增量：adapter 需要在 block-start 时发 `item.start`，前端 `update` 帧要能**新建**热条目，否则增量无处可落（已修的 DSH/Claude adapter + store）。

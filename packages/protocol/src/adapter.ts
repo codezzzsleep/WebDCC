@@ -63,8 +63,19 @@ export type AdapterEvent =
   /** 原生 id 迟到（Claude Code 要等首条消息才有 session_id）：manager 收到后落库 */
   | { type: 'native-id'; nativeId: string };
 
+export interface AgentProcessInfo {
+  sessionId: string;
+  pid: number;
+  /** 进程环境里与本 Agent 相关的目录变量（测试断言用） */
+  dirs?: Record<string, string>;
+}
+
 export interface AgentAdapter {
   id: AgentId;
+  /** real = 原生 Agent；fake = 假 adapter（只在快速 e2e 里出现） */
+  kind?: 'real' | 'fake';
+  /** 测试钩子用：列出本 adapter 启动的进程 */
+  debugProcesses?(): AgentProcessInfo[];
   probe(): Promise<ProbeResult>;
   listModels(providerId: string | null): Promise<ModelOption[]>;
   accessModes(): { id: string; label: string }[];

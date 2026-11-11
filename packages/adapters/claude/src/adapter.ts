@@ -19,6 +19,7 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import { isValidEventData } from '@webdcc/protocol';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -97,6 +98,8 @@ interface SessionRuntime {
   pending: Map<string, PendingInteraction>;
   toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind] }>;
   messageSeq: number;
+  /** 这一块是否已经发过 item.start（SDK 不一定给 block-start，按首个 delta 兜底） */
+  liveStarted: boolean;
   ready: Promise<void>;
 }
 
@@ -139,6 +142,18 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   private emit(sessionId: string, event: AdapterEvent): void {
+    // 发送前校验：不合格的完成态事件降级为 unknown（F2）
+    if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
+      const degraded: AdapterEvent = {
+        type: 'item.complete',
+        itemKey: event.itemKey,
+        kind: 'unknown',
+        data: { nativeType: event.kind },
+        native: event.native ?? event.data,
+      };
+      for (const listener of this.listeners) listener(sessionId, degraded);
+      return;
+    }
     for (const listener of this.listeners) listener(sessionId, event);
   }
 
@@ -214,6 +229,7 @@ export class ClaudeAdapter implements AgentAdapter {
       pending: new Map(),
       toolItems: new Map(),
       messageSeq: 0,
+      liveStarted: false,
       ready,
     };
     this.sessions.set(sessionId, runtime);
@@ -277,6 +293,17 @@ export class ClaudeAdapter implements AgentAdapter {
     pending.resolve({ approved: true, optionId: 'answer', answers: { [questionId]: value } });
   }
 
+  debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
+    return [...this.sessions.keys()].map((sessionId) => ({
+      sessionId,
+      pid: 0,
+      dirs: {
+        HOME: process.env['HOME'] ?? '',
+        CLAUDE_CONFIG_DIR: this.options.env?.['CLAUDE_CONFIG_DIR'] ?? process.env['CLAUDE_CONFIG_DIR'] ?? '',
+      },
+    }));
+  }
+
   async dispose(sessionId: string): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
@@ -304,6 +331,9 @@ export class ClaudeAdapter implements AgentAdapter {
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
       const questionId = `${options.toolUseID ?? `q-${Date.now()}`}`;
+      const questionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
+        runtime.pending.set(questionId, { kind: 'question', toolName, input, resolve });
+      });
       this.emit(sessionId, {
         type: 'item.complete',
         itemKey: `question-${questionId}`,
@@ -323,15 +353,16 @@ export class ClaudeAdapter implements AgentAdapter {
         },
       });
       this.emit(sessionId, { type: 'status', status: 'waiting' });
-      const decision = await new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
-        runtime.pending.set(questionId, { kind: 'question', toolName, input, resolve });
-      });
+      const decision = await questionPromise;
       this.emit(sessionId, { type: 'status', status: 'running' });
       const answers = decision.answers ?? {};
       return { behavior: 'allow', updatedInput: { ...input, answers } } as PermissionResult;
     }
 
     const approvalId = `${sessionId}:${options.toolUseID ?? Date.now().toString(36)}`;
+    const decisionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
+      runtime.pending.set(approvalId, { kind: 'approval', toolName, input, resolve });
+    });
     this.emit(sessionId, {
       type: 'item.complete',
       itemKey: `approval-${approvalId}`,
@@ -347,9 +378,7 @@ export class ClaudeAdapter implements AgentAdapter {
       },
     });
     this.emit(sessionId, { type: 'status', status: 'waiting' });
-    const decision = await new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
-      runtime.pending.set(approvalId, { kind: 'approval', toolName, input, resolve });
-    });
+    const decision = await decisionPromise;
     this.emit(sessionId, { type: 'status', status: 'running' });
     if (decision.approved) return { behavior: 'allow', updatedInput: input } as PermissionResult;
     return { behavior: 'deny', message: '用户拒绝', interrupt: true } as PermissionResult;
@@ -375,19 +404,41 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'stream_event': {
-        const event = message.event as { type?: string; index?: number; delta?: { type?: string; text?: string; thinking?: string } };
-        const itemKey = `msg-${runtime.messageSeq}`;
+        const event = message.event as {
+          type?: string;
+          index?: number;
+          block?: { type?: string };
+          content_block?: { type?: string };
+          delta?: { type?: string; text?: string; thinking?: string };
+        };
         if (event.type === 'content_block_start') {
           runtime.messageSeq += 1;
+          runtime.liveStarted = false;
+          const blockType = event.content_block?.type ?? event.block?.type ?? 'text';
+          this.emit(sessionId, {
+            type: 'item.start',
+            itemKey: `msg-${runtime.messageSeq}`,
+            kind: blockType === 'thinking' ? 'reasoning' : 'assistant.message',
+            data: { text: '' },
+          });
           return;
         }
         if (event.type === 'content_block_delta') {
           const delta = event.delta ?? {};
+          const liveKey = `msg-${runtime.messageSeq}`;
           if (delta.type === 'text_delta' && delta.text !== undefined) {
-            this.emit(sessionId, { type: 'item.delta', itemKey, field: 'text', append: delta.text });
+            if (!runtime.liveStarted) {
+              runtime.liveStarted = true;
+              this.emit(sessionId, { type: 'item.start', itemKey: liveKey, kind: 'assistant.message', data: { text: '' } });
+            }
+            this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.text });
           }
           if (delta.type === 'thinking_delta' && delta.thinking !== undefined) {
-            this.emit(sessionId, { type: 'item.delta', itemKey, field: 'text', append: delta.thinking });
+            if (!runtime.liveStarted) {
+              runtime.liveStarted = true;
+              this.emit(sessionId, { type: 'item.start', itemKey: liveKey, kind: 'reasoning', data: { text: '' } });
+            }
+            this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.thinking });
           }
         }
         return;
@@ -413,6 +464,22 @@ export class ClaudeAdapter implements AgentAdapter {
           const toolId = String(block['id'] ?? '');
           const name = String(block['name'] ?? '');
           const kind = toolKind(name);
+          if (name === 'TodoWrite') {
+            const todos = ((block['input'] as Record<string, unknown>)?.['todos'] as { content?: string; status?: string }[] | undefined) ?? [];
+            this.emit(sessionId, {
+              type: 'item.complete',
+              itemKey: `plan-${toolId}`,
+              kind: 'plan',
+              data: {
+                items: todos.map((todo) => ({
+                  text: String(todo.content ?? ''),
+                  status: todo.status === 'completed' ? 'completed' : todo.status === 'in_progress' ? 'in_progress' : 'pending',
+                })),
+              },
+            });
+            runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind: 'tool.call', data: { name, input: block['input'], status: 'running' } });
+            continue;
+          }
           const data: EventData[EventKind] =
             kind === 'command'
               ? { command: String((block['input'] as Record<string, unknown>)?.['command'] ?? ''), status: 'running' }

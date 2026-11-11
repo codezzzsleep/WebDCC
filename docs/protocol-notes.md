@@ -529,3 +529,12 @@ Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools
 - **`permissionMode: 'bypassPermissions'` 在 root 下不可用**：SDK 会传 `--dangerously-skip-permissions`，CLI 直接退出并报 `cannot be used with root/sudo privileges for security reasons`。以 root 运行时要避开这一档（部署到普通用户账号时不受影响）。
 - **`bypassPermissions` 下 `canUseTool` 不会被调用**：SDK 打警告 `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`，审批与提问都收不到。所以"跳过权限"档不能用来做审批验收。
 - 通过 adapter 启动的会话仍然加载项目 `.mcp.json` 与 hooks（A2 实测：`mcp_servers=[{name:'wdccecho',status:'connected',source:'project'}]`、hook 标记文件生成、51 个斜杠命令、28 个工具）。
+
+### 7.10 三个 Agent 在验收环境里的工具清单（M8 实测，用于 AG-*-04 的断言修改）
+
+- **Codex 0.167（gpt-5 兜底元数据、直接工具模式）**：请求里没有任何 plan/todo/task 工具；只有 `exec_command` 等执行类工具。`turn/plan/updated` 只在模型使用计划工具时产生，因此这个配置下不会有任务面板。
+- **Claude Code 2.1.322（Agent SDK、默认权限模式）**：本环境实测工具清单为
+  `Agent, AskUserQuestion, Bash, Edit, ListAgents, Read, ReportFindings, ScheduleWakeup, Skill, ToolSearch, Workflow, DeferredToolPlaceholder, Write`
+  —— **没有 `TodoWrite`，也没有 `TaskCreate/TaskUpdate`**，所以同样没有任务面板。
+- **DSH 0.2.2-rc.1**：默认 preset 有 `todo_write`，任务面板由 `todo/write` 事件产生（AG-dsh-04 通过）。
+- 结论：`AG-codex-04` 与 `AG-claude-04` 的"2 项、1 完成 1 进行中"断言与本机原生行为冲突，按 SPEC-M8 1.2 改为"该 Agent 不出现任务面板、且这一轮没有错误卡片"；DSH 的断言保持不变。
