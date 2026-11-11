@@ -59,4 +59,37 @@ describe('DSH home patch provider fallback', () => {
     expect(next).toContain('value: keep-me');
     expect((await stat(file)).mode & 0o777).toBe(0o600);
   });
+
+  it('Provider 不存在时创建新的 home patch Provider', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'wdcc-dsh-settings-new-'));
+    homes.push(home);
+    const file = join(home, 'cordis.patch.yml');
+    await writeFile(
+      file,
+      `- id: llm-pi-ai
+  config:
+    providers:
+      existing:
+        baseURL: https://existing.example/v1
+- id: agent-default-model
+  config:
+    provider: existing
+    model: old
+`,
+      { mode: 0o600 },
+    );
+    const previousHome = process.env['DSH_HOME'];
+    process.env['DSH_HOME'] = home;
+    try {
+      await updateDshHomePatch({ providerKey: 'openai-next', baseURL: 'https://us.api.openai-next.com/', model: 'deepseek-v4-1-flash-261017', apiKeyEnv: 'OPENAI_API_KEY' });
+    } finally {
+      if (previousHome === undefined) delete process.env['DSH_HOME'];
+      else process.env['DSH_HOME'] = previousHome;
+    }
+    const next = await readFile(file, 'utf8');
+    expect(next).toContain('openai-next:');
+    expect(next).toContain('apiKeyEnv: OPENAI_API_KEY');
+    expect(next).toContain('provider: openai-next');
+    expect(next).toContain('model: deepseek-v4-1-flash-261017');
+  });
 });

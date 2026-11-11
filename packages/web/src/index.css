@@ -1754,6 +1754,33 @@ button.step-line:hover {
   flex-wrap: wrap;
   align-items: center;
 }
+.harness-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+.harness-provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-l1);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+.harness-provider-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.harness-provider-card-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.harness-provider-card-head > .badge {
+  margin-left: auto;
+}
 
 /* ============ 弹窗 / 提示 ============ */
 .modal-backdrop {

@@ -441,6 +441,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       model?: string;
       reasoning?: string;
       apiKey?: string;
+      apiKeyEnv?: string;
     };
     if (typeof body?.providerKey !== 'string' || body.providerKey.trim() === '') throw badRequest('需要 providerKey');
     if (typeof body?.baseURL !== 'string' || body.baseURL.trim() === '') throw badRequest('需要 baseURL');
@@ -465,6 +466,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       ...currentProvider,
       displayName: currentProvider['displayName'] ?? body.providerKey,
       api: currentProvider['api'] ?? 'openai-completions',
+      apiKeyEnv: currentProvider['apiKeyEnv'] ?? 'OPENAI_API_KEY',
       baseURL: body.baseURL,
       models: [nextModel],
       ...(body.reasoning === undefined || body.reasoning === '' ? {} : { reasoning: body.reasoning }),
@@ -492,7 +494,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!/overridden by a home patch/i.test(message)) throw error;
-      await updateDshHomePatch({ providerKey: body.providerKey, baseURL: body.baseURL, model: body.model, reasoning: body.reasoning });
+      await updateDshHomePatch({ providerKey: body.providerKey, baseURL: body.baseURL, model: body.model, reasoning: body.reasoning, apiKeyEnv: String(nextProvider['apiKeyEnv'] ?? 'OPENAI_API_KEY') });
       usedHomePatch = true;
     }
     if (body.apiKey !== undefined && body.apiKey !== '') {

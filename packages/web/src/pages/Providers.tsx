@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
-import { AGENT_IDS, agentText, isCompatible, sourceLabel } from '../lib/agents.js';
+import { AGENT_IDS, agentText, isCompatible, sourceLabel, type AgentKey } from '../lib/agents.js';
 import { refreshDsh, refreshProviders, useAppData } from '../lib/appData.js';
 import { store } from '../lib/store.js';
 import { AgentMark } from '../components/AgentMark.js';
@@ -22,9 +22,6 @@ export function ProvidersPage(): React.ReactElement {
     provider: Record<string, unknown>;
     defaultModel: { provider: string; model: string; reasoningEffort?: string };
   } | null>(null);
-  const [dshProviderForm, setDshProviderForm] = useState({ providerKey: '', baseURL: '', model: '', reasoning: 'low', apiKey: '' });
-  const [dshProviderError, setDshProviderError] = useState<string | null>(null);
-  const [dshProviderSaving, setDshProviderSaving] = useState(false);
   const [form, setForm] = useState({ name: '', baseUrl: '', apiKey: '', models: '', protocols: [] as string[], codexCatalogPath: '' });
   const [error, setError] = useState<string | null>(null);
   const [scanInfo, setScanInfo] = useState<string | null>(null);
@@ -38,13 +35,6 @@ export function ProvidersPage(): React.ReactElement {
     if (dsh?.connected === true) {
       void api.dshProvider().then((value) => {
         setDshProvider(value);
-        setDshProviderForm((current) => ({
-          ...current,
-          providerKey: value.providerKey,
-          baseURL: typeof value.provider['baseURL'] === 'string' ? String(value.provider['baseURL']) : current.baseURL,
-          model: value.defaultModel.model,
-          reasoning: value.defaultModel.reasoningEffort ?? (typeof value.provider['reasoning'] === 'string' ? String(value.provider['reasoning']) : current.reasoning),
-        }));
       }).catch(() => setDshProvider(null));
     }
   };
@@ -56,13 +46,6 @@ export function ProvidersPage(): React.ReactElement {
     }
     void api.dshProvider().then((value) => {
       setDshProvider(value);
-      setDshProviderForm((current) => ({
-        ...current,
-        providerKey: value.providerKey,
-        baseURL: typeof value.provider['baseURL'] === 'string' ? String(value.provider['baseURL']) : current.baseURL,
-        model: value.defaultModel.model,
-        reasoning: value.defaultModel.reasoningEffort ?? (typeof value.provider['reasoning'] === 'string' ? String(value.provider['reasoning']) : current.reasoning),
-      }));
     }).catch(() => setDshProvider(null));
   }, [dsh?.connected]);
 
@@ -169,61 +152,6 @@ export function ProvidersPage(): React.ReactElement {
                 WebDCC 会自动发现本机正在运行的 DSH，和 DSH 原版界面共用同一个进程。WebDCC 重启后会自动恢复连接；自动发现失败时才需要手动恢复。
               </p>
               {dsh?.connected === true ? <div className="kv" style={{ marginTop: 10 }}><span>自动连接</span><span>已连接当前 DSH</span></div> : null}
-              {dsh?.connected === true && dshProvider !== null ? (
-                <div className="dsh-provider-editor" data-testid="dsh-provider-editor" style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-                  <div className="panel-head" style={{ padding: 0, border: 0 }}>
-                    <h3 style={{ margin: 0 }}>DSH Provider</h3>
-                    <span className="badge">{dshProvider.writable ? '可修改' : '只读'}</span>
-                  </div>
-                  <div className="form-grid" style={{ marginTop: 10 }}>
-                    <label className="field">
-                      <span>Provider</span>
-                      <input className="text-input" value={dshProviderForm.providerKey} onChange={(event) => setDshProviderForm({ ...dshProviderForm, providerKey: event.target.value })} data-testid="dsh-provider-key" />
-                    </label>
-                    <label className="field">
-                      <span>Base URL</span>
-                      <input className="text-input" value={dshProviderForm.baseURL} onChange={(event) => setDshProviderForm({ ...dshProviderForm, baseURL: event.target.value })} data-testid="dsh-provider-url" />
-                    </label>
-                    <label className="field">
-                      <span>模型</span>
-                      <input className="text-input" value={dshProviderForm.model} onChange={(event) => setDshProviderForm({ ...dshProviderForm, model: event.target.value })} data-testid="dsh-provider-model" />
-                    </label>
-                    <label className="field">
-                      <span>思考强度</span>
-                      <select className="text-input" value={dshProviderForm.reasoning} onChange={(event) => setDshProviderForm({ ...dshProviderForm, reasoning: event.target.value })} data-testid="dsh-provider-reasoning">
-                        {['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => <option key={value} value={value}>{value}</option>)}
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>API Key（留空表示不修改）</span>
-                      <input className="text-input" type="password" value={dshProviderForm.apiKey} onChange={(event) => setDshProviderForm({ ...dshProviderForm, apiKey: event.target.value })} data-testid="dsh-provider-api-key" />
-                    </label>
-                  </div>
-                  <div className="row-actions" style={{ marginTop: 10 }}>
-                    <button
-                      type="button"
-                      className="btn primary"
-                      disabled={!dshProvider.writable || dshProviderSaving}
-                      data-testid="dsh-provider-save"
-                      onClick={() => {
-                        setDshProviderSaving(true);
-                        setDshProviderError(null);
-                        void api.updateDshProvider({ ...dshProviderForm, ...(dshProviderForm.apiKey === '' ? {} : { apiKey: dshProviderForm.apiKey }) })
-                          .then(() => {
-                            setDshProviderForm((current) => ({ ...current, apiKey: '' }));
-                            reload();
-                          })
-                          .catch((cause: unknown) => setDshProviderError(cause instanceof Error ? cause.message : String(cause)))
-                          .finally(() => setDshProviderSaving(false));
-                      }}
-                    >
-                      {dshProviderSaving ? '保存中…' : '保存 DSH Provider'}
-                    </button>
-                    <span className="muted" style={{ fontSize: 12 }}>优先写入 DSH 原生 settings/credentials API；被 home patch 覆盖时自动更新该 patch。</span>
-                  </div>
-                  {dshProviderError !== null ? <div className="error-card" role="alert">{dshProviderError}</div> : null}
-                </div>
-              ) : null}
               <details style={{ marginTop: 12 }}>
                 <summary className="link-button">自动发现失败？手动连接</summary>
                 <div className="row-actions" style={{ marginTop: 10 }}>
@@ -269,6 +197,52 @@ export function ProvidersPage(): React.ReactElement {
                   {dshError}
                 </div>
               ) : null}
+            </div>
+          </section>
+
+          <section className="panel" aria-label="Harness Provider">
+            <div className="panel-head">
+              <h2>Harness Provider</h2>
+              <span className="muted" style={{ fontSize: 12 }}>三个 Agent 使用同一套 Provider 表单</span>
+            </div>
+            <div className="harness-provider-grid">
+              {AGENT_IDS.map((agent) => {
+                if (agent === 'dsh') {
+                  if (dshProvider === null) return <ProviderEditor key={agent} agent={agent} editable={false} connected={dsh?.connected === true} onSaved={reload} />;
+                  return (
+                    <ProviderEditor
+                      key={agent}
+                      agent={agent}
+                      editable={dshProvider.writable}
+                      connected={dsh?.connected === true}
+                      providerKey={dshProvider.providerKey}
+                      providerName={String(dshProvider.provider['displayName'] ?? dshProvider.providerKey)}
+                      baseUrl={String(dshProvider.provider['baseURL'] ?? '')}
+                      model={dshProvider.defaultModel.model}
+                      reasoning={dshProvider.defaultModel.reasoningEffort ?? String(dshProvider.provider['reasoning'] ?? 'low')}
+                      hasKey={typeof dshProvider.provider['apiKeyEnv'] === 'string'}
+                      onSaved={reload}
+                    />
+                  );
+                }
+                const provider = providers.find((item) => isCompatible(agent, item));
+                return (
+                  <ProviderEditor
+                    key={agent}
+                    agent={agent}
+                    editable={provider !== undefined}
+                    connected={true}
+                    providerId={provider?.id}
+                    providerName={provider?.name}
+                    providerKey={provider?.source ?? ''}
+                    baseUrl={provider?.endpoints?.[agent === 'codex' ? 'openai-responses' : 'anthropic-messages'] ?? provider?.baseUrl}
+                    model={provider?.models[0]}
+                    protocols={provider?.protocols}
+                    hasKey={provider?.hasKey}
+                    onSaved={reload}
+                  />
+                );
+              })}
             </div>
           </section>
 
@@ -478,5 +452,92 @@ export function ProvidersPage(): React.ReactElement {
         </div>
       </div>
     </main>
+  );
+}
+
+interface ProviderEditorProps {
+  agent: AgentKey;
+  editable: boolean;
+  connected: boolean;
+  providerId?: string;
+  providerKey?: string;
+  providerName?: string;
+  baseUrl?: string;
+  model?: string;
+  reasoning?: string;
+  protocols?: string[];
+  hasKey?: boolean;
+  onSaved: () => void;
+}
+
+function ProviderEditor({
+  agent,
+  editable,
+  connected,
+  providerId,
+  providerKey,
+  providerName,
+  baseUrl,
+  model,
+  reasoning = 'low',
+  protocols = [],
+  hasKey = false,
+  onSaved,
+}: ProviderEditorProps): React.ReactElement {
+  const [draft, setDraft] = useState({ providerKey: providerKey ?? '', providerName: providerName ?? '', baseUrl: baseUrl ?? '', model: model ?? '', reasoning, apiKey: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const name = agentText(agent).name;
+  const isDsh = agent === 'dsh';
+
+  useEffect(() => {
+    setDraft({ providerKey: providerKey ?? '', providerName: providerName ?? '', baseUrl: baseUrl ?? '', model: model ?? '', reasoning, apiKey: '' });
+  }, [providerKey, providerName, baseUrl, model, reasoning]);
+
+  const save = (): void => {
+    if (!editable || draft.baseUrl.trim() === '' || draft.model.trim() === '') return;
+    setSaving(true);
+    setError(null);
+    const request = isDsh
+      ? api.updateDshProvider({ providerKey: draft.providerKey.trim(), baseURL: draft.baseUrl.trim(), model: draft.model.trim(), reasoning: draft.reasoning, ...(draft.apiKey === '' ? {} : { apiKey: draft.apiKey }) })
+      : providerId === undefined
+        ? Promise.reject(new Error('Provider 不存在'))
+        : api.updateProvider(providerId, {
+            ...(draft.providerName.trim() === '' ? {} : { name: draft.providerName.trim() }),
+            baseUrl: draft.baseUrl.trim(),
+            models: [draft.model.trim()],
+            endpoints: protocols.reduce<Record<string, string>>((out, protocol) => { out[protocol] = draft.baseUrl.trim(); return out; }, {}),
+            ...(draft.apiKey === '' ? {} : { apiKey: draft.apiKey }),
+          });
+    void request
+      .then(() => { setDraft((current) => ({ ...current, apiKey: '' })); onSaved(); })
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <article className="harness-provider-card" data-testid={`harness-provider-${agent}`}>
+      <div className="harness-provider-card-head">
+        <AgentMark agent={agent} size="md" />
+        <div>
+          <h3>{name}</h3>
+          <span className="muted">{connected ? providerName ?? (isDsh ? 'DSH 未返回 Provider' : '原生登录') : '未连接'}</span>
+        </div>
+        <span className={`badge ${editable ? '' : 'off'}`}>{editable ? '可编辑' : '只读'}</span>
+      </div>
+      <div className="form-grid">
+        <label className="field"><span>Provider</span><input className="text-input" value={draft.providerKey} disabled={!editable || !isDsh} onChange={(event) => setDraft({ ...draft, providerKey: event.target.value })} /></label>
+        <label className="field"><span>名称</span><input className="text-input" value={draft.providerName} disabled={!editable || isDsh} onChange={(event) => setDraft({ ...draft, providerName: event.target.value })} /></label>
+        <label className="field"><span>Base URL</span><input className="text-input" value={draft.baseUrl} disabled={!editable} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} /></label>
+        <label className="field"><span>模型</span><input className="text-input" value={draft.model} disabled={!editable} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label>
+        <label className="field"><span>思考强度</span><select className="text-input" value={draft.reasoning} disabled={!editable || !isDsh} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })}>{['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+        <label className="field"><span>API Key（留空不修改）</span><input className="text-input" type="password" value={draft.apiKey} disabled={!editable} placeholder={hasKey ? '已配置' : '未配置'} onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} /></label>
+      </div>
+      <div className="row-actions">
+        <button type="button" className="btn primary" disabled={!editable || saving || draft.baseUrl.trim() === '' || draft.model.trim() === ''} onClick={save}>{saving ? '保存中…' : '保存 Provider'}</button>
+        <span className="muted" style={{ fontSize: 12 }}>{isDsh ? '写入 DSH 当前 Provider 配置' : '更新本机导入的 Provider 运行配置'}</span>
+      </div>
+      {error !== null ? <div className="error-card" role="alert">{error}</div> : null}
+    </article>
   );
 }
