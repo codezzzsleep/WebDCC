@@ -191,6 +191,8 @@ export class ClaudeAdapter implements AgentAdapter {
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
         includePartialMessages: true,
+        // settings.json 的 env 会覆盖 options.env；用 flag 级 settings 注入 Provider 才能生效（F16 实测）
+        ...(Object.keys(providerEnv).length === 0 ? {} : { settings: { env: providerEnv } }),
         ...(opts.model === undefined ? {} : { model: opts.model }),
         ...(opts.accessMode === undefined ? {} : { permissionMode: opts.accessMode }),
         ...(this.options.model === undefined ? {} : { model: this.options.model }),
