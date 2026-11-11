@@ -80,7 +80,7 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   const anthClaude = await startAnthropicMock({ plan: [], port: 0, plansDir: PLANS_DIR, control: new MockControl([], PLANS_DIR), log: () => undefined });
   const anthDsh = await startAnthropicMock({ plan: [], port: 0, plansDir: PLANS_DIR, control: new MockControl([], PLANS_DIR), log: () => undefined });
 
-  const slugs = { a: 'gpt-6.1-sol', b: 'gpt-6-astra' };
+  const slugs = { a: 'gpt-5', b: 'gpt-5-mini' };
   await writeFile(
     join(dirs.codexHome, 'config.toml'),
     `model = "${slugs.a}"\nmodel_provider = "mockr"\n\n[model_providers.mockr]\nname = "Mock Responses"\nbase_url = "${responses.url}/v1"\nwire_api = "responses"\nenv_key = "WDCC_TEST_MOCKR_KEY"\n\n[model_providers.mockr2]\nname = "Mock Responses 2"\nbase_url = "${responses.url}/v2"\nwire_api = "responses"\nenv_key = "WDCC_TEST_MOCKR2_KEY_MISSING"\n\n[profiles.alt]\nmodel_provider = "mockr"\nmodel = "${slugs.b}"\n`,
@@ -96,6 +96,7 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
 
   // 服务端
   const port = await freePort();
+  const dshPort = await freePort();
   const token = `t${createHash('sha256').update(runId).digest('hex').slice(0, 24)}`;
   const env = {
     ...process.env,
@@ -108,6 +109,7 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     WDCC_PORT: String(port),
     WDCC_TOKEN: token,
     WDCC_DSH_MODE: 'spawn',
+    WDCC_DSH_PORT: String(dshPort),
     WDCC_TEST_HOOKS: '1',
     WDCC_TEST_MOCKR_KEY: `sk-wdcc-test-mockr-${runId}`,
     WDCC_TEST_MOCKR2_KEY_MISSING: '',
@@ -130,6 +132,16 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     if (Date.now() - started > 30_000) throw new Error('服务端 30 秒内没有起来');
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
+
+  // 把工作区注册进 WebDCC
+  const authResponse = await fetch(`${baseURL}/?token=${token}`, { redirect: 'manual' });
+  const cookie = (authResponse.headers.getSetCookie()[0] ?? '').split(';')[0] ?? '';
+  const created = await fetch(`${baseURL}/api/workspaces`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'sample-repo', path: repo }),
+  });
+  if (!created.ok) throw new Error(`注册工作区失败：${created.status}`);
 
   // 用户真实配置的哈希（FIN-04）
   const userHashes = {

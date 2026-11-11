@@ -162,7 +162,7 @@ export class DshAdapter implements AgentAdapter {
 
   /** 3.3 的机器检查入口：只启动一个只监听 127.0.0.1 的侧车 */
   buildLaunchSpec(): LaunchSpec {
-    const port = String(this.options.port ?? 3091);
+    const port = String(this.options.port ?? process.env['WDCC_DSH_PORT'] ?? 3091);
     return {
       command: this.options.command ?? 'dsh',
       args: ['web', '--no-open', '--port', port, '--host', '127.0.0.1'],
@@ -175,7 +175,7 @@ export class DshAdapter implements AgentAdapter {
     this.booting ??= (async () => {
       const spec = this.buildLaunchSpec();
       this.sidecar = await startSidecar({
-        port: Number((spec.args ?? [])[3] ?? 3091),
+        port: Number((spec.args ?? [])[3] ?? process.env['WDCC_DSH_PORT'] ?? 3091),
         env: { ...process.env, ...spec.env },
         ...(spec.command === undefined ? {} : { command: spec.command }),
       });
@@ -532,8 +532,10 @@ export class DshAdapter implements AgentAdapter {
       const blockType = String(chunk['blockType'] ?? '');
       if (blockType === 'reasoning') {
         runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
       } else {
         runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
       }
       return;
     }

@@ -399,19 +399,33 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'stream_event': {
-        const event = message.event as { type?: string; index?: number; delta?: { type?: string; text?: string; thinking?: string } };
+        const event = message.event as {
+          type?: string;
+          index?: number;
+          block?: { type?: string };
+          content_block?: { type?: string };
+          delta?: { type?: string; text?: string; thinking?: string };
+        };
         const itemKey = `msg-${runtime.messageSeq}`;
         if (event.type === 'content_block_start') {
           runtime.messageSeq += 1;
+          const blockType = event.content_block?.type ?? event.block?.type ?? 'text';
+          this.emit(sessionId, {
+            type: 'item.start',
+            itemKey: `msg-${runtime.messageSeq}`,
+            kind: blockType === 'thinking' ? 'reasoning' : 'assistant.message',
+            data: { text: '' },
+          });
           return;
         }
         if (event.type === 'content_block_delta') {
           const delta = event.delta ?? {};
+          const liveKey = `msg-${runtime.messageSeq}`;
           if (delta.type === 'text_delta' && delta.text !== undefined) {
-            this.emit(sessionId, { type: 'item.delta', itemKey, field: 'text', append: delta.text });
+            this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.text });
           }
           if (delta.type === 'thinking_delta' && delta.thinking !== undefined) {
-            this.emit(sessionId, { type: 'item.delta', itemKey, field: 'text', append: delta.thinking });
+            this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.thinking });
           }
         }
         return;

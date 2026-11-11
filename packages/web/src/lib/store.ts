@@ -163,10 +163,14 @@ export class AppStore {
           ...(existing ?? {
             id: message.sessionId,
             workspaceId: String(patch['workspaceId'] ?? ''),
-            agent: 'dsh',
+            agent: String(patch['agent'] ?? 'dsh'),
             status: 'idle',
             updatedAt: nowIso(),
           }),
+          // F5：新会话的 agent 必须来自 patch，不能写死成 dsh
+          ...(patch['agent'] === undefined ? {} : { agent: String(patch['agent']) }),
+          ...(patch['workspaceId'] === undefined ? {} : { workspaceId: String(patch['workspaceId']) }),
+          ...(patch['createdAt'] === undefined ? {} : { createdAt: String(patch['createdAt']) }),
           ...(patch['title'] === undefined ? {} : { title: String(patch['title']) }),
           ...(patch['status'] === undefined ? {} : { status: patch['status'] as SessionMeta['status'] }),
           ...(patch['archived'] === undefined ? {} : { archived: Boolean(patch['archived']) }),

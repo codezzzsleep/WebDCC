@@ -97,3 +97,21 @@
 ### 最终状态
 
 M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提前核实；两处 SPEC 与实测的冲突（Codex catalog 与 R1、Codex 审批 id 冲突）已按 0.1 节规则记录并修复。剩余待办只有两类：**真实模型验证**（无 Key）与**界面人工确认**（截图已存档）。
+
+
+## M8 进度（进行中）
+
+| 项 | 状态 |
+|---|---|
+| 验收框架（6.1–6.6） | 已可运行：globalSetup（临时目录 + git 工作区 + 三 mock + 动态端口服务）、fixtures（登录/mock 控制/全局断言/截图）、reporter（从 SPEC 解析 ID 并严格比对，产出 report.json/index.html/status.json） |
+| 7.1 用例 | S-01、S-02、S-03、AUTH-01、AUTH-02、AUTH-03 通过 |
+| 7.4 用例 | AG-{dsh,codex,claude}-01 通过；AG-dsh-04、AG-codex-02 通过 |
+| 未通过 | AG-dsh-02、AG-claude-02（流式增量在界面上只增长 1–2 次）；AG-codex-04、AG-claude-04（任务面板） |
+| F1/F2/F3 | 已修（SDK external + 建会话回滚；数据校验 + 错误边界；模型默认值与 400） |
+| F5 | 已修（feed 里的 agent 来自 patch） |
+
+### M8 实测发现（需写进 protocol-notes）
+
+- **Codex 0.167 的内置模型全部走 code mode**：`model/list` 返回的 12 个 slug，请求里 `tools` 为空，工具放在 `input[]` 的 `additional_tools` 命名空间里（`functions.exec` 自定义工具）。只有**不在 model/list 里的 slug**（如 `gpt-5`）会退回直接工具。SPEC 6.2 要求 SLUG 取自 model/list，与实测冲突 → 验收 fixture 改用 `gpt-5`/`gpt-5-mini`，证据待补进 protocol-notes。
+- DSH 侧车端口必须取 `WDCC_DSH_PORT`（已修），否则并行运行会撞 3091。
+- 流式增量：adapter 需要在 block-start 时发 `item.start`，前端 `update` 帧要能**新建**热条目，否则增量无处可落（已修的 DSH/Claude adapter + store）。
