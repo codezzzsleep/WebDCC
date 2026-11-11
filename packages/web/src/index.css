@@ -10,6 +10,7 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 body {
   margin: 0;
@@ -313,9 +314,11 @@ textarea.text-input {
 .main {
   flex: 1 1 0;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
   background: var(--bg);
 }
 
@@ -1606,6 +1609,7 @@ button.step-line:hover {
 /* ============ 设置页 ============ */
 .settings {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 32px 40px 48px;
 }
