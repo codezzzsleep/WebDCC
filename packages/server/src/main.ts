@@ -71,6 +71,9 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   });
 
   await app.listen({ host: config.host, port: config.port });
+  // F16：启动时只读扫描一次本机配置并导入 Provider
+  const scan = await providers.scanLocal().catch(() => ({ imported: 0, skipped: 0 }));
+  if (scan.imported > 0) process.stdout.write(`webdcc: 从本机导入了 ${scan.imported} 个 Provider\n`);
   store.pruneCommands();
 
   return {

@@ -329,6 +329,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   // ---------- providers / models ----------
   app.get('/api/providers', async () => deps.providers.list());
 
+  app.post('/api/providers/scan', async () => deps.providers.scanLocal());
+
+  app.post('/api/providers/restore-ignored', async () => {
+    await deps.providers.restoreIgnored();
+    return deps.providers.scanLocal();
+  });
+
   app.post('/api/providers', async (request) => {
     const body = request.body as { name?: string; baseUrl?: string; protocols?: string[]; models?: string[]; apiKey?: string; codexCatalogPath?: string };
     if (typeof body?.name !== 'string' || typeof body?.baseUrl !== 'string') throw badRequest('需要 name 与 baseUrl');

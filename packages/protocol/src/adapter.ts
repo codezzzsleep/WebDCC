@@ -20,6 +20,7 @@ export interface ProviderRuntimeConfig {
   id: string;
   name: string;
   baseUrl: string;
+  endpoints?: Record<string, string>;
   protocols: string[];
   /** 只在启动子进程/构造 SDK 环境时使用，绝不落库明文或返回给前端 */
   apiKey?: string;

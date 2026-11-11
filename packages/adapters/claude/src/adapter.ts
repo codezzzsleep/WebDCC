@@ -179,7 +179,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const providerEnv: Record<string, string> = {};
     const provider = opts.provider;
     if (provider !== null && provider !== undefined) {
-      providerEnv['ANTHROPIC_BASE_URL'] = provider.baseUrl;
+      providerEnv['ANTHROPIC_BASE_URL'] = provider.endpoints?.['anthropic-messages'] ?? provider.baseUrl;
       providerEnv['ANTHROPIC_AUTH_TOKEN'] = provider.apiKey ?? '';
       providerEnv['ANTHROPIC_API_KEY'] = '';
       if (opts.model !== undefined) providerEnv['ANTHROPIC_MODEL'] = opts.model;

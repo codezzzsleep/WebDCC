@@ -45,6 +45,9 @@ export interface ProviderRecord {
   id: string;
   name: string;
   baseUrl: string;
+  source: string;
+  sourceKey: string | null;
+  endpoints: string | null;
   protocols: string[];
   models: string[];
   codexCatalogPath: string | null;
@@ -61,6 +64,9 @@ interface ProviderDbRow {
   codex_catalog_path: string | null;
   secret_ref: string;
   created_at: string;
+  source: string | null;
+  source_key: string | null;
+  endpoints: string | null;
 }
 
 function toProviderRecord(row: ProviderDbRow): ProviderRecord {
@@ -73,6 +79,9 @@ function toProviderRecord(row: ProviderDbRow): ProviderRecord {
     codexCatalogPath: row.codex_catalog_path,
     secretRef: row.secret_ref,
     createdAt: row.created_at,
+    source: row.source ?? 'manual',
+    sourceKey: row.source_key,
+    endpoints: row.endpoints,
   };
 }
 
@@ -272,13 +281,28 @@ export class Store {
     models: string[];
     secretRef: string;
     codexCatalogPath: string | null;
+    source?: string;
+    sourceKey?: string | null;
+    endpoints?: string | null;
   }): ProviderRecord {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at, source, source_key, endpoints) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run(input.id, input.name, input.baseUrl, JSON.stringify(input.protocols), input.secretRef, JSON.stringify(input.models), input.codexCatalogPath, at);
+      .run(
+        input.id,
+        input.name,
+        input.baseUrl,
+        JSON.stringify(input.protocols),
+        input.secretRef,
+        JSON.stringify(input.models),
+        input.codexCatalogPath,
+        at,
+        input.source ?? 'manual',
+        input.sourceKey ?? null,
+        input.endpoints ?? null,
+      );
     return {
       id: input.id,
       name: input.name,
@@ -288,6 +312,9 @@ export class Store {
       codexCatalogPath: input.codexCatalogPath,
       secretRef: input.secretRef,
       createdAt: at,
+      source: input.source ?? 'manual',
+      sourceKey: input.sourceKey ?? null,
+      endpoints: input.endpoints ?? null,
     };
   }
 

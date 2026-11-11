@@ -57,5 +57,11 @@ export function openDb(file: string): Db {
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = NORMAL');
   db.exec(SCHEMA);
+  // M8 F16：Provider 增加来源与按协议的多端点
+  const columns = db.prepare('PRAGMA table_info(providers)').all() as { name: string }[];
+  const has = (name: string): boolean => columns.some((column) => column.name === name);
+  if (!has('source')) db.exec("ALTER TABLE providers ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
+  if (!has('source_key')) db.exec('ALTER TABLE providers ADD COLUMN source_key TEXT');
+  if (!has('endpoints')) db.exec('ALTER TABLE providers ADD COLUMN endpoints TEXT');
   return db;
 }

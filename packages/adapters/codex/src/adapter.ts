@@ -209,7 +209,8 @@ export class CodexAdapter implements AgentAdapter {
       const key = `wdcc_${provider.id}`;
       args.push('-c', `model_provider=${key}`);
       args.push('-c', `model_providers.${key}.name="${provider.name}"`);
-      args.push('-c', `model_providers.${key}.base_url="${provider.baseUrl}"`);
+      const baseUrl = provider.endpoints?.['openai-responses'] ?? provider.baseUrl;
+      args.push('-c', `model_providers.${key}.base_url="${baseUrl}"`);
       args.push('-c', `model_providers.${key}.wire_api="responses"`);
       args.push('-c', `model_providers.${key}.env_key="WDCC_PROVIDER_KEY"`);
       if (provider.codexCatalogPath !== undefined) args.push('-c', `model_catalog_json="${provider.codexCatalogPath}"`);

@@ -85,10 +85,18 @@ export interface DraftDto {
   updatedAt: string;
 }
 
+export interface ProviderEndpointMap {
+  'openai-responses'?: string;
+  'anthropic-messages'?: string;
+}
+
 export interface ProviderDto {
   id: string;
   name: string;
   baseUrl: string;
+  /** manual / codex-config / claude-settings / dsh / paste */
+  source?: string;
+  endpoints?: ProviderEndpointMap;
   protocols: string[];
   models: string[];
   codexCatalogPath?: string;
