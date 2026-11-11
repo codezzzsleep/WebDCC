@@ -11,6 +11,7 @@ import type {
   ProbeResult,
   UserInput,
 } from '@webdcc/protocol';
+import { isValidEventData } from '@webdcc/protocol';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 
 export const PINNED_VERSION = '0.167.0';
@@ -159,6 +160,17 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   private emit(sessionId: string, event: AdapterEvent): void {
+    if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
+      const degraded: AdapterEvent = {
+        type: 'item.complete',
+        itemKey: event.itemKey,
+        kind: 'unknown',
+        data: { nativeType: event.kind },
+        native: event.native ?? event.data,
+      };
+      for (const listener of this.listeners) listener(sessionId, degraded);
+      return;
+    }
     for (const listener of this.listeners) listener(sessionId, event);
   }
 

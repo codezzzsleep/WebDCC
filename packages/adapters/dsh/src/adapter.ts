@@ -11,7 +11,7 @@ import type {
   ProbeResult,
   UserInput,
 } from '@webdcc/protocol';
-import { ulid } from '@webdcc/protocol';
+import { isValidEventData, ulid } from '@webdcc/protocol';
 import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
@@ -72,7 +72,8 @@ export function toolKind(name: string): EventKind {
     case 'edit':
       return 'file.change';
     case 'todo_write':
-      return 'plan';
+      // 任务清单只由 todo/write 事件生成；工具调用本身按 tool.call 处理（SPEC-M8 F2）
+      return 'tool.call';
     default:
       return 'tool.call';
   }
@@ -381,7 +382,19 @@ export class DshAdapter implements AgentAdapter {
     nativeSeq: number,
     native: unknown,
   ): void {
-    const complete = (itemKey: string, kind: EventKind, eventData: EventData[EventKind]): void => {
+    const complete = (itemKey: string, kind: EventKind, eventData: EventData[EventKind], fallbackNative?: unknown): void => {
+      // 数据不合格就降级为 unknown 并保留原始帧，绝不让前端拿到错的形状（F2）
+      if (!isValidEventData(kind, eventData)) {
+        this.emit(sessionId, {
+          type: 'item.complete',
+          itemKey,
+          kind: 'unknown',
+          data: { nativeType: type },
+          native: fallbackNative ?? { type, data },
+          nativeSeq,
+        });
+        return;
+      }
       this.emit(sessionId, { type: 'item.complete', itemKey, kind, data: eventData, nativeSeq, native });
     };
 

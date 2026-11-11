@@ -19,6 +19,7 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import { isValidEventData } from '@webdcc/protocol';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -139,6 +140,18 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   private emit(sessionId: string, event: AdapterEvent): void {
+    // 发送前校验：不合格的完成态事件降级为 unknown（F2）
+    if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
+      const degraded: AdapterEvent = {
+        type: 'item.complete',
+        itemKey: event.itemKey,
+        kind: 'unknown',
+        data: { nativeType: event.kind },
+        native: event.native ?? event.data,
+      };
+      for (const listener of this.listeners) listener(sessionId, degraded);
+      return;
+    }
     for (const listener of this.listeners) listener(sessionId, event);
   }
 

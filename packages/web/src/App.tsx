@@ -10,6 +10,7 @@ import { Timeline } from './components/Timeline.js';
 import { Trajectory } from './components/Trajectory.js';
 import { Composer } from './components/Composer.js';
 import { Dock, type DockState } from './components/Dock.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { HandoffDialog } from './components/HandoffDialog.js';
 import { ProvidersPage } from './pages/Providers.js';
 import { NewSession } from './pages/NewSession.js';
@@ -196,6 +197,7 @@ function SessionPage(): React.ReactElement {
   return (
     <>
       <main className="main" data-testid="main-column">
+        <ErrorBoundary label="main-column">
         <SessionHeader
           sessionId={mainId}
           tab={tab}
@@ -224,8 +226,10 @@ function SessionPage(): React.ReactElement {
             window.location.hash = `e-${seq}`;
           }} />
         )}
+        </ErrorBoundary>
       </main>
       {dock !== null ? (
+        <ErrorBoundary label="dock">
         <Dock
           state={dock}
           onClose={() => {
@@ -234,6 +238,7 @@ function SessionPage(): React.ReactElement {
           onPromote={(sessionId) => void navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} })}
           onHandoff={setHandoffText}
         />
+        </ErrorBoundary>
       ) : null}
       {handoffText !== null && session !== undefined ? (
         <HandoffDialog

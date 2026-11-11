@@ -1056,3 +1056,12 @@ button {
   gap: 12px;
   margin-bottom: 14px;
 }
+
+.render-fallback {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}

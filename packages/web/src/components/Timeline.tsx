@@ -3,7 +3,9 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { EventData, StoredEvent } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store, type HotItem, type TurnModel } from '../lib/store.js';
+import { isValidEventData } from '@webdcc/protocol';
 import { duration, shortNumber } from '../lib/format.js';
+import { ErrorBoundary } from './ErrorBoundary.js';
 import { Markdown } from './Markdown.js';
 
 function useTurns(sessionId: string): TurnModel[] {
@@ -146,15 +148,16 @@ function TurnView({
       <div className={`turn-body ${expanded ? 'expanded' : 'collapsed'}`}>
         {expanded
           ? steps.map((event) => (
-              <StepRow
-                key={`${event.itemKey}-${event.seq}`}
-                event={event}
-                highlight={highlightSeq === event.seq}
-                onOpenDiff={onOpenDiff}
-              />
+              <ErrorBoundary key={`${event.itemKey}-${event.seq}`} label="timeline-item">
+                <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
+              </ErrorBoundary>
             ))
           : finalMessage !== undefined
-            ? <StepRow event={finalMessage} highlight={highlightSeq === finalMessage.seq} onOpenDiff={onOpenDiff} />
+            ? (
+                <ErrorBoundary label="timeline-final">
+                  <StepRow event={finalMessage} highlight={highlightSeq === finalMessage.seq} onOpenDiff={onOpenDiff} />
+                </ErrorBoundary>
+              )
             : null}
 
         {turn.hot.map((item) => (
@@ -289,6 +292,10 @@ function HotRow({ item }: { item: HotItem }): React.ReactElement {
 function StepRow({ event, highlight, onOpenDiff }: { event: StoredEvent; highlight?: boolean; onOpenDiff: (fileId: string, path: string) => void }): React.ReactElement | null {
   const [open, setOpen] = useState(false);
   const className = `step-row ${highlight === true ? 'highlight' : ''}`;
+  // 渲染前再校验一次：不合格的事件显示占位，而不是让组件崩掉（F2）
+  if (!isValidEventData(event.kind, event.data)) {
+    return <div className={`${className} render-fallback`}>这条内容无法显示 · 在轨迹中查看</div>;
+  }
 
   switch (event.kind) {
     case 'assistant.message': {
