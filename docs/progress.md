@@ -126,7 +126,7 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 | PR | 状态 | 内容 |
 |---|---|---|
 | PR1 | ✅ 已合并（#10） | 验收框架 + mock 扩展 + 测试钩子 + F1/F2/F3/F5；`M8 ACCEPTANCE: 15/125 passed`，棘轮通过 |
-| PR2 | 下一轮 | D1（attach 模式、spawn 冲突检查、设置页 DSH 连接）+ F16（本机 Provider 自动导入） |
+| PR2 | 进行中（分支 m8/pr2-d1） | D1 已完成：attachToDsh（/connect 换 operator Cookie）、adapter attach/spawn、spawn 冲突检查、DshConnectionStore、/api/dsh、设置页 DSH 连接。**F16 与 DSHX-* 用例待做**。注：一次误提交到 main 已用 revert 恢复（未 force push） |
 | PR3–PR7 | 待做 | 按 SPEC 8 的顺序 |
 
 实时统计：`docs/acceptance/M8/report.json`（每次 `pnpm accept:m8 --ratchet` 覆盖）。
