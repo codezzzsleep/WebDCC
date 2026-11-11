@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import type { MetaResponse, ProviderDto, WorkspaceDto } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
@@ -8,12 +8,14 @@ import { agentInfo } from '../lib/format.js';
 interface NewSessionProps {
   workspaces: WorkspaceDto[];
   meta: MetaResponse | null;
+  /** 由路由层传入（这里的组件也会被 "/" 复用，不能直接用 useSearch） */
+  initial?: { w?: string; agent?: string };
 }
 
 const AGENTS = ['dsh', 'codex', 'claude-code'] as const;
 
-export function NewSession({ workspaces, meta }: NewSessionProps): React.ReactElement {
-  const search = useSearch({ from: '/new' }) as { w?: string; agent?: string };
+export function NewSession({ workspaces, meta, initial }: NewSessionProps): React.ReactElement {
+  const search = initial ?? {};
   const navigate = useNavigate();
   const [workspaceId, setWorkspaceId] = useState(search.w ?? workspaces[0]?.id ?? '');
   useEffect(() => {
@@ -76,7 +78,8 @@ export function NewSession({ workspaces, meta }: NewSessionProps): React.ReactEl
         {AGENTS.map((id) => {
           const info = agentInfo(id);
           const agentMeta = meta?.agents[id];
-          const installed = agentMeta?.installed !== false;
+          // 没有 probe 结果 = 该 adapter 未启用（例如 DSH 被 WDCC_ENABLE_DSH=0 关掉）
+          const installed = agentMeta !== undefined && agentMeta.installed !== false;
           return (
             <button
               key={id}
@@ -88,7 +91,7 @@ export function NewSession({ workspaces, meta }: NewSessionProps): React.ReactEl
             >
               <span className={`agent-mark ${info.className}`}>{info.mark}</span>
               <span className="agent-card-name">{info.name}</span>
-              <span className="muted">{installed ? '原装运行，使用你自己的配置' : agentMeta?.notes?.[0] ?? '未安装'}</span>
+              <span className="muted">{installed ? '原装运行，使用你自己的配置' : (agentMeta?.notes?.[0] ?? '该 Agent 未启用或未安装')}</span>
             </button>
           );
         })}
