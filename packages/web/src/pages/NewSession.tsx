@@ -51,7 +51,8 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
   }, [compatible, providerId, sourcePreference]);
 
   useEffect(() => {
-    if (selectedProvider !== undefined && (model === '' || !selectedProvider.models.includes(model))) {
+    // 只有 Provider 自带模型列表时才自动纠正；否则保留用户手填的模型名
+    if (selectedProvider !== undefined && selectedProvider.models.length > 0 && !selectedProvider.models.includes(model)) {
       setModel(selectedProvider.models[0] ?? '');
     }
   }, [selectedProvider, model]);
@@ -145,14 +146,18 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
         </label>
         <label className="field">
           <span>模型</span>
-          <select className="text-input" value={model} onChange={(event) => setModel(event.target.value)} data-testid="model-select" disabled={selectedProvider === undefined}>
-            {(selectedProvider?.models ?? []).map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-            {selectedProvider === undefined ? <option value="">（先选 Provider）</option> : null}
-          </select>
+          {selectedProvider !== undefined && selectedProvider.models.length === 0 ? (
+            <input className="text-input" placeholder="这个 Provider 没有模型列表，手动填模型名" value={model} onChange={(event) => setModel(event.target.value)} data-testid="model-input" />
+          ) : (
+            <select className="text-input" value={model} onChange={(event) => setModel(event.target.value)} data-testid="model-select" disabled={selectedProvider === undefined}>
+              {(selectedProvider?.models ?? []).map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+              {selectedProvider === undefined ? <option value="">（先选 Provider）</option> : null}
+            </select>
+          )}
         </label>
       </div>
 

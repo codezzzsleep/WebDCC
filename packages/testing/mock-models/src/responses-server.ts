@@ -136,10 +136,11 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     const method = req.method ?? 'GET';
     log(`${method} ${url.pathname}`);
 
-    if (method === 'POST' && (url.pathname === '/v1/responses' || url.pathname === '/responses')) {
+    // SPEC-M8 6.2：同时接受 /v1 与 /v2 前缀
+    if (method === 'POST' && /^\/v\d+\/responses$/.test(url.pathname)) {
       const body = (await readJsonBody(req)) as Record<string, unknown>;
       recorder?.record({ ts: new Date().toISOString(), direction: 'request', path: url.pathname, body });
-      await replyToResponse(res, body);
+      await replyToResponse(res, body, url.pathname, Object.fromEntries(Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(',') : (value ?? '')])));
       return;
     }
 
@@ -177,7 +178,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     sendJson(res, 404, { error: { message: `mock-responses has no ${method} ${url.pathname}`, type: 'not_found' } });
   }
 
-  async function replyToResponse(res: ServerResponse, body: Record<string, unknown>): Promise<void> {
+  async function replyToResponse(res: ServerResponse, body: Record<string, unknown>, urlPath: string, headers: Record<string, string>): Promise<void> {
     const input = Array.isArray(body['input']) ? (body['input'] as ResponsesInputItem[]) : undefined;
     const tools = Array.isArray(body['tools']) ? (body['tools'] as ToolDescriptor[]) : undefined;
     const vars = countResponses(body);
@@ -185,8 +186,8 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     const helper = tools === undefined || tools.length === 0;
     control.record({
       at: new Date().toISOString(),
-      path: '/v1/responses',
-      headers: {},
+      path: urlPath,
+      headers,
       body,
       ...(helper ? { helper: true } : {}),
     });

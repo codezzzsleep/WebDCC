@@ -30,6 +30,8 @@ export function ProvidersPage(): React.ReactElement {
   const [form, setForm] = useState({ name: '', baseUrl: '', apiKey: '', models: '', protocols: [] as string[], codexCatalogPath: '' });
   const [error, setError] = useState<string | null>(null);
   const [scanInfo, setScanInfo] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [keyDraft, setKeyDraft] = useState('');
 
   const reload = (): void => {
     void api.providers().then(setProviders).catch((cause: unknown) => setError(String(cause)));
@@ -147,7 +149,42 @@ export function ProvidersPage(): React.ReactElement {
               <td className="mono">{provider.endpoints?.['openai-responses'] ?? provider.endpoints?.['anthropic-messages'] ?? provider.baseUrl}</td>
               <td>{provider.protocols.join(', ')}</td>
               <td>{provider.models.join(', ') || '—'}</td>
-              <td>{provider.hasKey ? `…${provider.keyHint ?? ''}` : (provider.note ?? '无')}</td>
+              <td>
+                {editingKey === provider.id ? (
+                  <span>
+                    <input className="text-input" style={{ width: 160, display: 'inline-block' }} value={keyDraft} onChange={(event) => setKeyDraft(event.target.value)} data-testid="provider-key-edit" />
+                    <button
+                      type="button"
+                      className="link-button"
+                      data-testid="provider-key-save"
+                      onClick={() => {
+                        void api.updateProvider(provider.id, { apiKey: keyDraft }).then(() => {
+                          setEditingKey(null);
+                          setKeyDraft('');
+                          reload();
+                        });
+                      }}
+                    >
+                      保存
+                    </button>
+                  </span>
+                ) : (
+                  <span>
+                    {provider.hasKey ? `…${provider.keyHint ?? ''}` : (provider.note ?? '无')}{' '}
+                    <button
+                      type="button"
+                      className="link-button"
+                      data-testid={`provider-key-edit-${provider.name}`}
+                      onClick={() => {
+                        setEditingKey(provider.id);
+                        setKeyDraft('');
+                      }}
+                    >
+                      编辑 Key
+                    </button>
+                  </span>
+                )}
+              </td>
               <td>
                 <button type="button" className="link-button" onClick={() => void api.deleteProvider(provider.id).then(reload)}>
                   删除
