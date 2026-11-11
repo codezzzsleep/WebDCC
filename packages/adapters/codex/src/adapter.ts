@@ -43,6 +43,8 @@ interface SessionRuntime {
   turnStartedAt: number;
   approvals: Map<string, PendingApproval>;
   lastAssistantText: string;
+  /** 已经发过 item.start 的条目（Codex 的 agentMessage 不一定有 item/started） */
+  started: Set<string>;
 }
 
 const ACCESS_MODES = [
@@ -240,6 +242,7 @@ export class CodexAdapter implements AgentAdapter {
       turnStartedAt: 0,
       approvals: new Map(),
       lastAssistantText: '',
+      started: new Set(),
     };
     rpc.onNotification((frame) => {
       if (frame['method'] === 'thread/started') markReady();
@@ -398,11 +401,21 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'item/agentMessage/delta': {
-        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'text', append: String(params['delta'] ?? '') });
+        const itemId = String(params['itemId'] ?? '');
+        if (!runtime.started.has(itemId)) {
+          runtime.started.add(itemId);
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'assistant.message', data: { text: '' } });
+        }
+        this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
         return;
       }
       case 'item/reasoning/summaryTextDelta': {
-        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'text', append: String(params['delta'] ?? '') });
+        const itemId = String(params['itemId'] ?? '');
+        if (!runtime.started.has(itemId)) {
+          runtime.started.add(itemId);
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'reasoning', data: { text: '' } });
+        }
+        this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
         return;
       }
       case 'item/commandExecution/outputDelta': {

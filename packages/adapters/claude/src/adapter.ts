@@ -98,6 +98,8 @@ interface SessionRuntime {
   pending: Map<string, PendingInteraction>;
   toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind] }>;
   messageSeq: number;
+  /** 这一块是否已经发过 item.start（SDK 不一定给 block-start，按首个 delta 兜底） */
+  liveStarted: boolean;
   ready: Promise<void>;
 }
 
@@ -227,6 +229,7 @@ export class ClaudeAdapter implements AgentAdapter {
       pending: new Map(),
       toolItems: new Map(),
       messageSeq: 0,
+      liveStarted: false,
       ready,
     };
     this.sessions.set(sessionId, runtime);
@@ -408,6 +411,7 @@ export class ClaudeAdapter implements AgentAdapter {
         };
         if (event.type === 'content_block_start') {
           runtime.messageSeq += 1;
+          runtime.liveStarted = false;
           const blockType = event.content_block?.type ?? event.block?.type ?? 'text';
           this.emit(sessionId, {
             type: 'item.start',
@@ -421,9 +425,17 @@ export class ClaudeAdapter implements AgentAdapter {
           const delta = event.delta ?? {};
           const liveKey = `msg-${runtime.messageSeq}`;
           if (delta.type === 'text_delta' && delta.text !== undefined) {
+            if (!runtime.liveStarted) {
+              runtime.liveStarted = true;
+              this.emit(sessionId, { type: 'item.start', itemKey: liveKey, kind: 'assistant.message', data: { text: '' } });
+            }
             this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.text });
           }
           if (delta.type === 'thinking_delta' && delta.thinking !== undefined) {
+            if (!runtime.liveStarted) {
+              runtime.liveStarted = true;
+              this.emit(sessionId, { type: 'item.start', itemKey: liveKey, kind: 'reasoning', data: { text: '' } });
+            }
             this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.thinking });
           }
         }
@@ -450,6 +462,22 @@ export class ClaudeAdapter implements AgentAdapter {
           const toolId = String(block['id'] ?? '');
           const name = String(block['name'] ?? '');
           const kind = toolKind(name);
+          if (name === 'TodoWrite') {
+            const todos = ((block['input'] as Record<string, unknown>)?.['todos'] as { content?: string; status?: string }[] | undefined) ?? [];
+            this.emit(sessionId, {
+              type: 'item.complete',
+              itemKey: `plan-${toolId}`,
+              kind: 'plan',
+              data: {
+                items: todos.map((todo) => ({
+                  text: String(todo.content ?? ''),
+                  status: todo.status === 'completed' ? 'completed' : todo.status === 'in_progress' ? 'in_progress' : 'pending',
+                })),
+              },
+            });
+            runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind: 'tool.call', data: { name, input: block['input'], status: 'running' } });
+            continue;
+          }
           const data: EventData[EventKind] =
             kind === 'command'
               ? { command: String((block['input'] as Record<string, unknown>)?.['command'] ?? ''), status: 'running' }

@@ -106,7 +106,9 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 | 验收框架（6.1–6.6） | 已可运行：globalSetup（临时目录 + git 工作区 + 三 mock + 动态端口服务）、fixtures（登录/mock 控制/全局断言/截图）、reporter（从 SPEC 解析 ID 并严格比对，产出 report.json/index.html/status.json） |
 | 7.1 用例 | S-01、S-02、S-03、AUTH-01、AUTH-02、AUTH-03 通过 |
 | 7.4 用例 | AG-{dsh,codex,claude}-01 通过；AG-dsh-04、AG-codex-02 通过 |
-| 未通过 | AG-dsh-02、AG-claude-02（流式增量在界面上只增长 1–2 次）；AG-codex-04、AG-claude-04（任务面板） |
+| 未通过 | AG-codex-04、AG-claude-04（任务面板）：DSH 通过；Codex 的 mock 请求里**没有任何 plan/todo/task 工具**（直接工具模式下 update_plan 不提供）；Claude 的 28 个工具里 TodoWrite 疑似被新的 Task* 工具取代，需要核实并映射 |
+| 已修 | 流式链路：adapter 懒发 item.start（Codex/Claude/DSH 都没有可靠的 block-start）、前端 update 帧可新建热条目；AG-{dsh,claude,codex}-02 全部通过 |
+| 新增 | 任务面板改成贴在输入框上方的独立组件（SPEC 9.5），不再依赖轮次展开 |
 | F1/F2/F3 | 已修（SDK external + 建会话回滚；数据校验 + 错误边界；模型默认值与 400） |
 | F5 | 已修（feed 里的 agent 来自 patch） |
 

@@ -9,6 +9,7 @@ import { SessionHeader } from './components/SessionHeader.js';
 import { Timeline } from './components/Timeline.js';
 import { Trajectory } from './components/Trajectory.js';
 import { Composer } from './components/Composer.js';
+import { TaskPanel } from './components/TaskPanel.js';
 import { Dock, type DockState } from './components/Dock.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { HandoffDialog } from './components/HandoffDialog.js';
@@ -214,6 +215,7 @@ function SessionPage(): React.ReactElement {
         {tab === 'chat' ? (
           <>
             <Timeline sessionId={mainId} onOpenDiff={openDiff} onHandoff={setHandoffText} />
+            <TaskPanel sessionId={mainId} />
             <Composer
               sessionId={mainId}
               workspaceId={session?.workspaceId ?? ''}

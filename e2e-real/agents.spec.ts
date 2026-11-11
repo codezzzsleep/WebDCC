@@ -19,10 +19,22 @@ test.describe('7.4 三个 Agent 的核心流程', () => {
       await app.planFor(agent, 'slow');
       await newSession(app.page, agent, '流式');
       const timeline = app.page.getByTestId('timeline');
-      void timeline;
-      console.log(`AG-${agent}-02：${Date.now() - start}ms 内文本增长 ${increases} 次`);
+      const start = Date.now();
+      let previous = 0;
+      let increases = 0;
+      let firstAt = 0;
+      while (Date.now() - start < 30_000 && increases < 3) {
+        const length = (await timeline.innerText()).length;
+        if (length > previous) {
+          increases += 1;
+          if (firstAt === 0) firstAt = Date.now() - start;
+          previous = length;
+        }
+        if (increases < 3) await app.page.waitForTimeout(100);
+      }
+      console.log(`AG-${agent}-02：首个字 ${firstAt}ms，增长 ${increases} 次，共 ${Date.now() - start}ms`);
+      expect(firstAt).toBeLessThanOrEqual(5_000);
       expect(increases).toBeGreaterThanOrEqual(3);
-      expect(Date.now() - start).toBeLessThan(60_000);
     });
 
     test(`AG-${agent}-04 任务面板`, async ({ app }) => {

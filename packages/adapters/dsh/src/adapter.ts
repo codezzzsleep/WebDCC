@@ -400,6 +400,8 @@ export class DshAdapter implements AgentAdapter {
 
     switch (type) {
       case 'turn/start': {
+        runtime.assistantKey = '';
+        runtime.reasoningKey = '';
         this.emit(sessionId, { type: 'status', status: 'running' });
         this.emit(sessionId, {
           type: 'item.complete',
@@ -539,11 +541,19 @@ export class DshAdapter implements AgentAdapter {
       }
       return;
     }
-    if (kind === 'text-delta' && runtime.assistantKey !== '') {
+    if (kind === 'text-delta') {
+      if (runtime.assistantKey === '') {
+        runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
+      }
       this.emit(sessionId, { type: 'item.delta', itemKey: runtime.assistantKey, field: 'text', append: String(chunk['text'] ?? '') });
       return;
     }
-    if (kind === 'reasoning-delta' && runtime.reasoningKey !== '') {
+    if (kind === 'reasoning-delta') {
+      if (runtime.reasoningKey === '') {
+        runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
+        this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
+      }
       this.emit(sessionId, { type: 'item.delta', itemKey: runtime.reasoningKey, field: 'text', append: String(chunk['text'] ?? '') });
       return;
     }
