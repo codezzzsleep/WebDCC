@@ -13,7 +13,8 @@ test.describe('M6：Provider / 交接 / 提醒 / 文件', () => {
     await page.getByText('OpenAI Responses（Codex 用）').click();
     await page.getByTestId('provider-create').click();
     await expect(page.getByTestId('provider-list')).toContainText('测试 Provider');
-    await expect(page.getByTestId('provider-list')).toContainText('已保存');
+    // 新 UI：Key 只显示后 4 位（不显示"已保存"）
+    await expect(page.getByTestId('provider-list')).toContainText('…-key');
 
     // 接口响应里不能出现 Key 原文
     const providers = await page.evaluate(async () => (await fetch('/api/providers', { credentials: 'same-origin' })).text());
