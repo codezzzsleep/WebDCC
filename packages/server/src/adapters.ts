@@ -4,7 +4,11 @@ import type { AgentAdapter } from '@webdcc/protocol';
  * 生产环境的 adapter 组装点。
  * M1 尚未接入真实 Agent，返回空列表；M3–M5 依次在这里加入 Codex / Claude / DSH adapter。
  */
-export async function adapters(): Promise<AgentAdapter[]> {
+export interface AdapterSettings {
+  dsh?: { mode: 'attach' | 'spawn'; url?: string; cookie?: string };
+}
+
+export async function adapters(settings: AdapterSettings = {}): Promise<AgentAdapter[]> {
   const list: AgentAdapter[] = [];
   if (process.env['WDCC_ENABLE_CODEX'] !== '0') {
     const { CodexAdapter } = await import('@webdcc/adapter-codex');
@@ -16,7 +20,15 @@ export async function adapters(): Promise<AgentAdapter[]> {
   }
   if (process.env['WDCC_ENABLE_DSH'] !== '0') {
     const { DshAdapter } = await import('@webdcc/adapter-dsh');
-    list.push(new DshAdapter());
+    const mode = settings.dsh?.mode ?? (process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn');
+    list.push(
+      new DshAdapter({
+        mode,
+        ...(settings.dsh?.url === undefined ? {} : { attachUrl: settings.dsh.url }),
+        ...(settings.dsh?.cookie === undefined ? {} : { attachCookie: settings.dsh.cookie }),
+        ...(process.env['WDCC_DSH_PORT'] === undefined ? {} : { port: Number(process.env['WDCC_DSH_PORT']) }),
+      }),
+    );
   }
   return list;
 }

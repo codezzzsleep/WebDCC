@@ -11,6 +11,7 @@ import { openDb, type Db } from '../src/db.js';
 import { FileStore } from '../src/files.js';
 import { SessionManager } from '../src/manager.js';
 import { ProviderRegistry } from '../src/providers.js';
+import { DshConnectionStore } from '../src/dsh-connection.js';
 import { Store } from '../src/store.js';
 
 export const TEST_TOKEN = 'test-token-0123456789abcdef0123456789abcdef';
@@ -49,7 +50,9 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
     version: 'test',
   };
 
-  const { app, hub } = await buildApp({ config, store, files, manager, providers });
+  const dsh = new DshConnectionStore(dataDir);
+  await dsh.init();
+  const { app, hub } = await buildApp({ config, store, files, manager, providers, dsh });
   manager.setHooks({
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),

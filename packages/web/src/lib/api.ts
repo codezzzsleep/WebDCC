@@ -61,6 +61,9 @@ export const api = {
     codexCatalogPath?: string;
   }) => request<ProviderDto>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),
   deleteProvider: (id: string) => fetch(`/api/providers/${id}`, { method: 'DELETE', credentials: 'same-origin' }),
+  dshStatus: () => request<{ mode: string; url: string | null; connected: boolean; version?: string }>('/api/dsh'),
+  dshConnect: (link: string) => request<{ ok: boolean; url: string }>('/api/dsh/connect', { method: 'POST', body: JSON.stringify({ link }) }),
+  dshDisconnect: () => request<{ ok: boolean }>('/api/dsh', { method: 'DELETE' }),
   command: (command: Command) =>
     request<{ ok: boolean; value?: unknown; error?: string; code?: string }>('/api/commands', {
       method: 'POST',
