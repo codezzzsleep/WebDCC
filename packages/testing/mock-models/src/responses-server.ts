@@ -16,7 +16,7 @@ import {
   writeSse,
   type MockLogger,
 } from './http-util.js';
-import { resolveTool, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { resolveStep, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
 import { defaultToolInput } from './anthropic-server.js';
 import { HELPER_REPLY, MockControl, countResponses } from './mock-control.js';
 
@@ -194,22 +194,21 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       replyHelper(res, body, modelId);
       return;
     }
-    const step: PlanStep = stepAt(control.currentPlan as Plan, stepIndex);
+    const resolvedStep = resolveStep(control.currentPlan as Plan, stepIndex, tools);
+    const step: PlanStep = resolvedStep.step;
     const requestModel = typeof body['model'] === 'string' ? body['model'] : modelId;
-    const resolvedTool = resolveTool(step.tool, tools);
-    if (step.tool !== undefined && resolvedTool === undefined) {
+    if (step.tool !== undefined && resolvedStep.toolName === undefined) {
       const last = control.requests.at(-1);
       if (last !== undefined) last.failed = true;
       log('工具不匹配：计划需要', step.tool.kind);
       sendJson(res, 500, { error: { type: 'mock_tool_mismatch', message: `plan wants tool kind ${step.tool.kind} but request has none` } });
       return;
     }
-    const toolName = resolvedTool?.name;
-    const toolInput = { ...defaultToolInput(resolvedTool?.kind ?? 'other'), ...(resolvedTool?.input ?? {}) };
-    if (!toolName && step.tool) log('plan wants a tool but request has no matching tool', step.tool.kind);
+    const toolName = resolvedStep.toolName;
+    const toolInput = { ...defaultToolInput(resolvedStep.kind ?? step.tool?.kind ?? 'other'), ...(resolvedStep.toolInput ?? {}) };
 
     const responseId = newId('resp');
-    const callId = resolvedTool?.callId ?? newId('call');
+    const callId = newId('call');
     const stepDelay = step.chunkDelayMs ?? 0;
 
     recorder?.record({

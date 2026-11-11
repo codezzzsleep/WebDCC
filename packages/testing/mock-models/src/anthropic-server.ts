@@ -16,7 +16,7 @@ import {
   writeSse,
   type MockLogger,
 } from './http-util.js';
-import { resolveTool, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { resolveStep, stepAt, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
 import { HELPER_REPLY, MockControl, countAnthropic } from './mock-control.js';
 
 export interface AnthropicMockOptions {
@@ -255,9 +255,9 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
       await replyHelper(res, body, messageSeq);
       return;
     }
-    const step: PlanStep = stepAt(control.currentPlan as Plan, toolResultCount);
-    const resolved = resolveTool(step.tool, tools);
-    const toolName = resolved?.name;
+    const resolvedStep = resolveStep(control.currentPlan as Plan, toolResultCount, tools);
+    const step: PlanStep = resolvedStep.step;
+    const toolName = resolvedStep.toolName;
     if (step.tool !== undefined && toolName === undefined) {
       const last = control.requests.at(-1);
       if (last !== undefined) last.failed = true;
@@ -273,8 +273,8 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
     messageSeq += 1;
     const messageId = `msg_mock_${String(messageSeq).padStart(4, '0')}`;
     const stopReason = step.stopReason ?? (toolName ? 'tool_use' : 'end_turn');
-    const toolUseId = resolved?.callId ?? nextToolUseId('toolu_mock');
-    const toolInput = { ...defaultToolInput(resolved?.kind ?? 'other'), ...(resolved?.input ?? {}) };
+    const toolUseId = nextToolUseId('toolu_mock');
+    const toolInput = { ...defaultToolInput(resolvedStep.kind ?? step.tool?.kind ?? 'other'), ...(resolvedStep.toolInput ?? {}) };
 
     if (!toolName && step.tool) {
       log('plan wants a tool but request has no matching tool', step.tool.kind);

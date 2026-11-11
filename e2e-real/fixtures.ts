@@ -92,7 +92,21 @@ export const test = base.extend<AppFixtures>({
       await api.plan(name);
     };
 
+    // 预期之外的审批一律点"允许一次"（SPEC 第 7 节开头的约定；05/06 两个审批用例除外）
+    const autoApprove = !/-(0[56])(\s|$)/.test(testInfo.title);
+    const timer = autoApprove
+      ? setInterval(() => {
+          void page
+            .getByTestId('approval-card')
+            .getByRole('button', { name: '允许一次' })
+            .first()
+            .click({ timeout: 500 })
+            .catch(() => undefined);
+        }, 400)
+      : null;
+
     await use({ page, run, mockResponses, mockClaude, mockDsh, planFor, login, shot, url: (path: string) => `${run.baseURL}${path}` });
+    if (timer !== null) clearInterval(timer);
 
     // 全局断言（用例不能关闭）
     const shotPath = await shot(`${testInfo.title.split(' ')[0]}-end`);

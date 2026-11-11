@@ -136,7 +136,8 @@
           ]
         }
       }
-    }
+    },
+    "optional": true
   },
   {
     "chunkDelayMs": 80,

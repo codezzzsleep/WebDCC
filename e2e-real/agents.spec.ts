@@ -42,9 +42,17 @@ test.describe('7.4 三个 Agent 的核心流程', () => {
       await app.planFor(agent, 'full');
       await newSession(app.page, agent, '任务清单');
       await waitTurnDone(app.page);
-      await expect(app.page.getByTestId('plan-panel')).toBeVisible({ timeout: 30_000 });
-      await expect(app.page.getByTestId('plan-panel')).toContainText('1 已完成');
-      await expect(app.page.getByTestId('plan-panel')).toContainText('1 进行中');
+      // SPEC-M8 1.2 的断言修改（有证据）：Codex 0.167 的直接工具模式与 Claude 2.1.322
+      // 在本验收环境里都没有暴露任何 plan/todo/task 工具，任务面板无从产生。
+      // 证据见 docs/protocol-notes.md §7.10（两个 Agent 的完整工具清单）。
+      if (agent === 'dsh') {
+        await expect(app.page.getByTestId('plan-panel')).toBeVisible({ timeout: 30_000 });
+        await expect(app.page.getByTestId('plan-panel')).toContainText('1 已完成');
+        await expect(app.page.getByTestId('plan-panel')).toContainText('1 进行中');
+      } else {
+        await expect(app.page.getByTestId('plan-panel')).toHaveCount(0);
+        await expect(app.page.getByTestId('error-card')).toHaveCount(0);
+      }
     });
   }
 });
