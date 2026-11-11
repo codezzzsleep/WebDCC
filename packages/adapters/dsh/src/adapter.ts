@@ -370,7 +370,6 @@ export class DshAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     if (seq > 0 && seq <= runtime.lastSeq) return; // nativeSeq 去重
     if (seq > 0) runtime.lastSeq = seq;
-    if (process.env['WDCC_DEBUG_DSH'] === '1' && type !== 'step/start' && type !== 'step/end') console.error('[dsh]', seq, type);
     this.onDshEvent(sessionId, runtime, type, data, seq, event);
   }
 
