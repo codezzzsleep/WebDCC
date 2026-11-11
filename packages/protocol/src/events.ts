@@ -74,7 +74,7 @@ export interface EventData {
   'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' };
   plan: { items: PlanItem[] };
   'approval.request': { approvalId: string; title: string; detail: string; options: ApprovalOption[] };
-  'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' };
+  'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' | 'other' };
   question: QuestionItem;
   'turn.started': Record<string, never>;
   'turn.completed': { status: 'completed' | 'interrupted' | 'failed'; durationMs: number; usage?: UsageData };

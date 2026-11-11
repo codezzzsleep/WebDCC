@@ -408,7 +408,29 @@ function StepRow({ event, highlight, onOpenDiff }: { event: StoredEvent; highlig
 }
 
 function ApprovalCard({ event, data, className }: { event: StoredEvent; data: EventData['approval.request']; className: string }): React.ReactElement {
+  useStoreVersion();
   const [resolved, setResolved] = useState(false);
+  // 处理过的审批要显示结果、不再显示按钮（F11 / F17）；结果也来自其他界面
+  const resolution = [...store.getEvents(event.sessionId)]
+    .reverse()
+    .find((item) => item.kind === 'approval.resolved' && (item.data as EventData['approval.resolved']).approvalId === data.approvalId);
+  const resolvedText = (() => {
+    if (resolution === undefined) return null;
+    const dataResolved = resolution.data as EventData['approval.resolved'];
+    if (dataResolved.by === 'other') return '已在其他界面处理';
+    if (dataResolved.optionId === 'allow' || dataResolved.optionId === 'accept' || dataResolved.optionId === 'allowed-once' || dataResolved.optionId === 'approved') return '已允许一次';
+    if (dataResolved.optionId === 'reject' || dataResolved.optionId === 'rejected' || dataResolved.optionId === 'deny') return '已拒绝';
+    if (dataResolved.optionId === 'cancelled' || dataResolved.optionId === 'cancel') return '已取消';
+    return '已处理';
+  })();
+  if (resolvedText !== null) {
+    return (
+      <div className={`${className} approval-card resolved`} data-testid="approval-card" data-resolved="true">
+        <div className="approval-title">{data.title}</div>
+        <div className="muted">{resolvedText}</div>
+      </div>
+    );
+  }
   return (
     <div className={`${className} approval-card`} data-testid="approval-card" id={`e-${event.seq}`}>
       <div className="approval-title">{data.title}</div>

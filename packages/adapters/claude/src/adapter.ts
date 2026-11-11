@@ -331,6 +331,9 @@ export class ClaudeAdapter implements AgentAdapter {
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
       const questionId = `${options.toolUseID ?? `q-${Date.now()}`}`;
+      const questionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
+        runtime.pending.set(questionId, { kind: 'question', toolName, input, resolve });
+      });
       this.emit(sessionId, {
         type: 'item.complete',
         itemKey: `question-${questionId}`,
@@ -350,15 +353,16 @@ export class ClaudeAdapter implements AgentAdapter {
         },
       });
       this.emit(sessionId, { type: 'status', status: 'waiting' });
-      const decision = await new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
-        runtime.pending.set(questionId, { kind: 'question', toolName, input, resolve });
-      });
+      const decision = await questionPromise;
       this.emit(sessionId, { type: 'status', status: 'running' });
       const answers = decision.answers ?? {};
       return { behavior: 'allow', updatedInput: { ...input, answers } } as PermissionResult;
     }
 
     const approvalId = `${sessionId}:${options.toolUseID ?? Date.now().toString(36)}`;
+    const decisionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
+      runtime.pending.set(approvalId, { kind: 'approval', toolName, input, resolve });
+    });
     this.emit(sessionId, {
       type: 'item.complete',
       itemKey: `approval-${approvalId}`,
@@ -374,9 +378,7 @@ export class ClaudeAdapter implements AgentAdapter {
       },
     });
     this.emit(sessionId, { type: 'status', status: 'waiting' });
-    const decision = await new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
-      runtime.pending.set(approvalId, { kind: 'approval', toolName, input, resolve });
-    });
+    const decision = await decisionPromise;
     this.emit(sessionId, { type: 'status', status: 'running' });
     if (decision.approved) return { behavior: 'allow', updatedInput: input } as PermissionResult;
     return { behavior: 'deny', message: '用户拒绝', interrupt: true } as PermissionResult;
