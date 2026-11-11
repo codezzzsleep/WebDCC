@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { newSession, waitTurnDone } from './helpers.js';
+import { waitTurnDone } from './helpers.js';
 
 test.describe('7.3 新会话', () => {
   test('NEW-02 默认 Provider 与模型传给 Agent', async ({ app }) => {
