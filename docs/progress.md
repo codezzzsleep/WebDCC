@@ -130,3 +130,10 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 | PR3–PR7 | 待做 | 按 SPEC 8 的顺序 |
 
 实时统计：`docs/acceptance/M8/report.json`（每次 `pnpm accept:m8 --ratchet` 覆盖）。
+
+
+## M8 人工审阅请求（2026-11-11）
+
+- 已把当前卡住的问题、妥协与 10 项待决断整理到 `docs/m8-review-request.md`
+- 结论先行：验收框架可用、27/125 用例实现并通过；主要卡点是 Provider 类用例共享实例互相污染、Codex 模型 slug 与 SPEC 6.2 冲突、Codex/Claude 无任务清单工具、mock optional 步骤放宽了严格性
+- 等用户对 Q1–Q10 拍板后再继续 PR2 收尾与后续 PR
