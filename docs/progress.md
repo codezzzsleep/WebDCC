@@ -119,3 +119,14 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 - **Codex 0.167 的内置模型全部走 code mode**：`model/list` 返回的 12 个 slug，请求里 `tools` 为空，工具放在 `input[]` 的 `additional_tools` 命名空间里（`functions.exec` 自定义工具）。只有**不在 model/list 里的 slug**（如 `gpt-5`）会退回直接工具。SPEC 6.2 要求 SLUG 取自 model/list，与实测冲突 → 验收 fixture 改用 `gpt-5`/`gpt-5-mini`，证据待补进 protocol-notes。
 - DSH 侧车端口必须取 `WDCC_DSH_PORT`（已修），否则并行运行会撞 3091。
 - 流式增量：adapter 需要在 block-start 时发 `item.start`，前端 `update` 帧要能**新建**热条目，否则增量无处可落（已修的 DSH/Claude adapter + store）。
+
+
+## M8 PR 进度
+
+| PR | 状态 | 内容 |
+|---|---|---|
+| PR1 | ✅ 已合并（#10） | 验收框架 + mock 扩展 + 测试钩子 + F1/F2/F3/F5；`M8 ACCEPTANCE: 15/125 passed`，棘轮通过 |
+| PR2 | 下一轮 | D1（attach 模式、spawn 冲突检查、设置页 DSH 连接）+ F16（本机 Provider 自动导入） |
+| PR3–PR7 | 待做 | 按 SPEC 8 的顺序 |
+
+实时统计：`docs/acceptance/M8/report.json`（每次 `pnpm accept:m8 --ratchet` 覆盖）。
