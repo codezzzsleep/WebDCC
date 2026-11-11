@@ -126,7 +126,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
   const currentModel = mode.kind === 'session' ? (session?.model ?? '') : mode.choice.model;
   const currentProvider = providerOf(currentProviderId);
-  const providerLabel = currentProvider?.name ?? agentText(agent).nativeLabel.replace('原生：', '');
+  const providerLabel = currentProvider?.name ?? agentText(agent).nativeLabel;
 
   const groups = useMemo(() => {
     const all = modelGroups(agent, agentMeta, providers);
@@ -739,7 +739,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             需要模型目录，否则工具可能不可用
           </span>
         ) : null}
-        {stats !== null ? <span>{stats}</span> : <span>由 {agentText(agent).name} 原装运行 · 发送后生成会话地址</span>}
+        {stats !== null ? <span>{stats}</span> : <span>由 {agentText(agent).name} 运行 · 发送后生成会话地址</span>}
       </div>
     </div>
   );

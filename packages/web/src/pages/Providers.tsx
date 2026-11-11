@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
-import { AGENT_IDS, agentText, isCompatible, sourceLabel, type AgentKey } from '../lib/agents.js';
+import { AGENT_IDS, agentText, isCompatible, type AgentKey } from '../lib/agents.js';
 import { refreshDsh, refreshProviders, useAppData } from '../lib/appData.js';
 import { store } from '../lib/store.js';
 import { AgentMark } from '../components/AgentMark.js';
@@ -25,8 +25,6 @@ export function ProvidersPage(): React.ReactElement {
   const [form, setForm] = useState({ name: '', baseUrl: '', apiKey: '', models: '', protocols: [] as string[], codexCatalogPath: '' });
   const [error, setError] = useState<string | null>(null);
   const [scanInfo, setScanInfo] = useState<string | null>(null);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [keyDraft, setKeyDraft] = useState('');
   const [showForm, setShowForm] = useState(false);
 
   const reload = (): void => {
@@ -71,13 +69,6 @@ export function ProvidersPage(): React.ReactElement {
     }
   };
 
-  const usedBy = (providerId: string): string => {
-    const provider = providers.find((item) => item.id === providerId);
-    if (provider === undefined) return '';
-    const names = AGENT_IDS.filter((id) => isCompatible(id, provider)).map((id) => agentText(id).name);
-    return names.length === 0 ? '—' : names.join(' · ');
-  };
-
   return (
     <main className="main" data-testid="providers-page">
       <div className="mobile-only session-header" style={{ borderBottom: 0 }}>
@@ -91,7 +82,7 @@ export function ProvidersPage(): React.ReactElement {
         <div className="settings-inner">
           <div>
             <h1>Agent 与 Provider</h1>
-            <p className="lead">本机配置会自动导入。Claude/Codex Provider 可在这里维护 Key；DSH Provider 直接写入 DSH 当前配置并立即生效。</p>
+            <p className="lead">Provider 是模型的容器：一个 Harness 可以有多个 Provider，一个 Provider 可以有多个模型；新建对话时从对应 Harness 的 Provider 和模型中选择。</p>
           </div>
 
           <div className="agent-status-grid">
@@ -117,12 +108,7 @@ export function ProvidersPage(): React.ReactElement {
                       <span>运行方式</span>
                       <span>{dsh === null ? '—' : dsh.mode === 'attach' ? `连接本机 DSH${dsh.url === null ? '' : ` · ${dsh.url}`}` : 'WebDCC 自己拉起'}</span>
                     </div>
-                  ) : (
-                    <div className="kv">
-                      <span>原生登录</span>
-                      <span>{info?.auth === 'ok' ? '已登录' : info?.auth === 'missing' ? '未登录' : '由本机配置决定'}</span>
-                    </div>
-                  )}
+                  ) : <div className="kv"><span>Provider</span><span>由下方 Harness Provider 管理</span></div>}
                   {meta?.runningAsRoot === true && id === 'claude-code' ? (
                     <div className="kv">
                       <span>注意</span>
@@ -203,7 +189,15 @@ export function ProvidersPage(): React.ReactElement {
           <section className="panel" aria-label="Harness Provider">
             <div className="panel-head">
               <h2>Harness Provider</h2>
-              <span className="muted" style={{ fontSize: 12 }}>三个 Agent 使用同一套 Provider 表单</span>
+              <div className="row-actions">
+                {scanInfo !== null ? <span className="muted" style={{ fontSize: 12 }}>{scanInfo}</span> : null}
+                <button type="button" className="btn small" data-testid="provider-scan" onClick={() => void api.providerScan().then((result) => { setScanInfo(`已扫描本机配置，新增 ${result.imported} 个 Provider`); reload(); }).catch((cause: unknown) => setError(String(cause)))}>
+                  <Icon name="refresh" size={14} /> 扫描本机 Provider
+                </button>
+                <button type="button" className="btn small ghost" data-testid="provider-restore" onClick={() => void api.providerRestore().then((result) => { setScanInfo(`已恢复 ${result.imported} 个 Provider`); reload(); }).catch((cause: unknown) => setError(String(cause)))}>
+                  恢复已忽略
+                </button>
+              </div>
             </div>
             <div className="harness-provider-grid">
               {AGENT_IDS.map((agent) => {
@@ -218,169 +212,18 @@ export function ProvidersPage(): React.ReactElement {
                       providerKey={dshProvider.providerKey}
                       providerName={String(dshProvider.provider['displayName'] ?? dshProvider.providerKey)}
                       baseUrl={String(dshProvider.provider['baseURL'] ?? '')}
-                      model={dshProvider.defaultModel.model}
+                      models={[dshProvider.defaultModel.model]}
                       reasoning={dshProvider.defaultModel.reasoningEffort ?? String(dshProvider.provider['reasoning'] ?? 'low')}
                       hasKey={typeof dshProvider.provider['apiKeyEnv'] === 'string'}
                       onSaved={reload}
                     />
                   );
                 }
-                const provider = providers.find((item) => isCompatible(agent, item));
-                return (
-                  <ProviderEditor
-                    key={agent}
-                    agent={agent}
-                    editable={provider !== undefined}
-                    connected={true}
-                    providerId={provider?.id}
-                    providerName={provider?.name}
-                    providerKey={provider?.source ?? ''}
-                    baseUrl={provider?.endpoints?.[agent === 'codex' ? 'openai-responses' : 'anthropic-messages'] ?? provider?.baseUrl}
-                    model={provider?.models[0]}
-                    protocols={provider?.protocols}
-                    hasKey={provider?.hasKey}
-                    onSaved={reload}
-                  />
-                );
+                const compatible = providers.filter((item) => isCompatible(agent, item));
+                return compatible.length === 0 ? <ProviderEditor key={agent} agent={agent} editable={false} connected={true} onSaved={reload} /> : compatible.map((provider) => (
+                  <ProviderEditor key={`${agent}:${provider.id}`} agent={agent} editable providerId={provider.id} connected providerName={provider.name} providerKey={provider.source ?? ''} baseUrl={provider.endpoints?.[agent === 'codex' ? 'openai-responses' : 'anthropic-messages'] ?? provider.baseUrl} models={provider.models} protocols={provider.protocols} hasKey={provider.hasKey} onSaved={reload} />
+                ));
               })}
-            </div>
-          </section>
-
-          <section className="panel" aria-label="Provider">
-            <div className="panel-head">
-              <h2>Provider</h2>
-              <div className="row-actions">
-                {scanInfo !== null ? (
-                  <span className="muted" style={{ fontSize: 12 }} data-testid="scan-info">
-                    {scanInfo}
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  className="btn small"
-                  data-testid="provider-scan"
-                  onClick={() => {
-                    void api
-                      .providerScan()
-                      .then((result) => {
-                        setScanInfo(`从本机导入了 ${result.imported} 个 Provider`);
-                        reload();
-                      })
-                      .catch((cause: unknown) => setError(String(cause)));
-                  }}
-                >
-                  <Icon name="refresh" size={14} />
-                  重新扫描本机配置
-                </button>
-                <button
-                  type="button"
-                  className="btn small ghost"
-                  data-testid="provider-restore"
-                  onClick={() => {
-                    void api
-                      .providerRestore()
-                      .then((result) => {
-                        setScanInfo(`恢复了 ${result.imported} 个 Provider`);
-                        reload();
-                      })
-                      .catch((cause: unknown) => setError(String(cause)));
-                  }}
-                >
-                  恢复已忽略的导入
-                </button>
-              </div>
-            </div>
-            <div className="table-scroll">
-              <table className="provider-table" data-testid="provider-list">
-                <thead>
-                  <tr>
-                    <th>名称</th>
-                    <th>来源</th>
-                    <th>可用于</th>
-                    <th>Key</th>
-                    <th>
-                      <span className="visually-hidden">操作</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {providers.map((provider) => (
-                    <tr key={provider.id}>
-                      <td>
-                        <span className="name">{provider.name}</span>
-                        <span className="sub mono">{provider.endpoints?.['openai-responses'] ?? provider.endpoints?.['anthropic-messages'] ?? provider.baseUrl}</span>
-                        <span className="sub">{provider.models.join(', ') || '没有模型列表'}</span>
-                      </td>
-                      <td>{sourceLabel(provider.source)}</td>
-                      <td>{usedBy(provider.id)}</td>
-                      <td>
-                        {editingKey === provider.id ? (
-                          <span className="row-actions">
-                            <input
-                              className="text-input"
-                              style={{ width: 170, height: 30 }}
-                              type="password"
-                              aria-label={`${provider.name} 的新 Key`}
-                              value={keyDraft}
-                              onChange={(event) => setKeyDraft(event.target.value)}
-                              data-testid="provider-key-edit"
-                            />
-                            <button
-                              type="button"
-                              className="btn small primary"
-                              data-testid="provider-key-save"
-                              onClick={() => {
-                                void api.updateProvider(provider.id, { apiKey: keyDraft }).then(() => {
-                                  setEditingKey(null);
-                                  setKeyDraft('');
-                                  reload();
-                                });
-                              }}
-                            >
-                              保存
-                            </button>
-                          </span>
-                        ) : provider.hasKey ? (
-                          <span className="key">…{provider.keyHint ?? ''}</span>
-                        ) : (
-                          <span style={{ color: 'var(--warning)', fontSize: 12 }}>{provider.note ?? '没有 Key'}</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="actions">
-                          <button
-                            type="button"
-                            className="btn small ghost"
-                            data-testid={`provider-key-edit-${provider.name}`}
-                            onClick={() => {
-                              setEditingKey(provider.id);
-                              setKeyDraft('');
-                            }}
-                          >
-                            <Icon name="key" size={14} />
-                            Key
-                          </button>
-                          <button
-                            type="button"
-                            className="btn small ghost"
-                            aria-label={`删除 ${provider.name}`}
-                            onClick={() => void api.deleteProvider(provider.id).then(reload)}
-                          >
-                            删除
-                          </button>
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {providers.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="muted">
-                        本机配置里没有找到 Provider。各 Agent 会使用自己的原生登录。
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
             </div>
           </section>
 
@@ -463,7 +306,7 @@ interface ProviderEditorProps {
   providerKey?: string;
   providerName?: string;
   baseUrl?: string;
-  model?: string;
+  models?: string[];
   reasoning?: string;
   protocols?: string[];
   hasKey?: boolean;
@@ -478,34 +321,34 @@ function ProviderEditor({
   providerKey,
   providerName,
   baseUrl,
-  model,
+  models = [],
   reasoning = 'low',
   protocols = [],
   hasKey = false,
   onSaved,
 }: ProviderEditorProps): React.ReactElement {
-  const [draft, setDraft] = useState({ providerKey: providerKey ?? '', providerName: providerName ?? '', baseUrl: baseUrl ?? '', model: model ?? '', reasoning, apiKey: '' });
+  const [draft, setDraft] = useState({ providerKey: providerKey ?? '', providerName: providerName ?? '', baseUrl: baseUrl ?? '', models: models.join(', '), reasoning, apiKey: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const name = agentText(agent).name;
   const isDsh = agent === 'dsh';
 
   useEffect(() => {
-    setDraft({ providerKey: providerKey ?? '', providerName: providerName ?? '', baseUrl: baseUrl ?? '', model: model ?? '', reasoning, apiKey: '' });
-  }, [providerKey, providerName, baseUrl, model, reasoning]);
+    setDraft({ providerKey: providerKey ?? '', providerName: providerName ?? '', baseUrl: baseUrl ?? '', models: models.join(', '), reasoning, apiKey: '' });
+  }, [providerKey, providerName, baseUrl, models, reasoning]);
 
   const save = (): void => {
-    if (!editable || draft.baseUrl.trim() === '' || draft.model.trim() === '') return;
+    if (!editable || draft.baseUrl.trim() === '' || draft.models.trim() === '') return;
     setSaving(true);
     setError(null);
     const request = isDsh
-      ? api.updateDshProvider({ providerKey: draft.providerKey.trim(), baseURL: draft.baseUrl.trim(), model: draft.model.trim(), reasoning: draft.reasoning, ...(draft.apiKey === '' ? {} : { apiKey: draft.apiKey }) })
+      ? api.updateDshProvider({ providerKey: draft.providerKey.trim(), baseURL: draft.baseUrl.trim(), model: draft.models.split(',')[0]?.trim() ?? '', reasoning: draft.reasoning, ...(draft.apiKey === '' ? {} : { apiKey: draft.apiKey }) })
       : providerId === undefined
         ? Promise.reject(new Error('Provider 不存在'))
         : api.updateProvider(providerId, {
             ...(draft.providerName.trim() === '' ? {} : { name: draft.providerName.trim() }),
             baseUrl: draft.baseUrl.trim(),
-            models: [draft.model.trim()],
+            models: draft.models.split(',').map((item) => item.trim()).filter(Boolean),
             endpoints: protocols.reduce<Record<string, string>>((out, protocol) => { out[protocol] = draft.baseUrl.trim(); return out; }, {}),
             ...(draft.apiKey === '' ? {} : { apiKey: draft.apiKey }),
           });
@@ -521,7 +364,7 @@ function ProviderEditor({
         <AgentMark agent={agent} size="md" />
         <div>
           <h3>{name}</h3>
-          <span className="muted">{connected ? providerName ?? (isDsh ? 'DSH 未返回 Provider' : '原生登录') : '未连接'}</span>
+          <span className="muted">{connected ? providerName ?? (isDsh ? 'DSH 未返回 Provider' : '等待 Provider') : '未连接'}</span>
         </div>
         <span className={`badge ${editable ? '' : 'off'}`}>{editable ? '可编辑' : '只读'}</span>
       </div>
@@ -529,13 +372,13 @@ function ProviderEditor({
         <label className="field"><span>Provider</span><input className="text-input" value={draft.providerKey} disabled={!editable || !isDsh} onChange={(event) => setDraft({ ...draft, providerKey: event.target.value })} /></label>
         <label className="field"><span>名称</span><input className="text-input" value={draft.providerName} disabled={!editable || isDsh} onChange={(event) => setDraft({ ...draft, providerName: event.target.value })} /></label>
         <label className="field"><span>Base URL</span><input className="text-input" value={draft.baseUrl} disabled={!editable} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} /></label>
-        <label className="field"><span>模型</span><input className="text-input" value={draft.model} disabled={!editable} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label>
-        <label className="field"><span>思考强度</span><select className="text-input" value={draft.reasoning} disabled={!editable || !isDsh} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })}>{['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+        <label className="field"><span>模型（多个用逗号分隔）</span><input className="text-input" value={draft.models} disabled={!editable} onChange={(event) => setDraft({ ...draft, models: event.target.value })} /></label>
+        <label className="field"><span>思考强度</span>{isDsh ? <select className="text-input" value={draft.reasoning} disabled={!editable} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })}>{['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => <option key={value} value={value}>{value}</option>)}</select> : <input className="text-input" value="由 Harness 控制" disabled />}</label>
         <label className="field"><span>API Key（留空不修改）</span><input className="text-input" type="password" value={draft.apiKey} disabled={!editable} placeholder={hasKey ? '已配置' : '未配置'} onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} /></label>
       </div>
       <div className="row-actions">
-        <button type="button" className="btn primary" disabled={!editable || saving || draft.baseUrl.trim() === '' || draft.model.trim() === ''} onClick={save}>{saving ? '保存中…' : '保存 Provider'}</button>
-        <span className="muted" style={{ fontSize: 12 }}>{isDsh ? '写入 DSH 当前 Provider 配置' : '更新本机导入的 Provider 运行配置'}</span>
+        <button type="button" className="btn primary" disabled={!editable || saving || draft.baseUrl.trim() === '' || draft.models.trim() === ''} onClick={save}>{saving ? '保存中…' : '保存 Provider'}</button>
+        <span className="muted" style={{ fontSize: 12 }}>{isDsh ? '写入 DSH 当前 Provider 配置；模型的思考强度跟随 Provider' : '一个 Provider 可维护多个模型，模型选择在新建对话中完成'}</span>
       </div>
       {error !== null ? <div className="error-card" role="alert">{error}</div> : null}
     </article>

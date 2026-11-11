@@ -9,19 +9,19 @@ export const AGENT_TEXT: Record<AgentKey, { name: string; mark: string; strength
     name: 'DeepSeek Harness',
     mark: 'DS',
     strength: '用 DSH 里你已经配好的模型、技能和子 Agent。',
-    nativeLabel: 'DSH 自己的设置',
+    nativeLabel: 'DSH Provider',
   },
   codex: {
     name: 'Codex',
     mark: 'CX',
-    strength: 'GPT 模型走 ChatGPT 登录；也能用导入的 DeepSeek 等 Provider。',
-    nativeLabel: '原生：ChatGPT 登录',
+    strength: '从 Provider 中选择模型；每个 Provider 可维护多个模型。',
+    nativeLabel: 'Codex Provider',
   },
   'claude-code': {
     name: 'Claude Code',
     mark: 'CC',
-    strength: '用本机 Claude Code 的设置、MCP 和斜杠命令。',
-    nativeLabel: '原生：Claude 登录',
+    strength: '从 Provider 中选择模型；每个 Provider 可维护多个模型。',
+    nativeLabel: 'Claude Provider',
   },
 };
 
@@ -41,7 +41,7 @@ export function sourceLabel(source: string | undefined): string {
   return SOURCE_LABEL[source ?? 'manual'] ?? source ?? '手动添加';
 }
 
-/** 该 Agent 需要的协议（10.2）。DSH 只用它自己的设置 */
+/** 该 Agent 需要的协议（10.2）。三个 Agent 都通过 Provider + model 工作。 */
 export function isCompatible(agent: string, provider: ProviderDto): boolean {
   if (agent === 'codex') return provider.protocols.includes('openai-responses');
   if (agent === 'claude-code') return provider.protocols.includes('anthropic-messages');
@@ -49,7 +49,7 @@ export function isCompatible(agent: string, provider: ProviderDto): boolean {
 }
 
 export function incompatibleReason(agent: string): string {
-  if (agent === 'dsh') return 'DSH 使用自己设置里的 Provider';
+  if (agent === 'dsh') return 'DSH 当前没有可用 Provider';
   if (agent === 'codex') return '没有 OpenAI Responses 地址，Codex 用不了';
   return '没有 Anthropic 兼容地址，Claude Code 用不了';
 }
@@ -70,20 +70,13 @@ export interface ModelChoice {
 }
 
 export function modelGroups(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelGroup[] {
-  const nativeMissing = meta?.auth === 'missing';
-  const groups: ModelGroup[] = [
-    {
-      key: 'native',
-      providerId: null,
-      title: agentText(agent).nativeLabel,
-      models: (meta?.models ?? []).map((model) => model.id),
-      disabled: nativeMissing,
-      ...(nativeMissing ? { reason: '未登录' } : {}),
-      ...(agent === 'dsh' ? { note: '模型和 Key 都由 DSH 管理' } : {}),
-    },
-  ];
+  const groups: ModelGroup[] = [];
+  if (agent === 'dsh') {
+    groups.push({ key: 'dsh-provider', providerId: null, title: 'DSH Provider', models: (meta?.models ?? []).map((model) => model.id), disabled: false, note: '模型由 DSH Provider 提供' });
+  }
   for (const provider of providers) {
     const compatible = isCompatible(agent, provider);
+    if (!compatible) continue;
     const notes: string[] = [sourceLabel(provider.source)];
     if (provider.note !== undefined) notes.push(provider.note);
     if (agent === 'codex' && compatible && provider.codexCatalogPath === undefined && !provider.models.some((model) => model.startsWith('gpt-'))) {
@@ -95,22 +88,20 @@ export function modelGroups(agent: string, meta: AgentMeta | undefined, provider
       title: provider.name,
       note: notes.join(' · '),
       models: provider.models,
-      disabled: !compatible,
-      ...(compatible ? {} : { reason: incompatibleReason(agent) }),
+      disabled: false,
     });
   }
   return groups;
 }
 
-/** 默认选择：与该 Agent 同源、带模型的导入 Provider；否则原生 */
+/** 默认选择第一个可用 Provider；Provider 是 Agent 选择模型的唯一来源。 */
 export function defaultChoice(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelChoice {
   const sameSource = agent === 'codex' ? 'codex-config' : agent === 'claude-code' ? 'claude-settings' : '';
   const compatible = providers.filter((provider) => isCompatible(agent, provider));
   const preferred =
-    compatible.find((provider) => provider.source === sameSource && provider.models.length > 0) ??
-    (meta?.auth === 'missing' ? compatible.find((provider) => provider.models.length > 0) : undefined);
+    compatible.find((provider) => provider.source === sameSource && provider.models.length > 0) ?? compatible.find((provider) => provider.models.length > 0);
   if (preferred !== undefined) return { providerId: preferred.id, model: preferred.models[0] ?? '' };
-  return { providerId: null, model: meta?.models?.[0]?.id ?? '' };
+  return { providerId: null, model: agent === 'dsh' ? (meta?.models?.[0]?.id ?? '') : '' };
 }
 
 export function agentStatusLine(agent: string, meta: MetaResponse | null, providers: ProviderDto[], dsh?: { connected: boolean; mode: string; url: string | null } | null): string {
@@ -123,7 +114,7 @@ export function agentStatusLine(agent: string, meta: MetaResponse | null, provid
   }
   const choice = defaultChoice(agent, info, providers);
   const provider = providers.find((item) => item.id === choice.providerId);
-  const who = provider === undefined ? agentText(agent).nativeLabel.replace('原生：', '') : provider.name;
+  const who = provider === undefined ? agentText(agent).nativeLabel : provider.name;
   return choice.model === '' ? who : `${who} · ${choice.model}`;
 }
 

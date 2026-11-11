@@ -136,7 +136,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
               </span>{' '}
               里开始
             </h1>
-            <p>先选由谁来做。三个 Agent 都是原装的：各用各的提示词、工具和权限。</p>
+            <p>先选 Harness，再从它的 Provider 和模型中选择；每个 Harness 保留自己的工具、提示词和权限。</p>
           </div>
 
           <div className="agent-cards" role="radiogroup" aria-label="选择 Agent">
