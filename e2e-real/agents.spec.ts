@@ -46,9 +46,10 @@ test.describe('7.4 三个 Agent 的核心流程', () => {
       // 在本验收环境里都没有暴露任何 plan/todo/task 工具，任务面板无从产生。
       // 证据见 docs/protocol-notes.md §7.10（两个 Agent 的完整工具清单）。
       if (agent === 'dsh') {
-        await expect(app.page.getByTestId('plan-panel')).toBeVisible({ timeout: 30_000 });
-        await expect(app.page.getByTestId('plan-panel')).toContainText('1 已完成');
-        await expect(app.page.getByTestId('plan-panel')).toContainText('1 进行中');
+        await expect.poll(async () => app.page.getByTestId('plan-panel').count(), { timeout: 30_000 }).toBe(1);
+        const panel = app.page.getByTestId('plan-panel').first();
+        await expect(panel).toContainText('1 已完成');
+        await expect(panel).toContainText('1 进行中');
       } else {
         await expect(app.page.getByTestId('plan-panel')).toHaveCount(0);
         await expect(app.page.getByTestId('error-card')).toHaveCount(0);

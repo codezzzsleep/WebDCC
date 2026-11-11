@@ -197,20 +197,35 @@ export class AppStore {
         break;
       }
       case 'delta': {
-        const map = this.hot.get(message.sessionId);
-        const item = map?.get(message.itemKey);
-        if (item !== undefined) {
-          const data = item.data as { text?: string; outputTail?: string };
-          if (message.field === 'text') data.text = (data.text ?? '') + message.append;
-          else data.outputTail = (data.outputTail ?? '') + message.append;
+        const map = this.hot.get(message.sessionId) ?? new Map<string, HotItem>();
+        let item = map.get(message.itemKey);
+        if (item === undefined) {
+          // 兜底：没收到 update 也要能接住增量
+          item = { itemKey: message.itemKey, kind: message.field === 'output' ? 'command' : 'assistant.message', data: {} };
+          map.set(message.itemKey, item);
         }
+        const data = item.data as { text?: string; outputTail?: string };
+        if (message.field === 'text') data.text = (data.text ?? '') + message.append;
+        else data.outputTail = (data.outputTail ?? '') + message.append;
+        this.hot.set(message.sessionId, map);
         this.notify();
         break;
       }
       case 'update': {
-        const map = this.hot.get(message.sessionId);
-        const item = map?.get(message.itemKey);
-        if (item !== undefined) item.data = message.data;
+        const map = this.hot.get(message.sessionId) ?? new Map<string, HotItem>();
+        const item = map.get(message.itemKey);
+        const payload = message.data as { started?: boolean; kind?: string; data?: unknown };
+        if (item !== undefined) {
+          item.data = payload.data ?? message.data;
+        } else if (payload.started === true) {
+          // 流式期间新开始的条目：客户端先建热条目，后续 delta 才有地方增长
+          map.set(message.itemKey, {
+            itemKey: message.itemKey,
+            kind: (payload.kind ?? 'tool.call') as HotItem['kind'],
+            data: payload.data ?? {},
+          });
+        }
+        this.hot.set(message.sessionId, map);
         this.notify();
         break;
       }
