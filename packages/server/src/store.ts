@@ -48,6 +48,7 @@ export interface ProviderRecord {
   source: string;
   sourceKey: string | null;
   endpoints: string | null;
+  note: string | null;
   protocols: string[];
   models: string[];
   codexCatalogPath: string | null;
@@ -67,6 +68,7 @@ interface ProviderDbRow {
   source: string | null;
   source_key: string | null;
   endpoints: string | null;
+  note: string | null;
 }
 
 function toProviderRecord(row: ProviderDbRow): ProviderRecord {
@@ -82,6 +84,7 @@ function toProviderRecord(row: ProviderDbRow): ProviderRecord {
     source: row.source ?? 'manual',
     sourceKey: row.source_key,
     endpoints: row.endpoints,
+    note: row.note,
   };
 }
 
@@ -284,11 +287,12 @@ export class Store {
     source?: string;
     sourceKey?: string | null;
     endpoints?: string | null;
+    note?: string | null;
   }): ProviderRecord {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at, source, source_key, endpoints) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at, source, source_key, endpoints, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         input.id,
@@ -302,6 +306,7 @@ export class Store {
         input.source ?? 'manual',
         input.sourceKey ?? null,
         input.endpoints ?? null,
+        input.note ?? null,
       );
     return {
       id: input.id,
@@ -315,6 +320,7 @@ export class Store {
       source: input.source ?? 'manual',
       sourceKey: input.sourceKey ?? null,
       endpoints: input.endpoints ?? null,
+      note: input.note ?? null,
     };
   }
 

@@ -46,7 +46,8 @@ export async function importFromCodex(): Promise<ImportedProvider[]> {
     if (baseUrl === undefined) continue;
     const envKey = typeof provider['env_key'] === 'string' ? provider['env_key'] : undefined;
     const bearer = typeof provider['experimental_bearer_token'] === 'string' ? provider['experimental_bearer_token'] : undefined;
-    const key = bearer ?? (envKey === undefined ? undefined : process.env[envKey]); 
+    const envValue = envKey === undefined ? undefined : process.env[envKey];
+    const key = bearer ?? (envValue === undefined || envValue === '' ? undefined : envValue);
     const models = new Set<string>();
     if (topProvider === id && topModel !== undefined) models.add(topModel);
     for (const profile of Object.values(profiles)) {

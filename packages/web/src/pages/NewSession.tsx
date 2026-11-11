@@ -34,10 +34,21 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
     void api.providers().then(setProviders).catch(() => setProviders([]));
   }, []);
 
+  const sourcePreference = agent === 'codex' ? ['codex-config'] : agent === 'claude-code' ? ['claude-settings'] : [];
   const compatible = providers.filter((provider) =>
     agent === 'codex' ? provider.protocols.includes('openai-responses') : agent === 'claude-code' ? provider.protocols.includes('anthropic-messages') : false,
   );
   const selectedProvider = compatible.find((provider) => provider.id === providerId);
+
+  // 默认选中：与该 Agent 同源的导入 Provider（例如 Codex 配置里的 mockr）
+  useEffect(() => {
+    if (providerId !== '') return;
+    const preferred = compatible.find((provider) => provider.source !== undefined && sourcePreference.includes(provider.source)) ?? compatible[0];
+    if (preferred !== undefined) {
+      setProviderId(preferred.id);
+      setModel(preferred.models[0] ?? '');
+    }
+  }, [compatible, providerId, sourcePreference]);
 
   useEffect(() => {
     if (selectedProvider !== undefined && (model === '' || !selectedProvider.models.includes(model))) {
@@ -117,7 +128,9 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
             }}
             data-testid="provider-select"
           >
-            <option value="">原生登录 / 原生配置</option>
+            <option value="">
+              {agent === 'codex' ? '原生：ChatGPT 登录' : agent === 'claude-code' ? '原生：Claude 登录' : '原生：Agent 自己的配置'}
+            </option>
             {compatible.map((provider) => (
               <option key={provider.id} value={provider.id}>
                 {provider.name}

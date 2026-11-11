@@ -101,6 +101,10 @@ export interface ProviderDto {
   models: string[];
   codexCatalogPath?: string;
   hasKey: boolean;
+  /** Key 后 4 位（永不返回原文） */
+  keyHint?: string;
+  /** 缺 Key 等原因（例如"缺少 Key（本机配置读取环境变量 X）"） */
+  note?: string;
   createdAt: string;
 }
 

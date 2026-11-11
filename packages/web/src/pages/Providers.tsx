@@ -7,6 +7,21 @@ const PROTOCOLS = [
   { id: 'anthropic-messages', label: 'Anthropic Messages（Claude Code 用）' },
 ];
 
+function sourceLabel(source: string | undefined): string {
+  switch (source) {
+    case 'codex-config':
+      return 'Codex 配置';
+    case 'claude-settings':
+      return 'Claude 设置';
+    case 'dsh':
+      return 'DSH';
+    case 'paste':
+      return '粘贴导入';
+    default:
+      return '手动';
+  }
+}
+
 export function ProvidersPage(): React.ReactElement {
   const [providers, setProviders] = useState<ProviderDto[]>([]);
   const [dsh, setDsh] = useState<{ mode: string; url: string | null; connected: boolean; version?: string } | null>(null);
@@ -14,6 +29,7 @@ export function ProvidersPage(): React.ReactElement {
   const [dshError, setDshError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', baseUrl: '', apiKey: '', models: '', protocols: [] as string[], codexCatalogPath: '' });
   const [error, setError] = useState<string | null>(null);
+  const [scanInfo, setScanInfo] = useState<string | null>(null);
 
   const reload = (): void => {
     void api.providers().then(setProviders).catch((cause: unknown) => setError(String(cause)));
@@ -42,6 +58,35 @@ export function ProvidersPage(): React.ReactElement {
   return (
     <div className="page" data-testid="providers-page">
       <h1>Provider 与模型</h1>
+      {scanInfo !== null ? <p className="muted" data-testid="scan-info">{scanInfo}</p> : null}
+      <div className="provider-actions">
+        <button
+          type="button"
+          className="button"
+          data-testid="provider-scan"
+          onClick={() => {
+            void api.providerScan().then((result) => {
+              setScanInfo(`从本机导入了 ${result.imported} 个 Provider`);
+              reload();
+            }).catch((cause: unknown) => setError(String(cause)));
+          }}
+        >
+          重新扫描本机配置
+        </button>
+        <button
+          type="button"
+          className="button ghost"
+          data-testid="provider-restore"
+          onClick={() => {
+            void api.providerRestore().then((result) => {
+              setScanInfo(`恢复了 ${result.imported} 个 Provider`);
+              reload();
+            }).catch((cause: unknown) => setError(String(cause)));
+          }}
+        >
+          恢复已忽略的导入
+        </button>
+      </div>
 
       <section className="dsh-section" data-testid="dsh-section">
         <h2>DSH 连接</h2>
@@ -86,6 +131,7 @@ export function ProvidersPage(): React.ReactElement {
         <thead>
           <tr>
             <th>名称</th>
+            <th>来源</th>
             <th>端点</th>
             <th>协议</th>
             <th>模型</th>
@@ -97,10 +143,11 @@ export function ProvidersPage(): React.ReactElement {
           {providers.map((provider) => (
             <tr key={provider.id}>
               <td>{provider.name}</td>
-              <td className="mono">{provider.baseUrl}</td>
+              <td>{sourceLabel(provider.source)}</td>
+              <td className="mono">{provider.endpoints?.['openai-responses'] ?? provider.endpoints?.['anthropic-messages'] ?? provider.baseUrl}</td>
               <td>{provider.protocols.join(', ')}</td>
-              <td>{provider.models.join(', ')}</td>
-              <td>{provider.hasKey ? '已保存' : '无'}</td>
+              <td>{provider.models.join(', ') || '—'}</td>
+              <td>{provider.hasKey ? `…${provider.keyHint ?? ''}` : (provider.note ?? '无')}</td>
               <td>
                 <button type="button" className="link-button" onClick={() => void api.deleteProvider(provider.id).then(reload)}>
                   删除
@@ -110,7 +157,7 @@ export function ProvidersPage(): React.ReactElement {
           ))}
           {providers.length === 0 ? (
             <tr>
-              <td colSpan={6} className="muted">
+              <td colSpan={7} className="muted">
                 还没有 Provider
               </td>
             </tr>

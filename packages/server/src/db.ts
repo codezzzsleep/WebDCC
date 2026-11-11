@@ -63,5 +63,6 @@ export function openDb(file: string): Db {
   if (!has('source')) db.exec("ALTER TABLE providers ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
   if (!has('source_key')) db.exec('ALTER TABLE providers ADD COLUMN source_key TEXT');
   if (!has('endpoints')) db.exec('ALTER TABLE providers ADD COLUMN endpoints TEXT');
+  if (!has('note')) db.exec('ALTER TABLE providers ADD COLUMN note TEXT');
   return db;
 }

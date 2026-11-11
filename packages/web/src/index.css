@@ -1086,3 +1086,9 @@ button {
 .task-panel li.in_progress {
   color: var(--accent);
 }
+
+.provider-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 4px;
+}

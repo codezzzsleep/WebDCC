@@ -140,6 +140,8 @@ export class ProviderRegistry {
       ...(row.sourceKey === null ? {} : { sourceKey: row.sourceKey }),
       ...(row.codexCatalogPath === null ? {} : { codexCatalogPath: row.codexCatalogPath }),
       hasKey: this.secrets[row.secretRef] !== undefined,
+      ...(this.secrets[row.secretRef] === undefined ? {} : { keyHint: (this.secrets[row.secretRef] ?? '').slice(-4) }),
+      ...(row.note === null ? {} : { note: row.note }),
       createdAt: row.createdAt,
     };
   }
@@ -160,6 +162,7 @@ export class ProviderRegistry {
       source: input.source ?? 'manual',
       sourceKey: input.sourceKey ?? null,
       endpoints: input.endpoints === undefined ? null : JSON.stringify(input.endpoints),
+      note: input.missingKeyReason ?? null,
     });
     return this.get(id) as ProviderDto;
   }
