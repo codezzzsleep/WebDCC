@@ -208,7 +208,7 @@ function TurnView({
           <HotRow key={item.itemKey} item={item} />
         ))}
 
-        {changes.length > 0 ? <ChangesCard changes={changes} onOpenDiff={onOpenDiff} /> : null}
+        {completedData !== undefined && changes.length > 0 ? <ChangesCard changes={changes} onOpenDiff={onOpenDiff} /> : null}
 
         {completedData !== undefined ? (
           <div className="turn-footer">
@@ -358,6 +358,7 @@ function HotRow({ item }: { item: HotItem }): React.ReactElement {
       <div className="step-line">
         <Icon name="sparkle" size={15} />
         <span className="label shimmer">思考中…</span>
+        {data.text === undefined || data.text === '' ? null : <span className="detail reasoning-live-text">{data.text}</span>}
       </div>
     );
   }

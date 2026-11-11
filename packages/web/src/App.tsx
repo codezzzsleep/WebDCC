@@ -63,6 +63,8 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
   const [current, setCurrent] = useState('');
   const [entries, setEntries] = useState<{ name: string; path: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [newDirectory, setNewDirectory] = useState(false);
+  const [directoryName, setDirectoryName] = useState('');
 
   const browse = (target?: string): void => {
     void api
@@ -142,7 +144,27 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
           >
             添加这个目录
           </button>
+          <button type="button" className="btn" onClick={() => { setNewDirectory(true); setDirectoryName(''); setError(null); }} disabled={current === ''}>
+            新建文件夹
+          </button>
         </div>
+        {newDirectory ? (
+          <form
+            className="row-actions"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const name = directoryName.trim();
+              if (name === '') return;
+              void api.createDirectory(current, name)
+                .then((created) => { setNewDirectory(false); setDirectoryName(''); return browse(created.path); })
+                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+            }}
+          >
+            <input className="text-input" autoFocus value={directoryName} placeholder="新文件夹名称" onChange={(event) => setDirectoryName(event.target.value)} />
+            <button type="submit" className="btn primary">创建</button>
+            <button type="button" className="btn" onClick={() => setNewDirectory(false)}>取消</button>
+          </form>
+        ) : null}
       </div>
     </div>
   );

@@ -64,6 +64,9 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'session/cancel',
   'session/modelCatalog',
   'session/selectModel',
+  'settings/describe',
+  'settings/update',
+  'credentials/set',
   'commands/execute',
   '$events',
   '$events/result',
@@ -143,6 +146,9 @@ interface SessionRuntime {
   assistantKey: string;
   assistantText: string;
   reasoningKey: string;
+  reasoningText: string;
+  streamedAssistant: boolean;
+  streamedReasoning: boolean;
 }
 
 export class DshAdapter implements AgentAdapter {
@@ -324,6 +330,9 @@ export class DshAdapter implements AgentAdapter {
       assistantKey: '',
       assistantText: '',
       reasoningKey: '',
+      reasoningText: '',
+      streamedAssistant: false,
+      streamedReasoning: false,
     };
     this.sessions.set(opts.sessionId, runtime);
     await this.permission(client, created.sessionId, opts.accessMode);
@@ -348,6 +357,9 @@ export class DshAdapter implements AgentAdapter {
       assistantKey: '',
       assistantText: '',
       reasoningKey: '',
+      reasoningText: '',
+      streamedAssistant: false,
+      streamedReasoning: false,
     };
     this.sessions.set(opts.sessionId, runtime);
     this.openFollow(opts.sessionId, runtime);
@@ -552,7 +564,11 @@ export class DshAdapter implements AgentAdapter {
     switch (type) {
       case 'turn/start': {
         runtime.assistantKey = '';
+        runtime.assistantText = '';
         runtime.reasoningKey = '';
+        runtime.reasoningText = '';
+        runtime.streamedAssistant = false;
+        runtime.streamedReasoning = false;
         this.emit(sessionId, { type: 'status', status: 'running' });
         this.emit(sessionId, {
           type: 'item.complete',
@@ -566,6 +582,8 @@ export class DshAdapter implements AgentAdapter {
       }
       case 'turn/end': {
         if (process.env['WDCC_DEBUG_DSH'] === '1') console.error('[dsh] turn/end', JSON.stringify(data).slice(0, 200));
+        this.finishLiveAssistant(sessionId, runtime);
+        this.finishLiveReasoning(sessionId, runtime);
         const reason = (data['reason'] ?? {}) as { kind?: string };
         const interrupted = reason.kind === 'interrupted' || reason.kind === 'cancelled' || reason.kind === 'aborted';
         const status = interrupted ? 'interrupted' : reason.kind === 'failed' || reason.kind === 'error' ? 'failed' : 'completed';
@@ -578,9 +596,16 @@ export class DshAdapter implements AgentAdapter {
         const content = message.content ?? [];
         const text = content.filter((block) => block['type'] === 'text').map((block) => String(block['text'] ?? '')).join('\n');
         const reasoning = content.filter((block) => block['type'] === 'reasoning').map((block) => String(block['text'] ?? '')).join('');
-        if (reasoning !== '') complete(`reasoning-${nativeSeq}`, 'reasoning', { text: reasoning });
-        if (text !== '') complete(`msg-${nativeSeq}`, 'assistant.message', { text, phase: 'final' });
-        runtime.assistantText = '';
+        if (runtime.reasoningKey !== '') {
+          this.finishLiveReasoning(sessionId, runtime, reasoning === '' ? undefined : reasoning);
+        } else if (reasoning !== '' && !runtime.streamedReasoning) {
+          complete(`reasoning-${nativeSeq}`, 'reasoning', { text: reasoning, summary: true });
+        }
+        if (runtime.assistantKey !== '') {
+          this.finishLiveAssistant(sessionId, runtime, text === '' ? undefined : text);
+        } else if (text !== '' && !runtime.streamedAssistant) {
+          complete(`msg-${nativeSeq}`, 'assistant.message', { text, phase: 'final' });
+        }
         return;
       }
       case 'tool/call': {
@@ -708,12 +733,24 @@ export class DshAdapter implements AgentAdapter {
     if (kind === 'block-start') {
       const blockType = String(chunk['blockType'] ?? '');
       if (blockType === 'reasoning') {
+        this.finishLiveAssistant(sessionId, runtime);
+        this.finishLiveReasoning(sessionId, runtime);
         runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
+        runtime.reasoningText = '';
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
       } else {
+        this.finishLiveReasoning(sessionId, runtime);
+        this.finishLiveAssistant(sessionId, runtime);
         runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
+        runtime.assistantText = '';
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
       }
+      return;
+    }
+    if (kind === 'block-end') {
+      const blockType = String(chunk['blockType'] ?? '');
+      if (blockType === 'reasoning' || (blockType === '' && runtime.reasoningKey !== '' && runtime.assistantKey === '')) this.finishLiveReasoning(sessionId, runtime);
+      else this.finishLiveAssistant(sessionId, runtime);
       return;
     }
     if (kind === 'text-delta') {
@@ -721,7 +758,9 @@ export class DshAdapter implements AgentAdapter {
         runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
       }
-      this.emit(sessionId, { type: 'item.delta', itemKey: runtime.assistantKey, field: 'text', append: String(chunk['text'] ?? '') });
+      const text = String(chunk['text'] ?? '');
+      runtime.assistantText += text;
+      this.emit(sessionId, { type: 'item.delta', itemKey: runtime.assistantKey, field: 'text', append: text });
       return;
     }
     if (kind === 'reasoning-delta') {
@@ -729,7 +768,9 @@ export class DshAdapter implements AgentAdapter {
         runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
       }
-      this.emit(sessionId, { type: 'item.delta', itemKey: runtime.reasoningKey, field: 'text', append: String(chunk['text'] ?? '') });
+      const text = String(chunk['text'] ?? '');
+      runtime.reasoningText += text;
+      this.emit(sessionId, { type: 'item.delta', itemKey: runtime.reasoningKey, field: 'text', append: text });
       return;
     }
     if (kind === 'usage') {
@@ -740,6 +781,30 @@ export class DshAdapter implements AgentAdapter {
         kind: 'usage',
         data: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
       });
+    }
+  }
+
+  private finishLiveAssistant(sessionId: string, runtime: SessionRuntime, finalText?: string): void {
+    if (runtime.assistantKey === '') return;
+    const text = finalText ?? runtime.assistantText;
+    const itemKey = runtime.assistantKey;
+    runtime.assistantKey = '';
+    runtime.assistantText = '';
+    if (text !== '') {
+      runtime.streamedAssistant = true;
+      this.emit(sessionId, { type: 'item.complete', itemKey, kind: 'assistant.message', data: { text, phase: 'final' } });
+    }
+  }
+
+  private finishLiveReasoning(sessionId: string, runtime: SessionRuntime, finalText?: string): void {
+    if (runtime.reasoningKey === '') return;
+    const text = finalText ?? runtime.reasoningText;
+    const itemKey = runtime.reasoningKey;
+    runtime.reasoningKey = '';
+    runtime.reasoningText = '';
+    if (text !== '') {
+      runtime.streamedReasoning = true;
+      this.emit(sessionId, { type: 'item.complete', itemKey, kind: 'reasoning', data: { text, summary: true } });
     }
   }
 

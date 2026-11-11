@@ -800,6 +800,10 @@ button.step-line:hover {
   white-space: nowrap;
   min-width: 0;
 }
+.step-line .reasoning-live-text {
+  font-family: var(--font-sans);
+  max-width: min(52vw, 560px);
+}
 .step-line .status-failed {
   color: var(--danger);
   font-size: 12px;

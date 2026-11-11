@@ -125,6 +125,12 @@ export interface BrowseResponse {
   entries: BrowseEntry[];
 }
 
+export interface WorkspaceEntryCreateRequest {
+  path: string;
+  kind: 'file' | 'dir';
+  content?: string;
+}
+
 export interface FsListResponse {
   path: string;
   entries: { name: string; path: string; type: 'file' | 'dir'; size?: number }[];

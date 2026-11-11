@@ -178,6 +178,7 @@ export class ProviderRegistry {
     this.store.updateProvider(id, {
       ...(patch.name === undefined ? {} : { name: patch.name }),
       ...(patch.baseUrl === undefined ? {} : { baseUrl: patch.baseUrl }),
+      ...(patch.endpoints === undefined ? {} : { endpoints: JSON.stringify(patch.endpoints) }),
       ...(patch.protocols === undefined ? {} : { protocols: patch.protocols }),
       ...(patch.models === undefined ? {} : { models: patch.models }),
       ...(patch.codexCatalogPath === undefined ? {} : { codexCatalogPath: patch.codexCatalogPath }),

@@ -113,6 +113,9 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
   const [path, setPath] = useState('');
   const [listing, setListing] = useState<FsListResponse | FsReadResponse | null>(null);
   const [preview, setPreview] = useState<{ path: string; content: string } | null>(null);
+  const [creating, setCreating] = useState<'file' | 'dir' | null>(null);
+  const [newName, setNewName] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
   useEffect(() => {
     void api
       .fs(workspaceId, path)
@@ -140,6 +143,34 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
             </span>
           ))}
       </div>
+      <div className="row-actions" style={{ marginBottom: 10 }}>
+        <button type="button" className="btn small" onClick={() => { setCreating('file'); setNewName(''); setCreateError(null); }}>
+          新建文件
+        </button>
+        <button type="button" className="btn small" onClick={() => { setCreating('dir'); setNewName(''); setCreateError(null); }}>
+          新建文件夹
+        </button>
+      </div>
+      {creating !== null ? (
+        <form
+          className="row-actions"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const name = newName.trim();
+            if (name === '') return;
+            setCreateError(null);
+            void api.createWorkspaceEntry(workspaceId, { path: path === '' ? name : `${path}/${name}`, kind: creating })
+              .then(() => { setCreating(null); setNewName(''); return api.fs(workspaceId, path); })
+              .then(setListing)
+              .catch((cause: unknown) => setCreateError(cause instanceof Error ? cause.message : String(cause)));
+          }}
+        >
+          <input className="text-input" autoFocus value={newName} placeholder={creating === 'file' ? '文件名，例如 notes.md' : '文件夹名'} onChange={(event) => setNewName(event.target.value)} />
+          <button type="submit" className="btn primary">创建</button>
+          <button type="button" className="btn" onClick={() => setCreating(null)}>取消</button>
+          {createError !== null ? <span className="status-failed">{createError}</span> : null}
+        </form>
+      ) : null}
       {listing !== null && 'entries' in listing ? (
         <ul className="file-list">
           {listing.entries.map((entry) => (
