@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>M8 acceptance</title><style>body{font-family:system-ui;padding:24px}table{border-collapse:collapse}td,th{padding:4px 10px;border-bottom:1px solid #eee}.failed{background:#fee}.skipped{background:#ffd}</style><h1>M8 验收</h1><p>通过 6/125，失败 0，缺少 119，多余 0</p><table><tr><th>ID</th><th>用例</th><th>结果</th><th>耗时</th></tr><tr class="passed"><td>S-01</td><td>S-01 三个 Agent 都是真实 adapter，版本等于锁定版本</td><td>passed</td><td>1s</td></tr>
+<tr class="passed"><td>S-02</td><td>S-02 服务端与各 Agent 进程都在临时目录，端口不是保留端口</td><td>passed</td><td>0s</td></tr>
+<tr class="passed"><td>AUTH-01</td><td>AUTH-01 错误 token 不设 Cookie</td><td>passed</td><td>0s</td></tr>
+<tr class="passed"><td>AUTH-02</td><td>AUTH-02 正确 token 换 Cookie 且地址栏不再有 token</td><td>passed</td><td>0s</td></tr>
+<tr class="passed"><td>AUTH-03</td><td>AUTH-03 无 Cookie 访问会话与文件都返回未授权</td><td>passed</td><td>0s</td></tr>
+<tr class="passed"><td>S-03</td><td>S-03 未设 WDCC_TEST_HOOKS 的实例上测试钩子全部 404</td><td>passed</td><td>1s</td></tr></table>
