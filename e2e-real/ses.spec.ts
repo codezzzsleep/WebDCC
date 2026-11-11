@@ -190,4 +190,20 @@ test.describe('7.7 @ 与交接、斜杠命令', () => {
     const text = JSON.stringify(requests.at(-1)?.body ?? {});
     expect(text).toContain('/foo bar');
   });
+
+  test('SL-04 Codex /model 打开模型菜单，Codex reasoning 可点击选择', async ({ app }) => {
+    await app.login();
+    await app.planFor('codex', 'echo-context');
+    await newSession(app.page, 'codex', 'Codex 模型菜单');
+    await waitTurnDone(app.page);
+    await app.page.getByTestId('composer-input').fill('/model');
+    await expect(app.page.getByTestId('slash-menu')).toBeVisible();
+    await expect(app.page.getByTestId('slash-menu')).toContainText('打开 Provider 和模型选择');
+    await app.page.getByTestId('slash-menu').getByRole('button').first().click();
+    await expect(app.page.getByTestId('model-menu')).toBeVisible();
+    await app.page.getByTestId('reasoning-menu').click();
+    await expect(app.page.getByText('Codex 思考强度')).toBeVisible();
+    await app.page.getByRole('menuitemradio', { name: 'high', exact: true }).click();
+    await expect(app.page.getByTestId('reasoning-menu')).toContainText('high');
+  });
 });

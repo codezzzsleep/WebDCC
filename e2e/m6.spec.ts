@@ -2,6 +2,21 @@ import { expect, test } from '@playwright/test';
 import { createSession, login, waitForTurnComplete } from './helpers.js';
 
 test.describe('M6：Provider / 交接 / 提醒 / 文件', () => {
+  test('Codex /model 与思考强度菜单走真实点击路径', async ({ page }) => {
+    await login(page);
+    await page.goto('/new');
+    await page.getByTestId('agent-card-codex').click();
+    await page.getByTestId('new-session-input').fill('/model');
+    await expect(page.getByTestId('slash-menu')).toBeVisible();
+    await expect(page.getByTestId('slash-menu')).toContainText('打开 Provider 和模型选择');
+    await page.getByTestId('slash-menu').getByRole('button').first().click();
+    await expect(page.getByTestId('model-menu')).toBeVisible();
+    await page.getByTestId('reasoning-menu').click();
+    await expect(page.getByText('Codex 思考强度')).toBeVisible();
+    await page.getByRole('menuitemradio', { name: 'high', exact: true }).click();
+    await expect(page.getByTestId('reasoning-menu')).toContainText('high');
+  });
+
   test('A7 Provider 注册与兼容矩阵，Key 不回显', async ({ page, request }) => {
     await login(page);
     await page.goto('/settings/providers');
@@ -13,16 +28,17 @@ test.describe('M6：Provider / 交接 / 提醒 / 文件', () => {
     await page.getByTestId('provider-models').fill('mock-a,mock-b');
     await page.getByText('OpenAI Responses（Codex 用）').click();
     await page.getByTestId('provider-create').click();
-    await expect(page.getByTestId('provider-list')).toContainText('测试 Provider');
-    // 新 UI：Key 只显示后 4 位（不显示"已保存"）
-    await expect(page.getByTestId('provider-list')).toContainText('…-key');
+    const codexHarness = page.getByTestId('harness-provider-codex');
+    await expect(codexHarness).toContainText('测试 Provider');
+    // 新 UI：Key 只显示为已配置状态，原文永不进入页面。
+    await expect(codexHarness.getByLabel('API Key（留空不修改）')).toHaveAttribute('placeholder', '已配置');
 
     // 接口响应里不能出现 Key 原文
     const providers = await page.evaluate(async () => (await fetch('/api/providers', { credentials: 'same-origin' })).text());
     expect(providers).not.toContain('super-secret-key');
     expect(providers).toContain('测试 Provider');
 
-    // 新建会话页：Codex 可选这个 Provider 的模型，Claude 那边同一 Provider 灰显并写明原因
+    // 新建会话页：Codex 可选这个 Provider 的模型；Harness 页面只展示各自兼容的 Provider。
     await page.goto('/new');
     await page.getByTestId('agent-card-codex').click();
     await page.getByTestId('model-menu').click();
@@ -33,9 +49,7 @@ test.describe('M6：Provider / 交接 / 提醒 / 文件', () => {
     await expect(page.getByTestId('model-menu')).toHaveAttribute('data-model', 'mock-b');
     await page.getByTestId('agent-card-claude-code').click();
     await page.getByTestId('model-menu').click();
-    const claudeGroup = page.getByRole('group', { name: '测试 Provider' });
-    await expect(claudeGroup).toContainText('Claude Code 用不了');
-    await expect(claudeGroup.getByTestId('model-option').first()).toBeDisabled();
+    await expect(page.getByRole('group', { name: '测试 Provider' })).toHaveCount(0);
     void request;
   });
 
