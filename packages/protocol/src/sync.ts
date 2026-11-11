@@ -70,6 +70,8 @@ export interface CreateSessionCommand extends CommandBase {
   providerId?: string | null;
   model?: string;
   accessMode?: string;
+  /** 接续会话：从哪个会话"在另一个 Agent 中继续"而来（只用于展示接力关系，不传任何内容给 Agent） */
+  parentId?: string;
   draftText?: string;
 }
 
@@ -138,6 +140,8 @@ export interface FeedPatch {
   accessMode?: string;
   model?: string;
   providerId?: string | null;
+  /** 接续会话的上一棒 */
+  parentId?: string;
 }
 
 export interface FeedMessage {

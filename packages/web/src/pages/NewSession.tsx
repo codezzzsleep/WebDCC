@@ -1,191 +1,183 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import type { MetaResponse, ProviderDto, WorkspaceDto } from '@webdcc/protocol';
-import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
-import { agentInfo } from '../lib/format.js';
+import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, type ModelChoice } from '../lib/agents.js';
+import { useAppData } from '../lib/appData.js';
+import { AgentMark } from '../components/AgentMark.js';
+import { Composer } from '../components/Composer.js';
+import { Icon } from '../components/Icon.js';
 
 interface NewSessionProps {
-  workspaces: WorkspaceDto[];
-  meta: MetaResponse | null;
-  /** 由路由层传入（这里的组件也会被 "/" 复用，不能直接用 useSearch） */
+  /** 由路由层传入（"/" 和 "/new" 共用这个组件，不能直接用 useSearch） */
   initial?: { w?: string; agent?: string };
 }
 
-const AGENTS = ['dsh', 'codex', 'claude-code'] as const;
+const LAST_AGENT_KEY = 'wdcc:last-agent';
 
-export function NewSession({ workspaces, meta, initial }: NewSessionProps): React.ReactElement {
-  const search = initial ?? {};
+function lastAgent(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_AGENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 新会话：先选由谁来做，再在同一个输入框里说要做什么 */
+export function NewSession({ initial }: NewSessionProps): React.ReactElement {
   const navigate = useNavigate();
-  const [workspaceId, setWorkspaceId] = useState(search.w ?? workspaces[0]?.id ?? '');
-  useEffect(() => {
-    // 工作区是异步加载的，首次渲染时可能还是空
-    if (workspaceId === '' && workspaces.length > 0) setWorkspaceId(search.w ?? workspaces[0]?.id ?? '');
-  }, [workspaces, search.w, workspaceId]);
-  const [agent, setAgent] = useState<string>(search.agent ?? 'dsh');
-  const [text, setText] = useState('');
-  const [providers, setProviders] = useState<ProviderDto[]>([]);
-  const [providerId, setProviderId] = useState<string>('');
-  const [model, setModel] = useState<string>('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { meta, providers, workspaces, dsh } = useAppData();
+  const [workspaceId, setWorkspaceId] = useState(initial?.w ?? '');
+  const [agent, setAgent] = useState<string>(initial?.agent ?? lastAgent() ?? 'codex');
+  const [choiceOverride, setChoiceOverride] = useState<Record<string, ModelChoice>>({});
+  const [accessModes, setAccessModes] = useState<Record<string, string>>({});
+  const [wsMenu, setWsMenu] = useState(false);
 
   useEffect(() => {
-    void api.providers().then(setProviders).catch(() => setProviders([]));
-  }, []);
+    if (workspaceId === '' && workspaces.length > 0) setWorkspaceId(initial?.w ?? workspaces[0]?.id ?? '');
+  }, [workspaces, initial?.w, workspaceId]);
 
-  const sourcePreference = agent === 'codex' ? ['codex-config'] : agent === 'claude-code' ? ['claude-settings'] : [];
-  const compatible = providers.filter((provider) =>
-    agent === 'codex' ? provider.protocols.includes('openai-responses') : agent === 'claude-code' ? provider.protocols.includes('anthropic-messages') : false,
+  // 选中的 Agent 不可用时，换成第一个可用的
+  useEffect(() => {
+    if (meta === null) return;
+    if (!agentAvailable(agent, meta)) {
+      const first = AGENT_IDS.find((id) => agentAvailable(id, meta));
+      if (first !== undefined) setAgent(first);
+    }
+  }, [meta, agent]);
+
+  const workspace = workspaces.find((item) => item.id === workspaceId);
+  const choice = choiceOverride[agent] ?? defaultChoice(agent, meta?.agents[agent], providers);
+
+  const cards = useMemo(
+    () =>
+      AGENT_IDS.map((id) => ({
+        id,
+        available: agentAvailable(id, meta),
+        status: agentStatusLine(id, meta, providers, dsh),
+      })),
+    [meta, providers, dsh],
   );
-  const selectedProvider = compatible.find((provider) => provider.id === providerId);
 
-  // 默认选中：与该 Agent 同源的导入 Provider（例如 Codex 配置里的 mockr）
-  useEffect(() => {
-    if (providerId !== '') return;
-    // 优先同源且带模型列表的 Provider（例如 Codex 配置里的 mockr）
-    const preferred =
-      compatible.find((provider) => provider.source !== undefined && sourcePreference.includes(provider.source) && provider.models.length > 0) ??
-      compatible.find((provider) => provider.models.length > 0) ??
-      compatible[0];
-    if (preferred !== undefined) {
-      setProviderId(preferred.id);
-      setModel(preferred.models[0] ?? '');
-    }
-  }, [compatible, providerId, sourcePreference]);
-
-  useEffect(() => {
-    // 只有 Provider 自带模型列表时才自动纠正；否则保留用户手填的模型名
-    if (selectedProvider !== undefined && selectedProvider.models.length > 0 && !selectedProvider.models.includes(model)) {
-      setModel(selectedProvider.models[0] ?? '');
-    }
-  }, [selectedProvider, model]);
-
-  const submit = async (): Promise<void> => {
-    if (workspaceId === '' || text.trim() === '' || busy) return;
-    setBusy(true);
-    setError(null);
+  const pickAgent = (id: string): void => {
+    setAgent(id);
     try {
-      const sessionId = await store.createSession({
-        workspaceId,
-        agent,
-        ...(providerId === '' ? { providerId: null } : { providerId }),
-        ...(model === '' ? {} : { model }),
-      });
-      if (sessionId === '') throw new Error('服务端没有返回会话 id');
-      store.sendMessage(sessionId, text);
-      await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
+      window.localStorage.setItem(LAST_AGENT_KEY, id);
+    } catch {
+      // 浏览器不让存就算了
     }
   };
 
+  const submit = async (text: string, images: string[]): Promise<void> => {
+    if (workspaceId === '') throw new Error('先添加一个工作区');
+    const accessMode = accessModes[agent];
+    const sessionId = await store.createSession({
+      workspaceId,
+      agent,
+      providerId: choice.providerId,
+      ...(choice.model === '' ? {} : { model: choice.model }),
+      ...(accessMode === undefined ? {} : { accessMode }),
+    });
+    if (sessionId === '') throw new Error('服务端没有返回会话 id');
+    store.sendMessage(sessionId, text, images);
+    await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+  };
+
   return (
-    <div className="new-session" data-testid="new-session">
-      <h1>新会话</h1>
-      <label className="field">
-        <span>工作区</span>
-        <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} className="text-input">
-          {workspaces.map((workspace) => (
-            <option key={workspace.id} value={workspace.id}>
-              {workspace.name} · {workspace.path}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="agent-cards">
-        {AGENTS.map((id) => {
-          const info = agentInfo(id);
-          const agentMeta = meta?.agents[id];
-          // 没有 probe 结果 = 该 adapter 未启用（例如 DSH 被 WDCC_ENABLE_DSH=0 关掉）
-          const installed = agentMeta !== undefined && agentMeta.installed !== false;
-          return (
-            <button
-              key={id}
-              type="button"
-              className={`agent-card ${agent === id ? 'selected' : ''} ${installed ? '' : 'disabled'}`}
-              disabled={!installed}
-              onClick={() => setAgent(id)}
-              data-testid={`agent-card-${id}`}
-            >
-              <span className={`agent-mark ${info.className}`}>{info.mark}</span>
-              <span className="agent-card-name">{info.name}</span>
-              <span className="muted">{installed ? '原装运行，使用你自己的配置' : (agentMeta?.notes?.[0] ?? '该 Agent 未启用或未安装')}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="provider-row">
-        <label className="field">
-          <span>Provider</span>
-          <select
-            className="text-input"
-            value={providerId}
-            onChange={(event) => {
-              const nextId = event.target.value;
-              setProviderId(nextId);
-              const next = providers.find((provider) => provider.id === nextId);
-              setModel(next?.models[0] ?? '');
-            }}
-            data-testid="provider-select"
-          >
-            <option value="">
-              {agent === 'codex' ? '原生：ChatGPT 登录' : agent === 'claude-code' ? '原生：Claude 登录' : '原生：Agent 自己的配置'}
-            </option>
-            {compatible.map((provider) => (
-              <option key={provider.id} value={provider.id}>
-                {provider.name}
-              </option>
-            ))}
-            {providers.filter((provider) => !compatible.includes(provider)).map((provider) => (
-              <option key={provider.id} value={provider.id} disabled>
-                {provider.name}（与 {agent} 协议不兼容）
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>模型</span>
-          {selectedProvider !== undefined && selectedProvider.models.length === 0 ? (
-            <input className="text-input" placeholder="这个 Provider 没有模型列表，手动填模型名" value={model} onChange={(event) => setModel(event.target.value)} data-testid="model-input" />
-          ) : (
-            <select className="text-input" value={model} onChange={(event) => setModel(event.target.value)} data-testid="model-select" disabled={selectedProvider === undefined}>
-              {(selectedProvider?.models ?? []).map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-              {selectedProvider === undefined ? <option value="">（先选 Provider）</option> : null}
-            </select>
-          )}
-        </label>
-      </div>
-
-      {agent === 'codex' && selectedProvider !== undefined && selectedProvider.codexCatalogPath === undefined ? (
-        <p className="muted" data-testid="catalog-hint">需要模型目录，否则工具可能不可用</p>
-      ) : null}
-
-      <div className="new-session-input">
-        <textarea
-          className="composer-input"
-          placeholder="描述你想做的事…"
-          rows={4}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          data-testid="new-session-input"
-        />
-        <div className="composer-bar">
-          <span className="muted">{meta?.agents[agent]?.pinnedVersion ?? ''}</span>
-          <button type="button" className="button primary" disabled={busy || text.trim() === ''} onClick={() => void submit()} data-testid="new-session-send">
-            发送
+    <main className="main" data-testid="new-session">
+      <div className="mobile-only session-header" style={{ borderBottom: 0 }}>
+        <div className="session-header-row">
+          <button type="button" className="icon-btn drawer-toggle" aria-label="会话列表" onClick={() => store.setDrawer(true)} data-testid="drawer-toggle">
+            <Icon name="menu" size={18} />
           </button>
         </div>
       </div>
-      {error !== null ? <div className="error-card">{error}</div> : null}
-    </div>
+      <div className="home">
+        <div className="home-inner">
+          <div className="home-title">
+            <h1>
+              在{' '}
+              <span className="menu-anchor">
+                <button
+                  type="button"
+                  className="workspace-chip"
+                  aria-haspopup="menu"
+                  aria-expanded={wsMenu}
+                  onClick={() => setWsMenu((value) => !value)}
+                  data-testid="workspace-chip"
+                >
+                  {workspace?.name ?? '选择工作区'}
+                  <Icon name="chevronDown" size={14} strokeWidth={2} />
+                </button>
+                {wsMenu ? (
+                  <div className="menu down left" role="menu" style={{ width: 320, fontSize: 13, fontWeight: 400 }}>
+                    {workspaces.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={item.id === workspaceId}
+                        className="menu-item"
+                        onClick={() => {
+                          setWorkspaceId(item.id);
+                          setWsMenu(false);
+                        }}
+                      >
+                        <Icon name="folder" />
+                        <span className="menu-item-body">
+                          {item.name}
+                          <span className="menu-item-sub">{item.path}</span>
+                        </span>
+                        {item.id === workspaceId ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}
+                      </button>
+                    ))}
+                    {workspaces.length === 0 ? <div className="menu-note">还没有工作区，先在左侧添加一个</div> : null}
+                  </div>
+                ) : null}
+              </span>{' '}
+              里开始
+            </h1>
+            <p>先选由谁来做。三个 Agent 都是原装的：各用各的提示词、工具和权限。</p>
+          </div>
+
+          <div className="agent-cards" role="radiogroup" aria-label="选择 Agent">
+            {cards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                role="radio"
+                aria-checked={agent === card.id}
+                className={`agent-card ${agent === card.id ? 'selected' : ''}`}
+                disabled={!card.available}
+                onClick={() => pickAgent(card.id)}
+                data-testid={`agent-card-${card.id}`}
+              >
+                <span className="top">
+                  <AgentMark agent={card.id} strong={agent === card.id} size="md" />
+                  <span className="name">{agentText(card.id).name}</span>
+                </span>
+                <span className="status">{card.status}</span>
+                <span className="strength">{card.available ? agentText(card.id).strength : ''}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="composer-area">
+        <Composer
+          workspaceId={workspaceId}
+          mode={{
+            kind: 'new',
+            agent,
+            onAgentChange: pickAgent,
+            choice,
+            onChoice: (next) => setChoiceOverride((prev) => ({ ...prev, [agent]: next })),
+            accessMode: accessModes[agent],
+            onAccessMode: (modeId) => setAccessModes((prev) => ({ ...prev, [agent]: modeId })),
+            onSubmit: submit,
+          }}
+        />
+      </div>
+      <div className="home-spacer" />
+    </main>
   );
 }

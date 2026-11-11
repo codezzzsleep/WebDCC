@@ -1,12 +1,12 @@
 import { expect, test } from './fixtures.js';
-import { waitTurnDone } from './helpers.js';
+import { chooseModel, waitTurnDone } from './helpers.js';
 
 test.describe('7.3 新会话（续）', () => {
   test('NEW-07 手动 Provider 的 Key 不被 settings.json 覆盖', async ({ app }) => {
     await app.login();
     const key = `sk-wdcc-test-manual-claude-${app.run.runId}`;
     const providerName = `手动 Claude Provider ${key.slice(-6)}`;
-    const created = await app.page.evaluate(async ({ apiKey, baseUrl }: { apiKey: string; baseUrl: string }) => {
+    const created = await app.page.evaluate(async ({ apiKey, baseUrl, name }: { apiKey: string; baseUrl: string; name: string }) => {
       const response = await fetch('/api/providers', {
         method: 'POST',
         credentials: 'same-origin',
@@ -25,7 +25,7 @@ test.describe('7.3 新会话（续）', () => {
     await app.planFor('claude', 'full');
     await app.page.goto(`${app.run.baseURL}/new`);
     await app.page.getByTestId('agent-card-claude-code').click();
-    await app.page.getByTestId('provider-select').selectOption({ label: providerName });
+    await chooseModel(app.page, providerName);
     await app.page.getByTestId('new-session-input').fill('Claude 手动 Provider');
     await app.page.getByTestId('new-session-send').click();
     await app.page.waitForURL(/\/s\/[0-9A-Z]+/, { timeout: 60_000 });

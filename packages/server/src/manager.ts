@@ -98,6 +98,7 @@ export class SessionManager {
     model?: string;
     accessMode?: string;
     title?: string;
+    parentId?: string;
   }): Promise<SessionDto> {
     const adapter = this.adapters.get(input.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${input.agent} adapter`), { statusCode: 400 });
@@ -111,6 +112,7 @@ export class SessionManager {
       model: input.model ?? null,
       accessMode: input.accessMode ?? null,
       title: input.title ?? null,
+      parentId: input.parentId !== undefined && this.store.getSession(input.parentId) !== undefined ? input.parentId : null,
     });
 
     const provider = this.options.resolveProvider?.(input.providerId ?? null) ?? null;
@@ -146,6 +148,7 @@ export class SessionManager {
       ...(updated?.model === undefined ? {} : { model: updated.model }),
       ...(updated?.accessMode === undefined ? {} : { accessMode: updated.accessMode }),
       providerId: updated?.providerId ?? null,
+      ...(updated?.parentId === undefined ? {} : { parentId: updated.parentId }),
     };
     const feedSeq = this.store.appendFeed(session.id, createPatch);
     this.hooks.onFeed(session.id, createPatch, feedSeq);
@@ -303,7 +306,8 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.setModel !== undefined) await runtime.adapter.setModel(sessionId, model);
-    this.updateSessionAndFeed(sessionId, { model }, {});
+    // 推给所有客户端：否则输入框里的模型胶囊要等刷新才变
+    this.updateSessionAndFeed(sessionId, { model }, { model });
   }
 
   /** 切换访问模式（F6）：记一个事件，轨迹里可见；实际生效的模式由 adapter 回报 */

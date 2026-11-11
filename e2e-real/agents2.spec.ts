@@ -151,33 +151,36 @@ test.describe('7.4 改动卡片与轮次', () => {
       await openSession(app.page, agent, '换模型');
       await waitTurnDone(app.page);
       const menu = app.page.getByTestId('model-menu');
-      // 模型列表是异步取的：等它到齐
-      await expect.poll(async () => menu.locator('option').evaluateAll((nodes) => nodes.filter((node) => (node as HTMLOptionElement).value !== '').length), { timeout: 30_000 }).toBeGreaterThan(0);
-      const options = await menu.locator('option').evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value).filter((value) => value !== ''));
+      // 模型列表是异步取的：打开"模型"菜单，等可选的模型到齐
+      const enabledOptions = app.page.locator('[data-testid="model-option"]:not([disabled])');
+      await expect
+        .poll(
+          async () => {
+            if ((await enabledOptions.count()) === 0) {
+              await app.page.keyboard.press('Escape');
+              await menu.click();
+            }
+            return enabledOptions.evaluateAll((nodes) => nodes.filter((node) => (node.getAttribute('data-model') ?? '') !== '').length);
+          },
+          { timeout: 30_000 },
+        )
+        .toBeGreaterThan(0);
+      const current = (await menu.getAttribute('data-model')) ?? '';
+      const options = await enabledOptions.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-model') ?? '').filter((value) => value !== ''));
       if (options.length < 1) {
-        const debug = await app.page.evaluate(async () => {
-          const store = (window as unknown as { __wdccStore?: { getSession: (id: string) => unknown } }).__wdccStore;
-          const id = /\/s\/([0-9A-Z]+)/.exec(window.location.pathname)?.[1] ?? '';
-          const session = store?.getSession(id) ?? null;
-          const agent = (session as { agent?: string } | null)?.agent ?? '';
-          const providerId = (session as { providerId?: string | null } | null)?.providerId ?? null;
-          const models = await fetch(`/api/models?agent=${agent}${providerId === null ? '' : `&providerId=${providerId}`}`, {
-            credentials: 'same-origin',
-          }).then((r) => r.json());
-          const meta = await fetch('/api/meta', { credentials: 'same-origin' }).then((r) => r.json());
-          return JSON.stringify({ session, models, metaModels: (meta as { agents: Record<string, unknown> }).agents }).slice(0, 900);
-        });
-        const html = await menu.evaluate((node) => node.outerHTML).catch(() => 'no-menu');
         const composerText = await app.page.getByTestId('composer').innerText().catch(() => '');
-        throw new Error(`模型菜单里没有可换的模型；fuel=${debug}\nHTML=${html}\nCOMPOSER=${composerText}`);
+        throw new Error(`模型菜单里没有可换的模型；COMPOSER=${composerText}`);
       }
+      // 优先换到一个和当前不同的模型
+      options.sort((a, b) => Number(a === current) - Number(b === current));
       const next = options[0] as string;
       const before = await app.mockResponses.requests();
       await app.mockClaude.reset();
       await app.mockDsh.reset();
       await app.mockResponses.reset();
       await app.planFor(agent, 'full');
-      await menu.selectOption(next);
+      await app.page.locator(`[data-testid="model-option"]:not([disabled])[data-model="${next}"]`).first().click();
+      await expect(menu).toHaveAttribute('data-model', next);
       await sendMessage(app.page, '换模型之后再跑一轮');
       await expect.poll(async () => (await app.page.getByTestId('composer').innerText()), { timeout: 120_000 }).toContain('2 轮');
       const api = agent === 'codex' ? app.mockResponses : agent === 'claude' ? app.mockClaude : app.mockDsh;

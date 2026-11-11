@@ -77,6 +77,7 @@ export class CommandDispatcher {
             providerId: command.providerId ?? null,
             ...(command.model === undefined ? {} : { model: command.model }),
             ...(command.accessMode === undefined ? {} : { accessMode: command.accessMode }),
+            ...(command.parentId === undefined ? {} : { parentId: command.parentId }),
           });
           return { ok: true, value: { sessionId: session.id } };
         }

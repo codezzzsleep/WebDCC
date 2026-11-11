@@ -42,6 +42,17 @@ export class JsonRpcStdio {
     rl.on('line', (line) => this.onLine(line));
     const errRl = createInterface({ input: child.stderr });
     errRl.on('line', (line) => this.options.onStderr?.(line));
+    // 没装 codex（ENOENT）等启动失败：不能让未处理的 'error' 事件拖垮整个服务进程
+    child.on('error', (error) => {
+      this.closed = true;
+      this.options.onStderr?.(`无法启动 ${options.command}：${error.message}`);
+      for (const [, p] of this.pending) {
+        clearTimeout(p.timer);
+        p.reject(new Error(`无法启动 ${options.command}：${error.message}`));
+      }
+      this.pending.clear();
+    });
+    child.stdin.on('error', () => undefined);
     child.on('exit', (code, signal) => {
       this.closed = true;
       for (const [, p] of this.pending) {

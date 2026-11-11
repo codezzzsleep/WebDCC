@@ -19,6 +19,8 @@ export interface SessionMeta {
   accessMode?: string;
   createdAt?: string;
   lastSeq?: number;
+  /** 接续会话的上一棒 */
+  parentId?: string;
 }
 
 export interface HotItem {
@@ -181,6 +183,7 @@ export class AppStore {
           ...(patch['model'] === undefined ? {} : { model: String(patch['model']) }),
           ...(patch['accessMode'] === undefined ? {} : { accessMode: String(patch['accessMode']) }),
           ...(patch['providerId'] === undefined ? {} : { providerId: patch['providerId'] === null ? null : String(patch['providerId']) }),
+          ...(typeof patch['parentId'] === 'string' ? { parentId: patch['parentId'] } : {}),
           updatedAt: nowIso(),
         };
         this.sessions.set(message.sessionId, next);
@@ -328,8 +331,10 @@ ${text}`;
     this.trace['ensureStart'] = t0;
     if (this.events.has(sessionId) === false) {
       const cached = await cache.getEvents(sessionId, 500).catch(() => []);
-      const map = new Map<number, StoredEvent>();
-      for (const event of cached) map.set(event.seq, event);
+      // 等缓存的这段时间里，实时通道可能已经送来了新事件（例如刚发出的 user.message）：
+      // 只能合并，不能整张表替换，否则这些事件会丢掉，直到刷新才出现
+      const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
+      for (const event of cached) if (!map.has(event.seq)) map.set(event.seq, event);
       this.events.set(sessionId, map);
     }
     performance.mark('wdcc:ensure-start');
@@ -543,6 +548,7 @@ ${text}`;
     providerId?: string | null;
     model?: string;
     accessMode?: string;
+    parentId?: string;
   }): Promise<string> {
     const command: Command = {
       op: 'create-session',
@@ -552,6 +558,7 @@ ${text}`;
       ...(input.providerId === undefined ? {} : { providerId: input.providerId }),
       ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
+      ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
     };
     const result = await api.command(command);
     if (!result.ok) throw new Error(result.error ?? '创建会话失败');

@@ -4,10 +4,9 @@
  * - Claude：settings.json 的 env 段
  * - DSH：读取类端点（下一步）
  */
-import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { ProviderInput } from './providers.js';
 
 export interface ImportedProvider extends ProviderInput {
@@ -17,8 +16,8 @@ export interface ImportedProvider extends ProviderInput {
 
 async function codexConfigRead(): Promise<Record<string, unknown> | null> {
   const { JsonRpcStdio } = await import('@webdcc/adapter-codex');
-  const home = await mkdtemp(join(tmpdir(), 'wdcc-import-'));
-  const rpc = JsonRpcStdio.start({ command: 'codex', args: ['app-server'], env: { ...process.env, CODEX_HOME: process.env['CODEX_HOME'] ?? home } });
+  // 读的是用户本机生效的 Codex 配置：CODEX_HOME 没设时就是 Codex 自己的默认位置（~/.codex），不能换成空的临时目录
+  const rpc = JsonRpcStdio.start({ command: 'codex', args: ['app-server'], env: { ...process.env } });
   try {
     await rpc.request('initialize', { clientInfo: { name: 'webdcc', title: 'WebDCC import', version: '0.1.0' }, capabilities: null });
     rpc.notify('initialized');
@@ -72,14 +71,18 @@ export async function importFromCodex(): Promise<ImportedProvider[]> {
 
 /** Claude Code：读 settings.json 的 env 段 */
 export async function importFromClaude(): Promise<ImportedProvider[]> {
-  const configDir = process.env['CLAUDE_CONFIG_DIR'] ?? join(process.env['HOME'] ?? '/root', '.claude');
+  const configDir = process.env['CLAUDE_CONFIG_DIR'] ?? join(process.env['HOME'] ?? homedir(), '.claude');
   let settings: Record<string, unknown>;
   try {
     settings = JSON.parse(await readFile(join(configDir, 'settings.json'), 'utf8')) as Record<string, unknown>;
   } catch {
     return [];
   }
-  const env = { ...(settings['env'] as Record<string, string> | undefined), ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) } as Record<string, string>;
+  // 和 Claude Code 自己一样：settings.json 的 env 盖过进程环境变量
+  const env = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)),
+    ...(settings['env'] as Record<string, string> | undefined),
+  } as Record<string, string>;
   const baseUrl = env['ANTHROPIC_BASE_URL'];
   if (baseUrl === undefined || baseUrl === '') return [];
   const key = env['ANTHROPIC_AUTH_TOKEN'] ?? env['ANTHROPIC_API_KEY'];

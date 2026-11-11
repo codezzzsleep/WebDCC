@@ -119,9 +119,9 @@ test.describe('7.8 窄屏', () => {
     const sidebar = app.page.getByTestId('sidebar');
     const box = await sidebar.boundingBox();
     expect(box?.width ?? 0).toBeLessThanOrEqual(120);
-    await app.page.getByTestId('session-header').getByRole('button', { name: /停靠区|▥/ }).click().catch(async () => {
-      await app.page.getByRole('button', { name: '▥' }).click();
-    });
+    // 会话头的"并排"菜单：选"工作区文件"在右侧打开
+    await app.page.getByTestId('dock-toggle').click();
+    await app.page.getByRole('menuitem', { name: '工作区文件' }).click();
     await expect(app.page.getByTestId('dock')).toBeVisible();
     void first;
   });

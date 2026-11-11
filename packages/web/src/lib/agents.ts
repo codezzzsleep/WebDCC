@@ -1,0 +1,142 @@
+/** 三个 Harness 的展示信息，以及"Provider + 模型"选择的共用逻辑 */
+import type { AgentMeta, MetaResponse, ProviderDto } from '@webdcc/protocol';
+
+export const AGENT_IDS = ['dsh', 'codex', 'claude-code'] as const;
+export type AgentKey = (typeof AGENT_IDS)[number];
+
+export const AGENT_TEXT: Record<AgentKey, { name: string; mark: string; strength: string; nativeLabel: string }> = {
+  dsh: {
+    name: 'DeepSeek Harness',
+    mark: 'DS',
+    strength: '用 DSH 里你已经配好的模型、技能和子 Agent。',
+    nativeLabel: 'DSH 自己的设置',
+  },
+  codex: {
+    name: 'Codex',
+    mark: 'CX',
+    strength: 'GPT 模型走 ChatGPT 登录；也能用导入的 DeepSeek 等 Provider。',
+    nativeLabel: '原生：ChatGPT 登录',
+  },
+  'claude-code': {
+    name: 'Claude Code',
+    mark: 'CC',
+    strength: '用本机 Claude Code 的设置、MCP 和斜杠命令。',
+    nativeLabel: '原生：Claude 登录',
+  },
+};
+
+export function agentText(agent: string): { name: string; mark: string; strength: string; nativeLabel: string } {
+  return AGENT_TEXT[agent as AgentKey] ?? { name: agent, mark: '??', strength: '', nativeLabel: '原生配置' };
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  manual: '手动添加',
+  'codex-config': '导入自 Codex 配置',
+  'claude-settings': '导入自 Claude 设置',
+  dsh: '导入自 DSH',
+  paste: '粘贴导入',
+};
+
+export function sourceLabel(source: string | undefined): string {
+  return SOURCE_LABEL[source ?? 'manual'] ?? source ?? '手动添加';
+}
+
+/** 该 Agent 需要的协议（10.2）。DSH 只用它自己的设置 */
+export function isCompatible(agent: string, provider: ProviderDto): boolean {
+  if (agent === 'codex') return provider.protocols.includes('openai-responses');
+  if (agent === 'claude-code') return provider.protocols.includes('anthropic-messages');
+  return false;
+}
+
+export function incompatibleReason(agent: string): string {
+  if (agent === 'dsh') return 'DSH 使用自己设置里的 Provider';
+  if (agent === 'codex') return '没有 OpenAI Responses 地址，Codex 用不了';
+  return '没有 Anthropic 兼容地址，Claude Code 用不了';
+}
+
+export interface ModelGroup {
+  key: string;
+  providerId: string | null;
+  title: string;
+  note?: string;
+  models: string[];
+  disabled: boolean;
+  reason?: string;
+}
+
+export interface ModelChoice {
+  providerId: string | null;
+  model: string;
+}
+
+export function modelGroups(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelGroup[] {
+  const nativeMissing = meta?.auth === 'missing';
+  const groups: ModelGroup[] = [
+    {
+      key: 'native',
+      providerId: null,
+      title: agentText(agent).nativeLabel,
+      models: (meta?.models ?? []).map((model) => model.id),
+      disabled: nativeMissing,
+      ...(nativeMissing ? { reason: '未登录' } : {}),
+      ...(agent === 'dsh' ? { note: '模型和 Key 都由 DSH 管理' } : {}),
+    },
+  ];
+  for (const provider of providers) {
+    const compatible = isCompatible(agent, provider);
+    const notes: string[] = [sourceLabel(provider.source)];
+    if (provider.note !== undefined) notes.push(provider.note);
+    if (agent === 'codex' && compatible && provider.codexCatalogPath === undefined && !provider.models.some((model) => model.startsWith('gpt-'))) {
+      notes.push('需要模型目录，否则工具可能不可用');
+    }
+    groups.push({
+      key: provider.id,
+      providerId: provider.id,
+      title: provider.name,
+      note: notes.join(' · '),
+      models: provider.models,
+      disabled: !compatible,
+      ...(compatible ? {} : { reason: incompatibleReason(agent) }),
+    });
+  }
+  return groups;
+}
+
+/** 默认选择：与该 Agent 同源、带模型的导入 Provider；否则原生 */
+export function defaultChoice(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelChoice {
+  const sameSource = agent === 'codex' ? 'codex-config' : agent === 'claude-code' ? 'claude-settings' : '';
+  const compatible = providers.filter((provider) => isCompatible(agent, provider));
+  const preferred =
+    compatible.find((provider) => provider.source === sameSource && provider.models.length > 0) ??
+    (meta?.auth === 'missing' ? compatible.find((provider) => provider.models.length > 0) : undefined);
+  if (preferred !== undefined) return { providerId: preferred.id, model: preferred.models[0] ?? '' };
+  return { providerId: null, model: meta?.models?.[0]?.id ?? '' };
+}
+
+export function agentStatusLine(agent: string, meta: MetaResponse | null, providers: ProviderDto[], dsh?: { connected: boolean; mode: string; url: string | null } | null): string {
+  const info = meta?.agents[agent];
+  if (info === undefined) return '这个 Agent 没有启用';
+  if (!info.installed) return info.notes?.[0] ?? '服务器上没有安装';
+  if (agent === 'dsh' && dsh !== undefined && dsh !== null) {
+    if (dsh.mode === 'attach') return dsh.connected ? `已连接本机 DSH · ${hostOf(dsh.url)}` : '还没有连接 DSH';
+    return dsh.connected ? 'WebDCC 自己拉起的 DSH' : 'DSH 未运行';
+  }
+  const choice = defaultChoice(agent, info, providers);
+  const provider = providers.find((item) => item.id === choice.providerId);
+  const who = provider === undefined ? agentText(agent).nativeLabel.replace('原生：', '') : provider.name;
+  return choice.model === '' ? who : `${who} · ${choice.model}`;
+}
+
+function hostOf(url: string | null): string {
+  if (url === null) return '';
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+export function agentAvailable(agent: string, meta: MetaResponse | null): boolean {
+  const info = meta?.agents[agent];
+  return info !== undefined && info.installed !== false;
+}

@@ -1,10 +1,11 @@
 import { expect, test } from './fixtures.js';
-import { waitTurnDone } from './helpers.js';
+import { chooseModel, waitTurnDone } from './helpers.js';
 
 test.describe('7.2 Provider（续）', () => {
   test('PRV-06 表单手动新增 Provider（来源=手动，Key 不外泄）', async ({ app }) => {
     await app.login();
     await app.page.goto(`${app.run.baseURL}/settings/providers`);
+    await app.page.getByTestId('provider-form-toggle').click();
     await app.page.getByTestId('provider-name').fill(`手动 Provider ${app.run.runId.slice(-4)}`);
     await app.page.getByTestId('provider-baseurl').fill('http://127.0.0.1:1/v1');
     await app.page.getByTestId('provider-key').fill(`sk-wdcc-test-manual-${app.run.runId}`);
@@ -30,8 +31,7 @@ test.describe('7.2 Provider（续）', () => {
     await app.planFor('codex', 'full');
     await app.page.goto(`${app.run.baseURL}/new`);
     await app.page.getByTestId('agent-card-codex').click();
-    await app.page.getByTestId('provider-select').selectOption({ label: 'Mock Responses 2' });
-    await app.page.getByTestId('model-input').fill(app.run.slugs.a);
+    await chooseModel(app.page, 'Mock Responses 2', undefined, app.run.slugs.a);
     await app.page.getByTestId('new-session-input').fill('mockr2 跑一轮');
     await app.page.getByTestId('new-session-send').click();
     await app.page.waitForURL(/\/s\/[0-9A-Z]+/, { timeout: 60_000 });

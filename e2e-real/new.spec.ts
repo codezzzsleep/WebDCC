@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { waitTurnDone } from './helpers.js';
+import { chooseModel, currentModel, waitTurnDone } from './helpers.js';
 
 test.describe('7.3 新会话', () => {
   test('NEW-02 默认 Provider 与模型传给 Agent', async ({ app }) => {
@@ -7,11 +7,10 @@ test.describe('7.3 新会话', () => {
     await app.planFor('codex', 'full');
     await app.page.goto(`${app.run.baseURL}/new`);
     await app.page.getByTestId('agent-card-codex').click();
-    await expect.poll(async () => app.page.getByTestId('provider-select').inputValue(), { timeout: 20_000 }).not.toBe('');
-    const providerText = await app.page.getByTestId('provider-select').evaluate((el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent ?? '');
-    const modelValue = await app.page.getByTestId('model-select').inputValue();
-    expect(providerText).toContain('Mock Responses');
-    expect(modelValue).toBe(app.run.slugs.a);
+    await expect.poll(async () => (await currentModel(app.page)).provider, { timeout: 20_000 }).not.toBe('');
+    const selected = await currentModel(app.page);
+    expect(selected.provider).toContain('Mock Responses');
+    expect(selected.model).toBe(app.run.slugs.a);
     await app.page.getByTestId('new-session-input').fill('默认模型');
     await app.page.getByTestId('new-session-send').click();
     await app.page.waitForURL(/\/s\/[0-9A-Z]+/, { timeout: 60_000 });
@@ -39,8 +38,8 @@ test.describe('7.3 新会话', () => {
     await app.planFor('codex', 'full');
     await app.page.goto(`${app.run.baseURL}/new`);
     await app.page.getByTestId('agent-card-codex').click();
-    await app.page.getByTestId('provider-select').selectOption({ label: '单模型 Provider' });
-    await expect.poll(async () => app.page.getByTestId('model-select').inputValue()).toBe('gpt-5');
+    await chooseModel(app.page, '单模型 Provider');
+    await expect.poll(async () => (await currentModel(app.page)).model).toBe('gpt-5');
     await app.page.getByTestId('new-session-input').fill('单模型');
     await app.page.getByTestId('new-session-send').click();
     await app.page.waitForURL(/\/s\/[0-9A-Z]+/, { timeout: 60_000 });

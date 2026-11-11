@@ -25,6 +25,7 @@ interface SessionRow {
   archived: number;
   last_seq: number;
   native_meta: string | null;
+  parent_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -124,6 +125,7 @@ export interface CreateSessionInput {
   model?: string | null;
   accessMode?: string | null;
   title?: string | null;
+  parentId?: string | null;
 }
 
 function toSessionDto(row: SessionRow): SessionDto {
@@ -136,6 +138,7 @@ function toSessionDto(row: SessionRow): SessionDto {
     providerId: row.provider_id,
     ...(row.model === null ? {} : { model: row.model }),
     ...(row.access_mode === null ? {} : { accessMode: row.access_mode }),
+    ...(row.parent_id === null || row.parent_id === undefined ? {} : { parentId: row.parent_id }),
     status: row.status as SessionDto['status'],
     pinned: row.pinned === 1,
     archived: row.archived === 1,
@@ -215,10 +218,10 @@ export class Store {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, access_mode, status, title, last_seq, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, 0, ?, ?)`,
+        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, access_mode, status, title, parent_id, last_seq, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, ?, ?)`,
       )
-      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.accessMode ?? null, input.title ?? null, at, at);
+      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, at, at);
     return this.getSession(id) as SessionDto;
   }
 

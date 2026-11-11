@@ -49,14 +49,14 @@ test.describe('7.10 会话管理', () => {
     await waitTurnDone(app.page);
     // 归档第二个
     await app.page.goto(`${run.baseURL}/s/${second}`);
-    await app.page.getByTestId('session-header').getByRole('button', { name: '···' }).click();
-    await app.page.getByRole('button', { name: '归档' }).click();
+    await app.page.getByTestId('session-more').click();
+    await app.page.getByRole('menuitem', { name: '归档' }).click();
     await expect.poll(async () => app.page.getByTestId('archived-section').count(), { timeout: 20_000 }).toBe(1);
     // 置顶第一个
     await app.page.goto(`${run.baseURL}/s/${first}`);
-    await app.page.getByTestId('session-header').getByRole('button', { name: '···' }).click();
-    await app.page.getByRole('button', { name: '置顶' }).click();
-    await expect.poll(async () => app.page.getByTestId('sidebar').innerText()).toMatch(/置顶/);
+    await app.page.getByTestId('session-more').click();
+    await app.page.getByRole('menuitem', { name: '置顶' }).click();
+    await expect(app.page.getByTestId('session-row').filter({ hasText: '置顶我' }).getByLabel('置顶')).toBeVisible();
     await app.page.reload();
     await expect.poll(async () => app.page.getByTestId('archived-section').count(), { timeout: 20_000 }).toBe(1);
     const rows = await app.page.getByTestId('session-row').allInnerTexts();

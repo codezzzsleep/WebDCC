@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures.js';
 import { spawnServer } from './fixtures.js';
+import { chooseModel } from './helpers.js';
 
 test.describe('7.2 Provider（三）', () => {
   test('PRV-08 缺模型目录时显示提示', async ({ app }) => {
@@ -15,7 +16,7 @@ test.describe('7.2 Provider（三）', () => {
     }, name);
     await app.page.goto(`${app.run.baseURL}/new`);
     await app.page.getByTestId('agent-card-codex').click();
-    await app.page.getByTestId('provider-select').selectOption({ label: `无目录 Provider ${app.run.runId.slice(-4)}` });
+    await chooseModel(app.page, `无目录 Provider ${app.run.runId.slice(-4)}`);
     await expect(app.page.getByTestId('catalog-hint')).toBeVisible();
   });
 

@@ -67,5 +67,7 @@ export function openDb(file: string): Db {
   // M8 C1：用户改过名字的会话不被原生标题覆盖
   const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
   if (!sessionColumns.some((column) => column.name === 'title_source')) db.exec('ALTER TABLE sessions ADD COLUMN title_source TEXT');
+  // 接续会话：记录上一棒（"在另一个 Agent 中继续"）
+  if (!sessionColumns.some((column) => column.name === 'parent_id')) db.exec('ALTER TABLE sessions ADD COLUMN parent_id TEXT');
   return db;
 }

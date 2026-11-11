@@ -24,6 +24,28 @@ export async function waitTurnDone(page: Page): Promise<void> {
   await expect.poll(async () => page.getByTestId('timeline').innerText(), { timeout: 60_000 }).toMatch(/已完成|已中断/);
 }
 
+/**
+ * 在输入框的"模型"菜单里选择 Provider 和模型（新会话页与会话页通用）。
+ * model 不传时选该 Provider 的第一个模型；Provider 没有模型列表时用 freeModel 填写。
+ */
+export async function chooseModel(page: Page, providerName: string, model?: string, freeModel?: string): Promise<void> {
+  await page.getByTestId('model-menu').click();
+  if (freeModel !== undefined) {
+    const input = page.getByRole('group', { name: providerName }).getByTestId('model-input');
+    await input.fill(freeModel);
+    await input.press('Enter');
+    return;
+  }
+  const selector = `[data-testid="model-option"][data-provider-name="${providerName}"]${model === undefined ? '' : `[data-model="${model}"]`}`;
+  await page.locator(selector).first().click();
+}
+
+/** 输入框当前选中的 Provider 名与模型 */
+export async function currentModel(page: Page): Promise<{ provider: string; model: string }> {
+  const pill = page.getByTestId('model-menu');
+  return { provider: (await pill.getAttribute('data-provider')) ?? '', model: (await pill.getAttribute('data-model')) ?? '' };
+}
+
 export async function agentMarkInHeader(page: Page): Promise<string> {
   return (await page.getByTestId('session-header').locator('.agent-mark').first().innerText()).trim();
 }
