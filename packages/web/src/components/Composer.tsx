@@ -9,6 +9,7 @@ interface ComposerProps {
   sessionId: string;
   workspaceId: string;
   meta?: AgentMeta;
+  runningAsRoot?: boolean;
   onSend?: (text: string) => void;
 }
 
@@ -18,7 +19,7 @@ interface MentionState {
   start: number;
 }
 
-export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps): React.ReactElement {
+export function Composer({ sessionId, workspaceId, meta, runningAsRoot = false, onSend }: ComposerProps): React.ReactElement {
   useStoreVersion();
   const session = store.getSession(sessionId);
   const [text, setText] = useState('');
@@ -27,8 +28,12 @@ export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps
   const [files, setFiles] = useState<{ name: string; path: string }[]>([]);
   const [accessOpen, setAccessOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashCommands, setSlashCommands] = useState<{ name: string; description?: string }[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void store.loadDraft(sessionId).then((draft) => setText(draft.text));
@@ -44,8 +49,25 @@ export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps
       .catch(() => setFiles([]));
   }, [mention.open, workspaceId]);
 
+  useEffect(() => {
+    if (session === undefined) return;
+    void api
+      .models(session.agent, session.providerId ?? null)
+      .then((list) => setModels(list))
+      .catch(() => setModels([]));
+  }, [session?.agent, session?.providerId, sessionId]);
+
+  useEffect(() => {
+    if (!slashOpen) return;
+    void api
+      .slashCommands(sessionId)
+      .then((result) => setSlashCommands(result.commands))
+      .catch(() => setSlashCommands([]));
+  }, [slashOpen, sessionId]);
+
   const running = session?.status === 'running' || session?.status === 'waiting';
   const accessModes = meta?.accessModes ?? [];
+  const rootBlocked = runningAsRoot && session?.agent === 'claude-code';
   const currentMode = accessModes.find((mode) => mode.id === session?.accessMode) ?? accessModes[0];
 
   const conversations = useMemo(() => {
@@ -62,6 +84,8 @@ export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps
   const updateText = (value: string): void => {
     setText(value);
     store.setDraft(sessionId, value, images);
+    // "/" 开头：打开斜杠命令菜单（F8）；Codex 不提供菜单（SL-03）
+    setSlashOpen(value.startsWith('/') && !value.includes('\n') && session?.agent !== 'codex');
     const cursor = textareaRef.current?.selectionStart ?? value.length;
     const before = value.slice(0, cursor);
     const at = before.lastIndexOf('@');
@@ -92,38 +116,89 @@ export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps
   };
 
   const pickFile = (): void => fileInputRef.current?.click();
+  const pickAttach = (): void => attachInputRef.current?.click();
+
+  /** 分片上传一个文件，返回 fileId（断点续传：按服务端已收到的分片续传） */
+  const uploadOne = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const init = (await fetch('/api/uploads', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: file.name, size: file.size, sha256, mime: file.type || 'application/octet-stream' }),
+    }).then(async (response) => {
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))) as unknown as string);
+      return response.json() as Promise<{ uploadId: string; chunkSize: number; received: number[]; existingFileId?: string }>;
+    })) as { uploadId: string; chunkSize: number; received: number[]; existingFileId?: string };
+    if (init.existingFileId !== undefined) return init.existingFileId;
+    const chunkSize = init.chunkSize;
+    const total = Math.ceil(buffer.byteLength / chunkSize);
+    const sent = new Set(init.received);
+    for (let index = 0; index < total; index += 1) {
+      if (sent.has(index)) continue;
+      const chunk = buffer.slice(index * chunkSize, (index + 1) * chunkSize);
+      // 断网时重试同一个分片（A6f：服务端不会留下重复分片）
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          const response = await fetch(`/api/uploads/${init.uploadId}/chunks/${index}`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/octet-stream' },
+            body: chunk,
+          });
+          if (response.ok) break;
+        } catch {
+          // 继续重试
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const status = (await fetch(`/api/uploads/${init.uploadId}`, { credentials: 'same-origin' }).then((r) => r.json())) as {
+          received: number[];
+        };
+        if (status.received.includes(index)) break;
+      }
+    }
+    const complete = (await fetch(`/api/uploads/${init.uploadId}/complete`, { method: 'POST', credentials: 'same-origin' }).then((response) =>
+      response.json(),
+    )) as { fileId: string };
+    return complete.fileId;
+  };
 
   const uploadFiles = async (list: FileList | null): Promise<void> => {
     if (list === null) return;
     setUploading(true);
     try {
       for (const file of Array.from(list)) {
-        const buffer = await file.arrayBuffer();
-        const digest = await crypto.subtle.digest('SHA-256', buffer);
-        const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-        const init = await fetch('/api/uploads', {
+        const fileId = await uploadOne(file);
+        setImages((prev) => [...prev, fileId]);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /** 其他文件：复制到 <工作区>/.webdcc/uploads/，把相对路径插进输入框（F7） */
+  const attachFiles = async (list: FileList | null): Promise<void> => {
+    if (list === null) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(list)) {
+        if (file.size > 100 * 1024 * 1024) {
+          window.alert(`文件超过 100 MB 上限：${file.name}`);
+          continue;
+        }
+        const fileId = await uploadOne(file);
+        const attached = (await fetch(`/api/workspaces/${workspaceId}/attach`, {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ name: file.name, size: file.size, sha256, mime: file.type || 'application/octet-stream' }),
-        }).then((response) => response.json() as Promise<{ uploadId: string; chunkSize: number; existingFileId?: string }>);
-        if (init.existingFileId !== undefined) {
-          setImages((prev) => [...prev, init.existingFileId as string]);
-          continue;
-        }
-        const chunkSize = init.chunkSize;
-        for (let index = 0; index * chunkSize < buffer.byteLength; index += 1) {
-          await fetch(`/api/uploads/${init.uploadId}/chunks/${index}`, {
-            method: 'PUT',
-            credentials: 'same-origin',
-            headers: { 'content-type': 'application/octet-stream' },
-            body: buffer.slice(index * chunkSize, (index + 1) * chunkSize),
-          });
-        }
-        const complete = await fetch(`/api/uploads/${init.uploadId}/complete`, { method: 'POST', credentials: 'same-origin' }).then(
-          (response) => response.json() as Promise<{ fileId: string }>,
-        );
-        setImages((prev) => [...prev, complete.fileId]);
+          body: JSON.stringify({ fileId, name: file.name }),
+        }).then((response) => response.json())) as { path: string };
+        const cursor = textareaRef.current?.selectionStart ?? text.length;
+        const next = `${text.slice(0, cursor)}${attached.path} ${text.slice(cursor)}`;
+        setText(next);
+        store.setDraft(sessionId, next, images);
       }
     } finally {
       setUploading(false);
@@ -134,6 +209,31 @@ export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps
 
   return (
     <div className="composer" data-testid="composer">
+      {slashOpen ? (
+        <div className="mention-menu" data-testid="slash-menu">
+          <div className="mention-title">斜杠命令</div>
+          {slashCommands.length === 0 ? <div className="muted">这个 Agent 没有可用的斜杠命令</div> : null}
+          {slashCommands
+            .filter((command) => command.name.startsWith(text.split('\n')[0] ?? ''))
+            .slice(0, 10)
+            .map((command) => (
+              <button
+                key={command.name}
+                type="button"
+                className="mention-item"
+                onClick={() => {
+                  setText(command.name);
+                  store.setDraft(sessionId, command.name, images);
+                  setSlashOpen(false);
+                  textareaRef.current?.focus();
+                }}
+              >
+                {command.name}
+                {command.description === undefined ? null : <span className="muted">{command.description}</span>}
+              </button>
+            ))}
+        </div>
+      ) : null}
       {mention.open ? (
         <div className="mention-menu" data-testid="at-menu">
           <div className="mention-group">
@@ -215,32 +315,69 @@ export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps
                 event.target.value = '';
               }}
             />
+            <button type="button" className="icon-button" onClick={pickAttach} title="添加文件" disabled={uploading} data-testid="add-file">
+              📎
+            </button>
+            <input
+              ref={attachInputRef}
+              type="file"
+              multiple
+              hidden
+              data-testid="add-file-input"
+              onChange={(event) => {
+                void attachFiles(event.target.files);
+                event.target.value = '';
+              }}
+            />
             <span className="menu-anchor">
               <button type="button" className="mode-button" onClick={() => setAccessOpen((value) => !value)} data-testid="access-mode">
                 {currentMode?.label ?? '默认访问模式'}
               </button>
               {accessOpen ? (
                 <div className="menu below" onMouseLeave={() => setAccessOpen(false)}>
-                  {accessModes.map((mode) => (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      className={mode.id === currentMode?.id ? 'active' : ''}
-                      onClick={() => {
-                        setAccessOpen(false);
-                        // 访问模式切换在 M6 接入（需要各 adapter 的实现）
-                      }}
-                    >
-                      {mode.label}
-                      <span className="muted"> {mode.id}</span>
-                    </button>
-                  ))}
+                  {accessModes.map((mode) => {
+                    // 以 root 运行时 Claude Code 不允许 bypassPermissions（MODE-claude-01）
+                    const blocked = mode.id === 'bypassPermissions' && rootBlocked;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        className={mode.id === currentMode?.id ? 'active' : ''}
+                        data-testid={`access-mode-${mode.id}`}
+                        disabled={blocked}
+                        title={blocked ? '以 root 运行时 Claude Code 不允许此模式' : undefined}
+                        onClick={() => {
+                          setAccessOpen(false);
+                          store.setAccessMode(sessionId, mode.id);
+                        }}
+                      >
+                        {mode.label}
+                        <span className="muted"> {mode.id}</span>
+                        {blocked ? <span className="muted">（以 root 运行时 Claude Code 不允许此模式）</span> : null}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
             </span>
           </div>
           <div className="composer-bar-right">
-            <span className="model-name">{session?.model ?? meta?.models?.[0]?.label ?? '默认模型'}</span>
+            <select
+              className="model-menu"
+              data-testid="model-menu"
+              value={session?.model ?? ''}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next !== '') store.setModel(sessionId, next);
+              }}
+            >
+              <option value="">{session?.model ?? '默认模型'}</option>
+              {(models ?? []).map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
             {running ? (
               <button type="button" className="button stop" onClick={() => store.interrupt(sessionId)} data-testid="stop-button">
                 停止
@@ -260,7 +397,10 @@ export function Composer({ sessionId, workspaceId, meta, onSend }: ComposerProps
 
 function statsFor(sessionId: string): string {
   const events = store.getEvents(sessionId);
-  const turns = new Set(events.map((event) => event.turnId)).size;
+  // "N 轮"只统计包含 user.message 的轮次（F4）
+  const turns = new Set(
+    events.filter((event) => event.kind === 'user.message' && event.turnId !== null).map((event) => event.turnId as string),
+  ).size;
   const steps = events.filter((event) => event.kind === 'command' || event.kind === 'tool.call').length;
   const usage = events.filter((event) => event.kind === 'usage').at(-1);
   const data = usage?.data as { inputTokens?: number; outputTokens?: number } | undefined;

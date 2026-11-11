@@ -1,5 +1,5 @@
-import { createReadStream } from 'node:fs';
-import { readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -71,11 +71,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       agents[adapter.id] = {
         ...probe,
         adapterKind: adapter.kind ?? 'real',
-        accessModes: adapter.accessModes(),
+        accessModes: adapter.listAccessModes === undefined ? adapter.accessModes() : await adapter.listAccessModes().catch(() => adapter.accessModes()),
         models: await adapter.listModels(null).catch(() => []),
       };
     }
-    return { version: deps.version, agents };
+    return { version: deps.version, agents, runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false };
   });
 
   // ---------- workspaces ----------
@@ -213,6 +213,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     reply.header('content-type', 'application/x-ndjson; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="${id}.jsonl"`);
     return events.map((event) => JSON.stringify(event)).join('\n');
+  });
+
+  app.get('/api/sessions/:id/slash-commands', async (request) => {
+    const { id } = request.params as { id: string };
+    const session = store.getSession(id);
+    if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+    const adapter = manager.adaptersList().find((item) => item.id === session.agent);
+    if (adapter?.slashCommands === undefined) return { commands: [] };
+    return { commands: await adapter.slashCommands(id).catch(() => []) };
   });
 
   app.get('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {
@@ -374,6 +383,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const query = request.query as { agent?: string; providerId?: string };
     const agent = query.agent ?? '';
     const providerId = query.providerId === undefined || query.providerId === '' ? null : query.providerId;
+    if (providerId === null) {
+      // 原生登录 / DSH 自己的设置：模型列表来自 adapter（DSH 用 session/modelCatalog）
+      const adapter = manager.adaptersList().find((item) => item.id === agent);
+      const models = adapter === undefined ? [] : await adapter.listModels(null).catch(() => []);
+      return { models: models.map((model) => model.id) };
+    }
     return { models: deps.providers.modelsFor(agent, providerId) };
   });
 
@@ -401,6 +416,41 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.post('/api/uploads/:uploadId/complete', async (request): Promise<UploadCompleteResponse> => {
     const { uploadId } = request.params as { uploadId: string };
     return files.completeUpload(uploadId);
+  });
+
+  // ---------- 附件：把上传的文件放进工作区（SPEC-M8 F7） ----------
+  app.post('/api/workspaces/:id/attach', async (request) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { fileId?: string; name?: string };
+    const workspace = store.getWorkspace(id);
+    if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
+    if (typeof body?.fileId !== 'string') throw badRequest('需要 fileId');
+    const found = await files.readAll(body.fileId);
+    if (found === undefined) throw Object.assign(new Error('文件不存在'), { statusCode: 404 });
+    if (found.buffer.byteLength > 100 * 1024 * 1024) throw Object.assign(new Error('文件超过 100 MB 上限'), { statusCode: 413 });
+    const original = body.name ?? found.file.name;
+    const safeName = original.replace(/[/\\]/g, '_');
+    const dir = join(workspace.path, '.webdcc', 'uploads');
+    await mkdir(dir, { recursive: true });
+    const target = join(dir, `${body.fileId}-${safeName}`);
+    await writeFile(target, found.buffer);
+    // 工作区是 git 仓库时把 .webdcc/ 写进 .git/info/exclude（不改用户的 .gitignore）
+    const gitDir = join(workspace.path, '.git');
+    if (existsSync(gitDir)) {
+      const exclude = join(gitDir, 'info', 'exclude');
+      await mkdir(join(gitDir, 'info'), { recursive: true });
+      const current = existsSync(exclude) ? await readFile(exclude, 'utf8') : '';
+      if (!current.split('\n').some((line) => line.trim() === '.webdcc/')) {
+        await writeFile(exclude, `${current}${current.endsWith('\n') || current === '' ? '' : '\n'}.webdcc/\n`);
+      }
+    }
+    return {
+      path: relative(workspace.path, target),
+      name: safeName,
+      fileId: body.fileId,
+      size: found.buffer.byteLength,
+      url: `/files/${body.fileId}`,
+    };
   });
 
   // ---------- files ----------

@@ -3,20 +3,19 @@
  * 通过 /?token=e2e-token 登录。
  */
 import { mkdir } from 'node:fs/promises';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { loadConfig } from '../packages/server/src/config.js';
 import { start } from '../packages/server/src/main.js';
+import { isolatedEnv } from '../packages/server/src/test-isolation.js';
 
-// 测试隔离（SPEC-M8 1.4）：绝不读取用户真实的 ~/.codex、~/.claude、~/.dsh
-const isolatedHome = mkdtempSync(join(tmpdir(), 'wdcc-e2e-home-'));
-const isolatedCodex = mkdtempSync(join(tmpdir(), 'wdcc-e2e-codex-'));
-const isolatedClaude = mkdtempSync(join(tmpdir(), 'wdcc-e2e-claude-'));
-process.env['HOME'] = isolatedHome;
-process.env['CODEX_HOME'] = isolatedCodex;
-process.env['CLAUDE_CONFIG_DIR'] = isolatedClaude;
+// 测试隔离（SPEC-M8 1.4/1.6.2）：绝不读取用户真实的 ~/.codex、~/.claude、~/.dsh
+const { env, dirs } = isolatedEnv(process.env, 'wdcc-fake-e2e');
+process.env['HOME'] = env['HOME'] as string;
+process.env['CODEX_HOME'] = env['CODEX_HOME'] as string;
+process.env['CLAUDE_CONFIG_DIR'] = env['CLAUDE_CONFIG_DIR'] as string;
+process.env['DSH_HOME'] = env['DSH_HOME'] as string;
+process.env['WDCC_TEST_HOOKS'] = '1';
+void dirs;
 
 const config = loadConfig();
 const adapters = [

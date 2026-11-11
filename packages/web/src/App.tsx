@@ -10,6 +10,7 @@ import { Timeline } from './components/Timeline.js';
 import { Trajectory } from './components/Trajectory.js';
 import { Composer } from './components/Composer.js';
 import { TaskPanel } from './components/TaskPanel.js';
+import { GoalPanel } from './components/GoalPanel.js';
 import { Dock, type DockState } from './components/Dock.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { HandoffDialog } from './components/HandoffDialog.js';
@@ -46,7 +47,7 @@ function RootLayout(): React.ReactElement {
   };
 
   return (
-    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''} ${store.drawerOpen ? 'drawer-open' : ''}`}>
       <Sidebar
         currentSessionId={currentSessionId()}
         dockSessionId={null}
@@ -57,7 +58,11 @@ function RootLayout(): React.ReactElement {
         onSearch={() => {
           void navigate({ to: '/new', search: {} });
         }}
+        onNavigate={() => store.setDrawer(false)}
       />
+      {store.drawerOpen ? (
+        <div className="drawer-backdrop" data-testid="drawer-backdrop" onClick={() => store.setDrawer(false)} />
+      ) : null}
       <Outlet />
       {addOpen ? (
         <div className="modal-backdrop" onClick={() => setAddOpen(false)}>
@@ -215,11 +220,13 @@ function SessionPage(): React.ReactElement {
         {tab === 'chat' ? (
           <>
             <Timeline sessionId={mainId} onOpenDiff={openDiff} onHandoff={setHandoffText} />
+            <GoalPanel sessionId={mainId} />
             <TaskPanel sessionId={mainId} />
             <Composer
               sessionId={mainId}
               workspaceId={session?.workspaceId ?? ''}
               meta={metaFor(session?.agent ?? 'dsh')}
+              runningAsRoot={metaFor(session?.agent ?? 'dsh') === undefined ? false : metaCache?.runningAsRoot === true}
             />
           </>
         ) : (

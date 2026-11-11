@@ -52,6 +52,13 @@ export const api = {
   saveDraft: (id: string, text: string, fileIds: string[]) =>
     request<DraftDto>(`/api/sessions/${id}/draft`, { method: 'PUT', body: JSON.stringify({ text, fileIds }) }),
   providers: () => request<ProviderDto[]>('/api/providers'),
+  slashCommands: (sessionId: string) =>
+    request<{ commands: { name: string; description?: string }[] }>(`/api/sessions/${sessionId}/slash-commands`),
+  models: async (agent: string, providerId: string | null): Promise<string[]> => {
+    const query = `agent=${encodeURIComponent(agent)}${providerId === null ? '' : `&providerId=${encodeURIComponent(providerId)}`}`;
+    const result = await request<{ models: string[] }>(`/api/models?${query}`);
+    return result.models;
+  },
   createProvider: (input: {
     name: string;
     baseUrl: string;

@@ -16,7 +16,7 @@ import {
   writeSse,
   type MockLogger,
 } from './http-util.js';
-import { resolveStep, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { detectVariant, resolveStep, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
 import { HELPER_REPLY, MockControl, countAnthropic } from './mock-control.js';
 
 export interface AnthropicMockOptions {
@@ -255,7 +255,8 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
       await replyHelper(res, body, messageSeq);
       return;
     }
-    const resolvedStep = resolveStep(control.currentPlan as Plan, toolResultCount, tools);
+    const variant = detectVariant('anthropic', tools, false);
+    const resolvedStep = resolveStep(control.planForVariant(variant), toolResultCount, tools);
     const step: PlanStep = resolvedStep.step;
     const toolName = resolvedStep.toolName;
     if (step.tool !== undefined && toolName === undefined) {

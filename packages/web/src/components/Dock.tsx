@@ -25,6 +25,9 @@ export function Dock({ state, onClose, onPromote, onHandoff }: DockProps): React
   return (
     <aside className="dock" data-testid="dock">
       <div className="dock-tabs">
+        <button type="button" className="icon-button dock-back" data-testid="dock-back" title="返回" onClick={onClose}>
+          ←
+        </button>
         <span className="dock-tab active">
           {state.kind === 'session' ? '会话' : state.kind === 'diff' ? `改动 · ${state.path}` : '工作区文件'}
         </span>

@@ -25,7 +25,7 @@ export interface HotItem {
   itemKey: string;
   kind: EventKind;
   data: unknown;
-  turnId?: string;
+  turnId?: string | null;
 }
 
 export interface PendingMessage {
@@ -39,6 +39,7 @@ export interface TurnModel {
   turnId: string;
   events: StoredEvent[];
   user?: StoredEvent;
+  started?: StoredEvent;
   completed?: StoredEvent;
   hot: HotItem[];
   pending?: PendingMessage;
@@ -68,6 +69,8 @@ export class AppStore {
   unread = new Map<string, number>();
   currentSessionId: string | null = null;
   feedSeq = 0;
+  /** 窄屏抽屉侧边栏（F9） */
+  drawerOpen = false;
   connectionState: ConnectionState = 'connecting';
   connectionAttempt = 0;
   lastReconnectAt = 0;
@@ -175,6 +178,9 @@ export class AppStore {
           ...(patch['status'] === undefined ? {} : { status: patch['status'] as SessionMeta['status'] }),
           ...(patch['archived'] === undefined ? {} : { archived: Boolean(patch['archived']) }),
           ...(patch['pinned'] === undefined ? {} : { pinned: Boolean(patch['pinned']) }),
+          ...(patch['model'] === undefined ? {} : { model: String(patch['model']) }),
+          ...(patch['accessMode'] === undefined ? {} : { accessMode: String(patch['accessMode']) }),
+          ...(patch['providerId'] === undefined ? {} : { providerId: patch['providerId'] === null ? null : String(patch['providerId']) }),
           updatedAt: nowIso(),
         };
         this.sessions.set(message.sessionId, next);
@@ -223,6 +229,7 @@ export class AppStore {
             itemKey: message.itemKey,
             kind: (payload.kind ?? 'tool.call') as HotItem['kind'],
             data: payload.data ?? {},
+            ...(message.turnId === undefined ? {} : { turnId: message.turnId }),
           });
         }
         this.hot.set(message.sessionId, map);
@@ -269,6 +276,12 @@ export class AppStore {
     this.notify();
   }
 
+  setDrawer(open: boolean): void {
+    if (this.drawerOpen === open) return;
+    this.drawerOpen = open;
+    this.notify();
+  }
+
   unreadTotal(): number {
     let total = 0;
     for (const count of this.unread.values()) total += count;
@@ -288,6 +301,10 @@ ${text}`;
     this.events.set(event.sessionId, map);
     const hot = this.hot.get(event.sessionId);
     if (hot !== undefined) hot.delete(event.itemKey);
+    if (event.kind === 'turn.completed') {
+      // 一轮结束时流式条目都已经落库，热条目清空（否则刷新前后文本不一致）
+      this.hot.delete(event.sessionId);
+    }
     if (event.kind === 'turn.completed' || event.kind === 'approval.request') {
       this.bumpUnread(event.sessionId, this.sessions.get(event.sessionId)?.title ?? '会话');
     }
@@ -370,6 +387,13 @@ ${text}`;
     return this.sessions.get(sessionId);
   }
 
+  /** 轮次之外的事件（turnId 为 null）：只进轨迹，不构成一轮 */
+  private orphans = new Map<string, StoredEvent[]>();
+
+  getOrphans(sessionId: string): StoredEvent[] {
+    return this.orphans.get(sessionId) ?? [];
+  }
+
   getSessions(): SessionMeta[] {
     return [...this.sessions.values()].sort((a, b) => {
       if (a.pinned === b.pinned) return a.updatedAt < b.updatedAt ? 1 : -1;
@@ -400,7 +424,13 @@ ${text}`;
     const hot = this.getHot(sessionId);
     const byTurn = new Map<string, TurnModel>();
     const order: string[] = [];
+    // 轮次之外的事件（turnId 为 null）不构成一轮，只在轨迹里显示（F4）
+    const orphans: StoredEvent[] = [];
     for (const event of events) {
+      if (event.turnId === null) {
+        orphans.push(event);
+        continue;
+      }
       let turn = byTurn.get(event.turnId);
       if (turn === undefined) {
         turn = { turnId: event.turnId, events: [], hot: [], startedAt: event.at };
@@ -409,18 +439,22 @@ ${text}`;
       }
       turn.events.push(event);
       if (event.kind === 'user.message') turn.user = event;
+      if (event.kind === 'turn.started') turn.started = event;
       if (event.kind === 'turn.completed') turn.completed = event;
     }
     for (const item of hot) {
-      const turnId = item.turnId ?? 'live';
-      let turn = byTurn.get(turnId);
+      if (item.turnId === null || item.turnId === undefined) {
+        continue;
+      }
+      let turn = byTurn.get(item.turnId);
       if (turn === undefined) {
-        turn = { turnId, events: [], hot: [], startedAt: nowIso() };
-        byTurn.set(turnId, turn);
-        order.push(turnId);
+        turn = { turnId: item.turnId, events: [], hot: [], startedAt: nowIso() };
+        byTurn.set(item.turnId, turn);
+        order.push(item.turnId);
       }
       turn.hot.push(item);
     }
+    this.orphans.set(sessionId, orphans);
     for (const pending of this.getPending(sessionId)) {
       const turnId = `pending-${pending.clientCommandId}`;
       const turn: TurnModel = { turnId, events: [], hot: [], startedAt: pending.at, pending };
@@ -483,12 +517,24 @@ ${text}`;
     this.enqueue({ op: 'interrupt', clientCommandId: ulid(), sessionId, createdAt: Date.now() });
   }
 
+  setAccessMode(sessionId: string, accessMode: string): void {
+    this.enqueue({ op: 'set-access-mode', clientCommandId: ulid(), sessionId, accessMode });
+  }
+
+  setModel(sessionId: string, model: string): void {
+    this.enqueue({ op: 'set-model', clientCommandId: ulid(), sessionId, model });
+  }
+
   rename(sessionId: string, title: string): void {
     this.enqueue({ op: 'rename', clientCommandId: ulid(), sessionId, title });
   }
 
   archive(sessionId: string, archived: boolean): void {
     this.enqueue({ op: 'archive', clientCommandId: ulid(), sessionId, archived });
+  }
+
+  setPinned(sessionId: string, pinned: boolean): void {
+    this.enqueue({ op: 'pin', clientCommandId: ulid(), sessionId, pinned });
   }
 
   async createSession(input: {

@@ -15,6 +15,9 @@ test.describe('7.2 Provider', () => {
   test('PRV-02 重启服务后 Provider 不重复', async ({ app }) => {
     await app.login();
     await app.page.goto(`${app.run.baseURL}/settings/providers`);
+    // 首次打开会触发一次扫描：先等列表稳定
+    await expect(app.page.getByTestId('provider-list').locator('tbody tr').first()).toBeVisible();
+    await expect.poll(async () => app.page.getByTestId('provider-list').locator('tbody tr').count()).toBeGreaterThanOrEqual(3);
     const count = await app.page.getByTestId('provider-list').locator('tbody tr').count();
     await app.page.getByTestId('provider-scan').click();
     await expect(app.page.getByTestId('scan-info')).toContainText('导入了 0 个');

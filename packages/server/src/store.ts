@@ -109,7 +109,7 @@ interface UploadRow {
 
 export interface AppendEventInput {
   sessionId: string;
-  turnId: string;
+  turnId: string | null;
   itemKey: string;
   kind: EventKind;
   data: EventData[EventKind];
@@ -149,7 +149,7 @@ function toEvent(row: EventRow): StoredEvent {
   return {
     sessionId: row.session_id,
     seq: row.seq,
-    turnId: row.turn_id,
+    turnId: row.turn_id === '' ? null : row.turn_id,
     itemKey: row.item_key,
     at: row.at,
     kind: row.kind as EventKind,
@@ -342,7 +342,20 @@ export class Store {
     return this.getProvider(id);
   }
 
+  /** 用户改过名字的会话不会被原生标题覆盖（C1 / SES-01） */
+  setTitleSource(sessionId: string, source: 'user' | 'native'): void {
+    this.db.prepare('UPDATE sessions SET title_source = ? WHERE id = ?').run(source, sessionId);
+  }
+
+  titleSource(sessionId: string): 'user' | 'native' | null {
+    const row = this.db.prepare('SELECT title_source FROM sessions WHERE id = ?').get(sessionId) as { title_source: string | null } | undefined;
+    if (row === undefined || row.title_source === null) return null;
+    return row.title_source === 'user' ? 'user' : 'native';
+  }
+
   deleteProvider(id: string): void {
+    // sessions.provider_id 有外键引用：先解绑再删（PRV-03）
+    this.db.prepare('UPDATE sessions SET provider_id = NULL WHERE provider_id = ?').run(id);
     this.db.prepare('DELETE FROM providers WHERE id = ?').run(id);
   }
 
@@ -371,7 +384,7 @@ export class Store {
         .run(
           event.sessionId,
           seq,
-          event.turnId,
+          event.turnId ?? '',
           event.itemKey,
           event.kind,
           event.nativeSeq ?? null,

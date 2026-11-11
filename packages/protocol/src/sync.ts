@@ -27,7 +27,7 @@ export interface PongMessage {
   op: 'pong';
 }
 
-export type CommandOp = 'send' | 'approve' | 'answer' | 'interrupt' | 'create-session' | 'rename' | 'archive';
+export type CommandOp = 'send' | 'approve' | 'answer' | 'interrupt' | 'create-session' | 'rename' | 'archive' | 'set-access-mode' | 'set-model' | 'pin';
 
 export interface CommandBase {
   op: CommandOp;
@@ -85,7 +85,28 @@ export interface ArchiveCommand extends CommandBase {
   archived: boolean;
 }
 
+export interface PinCommand extends CommandBase {
+  op: 'pin';
+  sessionId: string;
+  pinned: boolean;
+}
+
+export interface SetAccessModeCommand extends CommandBase {
+  op: 'set-access-mode';
+  sessionId: string;
+  accessMode: string;
+}
+
+export interface SetModelCommand extends CommandBase {
+  op: 'set-model';
+  sessionId: string;
+  model: string;
+}
+
 export type Command =
+  | PinCommand
+  | SetAccessModeCommand
+  | SetModelCommand
   | SendCommand
   | ApproveCommand
   | AnswerCommand
@@ -113,6 +134,10 @@ export interface FeedPatch {
   workspaceId?: string;
   created?: boolean;
   draftSeq?: number;
+  /** 访问模式 / 模型 / Provider 变化（F6、AG-*-12） */
+  accessMode?: string;
+  model?: string;
+  providerId?: string | null;
 }
 
 export interface FeedMessage {
@@ -131,7 +156,7 @@ export interface SnapshotItem {
   itemKey: string;
   kind: EventKind;
   data: EventData[EventKind];
-  turnId?: string;
+  turnId?: string | null;
 }
 
 export interface SnapshotMessage {
@@ -153,6 +178,8 @@ export interface UpdateMessage {
   sessionId: string;
   itemKey: string;
   data: unknown;
+  /** 该条目所属的轮次（F4：流式帧必须带 turnId） */
+  turnId?: string | null;
 }
 
 export interface AckMessage {

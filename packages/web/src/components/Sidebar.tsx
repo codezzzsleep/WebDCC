@@ -13,9 +13,11 @@ interface SidebarProps {
   onSearch: () => void;
   collapsed: boolean;
   onToggle: () => void;
+  /** 窄屏抽屉里点了会话之后关掉抽屉（F9） */
+  onNavigate?: () => void;
 }
 
-export function Sidebar({ currentSessionId, dockSessionId, workspaces, onAddWorkspace, onSearch, collapsed, onToggle }: SidebarProps): React.ReactElement {
+export function Sidebar({ currentSessionId, dockSessionId, workspaces, onAddWorkspace, onSearch, collapsed, onToggle, onNavigate }: SidebarProps): React.ReactElement {
   useStoreVersion();
   const sessions = store.getSessions();
   const grouped = useMemo(() => {
@@ -52,7 +54,7 @@ export function Sidebar({ currentSessionId, dockSessionId, workspaces, onAddWork
           ⇤
         </button>
       </div>
-      <Link to="/new" search={{}} className="new-session-button">
+      <Link to="/new" search={{}} className="new-session-button" onClick={() => onNavigate?.()}>
         ＋ 新会话
       </Link>
 
@@ -105,7 +107,10 @@ export function Sidebar({ currentSessionId, dockSessionId, workspaces, onAddWork
                     data-testid="session-row"
                   >
                     <span className={`agent-mark ${info.className}`}>{info.mark}</span>
-                    <span className="session-title">{session.title ?? '新会话'}</span>
+                    <span className="session-title">
+                      {session.pinned === true ? '置顶 · ' : ''}
+                      {session.title ?? '新会话'}
+                    </span>
                     <span className={`session-status status-${session.status}`}>
                       {session.status === 'running'
                         ? '运行中'
@@ -122,6 +127,28 @@ export function Sidebar({ currentSessionId, dockSessionId, workspaces, onAddWork
           );
         })}
       </div>
+
+      {store.getSessions().some((session) => session.archived === true) ? (
+        <div className="archived-section" data-testid="archived-section">
+          <div className="sidebar-section-title">已归档</div>
+          {store
+            .getSessions()
+            .filter((session) => session.archived === true)
+            .map((session) => (
+              <Link
+                key={session.id}
+                to="/s/$sid"
+                params={{ sid: session.id }}
+                search={{}}
+                className="session-row archived"
+                data-testid="archived-row"
+              >
+                <span className="agent-mark muted">{agentInfo(session.agent).mark}</span>
+                <span className="session-title">{session.title ?? '新会话'}</span>
+              </Link>
+            ))}
+        </div>
+      ) : null}
 
       <div className="sidebar-bottom">
         <span className="muted">WebDCC · 三个原装 Agent</span>

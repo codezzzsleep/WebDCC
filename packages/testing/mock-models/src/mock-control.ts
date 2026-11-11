@@ -1,8 +1,9 @@
 /**
  * 假模型的控制面（SPEC-M8 6.3）：请求记录、重置、切换计划、模板变量、工具不匹配报错。
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Plan, PlanVariant } from './plan.js';
 
 export interface RecordedRequest {
   at: string;
@@ -26,6 +27,7 @@ export interface PlanStepShape {
 export class MockControl {
   readonly requests: RecordedRequest[] = [];
   private plan: unknown[] = [];
+  private planName = '';
   private readonly plansDir: string;
 
   constructor(initial: unknown[], plansDir: string) {
@@ -44,6 +46,19 @@ export class MockControl {
   setPlan(name: string): void {
     const file = join(this.plansDir, `${name}.json`);
     this.plan = JSON.parse(readFileSync(file, 'utf8')) as unknown[];
+    this.planName = name;
+  }
+
+  /**
+   * 取该 Agent 变体的计划：优先 `<name>.<variant>.json`，没有再退回 `<name>.json`。
+   * 每个 Agent 用自己的变体，缺少必需的工具时由调用方返回 500（SPEC-M8 6.3）。
+   */
+  planForVariant(variant: PlanVariant): Plan {
+    if (this.planName !== '') {
+      const variantFile = join(this.plansDir, `${this.planName}.${variant}.json`);
+      if (existsSync(variantFile)) return JSON.parse(readFileSync(variantFile, 'utf8')) as Plan;
+    }
+    return this.plan as Plan;
   }
 
   record(entry: RecordedRequest): void {
@@ -66,12 +81,17 @@ export function countAnthropic(body: Record<string, unknown>): { userMessageCoun
   let imageCount = 0;
   for (const message of messages) {
     if (message['role'] !== 'user') continue;
-    userMessageCount += 1;
     const content = message['content'];
-    if (Array.isArray(content)) {
-      for (const block of content) {
-        if (typeof block === 'object' && block !== null && (block as { type?: string }).type === 'image') imageCount += 1;
-      }
+    if (!Array.isArray(content)) {
+      userMessageCount += 1;
+      continue;
+    }
+    // 工具结果是 role=user 的 tool_result 块，不算"用户消息"（AG-*-11）
+    const hasToolResult = content.some((block) => typeof block === 'object' && block !== null && (block as { type?: string }).type === 'tool_result');
+    const hasText = content.some((block) => typeof block === 'object' && block !== null && (block as { type?: string }).type === 'text');
+    if (hasText && !hasToolResult) userMessageCount += 1;
+    for (const block of content) {
+      if (typeof block === 'object' && block !== null && (block as { type?: string }).type === 'image') imageCount += 1;
     }
   }
   return {

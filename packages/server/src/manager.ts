@@ -18,7 +18,7 @@ export interface HotItem {
   itemKey: string;
   kind: EventKind;
   data: EventData[EventKind];
-  turnId: string;
+  turnId: string | null;
 }
 
 export interface Runtime {
@@ -29,6 +29,8 @@ export interface Runtime {
   status: Exclude<SessionDto['status'], never>;
   turnId: string | null;
   turnStartedAt: number | null;
+  /** 本轮的 turn.started 是否已经由服务端写入（F4） */
+  turnStartedStored: boolean;
   hot: Map<string, HotItem>;
   idleTimer: NodeJS.Timeout | null;
 }
@@ -37,7 +39,7 @@ export interface ManagerHooks {
   onFeed: (sessionId: string, patch: FeedPatch, feedSeq: number) => void;
   onEvent: (event: StoredEvent) => void;
   onDelta: (sessionId: string, itemKey: string, field: 'text' | 'output', append: string) => void;
-  onUpdate: (sessionId: string, itemKey: string, data: unknown) => void;
+  onUpdate: (sessionId: string, itemKey: string, data: unknown, turnId?: string | null) => void;
   onStatus: (sessionId: string, status: SessionDto['status']) => void;
 }
 
@@ -57,6 +59,8 @@ export class SessionManager {
     private readonly options: {
       idleDisposeMin: number;
       resolveProvider?: (id: string | null) => ProviderRuntimeConfig | null;
+      /** 把 diff 文本存成文件，返回 fileId（C2 / F10） */
+      saveDiff?: (name: string, diff: string) => string;
     },
   ) {}
 
@@ -139,6 +143,9 @@ export class SessionManager {
       workspaceId: updated?.workspaceId ?? input.workspaceId,
       createdAt: updated?.createdAt ?? new Date().toISOString(),
       ...(updated?.title === undefined || updated.title === null ? {} : { title: updated.title }),
+      ...(updated?.model === undefined ? {} : { model: updated.model }),
+      ...(updated?.accessMode === undefined ? {} : { accessMode: updated.accessMode }),
+      providerId: updated?.providerId ?? null,
     };
     const feedSeq = this.store.appendFeed(session.id, createPatch);
     this.hooks.onFeed(session.id, createPatch, feedSeq);
@@ -156,6 +163,7 @@ export class SessionManager {
       status: session.status,
       turnId: null,
       turnStartedAt: null,
+      turnStartedStored: false,
       hot: new Map(),
       idleTimer: null,
     };
@@ -194,6 +202,7 @@ export class SessionManager {
     const turnId = ulid();
     runtime.turnId = turnId;
     runtime.turnStartedAt = Date.now();
+    runtime.turnStartedStored = true;
 
     const userEvent = this.store.appendEvent({
       sessionId,
@@ -207,6 +216,15 @@ export class SessionManager {
       },
     });
     this.hooks.onEvent(userEvent);
+    // 服务端分配轮次（F4）：一轮以 turn.started 开始、以 turn.completed 结束
+    const startEvent = this.store.appendEvent({
+      sessionId,
+      turnId,
+      itemKey: `turn-start-${turnId}`,
+      kind: 'turn.started',
+      data: {},
+    });
+    this.hooks.onEvent(startEvent);
 
     if (session.title === undefined || session.title === null || session.title === '') {
       const title = firstLine(input.text);
@@ -225,7 +243,9 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.respond(sessionId, decision);
-    const resolvedTurn = runtime.turnId ?? 'unknown';
+    // 轮次已经结束之后才到的审批：处理完不要停在"待批准"
+    if (runtime.turnId === null) this.setStatus(runtime, 'idle');
+    const resolvedTurn = runtime.turnId;
     const event = this.store.appendEvent({
       sessionId,
       turnId: resolvedTurn,
@@ -251,7 +271,31 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.interrupt(sessionId);
+    // 打断时把本会话挂起的审批标成已取消（只处理自己的会话，AG-*-09）
+    await runtime.adapter.cancelPending?.(sessionId);
+    for (const approvalId of this.pendingApprovalIds(sessionId)) {
+      const event = this.store.appendEvent({
+        sessionId,
+        turnId: runtime.turnId,
+        itemKey: `approval-resolved-${approvalId}`,
+        kind: 'approval.resolved',
+        data: { approvalId, optionId: 'cancelled', by: 'system' },
+      });
+      this.hooks.onEvent(event);
+    }
     this.touchIdle(runtime);
+  }
+
+  /** 还没有 approval.resolved 的审批 id */
+  private pendingApprovalIds(sessionId: string): string[] {
+    const events = this.store.allEvents(sessionId);
+    const resolved = new Set(
+      events.filter((event) => event.kind === 'approval.resolved').map((event) => (event.data as { approvalId: string }).approvalId),
+    );
+    return events
+      .filter((event) => event.kind === 'approval.request')
+      .map((event) => (event.data as { approvalId: string }).approvalId)
+      .filter((approvalId) => !resolved.has(approvalId));
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
@@ -262,7 +306,30 @@ export class SessionManager {
     this.updateSessionAndFeed(sessionId, { model }, {});
   }
 
+  /** 切换访问模式（F6）：记一个事件，轨迹里可见；实际生效的模式由 adapter 回报 */
+  async setAccessMode(sessionId: string, mode: string): Promise<string> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    let applied = mode;
+    if (runtime.adapter.setAccessMode !== undefined) {
+      const result = await runtime.adapter.setAccessMode(sessionId, mode);
+      if (result !== undefined && typeof result.accessMode === 'string') applied = result.accessMode;
+    }
+    this.updateSessionAndFeed(sessionId, { accessMode: applied }, { accessMode: applied });
+    const event = this.store.appendEvent({
+      sessionId,
+      turnId: runtime.turnId,
+      itemKey: `access-mode-${Date.now().toString(36)}`,
+      kind: 'internal',
+      data: { nativeType: 'access-mode', accessMode: applied } as unknown as EventData[EventKind],
+    });
+    this.hooks.onEvent(event);
+    return applied;
+  }
+
   async rename(sessionId: string, title: string): Promise<void> {
+    this.store.setTitleSource(sessionId, 'user');
     this.updateSessionAndFeed(sessionId, { title }, { title });
   }
 
@@ -276,6 +343,8 @@ export class SessionManager {
     if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
     await runtime.adapter.dispose(sessionId);
     this.runtimes.delete(sessionId);
+    // 回收之后状态回到空闲，否则界面上会一直显示"停止"（AG-*-11）
+    if (runtime.status !== 'idle') this.setStatus(runtime, 'idle');
   }
 
   async disposeAll(): Promise<void> {
@@ -287,10 +356,9 @@ export class SessionManager {
   private handleAdapterEvent(sessionId: string, event: AdapterEvent): void {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
-    // 一轮的 turnId 由 manager 在 send() 时分配；adapter 的原生 turn id 只作为参考，
-    // 否则 adapter 自造的 turnId 会让 user.message 和后续事件分到两个轮次里
-    const nativeTurnId = 'turnId' in event ? event.turnId : undefined;
-    const turnId = runtime.turnId ?? nativeTurnId ?? ulid();
+    // 一轮的 turnId 一律以 manager 在 send() 时分配的为准；原生 turn id 只保留在 native 里。
+    // 轮次之外的事件 turnId 为 null：不构成一轮，只进轨迹（F4）
+    const turnId = runtime.turnId;
 
     switch (event.type) {
       case 'item.start': {
@@ -298,10 +366,10 @@ export class SessionManager {
           itemKey: event.itemKey,
           kind: event.kind,
           data: event.data as EventData[EventKind],
-          turnId: event.turnId ?? turnId,
+          turnId,
         };
         runtime.hot.set(event.itemKey, item);
-        this.hooks.onUpdate(sessionId, event.itemKey, { started: true, kind: event.kind, data: item.data });
+        this.hooks.onUpdate(sessionId, event.itemKey, { started: true, kind: event.kind, data: item.data }, turnId);
         break;
       }
       case 'item.delta': {
@@ -317,29 +385,59 @@ export class SessionManager {
       case 'item.update': {
         const item = runtime.hot.get(event.itemKey);
         if (item !== undefined) item.data = event.data as EventData[EventKind];
-        this.hooks.onUpdate(sessionId, event.itemKey, event.data);
+        this.hooks.onUpdate(sessionId, event.itemKey, event.data, item?.turnId ?? turnId);
         break;
       }
       case 'item.complete': {
         runtime.hot.delete(event.itemKey);
+        // 改动卡片的数据来源：把 diff 文本存成文件，前端据此打开 diff 标签（C2）
+        let completeData = event.data as EventData[EventKind];
+        if (event.kind === 'file.change') {
+          const data = completeData as EventData['file.change'];
+          const changes = data.changes.map((change) => {
+            if (change.diff === undefined || this.options.saveDiff === undefined) return change;
+            const fileId = this.options.saveDiff(`${change.path}.diff`, change.diff);
+            const { diff: _diff, ...rest } = change;
+            void _diff;
+            return { ...rest, diffFileId: fileId };
+          });
+          completeData = { ...data, changes };
+        }
+        // adapter 也发 turn.started 时，服务端已经发过一条：重复的降级为 internal（只进轨迹）
+        const kind = event.kind === 'turn.started' && runtime.turnStartedStored ? 'internal' : event.kind;
+        if (event.kind === 'turn.started') runtime.turnStartedStored = true;
         const stored = this.store.appendEvent({
           sessionId,
-          turnId: event.turnId ?? turnId,
+          turnId,
           itemKey: event.itemKey,
-          kind: event.kind,
-          data: event.data as EventData[EventKind],
+          kind,
+          data: (kind === 'internal' ? { nativeType: 'turn.started' } : completeData) as EventData[EventKind],
           ...(event.native === undefined ? {} : { native: event.native }),
           ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
         });
+        // 原生标题：用户没改过名字时才生效（C1）
+        if (kind === 'internal') {
+          const internal = completeData as { nativeType?: string; title?: string };
+          if ((internal.nativeType === 'thread/name/updated' || internal.nativeType === 'session/title') && typeof internal.title === 'string' && internal.title !== '') {
+            if (this.store.titleSource(sessionId) !== 'user') {
+              this.store.setTitleSource(sessionId, 'native');
+              this.updateSessionAndFeed(sessionId, { title: internal.title }, { title: internal.title });
+            }
+          }
+        }
         this.hooks.onEvent(stored);
         if (event.kind === 'turn.completed') {
+          runtime.hot.clear();
           runtime.turnId = null;
           runtime.turnStartedAt = null;
+          runtime.turnStartedStored = false;
           this.setStatus(runtime, 'idle');
         }
         break;
       }
       case 'status': {
+        // 轮次已经结束时，adapter 迟到的 waiting/running 不再改变状态（避免卡在"待批准"）
+        if (runtime.turnId === null && event.status !== 'idle') break;
         this.setStatus(runtime, event.status);
         break;
       }

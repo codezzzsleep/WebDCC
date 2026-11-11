@@ -80,6 +80,8 @@ export interface AgentAdapter {
   probe(): Promise<ProbeResult>;
   listModels(providerId: string | null): Promise<ModelOption[]>;
   accessModes(): { id: string; label: string }[];
+  /** 运行时可用的访问模式（Codex 从 permissionProfile/list 读，MODE-codex-01） */
+  listAccessModes?(): Promise<{ id: string; label: string }[]>;
   buildLaunchSpec(opts: CreateOpts): LaunchSpec;
   create(opts: CreateOpts): Promise<{ nativeId: string }>;
   resume(opts: CreateOpts & { nativeId: string }): Promise<void>;
@@ -87,8 +89,14 @@ export interface AgentAdapter {
   steer?(sessionId: string, input: UserInput): Promise<void>;
   interrupt(sessionId: string): Promise<void>;
   respond(sessionId: string, d: ApprovalDecision): Promise<void>;
+  /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
+  cancelPending?(sessionId: string): Promise<void>;
   answer?(sessionId: string, questionId: string, answer: unknown): Promise<void>;
   setModel?(sessionId: string, model: string): Promise<void>;
+  /** 切换访问模式（F6）；Codex 在下一次 turn/start 生效，返回值是实际生效的模式 */
+  setAccessMode?(sessionId: string, mode: string): Promise<{ accessMode: string } | void>;
+  /** 斜杠命令目录（F8）：Claude 来自 init 消息，DSH 来自 commands/list */
+  slashCommands?(sessionId: string): Promise<{ name: string; description?: string }[]>;
   dispose(sessionId: string): Promise<void>;
   onEvent(cb: (sessionId: string, e: AdapterEvent) => void): void;
 }

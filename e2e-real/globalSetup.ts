@@ -8,11 +8,13 @@ import { createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import type { FullConfig } from '@playwright/test';
 import { startAnthropicMock } from '../packages/testing/mock-models/src/anthropic-server.js';
 import { startResponsesMock } from '../packages/testing/mock-models/src/responses-server.js';
 import { MockControl } from '../packages/testing/mock-models/src/mock-control.js';
 import { DshHostClient, startSidecar } from '../packages/adapters/dsh/src/host.js';
+import { isolatedDirsAt } from '../packages/server/src/test-isolation.js';
 
 export interface RunInfo {
   runId: string;
@@ -26,7 +28,8 @@ export interface RunInfo {
   externalDsh?: { url: string; port: number; home: string; sessionId: string; workspaceId: string; pid: number };
 }
 
-const PLANS_DIR = join(process.cwd(), 'packages/testing/mock-models/plans');
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const PLANS_DIR = join(REPO_ROOT, 'packages/testing/mock-models/plans');
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -49,12 +52,14 @@ async function hashFile(path: string): Promise<string> {
 export default async function globalSetup(_config: FullConfig): Promise<void> {
   const runId = `r${Date.now().toString(36)}`;
   const root = await mkdtemp(join(tmpdir(), `wdcc-accept-${runId}-`));
+  // 统一隔离（SPEC-M8 1.4/1.6.2）：四个家目录都从同一个 helper 来
+  const isolated = isolatedDirsAt(root);
   const dirs = {
-    home: join(root, 'home'),
-    codexHome: join(root, 'codex'),
-    claudeConfig: join(root, 'claude'),
-    dshHome: join(root, 'dsh'),
-    data: join(root, 'data'),
+    home: isolated.HOME,
+    codexHome: isolated.CODEX_HOME,
+    claudeConfig: isolated.CLAUDE_CONFIG_DIR,
+    dshHome: isolated.DSH_HOME,
+    data: isolated.data,
     ws: join(root, 'ws'),
     shots: join(root, 'shots'),
   };
@@ -82,15 +87,24 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   const anthClaude = await startAnthropicMock({ plan: [], port: 0, plansDir: PLANS_DIR, control: new MockControl([], PLANS_DIR), log: () => undefined });
   const anthDsh = await startAnthropicMock({ plan: [], port: 0, plansDir: PLANS_DIR, control: new MockControl([], PLANS_DIR), log: () => undefined });
 
-  const slugs = { a: 'gpt-5', b: 'gpt-5-mini' };
+  // SPEC-M8 6.2 / Q1：code mode 用 model/list 里的 slug，直接工具路径用 deepseek-v4-pro
+  const slugs = { a: 'gpt-6.1-sol', b: 'gpt-6-astra' };
   await writeFile(
     join(dirs.codexHome, 'config.toml'),
-    `model = "${slugs.a}"\nmodel_provider = "mockr"\n\n[model_providers.mockr]\nname = "Mock Responses"\nbase_url = "${responses.url}/v1"\nwire_api = "responses"\nenv_key = "WDCC_TEST_MOCKR_KEY"\n\n[model_providers.mockr2]\nname = "Mock Responses 2"\nbase_url = "${responses.url}/v2"\nwire_api = "responses"\nenv_key = "WDCC_TEST_MOCKR2_KEY_MISSING"\n\n[profiles.alt]\nmodel_provider = "mockr"\nmodel = "${slugs.b}"\n`,
+    `model = "${slugs.a}"\nmodel_provider = "mockr"\n\n[model_providers.mockr]\nname = "Mock Responses"\nbase_url = "${responses.url}/v1"\nwire_api = "responses"\nenv_key = "WDCC_TEST_MOCKR_KEY"\n\n[model_providers.mockr2]\nname = "Mock Responses 2"\nbase_url = "${responses.url}/v2"\nwire_api = "responses"\nenv_key = "WDCC_TEST_MOCKR2_KEY_MISSING"\n\n[profiles.alt]\nmodel_provider = "mockr"\nmodel = "${slugs.b}"\n\n[profiles.ds]\nmodel_provider = "mockr"\nmodel = "deepseek-v4-pro"\n`,
   );
   await writeFile(
     join(dirs.claudeConfig, 'settings.json'),
     JSON.stringify(
-      { env: { ANTHROPIC_BASE_URL: anthClaude.url, ANTHROPIC_AUTH_TOKEN: `sk-wdcc-test-claude-${runId}`, ANTHROPIC_MODEL: 'mock-claude-a' } },
+      {
+        env: {
+          ANTHROPIC_BASE_URL: anthClaude.url,
+          ANTHROPIC_AUTH_TOKEN: `sk-wdcc-test-claude-${runId}`,
+          ANTHROPIC_MODEL: 'mock-claude-a',
+          // AG-*-12 需要一个可切换的第二个模型（同一 Provider 下）
+          ANTHROPIC_SMALL_FAST_MODEL: 'mock-claude-b',
+        },
+      },
       null,
       2,
     ),
@@ -137,7 +151,12 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   };
   const { spawn } = await import('node:child_process');
   const serverLog = await import('node:fs').then((fs) => fs.openSync(join(root, 'server.log'), 'a'));
-  const child = spawn('node', ['packages/server/dist/main.js'], { cwd: process.cwd(), env, stdio: ['ignore', serverLog, serverLog] });
+  // 用 process.execPath 与仓库根目录：换机器复跑时不依赖 cwd 与 node 的名字（SPEC-M8 0.1 Q10）
+  const child = spawn(process.execPath, [join(REPO_ROOT, 'packages/server/dist/main.js')], {
+    cwd: REPO_ROOT,
+    env,
+    stdio: ['ignore', serverLog, serverLog],
+  });
   const baseURL = `http://127.0.0.1:${port}`;
   const started = Date.now();
   for (;;) {

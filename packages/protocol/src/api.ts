@@ -11,6 +11,8 @@ export interface AgentMeta extends ProbeResult {
 export interface MetaResponse {
   version: string;
   agents: Record<string, AgentMeta>;
+  /** 服务进程是否以 root 运行：root 下 Claude 不能用 bypassPermissions（MODE-claude-01） */
+  runningAsRoot?: boolean;
 }
 
 export interface WorkspaceDto {
@@ -41,7 +43,7 @@ export interface SnapshotItemDto {
   itemKey: string;
   kind: EventKind;
   data: EventData[EventKind];
-  turnId?: string;
+  turnId?: string | null;
 }
 
 export interface SessionDetailResponse extends SessionDto {

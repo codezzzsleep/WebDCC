@@ -1,0 +1,50 @@
+[
+  {
+    "chunkDelayMs": 80,
+    "text": "先看一下工作区里有哪些文件。",
+    "tool": { "kind": "command", "input": { "command": "ls -la", "description": "列出目录" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "读取 README.md。",
+    "tool": { "kind": "read", "input": { "file_path": "./README.md" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "新建 notes.txt，写两行内容。",
+    "tool": { "kind": "write", "input": { "file_path": "./notes.txt", "content": "第一行\n第二行\n" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "修改 README.md 里的一行。",
+    "tool": {
+      "kind": "edit",
+      "input": { "file_path": "./README.md", "old_string": "line to modify: ORIGINAL", "new_string": "line to modify: UPDATED" }
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "建任务：读 README。",
+    "tool": { "kind": "todo", "name": "TaskCreate", "input": { "subject": "读 README", "description": "读取 README.md" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "建任务：写 notes.txt。",
+    "tool": { "kind": "todo", "name": "TaskCreate", "input": { "subject": "写 notes.txt", "description": "新建 notes.txt" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "第一个任务完成。",
+    "tool": { "kind": "todo", "name": "TaskUpdate", "input": { "taskId": "1", "status": "completed" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "第二个任务进行中。",
+    "tool": { "kind": "todo", "name": "TaskUpdate", "input": { "taskId": "2", "status": "in_progress" } }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "全部完成。",
+    "stopReason": "end_turn"
+  }
+]

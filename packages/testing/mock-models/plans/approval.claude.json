@@ -1,0 +1,18 @@
+[
+  {
+    "chunkDelayMs": 80,
+    "text": "需要写工作区外的文件，请批准。",
+    "tool": {
+      "kind": "command",
+      "input": {
+        "command": "echo approved > /tmp/wdcc-m8-approval.txt",
+        "description": "写工作区外的文件"
+      }
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "审批已完成，这一轮结束。",
+    "stopReason": "end_turn"
+  }
+]

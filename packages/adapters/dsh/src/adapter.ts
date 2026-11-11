@@ -14,7 +14,7 @@ import type {
   ProbeResult,
   UserInput,
 } from '@webdcc/protocol';
-import { isValidEventData, ulid } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, ulid } from '@webdcc/protocol';
 import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
@@ -119,7 +119,6 @@ const INTERNAL_EVENTS = new Set([
   'command/run',
   'command/done',
   'approval/asked',
-  'approval/decided',
   'request/context',
   'system/message',
   'session/title-llm-request',
@@ -138,7 +137,9 @@ interface SessionRuntime {
   lastSeq: number;
   turnStartedAt: number;
   pending: Map<string, PendingInteraction>;
-  toolCalls: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind] }>;
+  toolCalls: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
+  /** callId → 工具入参：审批请求里只有 toolName 和 callId，标题需要从工具调用取命令（F11） */
+  toolInputs: Map<string, Record<string, unknown>>;
   assistantKey: string;
   assistantText: string;
   reasoningKey: string;
@@ -193,8 +194,22 @@ export class DshAdapter implements AgentAdapter {
     };
   }
 
+  /** DSH 的模型列表来自 `session/modelCatalog`（NEW-06 / AG-*-12） */
   async listModels(): Promise<ModelOption[]> {
-    return [];
+    try {
+      const client = await this.ensureSidecar();
+      // 形状：{ default, routableProviders, groups: [{ id, name, models: [{ id, name }] }] }
+      const catalog = await client.rpc<{
+        models?: { id?: string; name?: string }[];
+        groups?: { id?: string; models?: { id?: string; name?: string }[] }[];
+      }>('session/modelCatalog', {});
+      const flat = catalog.models ?? (catalog.groups ?? []).flatMap((group) => group.models ?? []);
+      return flat
+        .filter((model) => typeof model.id === 'string')
+        .map((model) => ({ id: String(model.id), label: String(model.name ?? model.id) }));
+    } catch {
+      return [];
+    }
   }
 
   accessModes(): { id: string; label: string }[] {
@@ -251,6 +266,31 @@ export class DshAdapter implements AgentAdapter {
     return this.client;
   }
 
+  /** 斜杠命令目录（F8 / SL-02）：来自 DSH 的 commands/list */
+  async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
+    const runtime = this.sessions.get(sessionId);
+    const client = await this.ensureSidecar().catch(() => null);
+    if (client === null) return [];
+    try {
+      const result = await client.rpc<{ commands?: { name?: string; description?: string }[] }>('commands/list', {
+        agentId: runtime?.nativeId ?? '',
+      });
+      return (result.commands ?? [])
+        .filter((command) => typeof command.name === 'string')
+        .map((command) => ({ name: `/${String(command.name)}`, ...(command.description === undefined ? {} : { description: command.description }) }));
+    } catch {
+      return [];
+    }
+  }
+
+  /** 运行中切换访问模式（F6）：/permission <preset> 只影响这一个会话 */
+  async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
+    const runtime = this.require(sessionId);
+    const client = await this.ensureSidecar();
+    await this.permission(client, runtime.nativeId, mode);
+    return { accessMode: mode };
+  }
+
   private async permission(client: DshHostClient, nativeId: string, accessMode: string | undefined): Promise<void> {
     if (accessMode === undefined) return;
     const line = `/permission ${accessMode}`;
@@ -280,6 +320,7 @@ export class DshAdapter implements AgentAdapter {
       turnStartedAt: 0,
       pending: new Map(),
       toolCalls: new Map(),
+      toolInputs: new Map(),
       assistantKey: '',
       assistantText: '',
       reasoningKey: '',
@@ -303,6 +344,7 @@ export class DshAdapter implements AgentAdapter {
       turnStartedAt: 0,
       pending: new Map(),
       toolCalls: new Map(),
+      toolInputs: new Map(),
       assistantKey: '',
       assistantText: '',
       reasoningKey: '',
@@ -324,12 +366,37 @@ export class DshAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
+    // 第一行是命令时走 commands/execute，不走 session/prompt（F8 / SL-02）
+    const firstLine = input.text.split(/\r?\n/)[0] ?? '';
+    if (firstLine.startsWith('/') && isAllowedCommandLine(firstLine.trim(), input.text)) {
+      await this.call(client, 'commands/execute', { agentId: runtime.nativeId, line: firstLine.trim(), submittedAttachments: [] });
+      this.emit(sessionId, {
+        type: 'item.complete',
+        itemKey: `command-${Date.now().toString(36)}`,
+        kind: 'internal',
+        data: { nativeType: 'commands/execute', line: firstLine.trim() } as unknown as EventData[EventKind],
+      });
+      this.emit(sessionId, {
+        type: 'item.complete',
+        itemKey: `turn-${Date.now().toString(36)}`,
+        kind: 'turn.completed',
+        data: { status: 'completed', durationMs: 0 },
+      });
+      return;
+    }
     runtime.turnStartedAt = Date.now();
     const content: Record<string, unknown>[] = [{ type: 'text', text: input.text }];
     for (const image of input.images ?? []) content.push({ type: 'image', path: image.path, mime: image.mime });
     await this.call(client, 'session/prompt', {
       request: { requestId: ulid(), sessionId: runtime.nativeId, mode: 'queue', content },
     });
+  }
+
+  /** 运行中换模型（AG-*-12）：DSH 用 session/selectModel */
+  async setModel(sessionId: string, model: string): Promise<void> {
+    const runtime = this.require(sessionId);
+    const client = await this.ensureSidecar();
+    await this.call(client, 'session/selectModel', { request: { sessionId: runtime.nativeId, model } }).catch(() => undefined);
   }
 
   async interrupt(sessionId: string): Promise<void> {
@@ -347,6 +414,24 @@ export class DshAdapter implements AgentAdapter {
       eventId: decision.approvalId,
       outcome: { kind: 'result', value: decision.optionId },
     });
+  }
+
+  /** 打断时把自己挂起的审批标成 cancelled（只处理本会话的） */
+  async cancelPending(sessionId: string): Promise<void> {
+    const runtime = this.sessions.get(sessionId);
+    if (runtime === undefined) return;
+    const client = await this.ensureSidecar().catch(() => null);
+    for (const [eventId, pending] of runtime.pending) {
+      runtime.pending.delete(eventId);
+      if (client === null) continue;
+      if (pending.kind === 'approval') {
+        await this.call(client, '$events/result', {
+          clientId: this.clientId,
+          eventId,
+          outcome: { kind: 'result', value: 'cancelled' },
+        }).catch(() => undefined);
+      }
+    }
   }
 
   async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
@@ -516,7 +601,8 @@ export class DshAdapter implements AgentAdapter {
             : kind === 'file.read'
               ? { path: String(input['file_path'] ?? input['pattern'] ?? '') }
               : { name, input, status: 'running' };
-        runtime.toolCalls.set(callId, { itemKey: `tool-${callId}`, kind, data: eventData });
+        runtime.toolCalls.set(callId, { itemKey: `tool-${callId}`, kind, data: eventData, name, input });
+        runtime.toolInputs.set(callId, input);
         this.emit(sessionId, { type: 'item.start', itemKey: `tool-${callId}`, kind, data: eventData, native });
         return;
       }
@@ -543,11 +629,12 @@ export class DshAdapter implements AgentAdapter {
         } else if (item.kind === 'file.read') {
           this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'], nativeSeq, native });
         } else if (item.kind === 'file.change') {
+          // C2：DSH 的 write/edit 结果不带 diff，用入参算 hunk（第 2/3 级）
           this.emit(sessionId, {
             type: 'item.complete',
             itemKey: item.itemKey,
             kind: 'file.change',
-            data: { changes: [], status: isError ? 'failed' : 'completed' },
+            data: { changes: buildFileChanges(item.name, item.input), status: isError ? 'failed' : 'completed' },
             nativeSeq,
             native,
           });
@@ -573,8 +660,30 @@ export class DshAdapter implements AgentAdapter {
         });
         return;
       }
+      case 'approval/decided': {
+        // F17：审批在别的界面被处理了 → 发 approval.resolved，by='other'
+        const approvalId = String(data['eventId'] ?? data['approvalId'] ?? data['requestId'] ?? '');
+        const pending = runtime.pending.get(approvalId);
+        if (approvalId === '' || pending === undefined) {
+          complete(`internal-decided-${nativeSeq}`, 'internal', { nativeType: type });
+          return;
+        }
+        runtime.pending.delete(approvalId);
+        const raw = String(data['decision'] ?? data['optionId'] ?? data['option'] ?? data['result'] ?? 'allowed-once');
+        const optionId = /reject|deny|declin/i.test(raw) ? 'rejected' : /cancel/i.test(raw) ? 'cancelled' : 'allowed-once';
+        complete(`approval-resolved-${nativeSeq}`, 'approval.resolved', { approvalId, optionId, by: 'other' });
+        return;
+      }
+      case 'user-questions/answered': {
+        const questionId = String(data['eventId'] ?? data['questionId'] ?? '');
+        const pending = runtime.pending.get(questionId);
+        if (pending !== undefined) runtime.pending.delete(questionId);
+        complete(`internal-answered-${nativeSeq}`, 'internal', { nativeType: type });
+        return;
+      }
       case 'session/title': {
-        complete(`internal-title-${nativeSeq}`, 'internal', { nativeType: 'session/title' });
+        const title = String(data['title'] ?? data['name'] ?? '');
+        complete(`internal-title-${nativeSeq}`, 'internal', { nativeType: 'session/title', ...(title === '' ? {} : { title }) } as unknown as EventData[EventKind]);
         return;
       }
       case 'user/message':
@@ -654,14 +763,30 @@ export class DshAdapter implements AgentAdapter {
     const request = (value['request'] ?? {}) as Record<string, unknown>;
 
     if (event === 'approval/request') {
+      if (process.env['WDCC_DEBUG_DSH'] === '1') console.error('[dsh] approval/request', JSON.stringify(value).slice(0, 1200));
       runtime.pending.set(eventId, { kind: 'approval', eventId });
+      const toolName = String(request['toolName'] ?? '工具');
+      const callId = String(request['callId'] ?? '');
+      const args = {
+        ...(runtime.toolInputs.get(callId) ?? {}),
+        ...((request['args'] ?? request['input'] ?? request['arguments'] ?? {}) as Record<string, unknown>),
+      };
+      const subject = String(args['command'] ?? args['file_path'] ?? args['path'] ?? '');
+      const displayReason = ((request['displayReason'] ?? {}) as { zh?: string }).zh ?? '';
       this.emit(target, {
         type: 'item.complete',
         itemKey: `approval-${eventId}`,
         kind: 'approval.request',
         data: {
           approvalId: eventId,
-          title: `DSH 请求使用 ${String(request['toolName'] ?? '工具')}`,
+          // F11：标题是工具名 + 命令原文（等宽显示）或文件路径
+          title: subject === '' ? toolName : `${toolName} · ${subject}`,
+          tool: toolName,
+          ...(displayReason !== ''
+            ? { reason: displayReason }
+            : typeof request['reason'] === 'string' && String(request['reason']) !== ''
+              ? { reason: request['reason'] }
+              : {}),
           detail: JSON.stringify(request, null, 2).slice(0, 2000),
           options: [
             { id: 'allowed-once', label: '允许一次' },

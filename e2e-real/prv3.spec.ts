@@ -4,14 +4,15 @@ import { spawnServer } from './fixtures.js';
 test.describe('7.2 Provider（三）', () => {
   test('PRV-08 缺模型目录时显示提示', async ({ app }) => {
     await app.login();
-    await app.page.evaluate(async () => {
+    const name = `无目录 Provider ${app.run.runId.slice(-4)}`;
+    await app.page.evaluate(async (providerName: string) => {
       await fetch('/api/providers', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: `无目录 Provider ${app.run.runId.slice(-4)}`, baseUrl: 'http://127.0.0.1:1/v1', protocols: ['openai-responses'], models: ['custom-model-x'] }),
+        body: JSON.stringify({ name: providerName, baseUrl: 'http://127.0.0.1:1/v1', protocols: ['openai-responses'], models: ['custom-model-x'] }),
       });
-    });
+    }, name);
     await app.page.goto(`${app.run.baseURL}/new`);
     await app.page.getByTestId('agent-card-codex').click();
     await app.page.getByTestId('provider-select').selectOption({ label: `无目录 Provider ${app.run.runId.slice(-4)}` });

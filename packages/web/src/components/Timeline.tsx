@@ -106,11 +106,14 @@ function TurnView({
 }): React.ReactElement {
   const user = turn.user;
   const completed = turn.completed;
-  const running = completed === undefined && turn.pending === undefined;
+  // 只有出现过 turn.started 且还没有 turn.completed 的组才算"运行中"（F4）
+  const running = turn.started !== undefined && completed === undefined && turn.pending === undefined;
   const durationMs = (completed?.data as EventData['turn.completed'] | undefined)?.durationMs;
+  const interrupted = (completed?.data as EventData['turn.completed'] | undefined)?.status === 'interrupted';
 
   const steps = turn.events.filter(
-    (event) => event.kind !== 'user.message' && event.kind !== 'turn.completed' && event.kind !== 'internal',
+    (event) =>
+      event.kind !== 'user.message' && event.kind !== 'turn.completed' && event.kind !== 'turn.started' && event.kind !== 'internal',
   );
   const finalMessage = [...turn.events]
     .reverse()
@@ -139,13 +142,25 @@ function TurnView({
             <span className="turn-title running">运行中…</span>
           ) : (
             <button type="button" className="turn-title done" onClick={onToggle}>
-              已完成{durationMs === undefined ? '' : `，用时 ${duration(durationMs)}`} {expanded ? '⌃' : '⌄'}
+              {interrupted ? '已中断' : '已完成'}
+              {durationMs === undefined ? '' : `，用时 ${duration(durationMs)}`} {expanded ? '⌃' : '⌄'}
             </button>
           )}
         </div>
       )}
 
       <div className={`turn-body ${expanded ? 'expanded' : 'collapsed'}`}>
+        {/* 审批/提问卡片在收起状态下也要显示：它们是必须处理的交互（F11/F17） */}
+        {!expanded
+          ? steps
+              .filter((event) => event.kind === 'approval.request' || event.kind === 'question')
+              .map((event) => (
+                <ErrorBoundary key={`always-${event.itemKey}-${event.seq}`} label="timeline-item">
+                  <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
+                </ErrorBoundary>
+              ))
+          : null}
+
         {expanded
           ? steps.map((event) => (
               <ErrorBoundary key={`${event.itemKey}-${event.seq}`} label="timeline-item">
@@ -171,7 +186,7 @@ function TurnView({
         {completed !== undefined ? (
           <div className="turn-footer">
             <span className={`turn-status ${(completed.data as EventData['turn.completed']).status}`}>
-              {(completed.data as EventData['turn.completed']).status === 'interrupted' ? '已打断' : '完成'}
+              {(completed.data as EventData['turn.completed']).status === 'interrupted' ? '已中断' : '完成'}
             </span>
             {usage !== undefined ? <span className="usage">{formatUsage(usage)}</span> : null}
             {finalMessage !== undefined ? (
@@ -218,15 +233,16 @@ function collectChanges(steps: StoredEvent[]): ChangeSummary[] {
   const map = new Map<string, ChangeSummary>();
   for (const event of steps) {
     if (event.kind !== 'file.change') continue;
-    for (const change of (event.data as EventData['file.change']).changes) {
-      const existing = map.get(change.path);
-      if (existing === undefined) {
-        map.set(change.path, { path: change.path, added: change.added, removed: change.removed, ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }) });
-      } else {
-        existing.added += change.added;
-        existing.removed += change.removed;
-        if (change.diffFileId !== undefined) existing.fileId = change.diffFileId;
-      }
+    const data = event.data as EventData['file.change'];
+    // 累计快照（Codex 的 turn/diff/updated）：以快照为基准，后面的覆盖同名文件
+    if (data.snapshot === true) map.clear();
+    for (const change of data.changes) {
+      map.set(change.path, {
+        path: change.path,
+        added: change.added,
+        removed: change.removed,
+        ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }),
+      });
     }
   }
   return [...map.values()];
@@ -382,6 +398,18 @@ function StepRow({ event, highlight, onOpenDiff }: { event: StoredEvent; highlig
     case 'usage': {
       return null;
     }
+    case 'notice': {
+      const data = event.data as EventData['notice'];
+      return (
+        <div className={`${className} notice-card`} data-testid="notice-card">
+          <span className="step-icon">ℹ</span>
+          {data.text}
+        </div>
+      );
+    }
+    case 'goal': {
+      return null;
+    }
     case 'error': {
       const data = event.data as EventData['error'];
       return (
@@ -418,23 +446,43 @@ function ApprovalCard({ event, data, className }: { event: StoredEvent; data: Ev
     if (resolution === undefined) return null;
     const dataResolved = resolution.data as EventData['approval.resolved'];
     if (dataResolved.by === 'other') return '已在其他界面处理';
-    if (dataResolved.optionId === 'allow' || dataResolved.optionId === 'accept' || dataResolved.optionId === 'allowed-once' || dataResolved.optionId === 'approved') return '已允许一次';
-    if (dataResolved.optionId === 'reject' || dataResolved.optionId === 'rejected' || dataResolved.optionId === 'deny') return '已拒绝';
-    if (dataResolved.optionId === 'cancelled' || dataResolved.optionId === 'cancel') return '已取消';
+    const option = dataResolved.optionId.toLowerCase();
+    if (['allow', 'accept', 'acceptforsession', 'allowed-once', 'approved', 'approved_for_session', 'approve'].includes(option)) return '已允许一次';
+    if (['reject', 'rejected', 'deny', 'decline', 'declined'].includes(option)) return '已拒绝';
+    if (['cancelled', 'cancel', 'canceled', 'aborted'].includes(option)) return '已取消';
     return '已处理';
   })();
+  const toolName = data.tool ?? data.title;
   if (resolvedText !== null) {
     return (
-      <div className={`${className} approval-card resolved`} data-testid="approval-card" data-resolved="true">
+      <div
+        className={`${className} approval-card resolved`}
+        data-testid="approval-card"
+        data-state="resolved"
+        data-tool={toolName}
+        data-resolved="true"
+        id={`e-${event.seq}`}
+      >
         <div className="approval-title">{data.title}</div>
         <div className="muted">{resolvedText}</div>
       </div>
     );
   }
   return (
-    <div className={`${className} approval-card`} data-testid="approval-card" id={`e-${event.seq}`}>
+    <div className={`${className} approval-card`} data-testid="approval-card" data-state="pending" data-tool={toolName} id={`e-${event.seq}`}>
       <div className="approval-title">{data.title}</div>
-      <pre className="output">{data.detail}</pre>
+      {(data as { reason?: string }).reason === undefined ? null : (
+        <div className="approval-reason">{(data as { reason?: string }).reason}</div>
+      )}
+      {data.planMarkdown === undefined ? null : (
+        <div className="approval-plan">
+          <Markdown text={data.planMarkdown} />
+        </div>
+      )}
+      <details className="approval-details">
+        <summary>详情</summary>
+        <pre className="output">{data.detail}</pre>
+      </details>
       <div className="approval-actions">
         {data.options.map((option) => (
           <button

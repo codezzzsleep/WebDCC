@@ -80,6 +80,18 @@ export class CommandDispatcher {
           });
           return { ok: true, value: { sessionId: session.id } };
         }
+        case 'set-access-mode': {
+          const applied = await this.manager.setAccessMode(command.sessionId, command.accessMode);
+          return { ok: true, value: { accessMode: applied } };
+        }
+        case 'set-model': {
+          await this.manager.setModel(command.sessionId, command.model);
+          return { ok: true, value: { model: command.model } };
+        }
+        case 'pin': {
+          this.manager.updateSessionAndFeed(command.sessionId, { pinned: command.pinned }, { pinned: command.pinned });
+          return { ok: true };
+        }
         case 'rename': {
           await this.manager.rename(command.sessionId, command.title);
           return { ok: true };

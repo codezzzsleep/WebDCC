@@ -19,7 +19,9 @@ export async function newSession(page: Page, agent: AgentKey, text: string): Pro
 }
 
 export async function waitTurnDone(page: Page): Promise<void> {
-  await expect(page.getByText(/已完成/).first()).toBeVisible({ timeout: 150_000 });
+  // 等这一轮真正结束：停止按钮消失，并且时间线出现"已完成/已中断"
+  await expect.poll(async () => page.getByTestId('stop-button').count(), { timeout: 150_000 }).toBe(0);
+  await expect.poll(async () => page.getByTestId('timeline').innerText(), { timeout: 60_000 }).toMatch(/已完成|已中断/);
 }
 
 export async function agentMarkInHeader(page: Page): Promise<string> {

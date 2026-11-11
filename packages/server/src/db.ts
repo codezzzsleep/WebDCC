@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   agent TEXT NOT NULL, native_id TEXT, title TEXT,
   provider_id TEXT REFERENCES providers(id), model TEXT, access_mode TEXT,
   status TEXT NOT NULL DEFAULT 'idle', pinned INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
-  last_seq INTEGER NOT NULL DEFAULT 0, native_meta TEXT,
+  last_seq INTEGER NOT NULL DEFAULT 0, native_meta TEXT, title_source TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS events (
@@ -64,5 +64,8 @@ export function openDb(file: string): Db {
   if (!has('source_key')) db.exec('ALTER TABLE providers ADD COLUMN source_key TEXT');
   if (!has('endpoints')) db.exec('ALTER TABLE providers ADD COLUMN endpoints TEXT');
   if (!has('note')) db.exec('ALTER TABLE providers ADD COLUMN note TEXT');
+  // M8 C1：用户改过名字的会话不被原生标题覆盖
+  const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  if (!sessionColumns.some((column) => column.name === 'title_source')) db.exec('ALTER TABLE sessions ADD COLUMN title_source TEXT');
   return db;
 }

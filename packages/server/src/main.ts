@@ -8,6 +8,7 @@ import { SessionManager } from './manager.js';
 import { ProviderRegistry } from './providers.js';
 import { DshConnectionStore } from './dsh-connection.js';
 import { Store } from './store.js';
+import { assertTestIsolation } from './test-isolation.js';
 
 export interface ServerOptions {
   /** 注册到服务端的 adapter；测试注入 fake-adapter，生产由 adapters.ts 组装 */
@@ -25,6 +26,8 @@ export interface RunningServer {
 }
 
 export async function start(config: Config = loadConfig(), options: ServerOptions = {}): Promise<RunningServer> {
+  // 测试模式下先检查家目录隔离，必须在任何配置扫描之前（SPEC-M8 1.6.2 / S-04）
+  assertTestIsolation();
   const file = config.dataDir === ':memory:' ? ':memory:' : join(config.dataDir, 'webdcc.db');
   const db = openDb(file);
   const store = new Store(db);
@@ -37,6 +40,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   const manager = new SessionManager(store, {
     idleDisposeMin: config.idleDisposeMin,
     resolveProvider: (id) => providers.runtimeConfig(id),
+    saveDiff: (name, diff) => files.putBufferSync(Buffer.from(diff, 'utf8'), name, 'text/x-diff').id,
   });
 
   let adapters = options.adapters;
@@ -66,7 +70,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),
     onDelta: (sessionId, itemKey, field, append) => hub.broadcastDelta(sessionId, itemKey, field, append),
-    onUpdate: (sessionId, itemKey, data) => hub.broadcastUpdate(sessionId, itemKey, data),
+    onUpdate: (sessionId, itemKey, data, turnId) => hub.broadcastUpdate(sessionId, itemKey, data, turnId),
     onStatus: () => undefined,
   });
 
@@ -96,8 +100,13 @@ const isEntrypoint = ((): boolean => {
 })();
 
 if (isEntrypoint) {
-  const config = loadConfig();
-  const server = await start(config);
+  let server: RunningServer;
+  try {
+    server = await start(loadConfig());
+  } catch (error) {
+    process.stderr.write(`webdcc: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  }
   process.stdout.write(`webdcc: ${server.url}\n`);
   const stop = (): void => {
     void server.close().then(() => process.exit(0));

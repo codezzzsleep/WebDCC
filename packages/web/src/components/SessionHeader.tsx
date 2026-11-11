@@ -22,6 +22,15 @@ export function SessionHeader({ sessionId, tab, onTab, dockOpen, onToggleDock }:
   return (
     <header className="session-header" data-testid="session-header">
       <div className="session-header-row">
+        <button
+          type="button"
+          className="icon-button drawer-toggle"
+          data-testid="drawer-toggle"
+          title="会话列表"
+          onClick={() => store.setDrawer(true)}
+        >
+          ☰
+        </button>
         {renaming ? (
           <form
             onSubmit={(event) => {
@@ -36,6 +45,7 @@ export function SessionHeader({ sessionId, tab, onTab, dockOpen, onToggleDock }:
           <button
             type="button"
             className="session-title-button"
+            data-testid="session-title"
             onClick={() => {
               setDraft(session?.title ?? '');
               setRenaming(true);
@@ -56,6 +66,9 @@ export function SessionHeader({ sessionId, tab, onTab, dockOpen, onToggleDock }:
             <div className="menu" onMouseLeave={() => setMenuOpen(false)}>
               <button type="button" onClick={() => { setDraft(session?.title ?? ''); setRenaming(true); setMenuOpen(false); }}>
                 重命名
+              </button>
+              <button type="button" onClick={() => { store.setPinned(sessionId, !(session?.pinned ?? false)); setMenuOpen(false); }}>
+                {session?.pinned === true ? '取消置顶' : '置顶'}
               </button>
               <button type="button" onClick={() => { store.archive(sessionId, !(session?.archived ?? false)); setMenuOpen(false); }}>
                 {session?.archived === true ? '取消归档' : '归档'}

@@ -16,7 +16,7 @@ import {
   writeSse,
   type MockLogger,
 } from './http-util.js';
-import { resolveStep, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { detectVariant, resolveStep, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
 import { defaultToolInput } from './anthropic-server.js';
 import { HELPER_REPLY, MockControl, countResponses } from './mock-control.js';
 
@@ -45,8 +45,9 @@ interface ResponsesInputItem {
 }
 
 /**
- * 统计"当前这一轮"已回传的 function_call_output 个数 → 回放第几步。
+ * 统计"当前这一轮"已回传的工具结果个数 → 回放第几步。
  * 从 input 末尾往前扫，遇到本轮的用户消息（role=user 的 message）就停。
+ * code mode 下工具结果叫 `custom_tool_call_output`（SPEC-M8 6.3）。
  */
 export function countFunctionCallOutputs(input: readonly ResponsesInputItem[] | undefined): number {
   if (!input) return 0;
@@ -54,13 +55,52 @@ export function countFunctionCallOutputs(input: readonly ResponsesInputItem[] | 
   for (let i = input.length - 1; i >= 0; i -= 1) {
     const item = input[i];
     if (item === undefined) continue;
-    if (item.type === 'function_call_output') {
+    if (item.type === 'function_call_output' || item.type === 'custom_tool_call_output') {
       count += 1;
       continue;
     }
     if (item.type === 'message' && item['role'] === 'user') break;
   }
   return count;
+}
+
+/** code mode：工具放在 input[] 的 additional_tools 里（functions 命名空间下的自定义工具 exec） */
+export function extractAdditionalTools(input: readonly ResponsesInputItem[] | undefined): ToolDescriptor[] | undefined {
+  for (const item of input ?? []) {
+    if (item.type !== 'additional_tools') continue;
+    const tools = item['tools'];
+    if (Array.isArray(tools)) return tools as ToolDescriptor[];
+  }
+  return undefined;
+}
+
+/**
+ * 把一个语义步骤翻译成 code mode 的 `exec` 脚本（SPEC-M8 6.3 的对照表）。
+ * 计划里可以直接写 `code`，否则按 kind 生成。
+ */
+export function codeModeScript(step: PlanStep, toolName: string): string {
+  const explicit = step.tool?.code;
+  if (explicit !== undefined) return explicit;
+  const input = step.tool?.inputByName?.[toolName] ?? step.tool?.input ?? {};
+  const json = JSON.stringify(input);
+  switch (step.tool?.kind) {
+    case 'command':
+      return `const r = await tools.exec_command(${json});\ntext(JSON.stringify(r));`;
+    case 'read':
+      return `const r = await tools.exec_command(${JSON.stringify({ cmd: `cat ${String(input['file_path'] ?? input['path'] ?? 'README.md')}` })});\ntext(JSON.stringify(r));`;
+    case 'write':
+    case 'edit':
+    case 'patch':
+      return `await tools.apply_patch(${JSON.stringify(String(input['patch'] ?? ''))});\ntext("patched");`;
+    case 'goal':
+      return `const r = await tools.${toolName}(${json});\ntext(JSON.stringify(r));`;
+    case 'ask':
+      return `const r = await tools.request_user_input(${json});\ntext(JSON.stringify(r));`;
+    case 'todo':
+      return `const r = await tools.exec_command(${JSON.stringify({ cmd: 'true' })});\ntext(JSON.stringify(r));`;
+    default:
+      return `text(${JSON.stringify('ok')});`;
+  }
 }
 
 let seq = 0;
@@ -181,9 +221,11 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
   async function replyToResponse(res: ServerResponse, body: Record<string, unknown>, urlPath: string, headers: Record<string, string>): Promise<void> {
     const input = Array.isArray(body['input']) ? (body['input'] as ResponsesInputItem[]) : undefined;
     const tools = Array.isArray(body['tools']) ? (body['tools'] as ToolDescriptor[]) : undefined;
+    const additionalTools = extractAdditionalTools(input);
+    const codeMode = (tools === undefined || tools.length === 0) && additionalTools !== undefined;
     const vars = countResponses(body);
     const stepIndex = countFunctionCallOutputs(input);
-    const helper = tools === undefined || tools.length === 0;
+    const helper = !codeMode && (tools === undefined || tools.length === 0);
     control.record({
       at: new Date().toISOString(),
       path: urlPath,
@@ -195,7 +237,11 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       replyHelper(res, body, modelId);
       return;
     }
-    const resolvedStep = resolveStep(control.currentPlan as Plan, stepIndex, tools);
+    const variant = detectVariant('responses', tools ?? additionalTools, codeMode);
+    const plan = control.planForVariant(variant);
+    const resolvedStep = codeMode
+      ? resolveStep(plan, stepIndex, additionalTools)
+      : resolveStep(plan, stepIndex, tools);
     const step: PlanStep = resolvedStep.step;
     const requestModel = typeof body['model'] === 'string' ? body['model'] : modelId;
     if (step.tool !== undefined && resolvedStep.toolName === undefined) {
@@ -354,7 +400,38 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
     }
 
-    if (toolName) {
+    if (codeMode && step.tool !== undefined) {
+      // code mode：一个 exec 自定义工具，input 是 JavaScript 源码
+      const itemId = newId('ctc');
+      const index = outputIndex;
+      const execCallId = newId('exec');
+      const source = codeModeScript(step, resolvedStep.toolName ?? 'exec_command');
+      writeSse(res, 'response.output_item.added', {
+        type: 'response.output_item.added',
+        output_index: index,
+        item: { id: itemId, type: 'custom_tool_call', status: 'in_progress', call_id: execCallId, name: 'exec', input: '' },
+      });
+      for (const chunk of chunkText(source, 40)) {
+        await delay(stepDelay);
+        writeSse(res, 'response.custom_tool_call_input.delta', {
+          type: 'response.custom_tool_call_input.delta',
+          item_id: itemId,
+          output_index: index,
+          delta: chunk,
+        });
+      }
+      writeSse(res, 'response.custom_tool_call_input.done', {
+        type: 'response.custom_tool_call_input.done',
+        item_id: itemId,
+        output_index: index,
+        input: source,
+      });
+      const item = { id: itemId, type: 'custom_tool_call', status: 'completed', call_id: execCallId, name: 'exec', input: source };
+      outputItems.push(item);
+      writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
+    }
+
+    if (!codeMode && toolName) {
       const itemId = newId('fc');
       const index = outputIndex;
       writeSse(res, 'response.output_item.added', {
