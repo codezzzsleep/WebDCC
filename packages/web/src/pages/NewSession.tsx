@@ -43,7 +43,11 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
   // 默认选中：与该 Agent 同源的导入 Provider（例如 Codex 配置里的 mockr）
   useEffect(() => {
     if (providerId !== '') return;
-    const preferred = compatible.find((provider) => provider.source !== undefined && sourcePreference.includes(provider.source)) ?? compatible[0];
+    // 优先同源且带模型列表的 Provider（例如 Codex 配置里的 mockr）
+    const preferred =
+      compatible.find((provider) => provider.source !== undefined && sourcePreference.includes(provider.source) && provider.models.length > 0) ??
+      compatible.find((provider) => provider.models.length > 0) ??
+      compatible[0];
     if (preferred !== undefined) {
       setProviderId(preferred.id);
       setModel(preferred.models[0] ?? '');
