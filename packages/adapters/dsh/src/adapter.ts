@@ -167,6 +167,18 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async probe(): Promise<ProbeResult> {
+    if ((this.options.mode ?? 'spawn') === 'spawn') {
+      const dshHome = this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? join(homedir(), '.dsh');
+      const running = findDshProcessOn(dshHome);
+      if (running !== undefined) {
+        return {
+          installed: false,
+          pinnedVersion: PINNED_VERSION,
+          auth: 'unknown',
+          notes: [`检测到已有 DSH 在使用 ${dshHome}，请改用 attach 模式`],
+        };
+      }
+    }
     const result = spawnSync(this.options.command ?? 'dsh', ['--version'], { encoding: 'utf8' });
     if (result.status !== 0) {
       return { installed: false, pinnedVersion: PINNED_VERSION, auth: 'unknown', notes: ['服务器上没有安装 DSH'] };

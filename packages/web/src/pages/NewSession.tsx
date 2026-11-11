@@ -165,6 +165,10 @@ export function NewSession({ workspaces, meta, initial }: NewSessionProps): Reac
         </label>
       </div>
 
+      {agent === 'codex' && selectedProvider !== undefined && selectedProvider.codexCatalogPath === undefined ? (
+        <p className="muted" data-testid="catalog-hint">需要模型目录，否则工具可能不可用</p>
+      ) : null}
+
       <div className="new-session-input">
         <textarea
           className="composer-input"

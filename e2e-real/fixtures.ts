@@ -37,6 +37,63 @@ function mockApi(base: string): MockApi {
   };
 }
 
+export interface ExtraServer {
+  baseURL: string;
+  token: string;
+  stop: () => void;
+}
+
+/** 起一个额外的服务实例（同一数据目录或独立目录），用于重启/多实例用例 */
+export async function spawnServer(overrides: {
+  dataDir?: string;
+  dshHome?: string;
+  dshMode?: 'attach' | 'spawn';
+  dshUrl?: string;
+  testHooks?: boolean;
+}): Promise<ExtraServer> {
+  const { spawn } = await import('node:child_process');
+  const { createServer } = await import('node:net');
+  const port = await new Promise<number>((resolvePort, reject) => {
+    const server = createServer();
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => (typeof address === 'object' && address !== null ? resolvePort(address.port) : reject(new Error('no port'))));
+    });
+  });
+  const env = {
+    ...process.env,
+    HOME: run.dirs.home,
+    CODEX_HOME: run.dirs.codexHome,
+    CLAUDE_CONFIG_DIR: run.dirs.claudeConfig,
+    DSH_HOME: overrides.dshHome ?? run.dirs.dshHome,
+    WDCC_DATA_DIR: overrides.dataDir ?? run.dirs.data,
+    WDCC_HOST: '127.0.0.1',
+    WDCC_PORT: String(port),
+    WDCC_TOKEN: run.token,
+    WDCC_DSH_MODE: overrides.dshMode ?? 'attach',
+    ...(overrides.dshUrl === undefined ? {} : { WDCC_DSH_URL: overrides.dshUrl }),
+    ...(overrides.testHooks === true ? { WDCC_TEST_HOOKS: '1' } : {}),
+    DEEPSEEK_BASE_URL: run.mocks.anthDsh,
+  };
+  const child = spawn('node', ['packages/server/dist/main.js'], { cwd: process.cwd(), env, stdio: 'ignore' });
+  const baseURL = `http://127.0.0.1:${port}`;
+  const started = Date.now();
+  for (;;) {
+    try {
+      const response = await fetch(`${baseURL}/api/meta`);
+      if (response.status === 401) break;
+    } catch {
+      // 等
+    }
+    if (Date.now() - started > 30_000) {
+      child.kill('SIGKILL');
+      throw new Error('额外实例 30 秒内没有起来');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return { baseURL, token: run.token, stop: () => child.kill('SIGKILL') };
+}
+
 export interface AppFixtures {
   app: {
     page: Page;
