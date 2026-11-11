@@ -103,7 +103,6 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     port: await freePort(),
     env: { ...process.env, DSH_HOME: externalHome, DEEPSEEK_BASE_URL: anthDsh.url, DEEPSEEK_API_KEY: `sk-wdcc-test-dsh-${runId}` },
   });
-  const externalToken = external.tokenUrl.split('token=')[1] ?? '';
   const externalClient = new DshHostClient(external.port);
   await externalClient.authenticate(external.tokenUrl);
   const externalWorkspace = await externalClient.rpc<{ workspace: { workspaceId: string } }>('workspace/create', { request: { path: repo } });
