@@ -47,3 +47,14 @@ test.describe('M2 / A3 URL 与布局还原', () => {
     await expect(other.getByTestId('timeline')).toContainText('双标签同步');
   });
 });
+
+test.describe('M2 / 首屏回归', () => {
+  test('直接打开根路径不抛错（新会话页）', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(String(error)));
+    await login(page);
+    await expect(page.getByTestId('new-session')).toBeVisible();
+    await expect(page.getByTestId('sidebar')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});

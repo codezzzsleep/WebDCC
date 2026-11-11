@@ -147,9 +147,10 @@ function IndexPage(): React.ReactElement {
 
 function NewSessionPage(): React.ReactElement {
   const { workspaces, meta } = useBootstrap();
+  const search = useSearch({ from: '/new' }) as { w?: string; agent?: string };
   return (
     <main className="main">
-      <NewSession workspaces={workspaces} meta={meta} />
+      <NewSession workspaces={workspaces} meta={meta} initial={search} />
     </main>
   );
 }
