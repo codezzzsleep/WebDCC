@@ -19,6 +19,7 @@ test.describe('7.4 三个 Agent 的核心流程', () => {
       await app.planFor(agent, 'slow');
       await newSession(app.page, agent, '流式');
       const timeline = app.page.getByTestId('timeline');
+      void timeline;
       console.log(`AG-${agent}-02：${Date.now() - start}ms 内文本增长 ${increases} 次`);
       expect(increases).toBeGreaterThanOrEqual(3);
       expect(Date.now() - start).toBeLessThan(60_000);

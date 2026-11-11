@@ -406,7 +406,6 @@ export class ClaudeAdapter implements AgentAdapter {
           content_block?: { type?: string };
           delta?: { type?: string; text?: string; thinking?: string };
         };
-        const itemKey = `msg-${runtime.messageSeq}`;
         if (event.type === 'content_block_start') {
           runtime.messageSeq += 1;
           const blockType = event.content_block?.type ?? event.block?.type ?? 'text';

@@ -1,6 +1,6 @@
 /** M8 验收套件的公共 fixture：登录、mock 控制、全局断言、截图（SPEC-M8 6.5） */
 import { readFileSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test as base, expect, type Page } from '@playwright/test';
 import type { RunInfo } from './globalSetup.js';

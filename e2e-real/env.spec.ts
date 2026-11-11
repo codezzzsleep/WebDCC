@@ -1,6 +1,6 @@
 import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
-import { expect, run, test } from './fixtures.js';
+import { expect, test } from './fixtures.js';
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
