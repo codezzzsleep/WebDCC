@@ -14,11 +14,17 @@ export function Trajectory({ sessionId, onJump }: TrajectoryProps): React.ReactE
   return (
     <div className="trajectory" data-testid="trajectory">
       <div className="trajectory-search">
-        <input className="text-input" placeholder="搜索类型或 itemKey" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input
+          className="text-input"
+          placeholder="搜索类型或 itemKey"
+          data-testid="trajectory-search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
       <div className="trajectory-list">
         {events.map((event) => (
-          <button key={event.seq} type="button" className="trajectory-row" onClick={() => onJump(event.seq)}>
+          <button key={event.seq} type="button" className="trajectory-row" data-testid="trajectory-row" onClick={() => onJump(event.seq)}>
             <span className="seq">{event.seq}</span>
             <span className="time">{new Date(event.at).toLocaleTimeString('zh-CN')}</span>
             <span className={`kind kind-${event.kind}`}>{event.kind}</span>

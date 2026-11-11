@@ -1,0 +1,79 @@
+[
+  {
+    "chunkDelayMs": 80,
+    "text": "先看一下工作区里有哪些文件。",
+    "tool": {
+      "kind": "command",
+      "name": "exec_command",
+      "input": {
+        "cmd": "ls -la"
+      },
+      "code": "const r = await tools.exec_command({cmd: \"ls -la\"});\ntext(JSON.stringify(r));"
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "读取 README.md。",
+    "tool": {
+      "kind": "command",
+      "name": "exec_command",
+      "input": {
+        "cmd": "cat ./README.md"
+      },
+      "code": "const r = await tools.exec_command({cmd: \"cat ./README.md\"});\ntext(JSON.stringify(r));"
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "新建 notes.txt，写两行内容。",
+    "tool": {
+      "kind": "patch",
+      "name": "apply_patch",
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: notes.txt\n+第一行\n+第二行\n*** End Patch"
+      },
+      "code": "await tools.apply_patch(\"*** Begin Patch\\n*** Add File: notes.txt\\n+第一行\\n+第二行\\n*** End Patch\");\ntext(\"patched\");"
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "修改 README.md 里的一行。",
+    "tool": {
+      "kind": "patch",
+      "name": "apply_patch",
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: README.md\n@@\n # Sample Repo\n \n WDCC-M8 sample workspace.\n-line to modify: ORIGINAL\n+line to modify: UPDATED\n src/hello.ts contains a greeting.\n*** End Patch"
+      },
+      "code": "await tools.apply_patch(\"*** Begin Patch\\n*** Update File: README.md\\n@@\\n # Sample Repo\\n \\n WDCC-M8 sample workspace.\\n-line to modify: ORIGINAL\\n+line to modify: UPDATED\\n src/hello.ts contains a greeting.\\n*** End Patch\");\ntext(\"patched\");"
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "记下这一轮的目标。",
+    "tool": {
+      "kind": "goal",
+      "name": "create_goal",
+      "input": {
+        "objective": "跑通 full 计划：列目录、读 README、写 notes.txt、改 README"
+      },
+      "code": "const r = await tools.create_goal({objective: \"跑通 full 计划：列目录、读 README、写 notes.txt、改 README\"});\ntext(JSON.stringify(r));"
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "把目标标成已完成。",
+    "tool": {
+      "kind": "goal",
+      "name": "update_goal",
+      "input": {
+        "status": "completed"
+      },
+      "code": "const r = await tools.update_goal({status: \"completed\"});\ntext(JSON.stringify(r));"
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "全部完成：列目录、读 README、写 notes.txt、改 README。",
+    "stopReason": "end_turn"
+  }
+]

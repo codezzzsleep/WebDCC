@@ -44,7 +44,7 @@ test.describe('7.1 环境与认证', () => {
     const page = await app.page.context().newPage();
     await page.goto(`${app.url('/')}?token=wrong-token-value`);
     const cookies = await page.context().cookies();
-    expect(cookies.find((cookie) => cookie.name === 'wdcc-auth')).toBeUndefined();
+    expect(cookies.find((cookie) => cookie.name.startsWith('wdcc-auth'))).toBeUndefined();
     void app;
   });
 
@@ -52,7 +52,8 @@ test.describe('7.1 环境与认证', () => {
     await app.login();
     expect(app.page.url()).not.toContain('token=');
     const cookies = await app.page.context().cookies();
-    const auth = cookies.find((cookie) => cookie.name === 'wdcc-auth');
+    // F18：Cookie 名由 Host（含端口）派生
+    const auth = cookies.find((cookie) => cookie.name.startsWith('wdcc-auth'));
     expect(auth?.httpOnly).toBe(true);
   });
 

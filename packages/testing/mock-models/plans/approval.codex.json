@@ -1,0 +1,21 @@
+[
+  {
+    "chunkDelayMs": 80,
+    "text": "需要写工作区外的文件，请批准。",
+    "tool": {
+      "kind": "command",
+      "name": "exec_command",
+      "input": {
+        "cmd": "echo approved > /tmp/wdcc-m8-approval.txt",
+        "sandbox_permissions": "require_escalated",
+        "justification": "验证审批链路需要写工作区外的临时文件。"
+      },
+      "code": "const r = await tools.exec_command({cmd: \"echo approved > /tmp/wdcc-m8-approval.txt\", sandbox_permissions: \"require_escalated\", justification: \"验证审批链路需要写工作区外的临时文件。\"});\ntext(JSON.stringify(r));"
+    }
+  },
+  {
+    "chunkDelayMs": 80,
+    "text": "审批已完成，这一轮结束。",
+    "stopReason": "end_turn"
+  }
+]

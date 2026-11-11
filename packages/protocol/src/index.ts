@@ -1,4 +1,5 @@
 export * from './events.js';
+export * from './changes.js';
 export * from './adapter.js';
 export * from './sync.js';
 export * from './api.js';

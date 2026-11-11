@@ -4,17 +4,12 @@
     "text": "需要写工作区外的文件，请批准。",
     "tool": {
       "kind": "command",
+      "name": "exec_command",
       "input": {
-        "command": "echo approved > /tmp/wdcc-m8-approval.txt",
-        "description": "写工作区外的文件",
-        "sandbox_permissions": "danger-full-access",
+        "cmd": "echo approved > /tmp/wdcc-m8-approval.txt",
+        "yield_time_ms": 10000,
+        "sandbox_permissions": "require_escalated",
         "justification": "验证审批链路需要写工作区外的临时文件。"
-      },
-      "inputByName": {
-        "exec_command": {
-          "cmd": "echo approved > /tmp/wdcc-m8-approval.txt",
-          "yield_time_ms": 10000
-        }
       }
     }
   },

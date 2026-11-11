@@ -16,7 +16,7 @@ import {
   writeSse,
   type MockLogger,
 } from './http-util.js';
-import { resolveStep, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
+import { detectVariant, resolveStep, type Plan, type PlanStep, type ToolDescriptor } from './plan.js';
 import { HELPER_REPLY, MockControl, countAnthropic } from './mock-control.js';
 
 export interface AnthropicMockOptions {
@@ -187,7 +187,7 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
     if (method === 'POST' && (url.pathname === '/v1/messages' || url.pathname === '/messages')) {
       const body = (await readJsonBody(req)) as Record<string, unknown>;
       recorder?.record({ ts: new Date().toISOString(), direction: 'request', path: url.pathname, body });
-      await replyToMessages(res, body);
+      await replyToMessages(res, body, Object.fromEntries(Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(',') : (value ?? '')])));
       return;
     }
 
@@ -238,7 +238,7 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
     sendJson(res, 404, { type: 'error', error: { type: 'not_found_error', message: `mock-anthropic has no ${method} ${url.pathname}` } });
   }
 
-  async function replyToMessages(res: ServerResponse, body: Record<string, unknown>): Promise<void> {
+  async function replyToMessages(res: ServerResponse, body: Record<string, unknown>, headers: Record<string, string>): Promise<void> {
     const messages = Array.isArray(body['messages']) ? (body['messages'] as AnthropicMessage[]) : [];
     const tools = Array.isArray(body['tools']) ? (body['tools'] as ToolDescriptor[]) : undefined;
     const vars = countAnthropic(body);
@@ -247,7 +247,7 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
     control.record({
       at: new Date().toISOString(),
       path: '/v1/messages',
-      headers: {},
+      headers,
       body,
       ...(helper ? { helper: true } : {}),
     });
@@ -255,7 +255,8 @@ export function createAnthropicMock(options: AnthropicMockOptions): RunningMock 
       await replyHelper(res, body, messageSeq);
       return;
     }
-    const resolvedStep = resolveStep(control.currentPlan as Plan, toolResultCount, tools);
+    const variant = detectVariant('anthropic', tools, false);
+    const resolvedStep = resolveStep(control.planForVariant(variant), toolResultCount, tools);
     const step: PlanStep = resolvedStep.step;
     const toolName = resolvedStep.toolName;
     if (step.tool !== undefined && toolName === undefined) {

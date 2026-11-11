@@ -1,8 +1,34 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import type { IncomingHttpHeaders } from 'node:http';
 
-export const COOKIE_NAME = 'wdcc-auth';
+/** 过渡期的固定 Cookie 名：同名 Cookie 不区分端口，同机多实例会互相覆盖（F18） */
+export const LEGACY_COOKIE_NAME = 'wdcc-auth';
+const COOKIE_PREFIX = 'wdcc-auth-';
 const COOKIE_TTL_DAYS = 30;
 const DAY_MS = 86_400_000;
+
+function encodeBase64Url(value: Buffer): string {
+  return value.toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+}
+
+/**
+ * Cookie 名由请求的 Host（含端口）派生（SPEC-M8 F18）。
+ * 与 DSH 的 `cookieName(authority)` 同一做法：前缀 + base64url(sha256(authority))。
+ */
+export function cookieNameFor(authority: string): string {
+  return COOKIE_PREFIX + encodeBase64Url(createHash('sha256').update(authority).digest());
+}
+
+/** 请求的 authority（Host 头，含端口）；缺失时退回给定的监听地址 */
+export function requestAuthority(headers: IncomingHttpHeaders, fallback: string): string {
+  const host = headers.host;
+  if (typeof host === 'string' && host.trim() !== '') return host.trim().toLowerCase();
+  return fallback;
+}
+
+export function authorityOf(headers: IncomingHttpHeaders, fallbackHost: string, fallbackPort: number): string {
+  return requestAuthority(headers, `${fallbackHost}:${fallbackPort}`);
+}
 
 /** 签名密钥由 token 派生：更换 token 即让旧 Cookie 失效（SPEC 12.1） */
 function signingKey(token: string): Buffer {
@@ -59,12 +85,21 @@ export function parseCookieHeader(header: string | undefined): Record<string, st
   return out;
 }
 
-export function isAuthenticated(token: string, cookieHeader: string | undefined): boolean {
+export type AuthKind = 'named' | 'legacy' | 'none';
+
+/** 认证结果：区分"按 Host 派生的新 Cookie"和过渡期的旧 Cookie */
+export function authState(token: string, cookieHeader: string | undefined, authority: string): AuthKind {
   const cookies = parseCookieHeader(cookieHeader);
-  return verifyCookie(token, cookies[COOKIE_NAME]);
+  if (verifyCookie(token, cookies[cookieNameFor(authority)])) return 'named';
+  if (verifyCookie(token, cookies[LEGACY_COOKIE_NAME])) return 'legacy';
+  return 'none';
 }
 
-export function cookieHeaderValue(cookie: string, secure = false): string {
+export function isAuthenticated(token: string, cookieHeader: string | undefined, authority = ''): boolean {
+  return authState(token, cookieHeader, authority) !== 'none';
+}
+
+export function cookieHeaderValue(name: string, cookie: string, secure = false): string {
   const maxAge = COOKIE_TTL_DAYS * 24 * 60 * 60;
-  return `${COOKIE_NAME}=${cookie}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
+  return `${name}=${cookie}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
 }

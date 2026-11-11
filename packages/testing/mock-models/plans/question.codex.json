@@ -1,0 +1,21 @@
+[
+  {
+    "chunkDelayMs": 80,
+    "thinking": "需要问用户。",
+    "text": "我需要确认一件事。",
+    "tool": {
+      "kind": "ask",
+      "name": "request_user_input",
+      "input": {
+        "questions": [
+          { "id": "q1", "question": "选哪一个？", "header": "确认", "options": [{ "label": "选项一" }, { "label": "选项二" }] }
+        ]
+      },
+      "code": "const r = await tools.request_user_input({questions: [{id: \"q1\", question: \"选哪一个？\", header: \"确认\", options: [{label: \"选项一\"}, {label: \"选项二\"}]}]});\ntext(JSON.stringify(r));"
+    }
+  },
+  {
+    "text": "收到你的选择。",
+    "stopReason": "end_turn"
+  }
+]

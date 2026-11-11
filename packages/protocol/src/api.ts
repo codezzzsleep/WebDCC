@@ -11,6 +11,8 @@ export interface AgentMeta extends ProbeResult {
 export interface MetaResponse {
   version: string;
   agents: Record<string, AgentMeta>;
+  /** 服务进程是否以 root 运行：root 下 Claude 不能用 bypassPermissions（MODE-claude-01） */
+  runningAsRoot?: boolean;
 }
 
 export interface WorkspaceDto {
@@ -29,6 +31,8 @@ export interface SessionDto {
   providerId?: string | null;
   model?: string;
   accessMode?: string;
+  /** 接续会话的上一棒（"在另一个 Agent 中继续"） */
+  parentId?: string;
   status: 'idle' | 'running' | 'waiting' | 'error';
   pinned: boolean;
   archived: boolean;
@@ -41,7 +45,7 @@ export interface SnapshotItemDto {
   itemKey: string;
   kind: EventKind;
   data: EventData[EventKind];
-  turnId?: string;
+  turnId?: string | null;
 }
 
 export interface SessionDetailResponse extends SessionDto {
@@ -85,14 +89,26 @@ export interface DraftDto {
   updatedAt: string;
 }
 
+export interface ProviderEndpointMap {
+  'openai-responses'?: string;
+  'anthropic-messages'?: string;
+}
+
 export interface ProviderDto {
   id: string;
   name: string;
   baseUrl: string;
+  /** manual / codex-config / claude-settings / dsh / paste */
+  source?: string;
+  endpoints?: ProviderEndpointMap;
   protocols: string[];
   models: string[];
   codexCatalogPath?: string;
   hasKey: boolean;
+  /** Key 后 4 位（永不返回原文） */
+  keyHint?: string;
+  /** 缺 Key 等原因（例如"缺少 Key（本机配置读取环境变量 X）"） */
+  note?: string;
   createdAt: string;
 }
 

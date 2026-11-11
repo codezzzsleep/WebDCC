@@ -16,12 +16,21 @@ export default async function globalTeardown(): Promise<void> {
   const run = JSON.parse(await readFile(join(process.cwd(), 'e2e-real/.run.json'), 'utf8')) as {
     root: string;
     serverPid: number;
+    externalDsh?: { pid: number };
     userHashes: Record<string, string>;
   };
   try {
     process.kill(run.serverPid, 'SIGKILL');
   } catch {
     // 已经退出
+  }
+  const externalPid = (run as { externalDsh?: { pid: number } }).externalDsh?.pid;
+  if (externalPid !== undefined) {
+    try {
+      process.kill(externalPid, 'SIGKILL');
+    } catch {
+      // 已经退出
+    }
   }
   const after = {
     codex: await hashFile(join(homedir(), '.codex/config.toml')),

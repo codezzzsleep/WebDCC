@@ -43,8 +43,31 @@ describe('A9 认证', () => {
     expect(response.statusCode).toBe(302);
     const setCookie = response.headers['set-cookie'];
     expect(typeof setCookie).toBe('string');
-    expect(String(setCookie)).toContain('wdcc-auth=');
+    // F18：Cookie 名由请求的 Host（含端口）派生
+    expect(String(setCookie)).toMatch(/wdcc-auth-[A-Za-z0-9_-]+=/);
     expect(String(setCookie)).toContain('HttpOnly');
+  });
+
+  it('F18 同机不同端口的两个实例 Cookie 不互相覆盖', async () => {
+    const first = await ctx.app.inject({ method: 'GET', url: `/?token=${TEST_TOKEN}`, headers: { host: '127.0.0.1:3001' } });
+    const second = await ctx.app.inject({ method: 'GET', url: `/?token=${TEST_TOKEN}`, headers: { host: '127.0.0.1:3002' } });
+    const firstName = String(first.headers['set-cookie']).split('=')[0];
+    const secondName = String(second.headers['set-cookie']).split('=')[0];
+    expect(firstName).not.toBe(secondName);
+    // 各自的名字只对自己的 Host 有效
+    const cookieValue = String(first.headers['set-cookie']).split(';')[0] ?? '';
+    const sameHost = await ctx.app.inject({ method: 'GET', url: '/api/workspaces', headers: { cookie: cookieValue, host: '127.0.0.1:3001' } });
+    expect(sameHost.statusCode).toBe(200);
+    const otherHost = await ctx.app.inject({ method: 'GET', url: '/api/workspaces', headers: { cookie: cookieValue, host: '127.0.0.1:3002' } });
+    expect(otherHost.statusCode).toBe(401);
+  });
+
+  it('F18 过渡期：旧名字的 Cookie 仍然接受，并换发新名字', async () => {
+    const legacy = `wdcc-auth=${issueCookie(TEST_TOKEN)}`;
+    const hit = await ctx.app.inject({ method: 'GET', url: '/api/workspaces', headers: { cookie: legacy, host: '127.0.0.1:3003' } });
+    expect(hit.statusCode).toBe(200);
+    const page = await ctx.app.inject({ method: 'GET', url: '/', headers: { cookie: legacy, host: '127.0.0.1:3003' } });
+    expect(String(page.headers['set-cookie'] ?? '')).toMatch(/wdcc-auth-[A-Za-z0-9_-]+=/);
   });
 
   it('更换 WDCC_TOKEN 后旧 Cookie 失效', async () => {

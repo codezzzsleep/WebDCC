@@ -52,6 +52,13 @@ export const api = {
   saveDraft: (id: string, text: string, fileIds: string[]) =>
     request<DraftDto>(`/api/sessions/${id}/draft`, { method: 'PUT', body: JSON.stringify({ text, fileIds }) }),
   providers: () => request<ProviderDto[]>('/api/providers'),
+  slashCommands: (sessionId: string) =>
+    request<{ commands: { name: string; description?: string }[] }>(`/api/sessions/${sessionId}/slash-commands`),
+  models: async (agent: string, providerId: string | null): Promise<string[]> => {
+    const query = `agent=${encodeURIComponent(agent)}${providerId === null ? '' : `&providerId=${encodeURIComponent(providerId)}`}`;
+    const result = await request<{ models: string[] }>(`/api/models?${query}`);
+    return result.models;
+  },
   createProvider: (input: {
     name: string;
     baseUrl: string;
@@ -60,6 +67,10 @@ export const api = {
     apiKey?: string;
     codexCatalogPath?: string;
   }) => request<ProviderDto>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),
+  updateProvider: (id: string, patch: Record<string, unknown>) =>
+    request<ProviderDto>(`/api/providers/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  providerScan: () => request<{ imported: number; skipped: number }>('/api/providers/scan', { method: 'POST', body: '{}' }),
+  providerRestore: () => request<{ imported: number; skipped: number }>('/api/providers/restore-ignored', { method: 'POST', body: '{}' }),
   deleteProvider: (id: string) => fetch(`/api/providers/${id}`, { method: 'DELETE', credentials: 'same-origin' }),
   command: (command: Command) =>
     request<{ ok: boolean; value?: unknown; error?: string; code?: string }>('/api/commands', {

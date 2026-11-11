@@ -14,6 +14,7 @@ export type ToolKind =
   | 'glob'
   | 'grep'
   | 'todo'
+  | 'goal'
   | 'ask'
   | 'patch'
   | 'other';
@@ -36,6 +37,11 @@ export interface PlanToolCall {
    * （DSH/Claude 的 bash 收 command，Codex 的 exec_command 收 cmd）。
    */
   inputByName?: Record<string, Record<string, unknown>>;
+  /**
+   * Codex code mode 的 `exec` 脚本源码：模型写 JavaScript，在里面调用
+   * `tools.exec_command` / `tools.apply_patch` 等嵌套工具（SPEC-M8 6.3）。
+   */
+  code?: string;
 }
 
 export interface PlanStep {
@@ -62,7 +68,8 @@ const TOOL_ALIASES: Record<Exclude<ToolKind, 'other'>, string[]> = {
   edit: ['edit', 'str_replace', 'edit_file', 'replace_in_file'],
   glob: ['glob', 'list_files', 'find_files'],
   grep: ['grep', 'search', 'search_files'],
-  todo: ['todo_write', 'update_plan', 'write_todos', 'todowrite'],
+  todo: ['todo_write', 'update_plan', 'write_todos', 'todowrite', 'taskcreate', 'taskupdate'],
+  goal: ['create_goal', 'update_goal', 'get_goal'],
   ask: ['ask_user_question', 'ask_human', 'request_user_input'],
   patch: ['apply_patch', 'edit_file', 'str_replace_editor'],
 };
@@ -172,4 +179,20 @@ export function resolveStep(plan: Plan, index: number, tools: readonly ToolDescr
     return { step };
   }
   return { step: EXHAUSTED_STEP };
+}
+
+
+/** 计划的 Agent 变体（SPEC-M8 6.3：每个 Agent 用自己的计划变体） */
+export type PlanVariant = 'dsh' | 'claude' | 'claude-tasks' | 'codex' | 'codexd';
+
+export function detectVariant(api: 'anthropic' | 'responses', tools: readonly ToolDescriptor[] | undefined, codeMode: boolean): PlanVariant {
+  const names = (tools ?? [])
+    .map((tool) => (typeof tool.name === 'string' ? tool.name.toLowerCase() : ''))
+    .filter((name) => name !== '');
+  if (api === 'responses') return codeMode ? 'codex' : 'codexd';
+  if (names.includes('todowrite') || names.includes('taskcreate') || names.includes('taskupdate') || names.includes('tasklist')) {
+    return 'claude-tasks';
+  }
+  if (names.includes('ask_user_question') || names.includes('todo_write')) return 'dsh';
+  return 'claude';
 }
