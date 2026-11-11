@@ -34,6 +34,7 @@ export interface CreateOpts {
   /** providerId 对应的解析结果；null = 原生登录/原生配置 */
   provider?: ProviderRuntimeConfig | null;
   model?: string;
+  reasoningEffort?: string;
   accessMode?: string;
 }
 
@@ -93,6 +94,7 @@ export interface AgentAdapter {
   cancelPending?(sessionId: string): Promise<void>;
   answer?(sessionId: string, questionId: string, answer: unknown): Promise<void>;
   setModel?(sessionId: string, model: string): Promise<void>;
+  setReasoningEffort?(sessionId: string, effort: string): Promise<void>;
   /** 切换访问模式（F6）；Codex 在下一次 turn/start 生效，返回值是实际生效的模式 */
   setAccessMode?(sessionId: string, mode: string): Promise<{ accessMode: string } | void>;
   /** 斜杠命令目录（F8）：Claude 来自 init 消息，DSH 来自 commands/list */

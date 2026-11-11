@@ -33,6 +33,11 @@ describe('原装原则：Codex（SPEC 3.3）', () => {
     expect(input[0]?.text).toBe(text);
   });
 
+  it('Codex 思考强度透传到原生 reasoningEffort', () => {
+    expect(buildThreadStartParams({ ...opts, reasoningEffort: 'high' })).toMatchObject({ reasoningEffort: 'high' });
+    expect(buildTurnStartParams('thread-1', 'hello', null, null, 'xhigh')).toMatchObject({ reasoningEffort: 'xhigh' });
+  });
+
   it('buildLaunchSpec 的 -c 覆盖只含白名单键', () => {
     const adapter = new CodexAdapter({
       configOverrides: [

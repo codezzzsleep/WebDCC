@@ -37,7 +37,8 @@ interface MentionState {
   start: number;
 }
 
-type MenuName = 'harness' | 'mode' | 'model' | 'attach' | null;
+type MenuName = 'harness' | 'mode' | 'model' | 'reasoning' | 'attach' | null;
+const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 export function Composer({ mode, workspaceId }: ComposerProps): React.ReactElement {
   useStoreVersion();
@@ -60,6 +61,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [freeModel, setFreeModel] = useState('');
+  const [sessionReasoning, setSessionReasoning] = useState('medium');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
@@ -71,6 +73,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     setText(store.getDraft(sessionId).text);
     void store.loadDraft(sessionId).then((draft) => setText(draft.text));
   }, [sessionId]);
+
+  useEffect(() => {
+    if (session?.agent === 'codex') setSessionReasoning('medium');
+  }, [sessionId, session?.agent]);
 
   useEffect(() => {
     if (!mention.open || workspaceId === '') return;
@@ -125,6 +131,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const providerOf = (id: string | null | undefined): ProviderDto | undefined => providers.find((provider) => provider.id === id);
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
   const currentModel = mode.kind === 'session' ? (session?.model ?? '') : mode.choice.model;
+  const currentReasoning = mode.kind === 'session' ? sessionReasoning : (mode.choice.reasoningEffort ?? 'medium');
   const currentProvider = providerOf(currentProviderId);
   const providerLabel = currentProvider?.name ?? agentText(agent).nativeLabel;
 
@@ -297,9 +304,18 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const pickModel = (providerId: string | null, model: string): void => {
     setMenu(null);
     if (mode.kind === 'new') {
-      mode.onChoice({ providerId, model });
+      mode.onChoice({ ...mode.choice, providerId, model });
     } else if (sessionId !== null && model !== '' && model !== session?.model) {
       store.setModel(sessionId, model);
+    }
+  };
+
+  const pickReasoning = (effort: string): void => {
+    setMenu(null);
+    if (mode.kind === 'new') mode.onChoice({ ...mode.choice, reasoningEffort: effort });
+    else if (sessionId !== null) {
+      setSessionReasoning(effort);
+      store.setReasoningEffort(sessionId, effort);
     }
   };
 
@@ -640,6 +656,20 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               </div>
             ) : null}
           </span>
+
+          {agent === 'codex' ? (
+            <span className="menu-anchor">
+              <button type="button" className="pill" aria-haspopup="menu" aria-expanded={menu === 'reasoning'} onClick={() => setMenu(menu === 'reasoning' ? null : 'reasoning')} data-testid="reasoning-menu">
+                <span className="pill-text">思考 {currentReasoning}</span><Icon name="chevronDown" size={12} strokeWidth={2} className="caret" />
+              </button>
+              {menu === 'reasoning' ? (
+                <div className="menu up right" role="menu" style={{ width: 220 }}>
+                  <div className="menu-group-title">Codex 思考强度</div>
+                  {REASONING_EFFORTS.map((effort) => <button key={effort} type="button" role="menuitemradio" aria-checked={effort === currentReasoning} className="menu-item" onClick={() => pickReasoning(effort)}>{effort}{effort === currentReasoning ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}</button>)}
+                </div>
+              ) : null}
+            </span>
+          ) : null}
 
           {running ? (
             <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label="停止" title="停止" data-testid="stop-button">

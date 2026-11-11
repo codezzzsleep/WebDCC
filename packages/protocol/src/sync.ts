@@ -27,7 +27,7 @@ export interface PongMessage {
   op: 'pong';
 }
 
-export type CommandOp = 'send' | 'approve' | 'answer' | 'interrupt' | 'create-session' | 'rename' | 'archive' | 'set-access-mode' | 'set-model' | 'pin';
+export type CommandOp = 'send' | 'approve' | 'answer' | 'interrupt' | 'create-session' | 'rename' | 'archive' | 'set-access-mode' | 'set-model' | 'set-reasoning-effort' | 'pin';
 
 export interface CommandBase {
   op: CommandOp;
@@ -69,6 +69,7 @@ export interface CreateSessionCommand extends CommandBase {
   agent: string;
   providerId?: string | null;
   model?: string;
+  reasoningEffort?: string;
   accessMode?: string;
   /** 接续会话：从哪个会话"在另一个 Agent 中继续"而来（只用于展示接力关系，不传任何内容给 Agent） */
   parentId?: string;
@@ -105,10 +106,17 @@ export interface SetModelCommand extends CommandBase {
   model: string;
 }
 
+export interface SetReasoningEffortCommand extends CommandBase {
+  op: 'set-reasoning-effort';
+  sessionId: string;
+  reasoningEffort: string;
+}
+
 export type Command =
   | PinCommand
   | SetAccessModeCommand
   | SetModelCommand
+  | SetReasoningEffortCommand
   | SendCommand
   | ApproveCommand
   | AnswerCommand

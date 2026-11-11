@@ -75,6 +75,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
       agent,
       providerId: choice.providerId,
       ...(choice.model === '' ? {} : { model: choice.model }),
+      ...(choice.reasoningEffort === undefined ? {} : { reasoningEffort: choice.reasoningEffort }),
       ...(accessMode === undefined ? {} : { accessMode }),
     });
     if (sessionId === '') throw new Error('服务端没有返回会话 id');

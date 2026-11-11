@@ -43,6 +43,7 @@ interface SessionRuntime {
   accessMode: string | null;
   /** 当前模型：换模型后下一次 turn/start 带上（AG-*-12） */
   model: string | null;
+  reasoningEffort: string | null;
   turnId: string | null;
   turnStartedAt: number;
   approvals: Map<string, PendingApproval>;
@@ -367,6 +368,7 @@ export function buildThreadStartParams(opts: CreateOpts): Record<string, unknown
   return {
     cwd: opts.cwd,
     ...(opts.model === undefined ? {} : { model: opts.model }),
+    ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
     ...accessParams(opts.accessMode),
   };
 }
@@ -377,6 +379,7 @@ export function buildTurnStartParams(
   text: string,
   accessMode?: string | null,
   model?: string | null,
+  reasoningEffort?: string | null,
   images?: { path: string; mime: string }[],
 ): Record<string, unknown> {
   return {
@@ -387,6 +390,7 @@ export function buildTurnStartParams(
       { type: 'text', text, text_elements: [] },
     ],
     ...(model === undefined || model === null ? {} : { model }),
+    ...(reasoningEffort === undefined || reasoningEffort === null ? {} : { reasoningEffort }),
     ...(accessMode === undefined || accessMode === null ? {} : accessParams(accessMode)),
   };
 }
@@ -468,6 +472,10 @@ export class CodexAdapter implements AgentAdapter {
     runtime.model = model;
   }
 
+  async setReasoningEffort(sessionId: string, effort: string): Promise<void> {
+    this.require(sessionId).reasoningEffort = effort;
+  }
+
   /** Codex：下一次 turn/start 带上 approvalPolicy / sandboxPolicy（F6） */
   async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
     const runtime = this.require(sessionId);
@@ -521,6 +529,7 @@ export class CodexAdapter implements AgentAdapter {
       cwd: opts.cwd,
       accessMode: opts.accessMode ?? null,
       model: opts.model ?? null,
+      reasoningEffort: opts.reasoningEffort ?? null,
       turnId: null,
       turnStartedAt: 0,
       approvals: new Map(),
@@ -560,6 +569,7 @@ export class CodexAdapter implements AgentAdapter {
     const response = await runtime.rpc.request<{ thread: { id: string } }>('thread/resume', {
       threadId: opts.nativeId,
       ...(opts.model === undefined ? {} : { model: opts.model }),
+      ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
       ...accessParams(opts.accessMode),
     });
     runtime.nativeId = response.thread.id;
@@ -575,7 +585,7 @@ export class CodexAdapter implements AgentAdapter {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId);
     const response = await runtime.rpc.request<{ turn: { id: string } }>(
       'turn/start',
-      buildTurnStartParams(runtime.nativeId, input.text, runtime.accessMode, runtime.model, input.images),
+      buildTurnStartParams(runtime.nativeId, input.text, runtime.accessMode, runtime.model, runtime.reasoningEffort, input.images),
     );
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
     runtime.turnId = response.turn.id;

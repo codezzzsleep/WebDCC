@@ -76,6 +76,7 @@ export class CommandDispatcher {
             agent: command.agent as never,
             providerId: command.providerId ?? null,
             ...(command.model === undefined ? {} : { model: command.model }),
+            ...(command.reasoningEffort === undefined ? {} : { reasoningEffort: command.reasoningEffort }),
             ...(command.accessMode === undefined ? {} : { accessMode: command.accessMode }),
             ...(command.parentId === undefined ? {} : { parentId: command.parentId }),
           });
@@ -88,6 +89,10 @@ export class CommandDispatcher {
         case 'set-model': {
           await this.manager.setModel(command.sessionId, command.model);
           return { ok: true, value: { model: command.model } };
+        }
+        case 'set-reasoning-effort': {
+          await this.manager.setReasoningEffort(command.sessionId, command.reasoningEffort);
+          return { ok: true, value: { reasoningEffort: command.reasoningEffort } };
         }
         case 'pin': {
           this.manager.updateSessionAndFeed(command.sessionId, { pinned: command.pinned }, { pinned: command.pinned });

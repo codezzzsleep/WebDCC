@@ -547,6 +547,7 @@ ${text}`;
     agent: string;
     providerId?: string | null;
     model?: string;
+    reasoningEffort?: string;
     accessMode?: string;
     parentId?: string;
   }): Promise<string> {
@@ -557,6 +558,7 @@ ${text}`;
       agent: input.agent,
       ...(input.providerId === undefined ? {} : { providerId: input.providerId }),
       ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
       ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
       ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
     };
@@ -564,6 +566,10 @@ ${text}`;
     if (!result.ok) throw new Error(result.error ?? '创建会话失败');
     const value = result.value as { sessionId?: string } | undefined;
     return value?.sessionId ?? '';
+  }
+
+  setReasoningEffort(sessionId: string, reasoningEffort: string): void {
+    this.enqueue({ op: 'set-reasoning-effort', clientCommandId: ulid(), sessionId, reasoningEffort });
   }
 
   // ---------- 草稿 ----------

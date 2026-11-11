@@ -96,6 +96,7 @@ export class SessionManager {
     agent: AgentId;
     providerId?: string | null;
     model?: string;
+    reasoningEffort?: string;
     accessMode?: string;
     title?: string;
     parentId?: string;
@@ -124,6 +125,7 @@ export class SessionManager {
         providerId: input.providerId ?? null,
         provider,
         ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
         ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
       });
     } catch (error) {
@@ -308,6 +310,13 @@ export class SessionManager {
     if (runtime.adapter.setModel !== undefined) await runtime.adapter.setModel(sessionId, model);
     // 推给所有客户端：否则输入框里的模型胶囊要等刷新才变
     this.updateSessionAndFeed(sessionId, { model }, { model });
+  }
+
+  async setReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    await runtime.adapter.setReasoningEffort?.(sessionId, reasoningEffort);
   }
 
   /** 切换访问模式（F6）：记一个事件，轨迹里可见；实际生效的模式由 adapter 回报 */
