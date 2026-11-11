@@ -20,11 +20,12 @@ import type {
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
 import { parseDshLink, type DshConnectionStore } from './dsh-connection.js';
-import { attachToDsh } from '@webdcc/adapter-dsh';
+import { attachToDsh, DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
 import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
+import { updateDshHomePatch } from './dsh-settings.js';
 
 export interface RouteDeps {
   store: Store;
@@ -39,8 +40,29 @@ export interface RouteDeps {
 
 const MAX_TEXT_READ = 1024 * 1024;
 
+interface DshSettingsView {
+  writable: boolean;
+  providerKey: string;
+  provider: Record<string, unknown>;
+  defaultModel: { provider: string; model: string; reasoningEffort?: string };
+  providerRevision: number;
+  defaultModelRevision: number;
+}
+
 function badRequest(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 400 });
+}
+
+function dshClient(deps: RouteDeps): DshHostClient {
+  const connection = deps.dsh.connection;
+  if (connection === null) throw Object.assign(new Error('DSH 尚未连接'), { statusCode: 503 });
+  const client = new DshHostClient(connection.url);
+  client.useCookie(connection.cookie);
+  return client;
+}
+
+function dshEndpoint(endpoint: string): void {
+  if (!isAllowedEndpoint(endpoint)) throw new Error(`DSH 端点不在白名单内：${endpoint}`);
 }
 
 /** 解析符号链接后必须仍在工作区内（SPEC 11.1） */
@@ -50,6 +72,21 @@ export async function resolveInsideWorkspace(workspacePath: string, requested: s
   const rel = relative(root, target);
   if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) throw badRequest('路径必须在工作区内');
   return target;
+}
+
+/** 解析尚不存在的目标，先解析父目录，避免新建文件时 realpath 失败。 */
+async function resolveNewInsideWorkspace(workspacePath: string, requested: string): Promise<string> {
+  const root = await realpath(workspacePath);
+  const normalized = requested.replace(/^\/+/, '');
+  if (normalized === '' || isAbsolute(requested)) throw badRequest('需要工作区内的相对路径');
+  const target = resolve(root, normalized);
+  const rel = relative(root, target);
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) throw badRequest('路径必须在工作区内');
+  const parent = await realpath(dirname(target)).catch(() => undefined);
+  if (parent === undefined) throw badRequest('父目录不存在');
+  const parentRel = relative(root, parent);
+  if (parentRel !== '' && (parentRel.startsWith('..') || isAbsolute(parentRel))) throw badRequest('路径必须在工作区内');
+  return join(parent, basename(target));
 }
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -125,6 +162,20 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     };
   });
 
+  app.post('/api/fs/mkdir', async (request) => {
+    const body = request.body as { parent?: string; name?: string };
+    if (typeof body?.parent !== 'string' || !isAbsolute(body.parent)) throw badRequest('parent 必须是绝对路径');
+    if (typeof body?.name !== 'string' || body.name.trim() === '' || body.name.includes('/') || body.name.includes('\\')) throw badRequest('目录名不合法');
+    const parent = await realpath(body.parent).catch(() => undefined);
+    if (parent === undefined) throw badRequest('父目录不存在');
+    const target = join(parent, body.name.trim());
+    await mkdir(target).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw badRequest('目录已存在');
+      throw error;
+    });
+    return { path: target };
+  });
+
   app.get('/api/workspaces/:id/fs', async (request): Promise<FsListResponse | FsReadResponse> => {
     const { id } = request.params as { id: string };
     const query = request.query as { path?: string; q?: string };
@@ -158,6 +209,28 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       content: buffer.subarray(0, MAX_TEXT_READ).toString('utf8'),
       truncated: buffer.byteLength > MAX_TEXT_READ,
     };
+  });
+
+  app.post('/api/workspaces/:id/fs', async (request) => {
+    const { id } = request.params as { id: string };
+    const workspace = store.getWorkspace(id);
+    if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
+    const body = request.body as { path?: string; kind?: string; content?: string };
+    if (typeof body?.path !== 'string' || body.path.trim() === '') throw badRequest('需要文件路径');
+    if (body.kind !== 'file' && body.kind !== 'dir') throw badRequest('kind 必须是 file 或 dir');
+    const target = await resolveNewInsideWorkspace(workspace.path, body.path.trim());
+    if (body.kind === 'dir') {
+      await mkdir(target).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw badRequest('目录已存在');
+        throw error;
+      });
+    } else {
+      await writeFile(target, body.content ?? '', { encoding: 'utf8', flag: 'wx' }).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw badRequest('文件已存在');
+        throw error;
+      });
+    }
+    return { path: relative(workspace.path, target), kind: body.kind };
   });
 
   app.get('/api/workspaces/:id/raw', async (request, reply) => {
@@ -335,6 +408,121 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return { ok: true };
   });
 
+  // ---------- DSH Provider（通过 DSH 原生 settings API） ----------
+  app.get('/api/dsh/provider', async (): Promise<DshSettingsView> => {
+    const client = dshClient(deps);
+    dshEndpoint('settings/describe');
+    const described = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
+    const namespaces = described.namespaces ?? [];
+    const llm = namespaces.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
+    const defaults = namespaces.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
+    const llmValue = (llm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
+    const defaultValue = (defaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
+    const providerKey = String(defaultValue.provider ?? Object.keys(llmValue.providers ?? {})[0] ?? '');
+    const provider = llmValue.providers?.[providerKey] ?? {};
+    return {
+      writable: described.writable === true,
+      providerKey,
+      provider,
+      defaultModel: {
+        provider: providerKey,
+        model: String(defaultValue.model ?? ''),
+        ...(defaultValue.reasoningEffort === undefined ? {} : { reasoningEffort: String(defaultValue.reasoningEffort) }),
+      },
+      providerRevision: Number(llm?.['revision'] ?? 0),
+      defaultModelRevision: Number(defaults?.['revision'] ?? 0),
+    };
+  });
+
+  app.patch('/api/dsh/provider', async (request): Promise<DshSettingsView> => {
+    const body = request.body as {
+      providerKey?: string;
+      baseURL?: string;
+      model?: string;
+      reasoning?: string;
+      apiKey?: string;
+    };
+    if (typeof body?.providerKey !== 'string' || body.providerKey.trim() === '') throw badRequest('需要 providerKey');
+    if (typeof body?.baseURL !== 'string' || body.baseURL.trim() === '') throw badRequest('需要 baseURL');
+    if (typeof body?.model !== 'string' || body.model.trim() === '') throw badRequest('需要 model');
+
+    const client = dshClient(deps);
+    dshEndpoint('settings/describe');
+    const described = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
+    if (described.writable !== true) throw Object.assign(new Error('DSH 当前配置不可写'), { statusCode: 409 });
+    const namespaces = described.namespaces ?? [];
+    const llm = namespaces.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
+    const defaults = namespaces.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
+    const llmValue = (llm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
+    const currentProvider: Record<string, unknown> = { ...(llmValue.providers?.[body.providerKey] ?? {}) };
+    const currentModels = Array.isArray(currentProvider['models']) ? (currentProvider['models'] as Record<string, unknown>[]) : [];
+    const nextModel = {
+      ...(currentModels.find((item) => item['id'] === body.model) ?? {}),
+      id: body.model,
+      name: body.model,
+    };
+    const nextProvider: Record<string, unknown> = {
+      ...currentProvider,
+      displayName: currentProvider['displayName'] ?? body.providerKey,
+      api: currentProvider['api'] ?? 'openai-completions',
+      baseURL: body.baseURL,
+      models: [nextModel],
+      ...(body.reasoning === undefined || body.reasoning === '' ? {} : { reasoning: body.reasoning }),
+    };
+    const providers = { ...(llmValue.providers ?? {}), [body.providerKey]: nextProvider };
+
+    let usedHomePatch = false;
+    try {
+      dshEndpoint('settings/update');
+      await client.rpc('settings/update', {
+        ns: 'llm-pi-ai',
+        patch: { providers },
+        expectedRevision: Number(llm?.['revision'] ?? 0),
+      });
+      dshEndpoint('settings/update');
+      await client.rpc('settings/update', {
+        ns: 'agent-default-model',
+        patch: {
+          provider: body.providerKey,
+          model: body.model,
+          ...(body.reasoning === undefined || body.reasoning === '' ? {} : { reasoningEffort: body.reasoning }),
+        },
+        expectedRevision: Number(defaults?.['revision'] ?? 0),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/overridden by a home patch/i.test(message)) throw error;
+      await updateDshHomePatch({ providerKey: body.providerKey, baseURL: body.baseURL, model: body.model, reasoning: body.reasoning });
+      usedHomePatch = true;
+    }
+    if (body.apiKey !== undefined && body.apiKey !== '') {
+      dshEndpoint('credentials/set');
+      const apiKeyEnv = String(nextProvider['apiKeyEnv'] ?? '');
+      if (apiKeyEnv !== '') await client.rpc('credentials/set', { ref: apiKeyEnv, value: body.apiKey });
+    }
+
+    // Return the redacted, live view after the write.
+    dshEndpoint('settings/describe');
+    const refreshed = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
+    const ns = refreshed.namespaces ?? [];
+    const currentLlm = ns.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
+    const currentDefaults = ns.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
+    const currentValue = (currentLlm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
+    const currentDefaultValue = (currentDefaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
+    return {
+      writable: refreshed.writable === true,
+      providerKey: String(currentDefaultValue.provider ?? body.providerKey),
+      provider: currentValue.providers?.[String(currentDefaultValue.provider ?? body.providerKey)] ?? {},
+      defaultModel: {
+        provider: String(currentDefaultValue.provider ?? body.providerKey),
+        model: String(currentDefaultValue.model ?? body.model),
+        ...(currentDefaultValue.reasoningEffort === undefined ? {} : { reasoningEffort: String(currentDefaultValue.reasoningEffort) }),
+      },
+      providerRevision: Number(currentLlm?.['revision'] ?? (usedHomePatch ? 1 : 0)),
+      defaultModelRevision: Number(currentDefaults?.['revision'] ?? 0),
+    };
+  });
+
   // ---------- providers / models ----------
   app.get('/api/providers', async () => deps.providers.list());
 
@@ -364,6 +552,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const updated = await deps.providers.update(id, {
       ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
       ...(typeof body['baseUrl'] === 'string' ? { baseUrl: body['baseUrl'] } : {}),
+      ...(typeof body['endpoints'] === 'object' && body['endpoints'] !== null ? { endpoints: body['endpoints'] as Record<string, string> } : {}),
       ...(Array.isArray(body['protocols']) ? { protocols: body['protocols'] as string[] } : {}),
       ...(Array.isArray(body['models']) ? { models: body['models'] as string[] } : {}),
       ...(typeof body['apiKey'] === 'string' ? { apiKey: body['apiKey'] } : {}),

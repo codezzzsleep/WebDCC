@@ -329,12 +329,13 @@ export class Store {
 
   updateProvider(
     id: string,
-    patch: { name?: string; baseUrl?: string; protocols?: string[]; models?: string[]; codexCatalogPath?: string | null },
+    patch: { name?: string; baseUrl?: string; endpoints?: string | null; protocols?: string[]; models?: string[]; codexCatalogPath?: string | null },
   ): ProviderRecord | undefined {
     const sets: string[] = [];
     const values: unknown[] = [];
     if (patch.name !== undefined) { sets.push('name = ?'); values.push(patch.name); }
     if (patch.baseUrl !== undefined) { sets.push('base_url = ?'); values.push(patch.baseUrl); }
+    if (patch.endpoints !== undefined) { sets.push('endpoints = ?'); values.push(patch.endpoints); }
     if (patch.protocols !== undefined) { sets.push('protocols = ?'); values.push(JSON.stringify(patch.protocols)); }
     if (patch.models !== undefined) { sets.push('models = ?'); values.push(JSON.stringify(patch.models)); }
     if (patch.codexCatalogPath !== undefined) { sets.push('codex_catalog_path = ?'); values.push(patch.codexCatalogPath); }

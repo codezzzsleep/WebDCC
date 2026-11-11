@@ -34,8 +34,11 @@ export const api = {
     request<WorkspaceDto>('/api/workspaces', { method: 'POST', body: JSON.stringify(input) }),
   browse: (path?: string) =>
     request<BrowseResponse>(`/api/fs/browse${path === undefined ? '' : `?path=${encodeURIComponent(path)}`}`),
+  createDirectory: (parent: string, name: string) => request<{ path: string }>('/api/fs/mkdir', { method: 'POST', body: JSON.stringify({ parent, name }) }),
   fs: (workspaceId: string, path: string) =>
     request<FsListResponse | FsReadResponse>(`/api/workspaces/${workspaceId}/fs?path=${encodeURIComponent(path)}`),
+  createWorkspaceEntry: (workspaceId: string, input: { path: string; kind: 'file' | 'dir'; content?: string }) =>
+    request<{ path: string; kind: 'file' | 'dir' }>(`/api/workspaces/${workspaceId}/fs`, { method: 'POST', body: JSON.stringify(input) }),
   rawUrl: (workspaceId: string, path: string) =>
     `/api/workspaces/${workspaceId}/raw?path=${encodeURIComponent(path)}`,
   feed: (after: number) => request<{ entries: { feedSeq: number; sessionId: string; patch: Record<string, unknown> }[] }>(`/api/feed?after=${after}`),
@@ -72,6 +75,19 @@ export const api = {
   providerScan: () => request<{ imported: number; skipped: number }>('/api/providers/scan', { method: 'POST', body: '{}' }),
   providerRestore: () => request<{ imported: number; skipped: number }>('/api/providers/restore-ignored', { method: 'POST', body: '{}' }),
   deleteProvider: (id: string) => fetch(`/api/providers/${id}`, { method: 'DELETE', credentials: 'same-origin' }),
+  dshStatus: () => request<{ mode: string; url: string | null; connected: boolean; version?: string }>('/api/dsh'),
+  dshConnect: (link: string) => request<{ ok: boolean; url: string }>('/api/dsh/connect', { method: 'POST', body: JSON.stringify({ link }) }),
+  dshDisconnect: () => request<{ ok: boolean }>('/api/dsh', { method: 'DELETE' }),
+  dshProvider: () => request<{
+    writable: boolean;
+    providerKey: string;
+    provider: Record<string, unknown>;
+    defaultModel: { provider: string; model: string; reasoningEffort?: string };
+    providerRevision: number;
+    defaultModelRevision: number;
+  }>('/api/dsh/provider'),
+  updateDshProvider: (input: { providerKey: string; baseURL: string; model: string; reasoning?: string; apiKey?: string }) =>
+    request('/api/dsh/provider', { method: 'PATCH', body: JSON.stringify(input) }),
   command: (command: Command) =>
     request<{ ok: boolean; value?: unknown; error?: string; code?: string }>('/api/commands', {
       method: 'POST',

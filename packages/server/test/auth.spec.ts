@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueCookie } from '../src/auth.js';
@@ -121,6 +121,36 @@ describe('REST 基础', () => {
       headers: { cookie: ctx.cookie },
     });
     expect([400, 404]).toContain(response.statusCode);
+  });
+
+  it('fs 可以在工作区内新建文件和目录，并拒绝越界写入', async () => {
+    const workspacePath = join(ctx.dataDir, `create-${Date.now().toString(36)}`);
+    await mkdir(workspacePath, { recursive: true });
+    const workspace = ctx.store.createWorkspace('新建测试', workspacePath);
+    const file = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${workspace.id}/fs`,
+      headers: { cookie: ctx.cookie },
+      payload: { path: 'notes.md', kind: 'file', content: 'hello' },
+    });
+    expect(file.statusCode).toBe(200);
+    expect(await readFile(join(workspacePath, 'notes.md'), 'utf8')).toBe('hello');
+
+    const directory = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${workspace.id}/fs`,
+      headers: { cookie: ctx.cookie },
+      payload: { path: 'src', kind: 'dir' },
+    });
+    expect(directory.statusCode).toBe(200);
+
+    const traversal = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/workspaces/${workspace.id}/fs`,
+      headers: { cookie: ctx.cookie },
+      payload: { path: '../outside.txt', kind: 'file', content: 'blocked' },
+    });
+    expect(traversal.statusCode).toBe(400);
   });
 
   it('带 token 与不带 token 的首页行为', async () => {
