@@ -46,7 +46,16 @@ try {
   try {
     execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
     const base = process.env['WDCC_RELEASE_URL'] ?? 'http://127.0.0.1:80';
-    const unauthStatus = execFileSync('curl', ['--silent', '--show-error', '--output', '/dev/null', '--write-out', '%{http_code}', `${base}/`], { encoding: 'utf8' }).trim();
+    let unauthStatus = '';
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        unauthStatus = execFileSync('curl', ['--silent', '--show-error', '--output', '/dev/null', '--write-out', '%{http_code}', `${base}/`], { encoding: 'utf8' }).trim();
+      } catch {
+        unauthStatus = '';
+      }
+      if (unauthStatus === '401') break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     if (unauthStatus !== '401') throw new Error(`未登录首页状态异常：${unauthStatus}`);
     const envFile = process.env['WDCC_ENV_FILE'] ?? '/etc/webdcc.env';
     const envText = await readFile(envFile, 'utf8').catch(() => '');
