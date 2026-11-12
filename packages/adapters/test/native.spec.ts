@@ -97,6 +97,12 @@ describe('原装原则：Claude Code（SPEC 3.3）', () => {
     expect(sdkOptions['settingSources']).toEqual(['user', 'project', 'local']);
   });
 
+  it('显式传入平台 CLI 路径，避免发布包的 optional dependency 解析失败', () => {
+    const executable = sdkOptions['pathToClaudeCodeExecutable'];
+    expect(typeof executable).toBe('string');
+    expect(String(executable)).toMatch(/(?:^|[\\/])claude(?:\.exe)?$/);
+  });
+
   it('不存在 mcpServers / agents / hooks / allowedTools / disallowedTools', () => {
     for (const key of ['mcpServers', 'agents', 'hooks', 'allowedTools', 'disallowedTools']) {
       expect(sdkOptions, key).not.toHaveProperty(key);

@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -31,6 +33,56 @@ export interface ClaudeAdapterOptions {
   env?: Record<string, string>;
   model?: string;
   traceSink?: TraceSink;
+}
+
+const requireFromAdapter = createRequire(import.meta.url);
+
+/**
+ * Resolve Claude Code's platform package explicitly. The Agent SDK normally
+ * does this itself through an optional dependency, but a production release
+ * is copied out of pnpm's virtual store and can lose the package lookup path
+ * even when the native binary is present. Passing the concrete executable
+ * path keeps startup independent of that package-manager layout.
+ */
+function resolveNativeCli(): string | undefined {
+  const platform = process.platform;
+  const arch = process.arch;
+  const executable = platform === 'win32' ? 'claude.exe' : 'claude';
+  let packageNames: string[];
+  if (platform === 'linux') {
+    let musl = false;
+    try {
+      const report = process.report?.getReport?.() as { header?: { glibcVersionRuntime?: string } } | undefined;
+      musl = report?.header?.glibcVersionRuntime === undefined;
+    } catch {
+      // If runtime detection is unavailable, prefer the glibc package.
+    }
+    const glibc = `@anthropic-ai/claude-agent-sdk-linux-${arch}`;
+    const alpine = `${glibc}-musl`;
+    packageNames = musl ? [alpine, glibc] : [glibc, alpine];
+  } else {
+    packageNames = [`@anthropic-ai/claude-agent-sdk-${platform}-${arch}`];
+  }
+
+  let sdkRoot: string | undefined;
+  try {
+    sdkRoot = dirname(requireFromAdapter.resolve('@anthropic-ai/claude-agent-sdk'));
+  } catch {
+    return undefined;
+  }
+  for (const packageName of packageNames) {
+    try {
+      const resolved = requireFromAdapter.resolve(`${packageName}/${executable}`, { paths: [sdkRoot] });
+      if (existsSync(resolved)) return resolved;
+    } catch {
+      // Try the materialized sibling path below. This also handles releases
+      // whose package.json has no `main` or `exports` entry.
+    }
+    const packageShortName = packageName.slice('@anthropic-ai/'.length);
+    const fallback = join(sdkRoot, 'node_modules', '@anthropic-ai', packageShortName, executable);
+    if (existsSync(fallback)) return fallback;
+  }
+  return undefined;
 }
 
 const ACCESS_MODES = [
@@ -229,6 +281,7 @@ export class ClaudeAdapter implements AgentAdapter {
       providerEnv['ANTHROPIC_API_KEY'] = '';
       if (opts.model !== undefined) providerEnv['ANTHROPIC_MODEL'] = opts.model;
     }
+    const nativeCli = resolveNativeCli();
     return {
       env: { ...(this.options.env ?? {}), ...providerEnv },
       sdkOptions: {
@@ -236,6 +289,7 @@ export class ClaudeAdapter implements AgentAdapter {
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
         includePartialMessages: true,
+        ...(nativeCli === undefined ? {} : { pathToClaudeCodeExecutable: nativeCli }),
         // settings.json 的 env 会覆盖 options.env；用 flag 级 settings 注入 Provider 才能生效（F16 实测）
         ...(Object.keys(providerEnv).length === 0 ? {} : { settings: { env: providerEnv } }),
         ...(opts.model === undefined ? {} : { model: opts.model }),
