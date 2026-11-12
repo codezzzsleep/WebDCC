@@ -24,6 +24,16 @@ try {
   await cp(join(checkout, 'packages/server/dist'), join(target, 'packages/server/dist'), { recursive: true });
   await cp(join(checkout, 'packages/web/dist'), join(target, 'packages/web/dist'), { recursive: true });
   await cp(join(checkout, 'node_modules'), join(target, 'node_modules'), { recursive: true, dereference: true });
+  // The server bundle leaves native modules external. Workspace package
+  // dependencies are linked from packages/server/node_modules, so the root
+  // node_modules copy does not reliably include them (for example
+  // better-sqlite3). Copy each runtime external to the release root where
+  // Node resolves imports from packages/server/dist/main.js.
+  await cp(
+    join(checkout, 'packages/server/node_modules/better-sqlite3'),
+    join(target, 'node_modules/better-sqlite3'),
+    { recursive: true, dereference: true },
+  );
   await cp(join(checkout, 'package.json'), join(target, 'package.json'));
   await cp(join(checkout, 'pnpm-lock.yaml'), join(target, 'pnpm-lock.yaml'));
   await writeFile(join(target, 'release.env'), `WDCC_COMMIT=${commit}\nWDCC_BUILT_AT=${builtAt}\n`);
