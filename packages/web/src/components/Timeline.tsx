@@ -393,8 +393,8 @@ function StepRow({
       const failed = data.status === 'failed';
       return (
         <div className={className} id={`e-${event.seq}`}>
-          <StepLine icon="terminal" label="运行命令" detail={data.label ?? data.command} onClick={toggle} open={open || failed} failed={failed} />
-          {open || failed ? <pre className="output">{data.outputTail === undefined || data.outputTail === '' ? '（无输出）' : data.outputTail}</pre> : null}
+          <StepLine icon="terminal" label="运行命令" detail={data.label ?? data.command} onClick={toggle} open={open} failed={failed} />
+          {open ? <pre className="output">{data.outputTail === undefined || data.outputTail === '' ? '（无输出）' : data.outputTail}</pre> : null}
         </div>
       );
     }
