@@ -75,7 +75,9 @@ try {
     throw error;
   }
   const entries = (await readdir(join(releaseRoot, 'releases'))).sort().reverse();
-  for (const old of entries.slice(5)) await rm(join(releaseRoot, 'releases', old), { recursive: true, force: true });
+  // Keep the release just activated even when commit hashes do not sort by
+  // deployment time (the current commit may lexically precede older hashes).
+  for (const old of entries.filter((entry) => entry !== commit).slice(5)) await rm(join(releaseRoot, 'releases', old), { recursive: true, force: true });
   process.stdout.write(`released ${commit} -> ${target}\n`);
 } finally {
   await rm(staging, { recursive: true, force: true });
