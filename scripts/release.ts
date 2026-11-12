@@ -23,7 +23,7 @@ try {
   await mkdir(target, { recursive: true });
   await cp(join(checkout, 'packages/server/dist'), join(target, 'packages/server/dist'), { recursive: true });
   await cp(join(checkout, 'packages/web/dist'), join(target, 'packages/web/dist'), { recursive: true });
-  await cp(join(checkout, 'node_modules'), join(target, 'node_modules'), { recursive: true, dereference: false });
+  await cp(join(checkout, 'node_modules'), join(target, 'node_modules'), { recursive: true, dereference: true });
   await cp(join(checkout, 'package.json'), join(target, 'package.json'));
   await cp(join(checkout, 'pnpm-lock.yaml'), join(target, 'pnpm-lock.yaml'));
   await writeFile(join(target, 'release.env'), `WDCC_COMMIT=${commit}\nWDCC_BUILT_AT=${builtAt}\n`);
