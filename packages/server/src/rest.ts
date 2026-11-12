@@ -365,9 +365,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const { id } = request.params as { id: string };
     const session = store.getSession(id);
     if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
-    const adapter = manager.adaptersList().find((item) => item.id === session.agent);
-    if (adapter?.slashCommands === undefined) return { commands: [] };
-    return { commands: await adapter.slashCommands(id).catch(() => []) };
+    return { commands: await manager.slashCommands(id).catch(() => []) };
   });
 
   app.get('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {

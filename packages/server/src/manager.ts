@@ -406,6 +406,13 @@ export class SessionManager {
     this.updateSessionAndFeed(sessionId, { model }, { model });
   }
 
+  async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    return runtime.adapter.slashCommands?.(sessionId) ?? [];
+  }
+
   async setReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);

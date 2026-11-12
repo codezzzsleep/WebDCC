@@ -327,7 +327,7 @@ export class DshAdapter implements AgentAdapter {
   async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
     const runtime = this.sessions.get(sessionId);
     const client = await this.ensureSidecar().catch(() => null);
-    if (client === null || runtime === undefined) return [];
+    if (client === null) return [];
     try {
       const result = await this.call<{ commands?: { name?: string; description?: string }[] }>(client, 'commands/list', {
         agentId: runtime?.nativeId ?? '',
