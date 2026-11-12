@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { store } from '../lib/store.js';
-import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, rememberAccessMode, rememberReasoning, rememberedAccessMode, type ModelChoice } from '../lib/agents.js';
+import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, rememberAccessMode, rememberModel, rememberReasoning, rememberedAccessMode, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { AgentMark } from '../components/AgentMark.js';
 import { Composer } from '../components/Composer.js';
@@ -176,6 +176,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
             onAgentChange: pickAgent,
             choice,
             onChoice: (next) => {
+              if (next.model !== '') rememberModel(agent, next.providerId, next.model);
               if (next.reasoningEffort !== undefined) rememberReasoning(agent, next.reasoningEffort);
               setChoiceOverride((prev) => ({ ...prev, [agent]: next }));
             },
