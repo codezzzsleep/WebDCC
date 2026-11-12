@@ -80,7 +80,9 @@ export class TurnTracker {
     }
     if (event.type === 'item.complete' && (event.kind === 'approval.request' || event.kind === 'question')) record.state = 'waiting';
     if (event.type === 'item.complete' || event.type === 'item.cancel') record.open.delete(event.itemKey);
-    if (event.type === 'turn.end') this.end(sessionId, assigned.turnId, event.status, at);
+    // SessionManager owns terminal persistence and applies a short settle
+    // window for late item/diff frames. Keep the tracker active until it calls
+    // end(), otherwise those frames would be tagged late immediately.
     return assigned;
   }
 

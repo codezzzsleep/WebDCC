@@ -16,6 +16,8 @@ import type { Store } from './store.js';
 import { resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
 
+const TURN_SETTLE_MS = 1_500;
+
 export interface HotItem {
   itemKey: string;
   kind: EventKind;
@@ -33,6 +35,9 @@ export interface Runtime {
   turnStartedAt: number | null;
   hot: Map<string, HotItem>;
   idleTimer: NodeJS.Timeout | null;
+  /** Codex 等 adapter 可能在 turn/end 后补发 item/diff；在终止前给它们一个收敛窗口。 */
+  finishTimer: NodeJS.Timeout | null;
+  finishAction: (() => void) | null;
 }
 
 export interface ManagerHooks {
@@ -190,6 +195,8 @@ export class SessionManager {
       turnStartedAt: null,
       hot: new Map(),
       idleTimer: null,
+      finishTimer: null,
+      finishAction: null,
     };
     this.runtimes.set(session.id, runtime);
     return runtime;
@@ -399,6 +406,9 @@ export class SessionManager {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
     if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
+    if (runtime.finishTimer !== null) clearTimeout(runtime.finishTimer);
+    runtime.finishTimer = null;
+    runtime.finishAction = null;
     if (runtime.turnId !== null) this.finishTurn(runtime, 'interrupted', 'session-disposed');
     await runtime.adapter.dispose(sessionId);
     this.runtimes.delete(sessionId);
@@ -417,6 +427,10 @@ export class SessionManager {
     if (runtime === undefined) return;
     const assignment = this.turns.observe(sessionId, event);
     const turnId = assignment.turnId;
+    // Keep extending the settle window while frames for the pending turn are
+    // still arriving. This is a quiet-period debounce, so a long Codex diff
+    // stream settles without leaking a partial terminal view.
+    if (runtime.finishTimer !== null && turnId === runtime.turnId) this.armFinishTimer(runtime);
 
     switch (event.type) {
       case 'item.start': {
@@ -509,6 +523,10 @@ export class SessionManager {
         break;
       }
       case 'status': {
+        // A few adapters report native idle before their final item/diff
+        // notifications. The public turn remains active during the settle
+        // window, so that status must not hide the stop state early.
+        if (event.status === 'idle' && runtime.turnId !== null) break;
         if (runtime.turnId !== null || event.status === 'idle') this.setStatus(runtime, event.status);
         break;
       }
@@ -529,8 +547,32 @@ export class SessionManager {
     usage?: EventData['usage'],
     native?: unknown,
   ): void {
+    // Codex can emit item/diff/status notifications just after turn/end. Keep
+    // the public turn active briefly so those frames bind to this turn and a
+    // refresh cannot observe a different summary from the live view.
+    if (status === 'completed' && reason === undefined && existing === undefined) {
+      runtime.finishAction = () => this.finishTurnNow(runtime, status, reason, existing, usage, native);
+      this.armFinishTimer(runtime);
+      return;
+    }
+    this.finishTurnNow(runtime, status, reason, existing, usage, native);
+  }
+
+  private finishTurnNow(
+    runtime: Runtime,
+    status: 'completed' | 'interrupted' | 'failed',
+    reason?: string,
+    existing?: StoredEvent,
+    usage?: EventData['usage'],
+    native?: unknown,
+  ): void {
     const turnId = runtime.turnId;
     if (turnId === null) return;
+    if (runtime.finishTimer !== null) {
+      clearTimeout(runtime.finishTimer);
+      runtime.finishTimer = null;
+    }
+    runtime.finishAction = null;
     const events = this.store.allEvents(runtime.sessionId).filter((event) => event.turnId === turnId);
     const answerItemKeys = resolveAnswer(events).map((item) => item.itemKey);
     if (existing === undefined) {
@@ -555,6 +597,18 @@ export class SessionManager {
     runtime.turnId = null;
     runtime.turnStartedAt = null;
     this.setStatus(runtime, 'idle');
+  }
+
+  private armFinishTimer(runtime: Runtime): void {
+    if (runtime.finishAction === null) return;
+    if (runtime.finishTimer !== null) clearTimeout(runtime.finishTimer);
+    runtime.finishTimer = setTimeout(() => {
+      runtime.finishTimer = null;
+      const action = runtime.finishAction;
+      runtime.finishAction = null;
+      action?.();
+    }, TURN_SETTLE_MS);
+    runtime.finishTimer.unref?.();
   }
 
   private setStatus(runtime: Runtime, status: SessionDto['status']): void {

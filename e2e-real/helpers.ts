@@ -19,9 +19,10 @@ export async function newSession(page: Page, agent: AgentKey, text: string): Pro
 }
 
 export async function waitTurnDone(page: Page): Promise<void> {
-  // 等这一轮真正结束：停止按钮消失，并且时间线出现"已完成/已中断"
+  // 先等终止态出现，再确认停止按钮消失。仅看按钮会在页面首帧/状态
+  // 补差期间短暂得到 0，导致 Codex 的迟到事件还没收敛就开始下一断言。
+  await expect.poll(async () => page.getByTestId('timeline').innerText(), { timeout: 60_000 }).toMatch(/已完成，用时|已中断，用时/);
   await expect.poll(async () => page.getByTestId('stop-button').count(), { timeout: 150_000 }).toBe(0);
-  await expect.poll(async () => page.getByTestId('timeline').innerText(), { timeout: 60_000 }).toMatch(/已完成|已中断/);
 }
 
 /**

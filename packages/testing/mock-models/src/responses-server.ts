@@ -51,15 +51,39 @@ interface ResponsesInputItem {
  */
 export function countFunctionCallOutputs(input: readonly ResponsesInputItem[] | undefined): number {
   if (!input) return 0;
-  let count = 0;
+  // Codex repeats the same user message when it starts a native continuation
+  // after an approval. Use its stable message id and the first occurrence so
+  // those continuations keep the current plan cursor; a genuinely new user
+  // prompt has a new id and therefore resets the cursor.
+  let userKey: string | undefined;
   for (let i = input.length - 1; i >= 0; i -= 1) {
     const item = input[i];
-    if (item === undefined) continue;
-    if (item.type === 'function_call_output' || item.type === 'custom_tool_call_output') {
-      count += 1;
-      continue;
+    if (item?.type === 'message' && item['role'] === 'user') {
+      const content = item['content'];
+      const text = Array.isArray(content)
+        ? content.filter((part) => typeof part === 'object' && part !== null && (part as { type?: string }).type === 'input_text').map((part) => String((part as { text?: unknown }).text ?? '')).join('\n')
+        : typeof content === 'string' ? content : '';
+      userKey = text === '' ? (typeof item['id'] === 'string' ? `id:${item['id']}` : undefined) : `text:${text}`;
+      break;
     }
-    if (item.type === 'message' && item['role'] === 'user') break;
+  }
+  let start: number;
+  if (userKey !== undefined) {
+    start = input.findIndex((item) => {
+      if (item.type !== 'message' || item['role'] !== 'user') return false;
+      const content = item['content'];
+      const text = Array.isArray(content)
+        ? content.filter((part) => typeof part === 'object' && part !== null && (part as { type?: string }).type === 'input_text').map((part) => String((part as { text?: unknown }).text ?? '')).join('\n')
+        : typeof content === 'string' ? content : '';
+      return (text === '' ? (typeof item['id'] === 'string' ? `id:${item['id']}` : undefined) : `text:${text}`) === userKey;
+    });
+  } else {
+    start = input.findIndex((item) => item.type === 'message' && item['role'] === 'user');
+  }
+  let count = 0;
+  for (let i = Math.max(0, start + 1); i < input.length; i += 1) {
+    const item = input[i];
+    if (item?.type === 'function_call_output' || item?.type === 'custom_tool_call_output') count += 1;
   }
   return count;
 }
@@ -93,7 +117,9 @@ export function codeModeScript(step: PlanStep, toolName: string): string {
     case 'patch':
       return `await tools.apply_patch(${JSON.stringify(String(input['patch'] ?? ''))});\ntext("patched");`;
     case 'goal':
-      return `const r = await tools.${toolName}(${json});\ntext(JSON.stringify(r));`;
+      // Codex's goal API uses `complete`; the fixture plans use the
+      // human-readable `completed` status used by the UI.
+      return `const r = await tools.${toolName}(${JSON.stringify({ ...input, ...(input['status'] === 'completed' ? { status: 'complete' } : {}) })});\ntext(JSON.stringify(r));`;
     case 'ask':
       return `const r = await tools.request_user_input(${json});\ntext(JSON.stringify(r));`;
     case 'todo':
@@ -135,6 +161,22 @@ function usage(): Record<string, unknown> {
   };
 }
 
+function latestUserPrompt(input: readonly ResponsesInputItem[] | undefined): string {
+  for (let index = (input?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const item = input?.[index];
+    if (item?.type !== 'message' || item['role'] !== 'user') continue;
+    const content = item['content'];
+    if (Array.isArray(content)) {
+      const text = content
+        .filter((part) => typeof part === 'object' && part !== null && (part as { type?: string }).type === 'input_text')
+        .map((part) => String((part as { text?: unknown }).text ?? ''))
+        .join('\n');
+      if (text !== '') return text;
+    } else if (typeof content === 'string' && content !== '') return content;
+  }
+  return '';
+}
+
 function replyHelper(res: ServerResponse, body: Record<string, unknown>, fallbackModel: string): void {
   const model = typeof body['model'] === 'string' ? body['model'] : fallbackModel;
   const responseId = newId('resp');
@@ -171,6 +213,13 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     });
   });
 
+  // Some Codex builds start a fresh native turn for each continuation and do
+  // not resend the preceding function outputs. Keep a per-prompt replay
+  // cursor so the protocol-neutral mock still advances through the recorded
+  // plan instead of restarting step 0 forever.
+  let replayPrompt = '';
+  let replayStep = 0;
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     const method = req.method ?? 'GET';
@@ -190,6 +239,8 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     }
     if (url.pathname === '/__reset' && method === 'POST') {
       control.reset();
+      replayPrompt = '';
+      replayStep = 0;
       sendJson(res, 200, { ok: true });
       return;
     }
@@ -224,7 +275,14 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     const additionalTools = extractAdditionalTools(input);
     const codeMode = (tools === undefined || tools.length === 0) && additionalTools !== undefined;
     const vars = countResponses(body);
-    const stepIndex = countFunctionCallOutputs(input);
+    const prompt = latestUserPrompt(input);
+    // Codex injects its persistent goal as an internal user context between
+    // tool calls. It is not a new WebDCC prompt and must not reset the plan.
+    if (prompt !== '' && !prompt.includes('<codex_internal_context') && prompt !== replayPrompt) {
+      replayPrompt = prompt;
+      replayStep = 0;
+    }
+    const stepIndex = Math.max(replayStep, countFunctionCallOutputs(input));
     const helper = !codeMode && (tools === undefined || tools.length === 0);
     control.record({
       at: new Date().toISOString(),
@@ -257,6 +315,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     const responseId = newId('resp');
     const callId = newId('call');
     const stepDelay = step.chunkDelayMs ?? 0;
+    if (step.tool !== undefined || toolName !== undefined) replayStep = stepIndex + 1;
 
     recorder?.record({
       ts: new Date().toISOString(),

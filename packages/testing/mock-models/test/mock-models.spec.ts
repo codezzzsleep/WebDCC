@@ -73,13 +73,15 @@ describe('工具结果计数（按当前轮）', () => {
     expect(countToolResults(messages)).toBe(3);
   });
 
-  it('Responses：只数当前轮末尾的 function_call_output', () => {
+  it('Responses：同一用户消息重复出现时保留计划游标，新消息才重置', () => {
     const input = [
-      { type: 'message', role: 'user' },
+      { type: 'message', id: 'u1', role: 'user' },
       { type: 'function_call_output' },
-      { type: 'message', role: 'user' },
+      { type: 'message', id: 'u1', role: 'user' },
+      { type: 'function_call_output' },
     ];
-    expect(countFunctionCallOutputs(input)).toBe(0);
+    expect(countFunctionCallOutputs(input)).toBe(2);
+    expect(countFunctionCallOutputs([...input, { type: 'message', id: 'u2', role: 'user' }])).toBe(0);
   });
 });
 
