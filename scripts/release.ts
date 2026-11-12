@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cp, mkdir, readdir, readlink, rm, symlink, lstat } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, readlink, rm, symlink, lstat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -18,6 +18,7 @@ try {
   execFileSync('git', ['clone', '--quiet', '--no-local', '--branch', 'main', '.', checkout], { stdio: 'inherit' });
   execFileSync('pnpm', ['install', '--frozen-lockfile'], { cwd: checkout, stdio: 'inherit' });
   execFileSync('pnpm', ['build'], { cwd: checkout, stdio: 'inherit', env: { ...process.env, WDCC_COMMIT: commit, WDCC_BUILT_AT: new Date().toISOString() } });
+  const builtAt = new Date().toISOString();
   const target = join(releaseRoot, 'releases', commit);
   await mkdir(target, { recursive: true });
   await cp(join(checkout, 'packages/server/dist'), join(target, 'packages/server/dist'), { recursive: true });
@@ -25,6 +26,7 @@ try {
   await cp(join(checkout, 'node_modules'), join(target, 'node_modules'), { recursive: true, dereference: false });
   await cp(join(checkout, 'package.json'), join(target, 'package.json'));
   await cp(join(checkout, 'pnpm-lock.yaml'), join(target, 'pnpm-lock.yaml'));
+  await writeFile(join(target, 'release.env'), `WDCC_COMMIT=${commit}\nWDCC_BUILT_AT=${builtAt}\n`);
   await mkdir(join(releaseRoot, 'backups'), { recursive: true });
   await cp(dataDir, join(releaseRoot, 'backups', `${commit}-${Date.now().toString(36)}`), { recursive: true });
   const current = join(releaseRoot, 'current');
@@ -33,9 +35,19 @@ try {
   await symlink(target, current, 'dir');
   try {
     execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
-    const base = process.env['WDCC_RELEASE_URL'] ?? 'http://127.0.0.1:8787';
-    execFileSync('curl', ['--fail', '--silent', '--show-error', `${base}/`], { stdio: 'ignore' });
-    const meta = JSON.parse(execFileSync('curl', ['--fail', '--silent', `${base}/api/meta`], { encoding: 'utf8' })) as { commit?: string };
+    const base = process.env['WDCC_RELEASE_URL'] ?? 'http://127.0.0.1:80';
+    const unauthStatus = execFileSync('curl', ['--silent', '--show-error', '--output', '/dev/null', '--write-out', '%{http_code}', `${base}/`], { encoding: 'utf8' }).trim();
+    if (unauthStatus !== '401') throw new Error(`未登录首页状态异常：${unauthStatus}`);
+    const envFile = process.env['WDCC_ENV_FILE'] ?? '/etc/webdcc.env';
+    const envText = await readFile(envFile, 'utf8').catch(() => '');
+    const token = process.env['WDCC_TOKEN'] ?? /^WDCC_TOKEN=(.*)$/m.exec(envText)?.[1]?.trim();
+    if (token === undefined || token === '') throw new Error('无法读取 WDCC_TOKEN，不能验证 /api/meta');
+    const auth = await fetch(`${base}/?token=${encodeURIComponent(token)}`, { redirect: 'manual' });
+    const setCookie = auth.headers.getSetCookie()[0]?.split(';')[0];
+    if (setCookie === undefined) throw new Error('token 换 Cookie 失败');
+    const metaResponse = await fetch(`${base}/api/meta`, { headers: { cookie: setCookie } });
+    if (!metaResponse.ok) throw new Error(`/api/meta 状态异常：${metaResponse.status}`);
+    const meta = await metaResponse.json() as { commit?: string };
     if (meta.commit !== commit) throw new Error(`线上 commit 不匹配：${meta.commit ?? 'missing'}`);
   } catch (error) {
     await rm(current, { force: true });
