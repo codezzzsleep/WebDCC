@@ -134,8 +134,8 @@ function ProviderEditForm({ provider, agent, saving, onSave }: { provider: Provi
   return <div className="provider-edit-form"><div className="form-grid"><label className="field"><span>Provider 名称</span><input className="text-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label className="field"><span>Base URL</span><input className="text-input" value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} /></label><label className="field"><span>替换 API Key（留空不修改）</span><input className="text-input" type="password" value={draft.apiKey} placeholder={provider.hasKey ? '已配置' : '未配置'} onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} /></label></div><div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={() => onSave(draft)}>保存 Provider</button></div></div>;
 }
 
-function ModelRow({ model, onEdit, onDelete, readOnly = false }: { model: ModelDetail; onEdit: () => void; onDelete: () => void; readOnly?: boolean }): React.ReactElement {
-  return <div className="model-row"><span className="model-mark"><Icon name="sparkle" size={14} /></span><span className="model-row-main"><strong>{model.name}</strong><code>{model.id}</code>{model.reasoningEfforts === undefined || model.reasoningEfforts.length === 0 ? null : <small>思考：{model.reasoningEfforts.join(' · ')}</small>}</span>{readOnly ? <span className="badge off">只读</span> : <span className="model-row-actions"><button type="button" className="btn small ghost" onClick={onEdit}>编辑</button><button type="button" className="btn small ghost danger-text" onClick={onDelete}>删除</button></span>}</div>;
+function ModelRow({ model, onEdit, onDelete, readOnly = false }: { model: ModelDetail; onEdit: () => void; onDelete?: () => void; readOnly?: boolean }): React.ReactElement {
+  return <div className="model-row"><span className="model-mark"><Icon name="sparkle" size={14} /></span><span className="model-row-main"><strong>{model.name}</strong><code>{model.id}</code>{model.reasoningEfforts === undefined || model.reasoningEfforts.length === 0 ? null : <small>思考：{model.reasoningEfforts.join(' · ')}</small>}</span>{readOnly ? <span className="badge off">只读</span> : <span className="model-row-actions"><button type="button" className="btn small ghost" onClick={onEdit}>编辑</button>{onDelete === undefined ? null : <button type="button" className="btn small ghost danger-text" onClick={onDelete}>删除</button>}</span>}</div>;
 }
 
 function ModelForm({ draft, saving, onChange, onCancel, onSave }: { draft: ModelDetail; saving: boolean; onChange: (draft: ModelDetail) => void; onCancel: () => void; onSave: (draft: ModelDetail) => void }): React.ReactElement {
@@ -148,15 +148,19 @@ function ReasoningEffortPicker({ values, onChange }: { values: string[]; onChang
   return <fieldset className="reasoning-picker"><legend>思考强度（可选，可多选）</legend><div className="reasoning-options">{REASONING_OPTIONS.map((value) => <label key={value} className="checkbox"><input type="checkbox" checked={values.includes(value)} onChange={() => toggle(value)} />{value}</label>)}</div><label className="field"><span>自定义等级（逗号分隔）</span><input className="text-input" value={custom.join(', ')} onChange={(event) => { const next = event.target.value.split(',').map((item) => item.trim()).filter(Boolean); onChange([...values.filter((item) => (REASONING_OPTIONS as readonly string[]).includes(item)), ...next]); }} placeholder="例如 reasoning-v2" /></label></fieldset>;
 }
 
-function ProviderModelRows({ provider }: { provider: DshProviderView }): React.ReactElement {
+type DshModelDetail = ModelDetail & { contextWindow?: number; maxTokens?: number };
+
+function ProviderModelRows({ provider, editable, onEdit }: { provider: DshProviderView; editable: boolean; onEdit: (model: DshModelDetail) => void }): React.ReactElement {
   const models = Array.isArray(provider.provider['models'])
     ? (provider.provider['models'] as Record<string, unknown>[]).filter((model) => typeof model['id'] === 'string').map((model) => ({
       id: String(model['id']),
       name: String(model['name'] ?? model['id']),
       reasoningEfforts: model['reasoningEfforts'] !== null && typeof model['reasoningEfforts'] === 'object' ? Object.keys(model['reasoningEfforts'] as Record<string, unknown>) : undefined,
+      ...(Number.isSafeInteger(model['contextWindow']) && Number(model['contextWindow']) > 0 ? { contextWindow: Number(model['contextWindow']) } : {}),
+      ...(Number.isSafeInteger(model['maxTokens']) && Number(model['maxTokens']) > 0 ? { maxTokens: Number(model['maxTokens']) } : {}),
     }))
     : provider.defaultModel.model === '' ? [] : [{ id: provider.defaultModel.model, name: provider.defaultModel.model }];
-  return <div className="model-list">{models.length === 0 ? <div className="model-empty">DSH 未返回模型。</div> : models.map((model) => <ModelRow key={model.id} model={model} onEdit={() => undefined} onDelete={() => undefined} readOnly />)}</div>;
+  return <div className="model-list">{models.length === 0 ? <div className="model-empty">DSH 未返回模型。</div> : models.map((model) => <ModelRow key={model.id} model={model} onEdit={() => onEdit(model)} readOnly={!editable} />)}</div>;
 }
 
 function formatCapacity(value: number): string {
@@ -198,6 +202,18 @@ function DshHarness({ dsh, dshLink, setDshLink, dshError, setDshError, provider,
       ...(draft.maxTokens === '' ? {} : { maxTokens: Number(draft.maxTokens) }),
     }).then(() => { setEditing(false); onReload(); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
   };
+  const editModel = (model: DshModelDetail): void => {
+    if (provider === null) return;
+    setDraft({
+      model: model.id,
+      reasoning: provider.defaultModel.model === model.id ? provider.defaultModel.reasoningEffort ?? provider.defaultReasoning ?? '' : provider.defaultReasoning ?? '',
+      efforts: model.reasoningEfforts?.join(', ') ?? provider.reasoningEfforts.join(', '),
+      contextWindow: model.contextWindow === undefined ? (provider.contextWindow === undefined ? '' : String(provider.contextWindow)) : String(model.contextWindow),
+      maxTokens: model.maxTokens === undefined ? (provider.maxTokens === undefined ? '' : String(provider.maxTokens)) : String(model.maxTokens),
+    });
+    setEditing(true);
+  };
+  const editable = provider !== null && !provider.official && provider.writable;
   return <div className="dsh-harness-stack" data-testid="harness-provider-dsh">
     <section className="panel panel-pad">
       <div className="dsh-connection-head"><div><h2>DeepSeek Harness</h2><p className="muted">官方 Provider 使用 Harness 原生能力；第三方 Provider 使用自己的模型声明。</p></div><span className={'badge ' + (dsh?.connected === true ? '' : 'warn')}>{dsh?.connected === true ? '已连接' : '未连接'}</span></div>
@@ -206,8 +222,8 @@ function DshHarness({ dsh, dshLink, setDshLink, dshError, setDshError, provider,
     </section>
     {provider !== null ? <section className={'panel provider-tree ' + (open ? 'open' : '')}>
       <button type="button" className="provider-tree-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} /><span className="provider-tree-title"><strong>{String(provider.provider['displayName'] ?? provider.providerKey)}</strong><small>{String(provider.provider['baseURL'] ?? 'DSH 原生配置')}</small></span><span className={'badge ' + (provider.official ? '' : 'warn')}>{provider.official ? '官方 Provider' : '第三方 Provider'}</span></button>
-      {open ? <div className="provider-tree-body"><div className="provider-facts"><span>DSH 当前 Provider · {provider.providerKey}</span><span className="provider-note">{provider.official ? '思考等级、上下文和输出上限来自 DeepSeek 官方适配器' : '思考等级、上下文和输出上限来自此 Provider 的模型声明'}</span>{!provider.official && provider.writable ? <button type="button" className="btn small ghost" onClick={() => setEditing((value) => !value)}>{editing ? '收起编辑' : '调整第三方能力'}</button> : null}</div>
-        <div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>当前模型能力</small></div><span className="badge off">{provider.defaultModel.model || '未选择模型'}</span></div><ProviderModelRows provider={provider} /></div>
+      {open ? <div className="provider-tree-body"><div className="provider-facts"><span>DSH 当前 Provider · {provider.providerKey}</span><span className="provider-note">{provider.official ? '思考等级、上下文和输出上限来自 DeepSeek 官方适配器' : '思考等级、上下文和输出上限来自此 Provider 的模型声明'}</span>{editable ? <button type="button" className="btn small ghost" onClick={() => setEditing((value) => !value)}>{editing ? '收起编辑' : '调整第三方能力'}</button> : null}</div>
+        <div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>当前模型能力</small></div><span className="badge off">{provider.defaultModel.model || '未选择模型'}</span></div><ProviderModelRows provider={provider} editable={editable} onEdit={editModel} /></div>
         <div className="dsh-capabilities"><div><b>思考等级</b><span>{provider.reasoningEfforts.length === 0 ? '未声明' : provider.reasoningEfforts.join(' · ')}</span></div><div><b>上下文</b><span>{provider.contextWindow === undefined ? '未声明' : formatCapacity(provider.contextWindow)}</span></div><div><b>输出上限</b><span>{provider.maxTokens === undefined ? '未声明' : formatCapacity(provider.maxTokens)}</span></div></div>
         {editing && !provider.official ? <div className="dsh-capability-editor"><div className="form-grid"><label className="field"><span>模型 ID</span><input className="text-input" value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label><label className="field"><span>默认思考等级</span><input className="text-input" value={draft.reasoning} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })} placeholder="留空表示不指定" /></label><label className="field"><span>上下文长度</span><input className="text-input" inputMode="numeric" value={draft.contextWindow} onChange={(event) => setDraft({ ...draft, contextWindow: event.target.value })} placeholder="1000000" /></label><label className="field"><span>输出上限</span><input className="text-input" inputMode="numeric" value={draft.maxTokens} onChange={(event) => setDraft({ ...draft, maxTokens: event.target.value })} placeholder="128000" /></label></div><ReasoningEffortPicker values={draft.efforts.split(',').map((item) => item.trim()).filter(Boolean)} onChange={(values) => setDraft({ ...draft, efforts: values.join(', ') })} /><div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存第三方能力'}</button></div>{error !== null ? <div className="error-card" role="alert">{error}</div> : null}</div> : null}
       </div> : null}
