@@ -102,6 +102,21 @@ export class SessionManager {
     return [...this.adapters.values()];
   }
 
+  /** 权限档位是安全边界，不能只依赖前端菜单的可见项。 */
+  private assertAccessMode(adapter: AgentAdapter, mode: string | undefined): void {
+    if (mode === undefined || mode === '') return;
+    const allowed = new Set(adapter.accessModes().map((item) => item.id));
+    // Codex 的原生 permissionProfile/list 返回带冒号的 id，而旧版配置
+    // 与下一轮参数仍接受无冒号别名。
+    if (adapter.id === 'codex') {
+      for (const id of ['read-only', 'workspace', 'danger-full-access']) allowed.add(`:${id}`);
+    }
+    if (!allowed.has(mode)) throw Object.assign(new Error(`${adapter.id}: 不支持的访问模式 ${mode}`), { statusCode: 400 });
+    if (adapter.id === 'claude-code' && mode === 'bypassPermissions' && typeof process.getuid === 'function' && process.getuid() === 0) {
+      throw Object.assign(new Error('以 root 运行时 Claude Code 不允许 bypassPermissions'), { statusCode: 400 });
+    }
+  }
+
   setHooks(hooks: ManagerHooks): void {
     this.hooks = hooks;
   }
@@ -128,6 +143,7 @@ export class SessionManager {
   }): Promise<SessionDto> {
     const adapter = this.adapters.get(input.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${input.agent} adapter`), { statusCode: 400 });
+    this.assertAccessMode(adapter, input.accessMode);
     const workspace = this.store.getWorkspace(input.workspaceId);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
 
@@ -208,6 +224,7 @@ export class SessionManager {
   private async ensureReady(session: SessionDto, workspacePath: string): Promise<Runtime> {
     const adapter = this.adapters.get(session.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${session.agent} adapter`), { statusCode: 400 });
+    this.assertAccessMode(adapter, session.accessMode);
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) return existing;
     if (session.nativeId === undefined) throw Object.assign(new Error('会话缺少原生 id，无法恢复'), { statusCode: 500 });
@@ -380,6 +397,7 @@ export class SessionManager {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
+    this.assertAccessMode(runtime.adapter, mode);
     let applied = mode;
     if (runtime.adapter.setAccessMode !== undefined) {
       const result = await runtime.adapter.setAccessMode(sessionId, mode);

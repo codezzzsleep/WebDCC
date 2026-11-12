@@ -350,7 +350,7 @@ export class DshAdapter implements AgentAdapter {
     if (accessMode === undefined) return;
     const line = `/permission ${accessMode}`;
     if (!isAllowedCommandLine(line)) throw new Error(`dsh: 不允许的 commands/execute line: ${line}`);
-    await client.rpc('commands/execute', { agentId: nativeId, line, submittedAttachments: [] }).catch(() => undefined);
+    await client.rpc('commands/execute', { agentId: nativeId, line, submittedAttachments: [] });
   }
 
   /** 所有 RPC 都经过白名单检查 */

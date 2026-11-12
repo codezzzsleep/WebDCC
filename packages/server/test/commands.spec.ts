@@ -23,6 +23,14 @@ async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<vo
 }
 
 describe('A6-6c / A6-6d 命令与审批的幂等', () => {
+  it('服务端拒绝未知访问模式，并阻止 root 下 Claude 的 bypassPermissions', async () => {
+    const { workspaceId } = await seedWorkspaceAndSession(ctx);
+    await expect(ctx.manager.createSession({ workspaceId, agent: 'codex', accessMode: 'untrusted' })).rejects.toThrow('不支持的访问模式');
+    if (typeof process.getuid === 'function' && process.getuid() === 0) {
+      await expect(ctx.manager.createSession({ workspaceId, agent: 'claude-code', accessMode: 'bypassPermissions' })).rejects.toThrow('不允许 bypassPermissions');
+    }
+  });
+
   it('离线重放的发送命令只生效一次（6c）', async () => {
     const { sessionId } = await seedWorkspaceAndSession(ctx);
     const command = { op: 'send' as const, sessionId, text: '重放一次', clientCommandId: 'REPLAY-1' };
