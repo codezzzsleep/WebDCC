@@ -39,6 +39,7 @@ export interface Runtime {
   /** Codex 等 adapter 可能在 turn/end 后补发 item/diff；在终止前给它们一个收敛窗口。 */
   finishTimer: NodeJS.Timeout | null;
   finishAction: (() => void) | null;
+  queued: { turnId: string; input: UserInput; clientCommandId?: string }[];
 }
 
 export interface ManagerHooks {
@@ -245,6 +246,7 @@ export class SessionManager {
       idleTimer: null,
       finishTimer: null,
       finishAction: null,
+      queued: [],
     };
     this.runtimes.set(session.id, runtime);
     return runtime;
@@ -279,20 +281,31 @@ export class SessionManager {
 
   // ---------- 发送 / 介入 ----------
 
-  async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string }> {
+  async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
     const session = this.requireSession(sessionId);
     if (automatic === undefined) {
       const job = this.store.watchdogJob(sessionId);
       if (job !== undefined && this.store.watchdogJobs().some((candidate) => candidate.rootSessionId === job.rootSessionId && candidate.sessionId !== sessionId && this.runtimes.get(candidate.sessionId)?.turnId != null)) throw Object.assign(new Error('任务已在接续会话中执行，请在那里继续或先停止该会话'), { statusCode: 409 });
-      if (this.runtimes.get(sessionId)?.turnId != null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
       this.watchdog.userInput(sessionId);
     }
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (automatic !== undefined && !automatic()) throw new Error('Watchdog 已取消');
-    if (runtime.turnId !== null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
+    if (automatic !== undefined && runtime.turnId !== null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
 
     const turnId = ulid();
+    if (runtime.turnId !== null) {
+      runtime.queued.push({ turnId, input, ...(clientCommandId === undefined ? {} : { clientCommandId }) });
+      return { turnId, queued: true };
+    }
+    await this.startTurn(runtime, turnId, input, clientCommandId);
+    return { turnId, queued: false };
+  }
+
+  private async startTurn(runtime: Runtime, turnId: string, input: UserInput, clientCommandId?: string): Promise<void> {
+    const sessionId = runtime.sessionId;
+    const session = this.store.getSession(sessionId);
+    if (session === undefined) throw new Error('会话不存在');
     runtime.turnId = turnId;
     runtime.turnStartedAt = Date.now();
 
@@ -338,7 +351,6 @@ export class SessionManager {
     }
     if (runtime.turnId === turnId) this.setStatus(runtime, 'running');
     this.touchIdle(runtime);
-    return { turnId };
   }
 
   async approve(sessionId: string, decision: ApprovalDecision): Promise<void> {
@@ -437,6 +449,29 @@ export class SessionManager {
     this.updateSessionAndFeed(sessionId, { model }, { model });
   }
 
+  async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    return runtime.adapter.slashCommands?.(sessionId) ?? [];
+  }
+
+  async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    if (runtime.adapter.sendSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持继续子 Agent'), { statusCode: 400 });
+    await runtime.adapter.sendSubagent(sessionId, childSessionId, text);
+  }
+
+  async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    if (runtime.adapter.interruptSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持打断子 Agent'), { statusCode: 400 });
+    await runtime.adapter.interruptSubagent(sessionId, childSessionId);
+  }
+
   async setReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
@@ -485,6 +520,7 @@ export class SessionManager {
     if (runtime.finishTimer !== null) clearTimeout(runtime.finishTimer);
     runtime.finishTimer = null;
     runtime.finishAction = null;
+    runtime.queued.length = 0;
     if (runtime.turnId !== null) this.finishTurn(runtime, 'interrupted', 'session-disposed');
     await runtime.adapter.dispose(sessionId);
     this.runtimes.delete(sessionId);
@@ -518,6 +554,14 @@ export class SessionManager {
           }
         }
       }
+    }
+    // Codex app-server reports the resolved effort on thread/started and on
+    // some resumed-thread payloads. Keep the database/page value aligned with
+    // the native response instead of only trusting the requested value.
+    if (typeof native['reasoningEffort'] === 'string') return native['reasoningEffort'];
+    const thread = native['thread'];
+    if (typeof thread === 'object' && thread !== null && typeof (thread as Record<string, unknown>)['reasoningEffort'] === 'string') {
+      return (thread as Record<string, unknown>)['reasoningEffort'] as string;
     }
     return undefined;
   }
@@ -701,9 +745,20 @@ export class SessionManager {
     runtime.turnId = null;
     runtime.turnStartedAt = null;
     this.setStatus(runtime, 'idle');
-    const terminalNative = (native ?? existing?.native) as { turn?: { error?: unknown }; error?: unknown } | undefined;
-    const lastError = events.filter((event) => event.kind === 'error').at(-1)?.data as { message?: string } | undefined;
-    this.watchdog.terminal(runtime.sessionId, turnId, status, terminalNative?.turn?.error ?? terminalNative?.error ?? reason ?? lastError?.message);
+    const next = runtime.queued.shift();
+    if (next !== undefined) {
+      // A queued user message takes precedence over automatic recovery.
+      this.watchdog.userInput(runtime.sessionId);
+      void this.startTurn(runtime, next.turnId, next.input, next.clientCommandId).catch((error: unknown) => {
+        // startTurn persists the failed turn; keep the manager available for
+        // later queued messages even when one queued input fails immediately.
+        if (process.env['WDCC_DEBUG_QUEUE'] === '1') console.error('[queue] failed', error);
+      });
+    } else {
+      const terminalNative = (native ?? existing?.native) as { turn?: { error?: unknown }; error?: unknown } | undefined;
+      const lastError = events.filter((event) => event.kind === 'error').at(-1)?.data as { message?: string } | undefined;
+      this.watchdog.terminal(runtime.sessionId, turnId, status, terminalNative?.turn?.error ?? terminalNative?.error ?? reason ?? lastError?.message);
+    }
   }
 
   private armFinishTimer(runtime: Runtime): void {

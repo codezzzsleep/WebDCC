@@ -35,7 +35,7 @@ export interface PendingMessage {
   clientCommandId: string;
   text: string;
   at: string;
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'queued' | 'sent' | 'failed';
 }
 
 export interface TurnModel extends TurnView {
@@ -249,7 +249,8 @@ export class AppStore {
         for (const [sessionId, list] of this.pending) {
           const match = list.find((item) => item.clientCommandId === message.clientCommandId);
           if (match !== undefined) {
-            match.status = message.result.ok ? 'sent' : 'failed';
+            const queued = message.result.ok && typeof message.result.value === 'object' && message.result.value !== null && (message.result.value as { queued?: unknown }).queued === true;
+            match.status = message.result.ok ? queued ? 'queued' : 'sent' : 'failed';
             this.pending.set(sessionId, list);
           }
         }

@@ -3,15 +3,18 @@ import { createTestApp, seedWorkspaceAndSession, type TestApp } from './helpers.
 
 let ctx: TestApp;
 let approvalCtx: TestApp;
+let queueCtx: TestApp;
 
 beforeAll(async () => {
   ctx = await createTestApp();
   approvalCtx = await createTestApp({ injectApproval: true });
+  queueCtx = await createTestApp({ delayMs: 20 });
 });
 
 afterAll(async () => {
   await ctx.close();
   await approvalCtx.close();
+  await queueCtx.close();
 });
 
 async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
@@ -23,6 +26,18 @@ async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<vo
 }
 
 describe('A6-6c / A6-6d 命令与审批的幂等', () => {
+  it('运行中发送会进入队列，当前轮次打断后仍会继续发送', async () => {
+    const { sessionId } = await seedWorkspaceAndSession(queueCtx);
+    await queueCtx.manager.send(sessionId, { text: '第一轮' });
+    await waitFor(() => queueCtx.store.getSession(sessionId)?.status === 'running');
+    const queued = await queueCtx.manager.send(sessionId, { text: '第二轮' });
+    expect(queued.queued).toBe(true);
+    await queueCtx.manager.interrupt(sessionId);
+    await waitFor(() => queueCtx.store.allEvents(sessionId).filter((event) => event.kind === 'turn.completed').length >= 2);
+    const messages = queueCtx.store.allEvents(sessionId).filter((event) => event.kind === 'user.message');
+    expect(messages.map((event) => (event.data as { text: string }).text)).toEqual(['第一轮', '第二轮']);
+  });
+
   it('服务端拒绝未知访问模式，并阻止 root 下 Claude 的 bypassPermissions', async () => {
     const { workspaceId } = await seedWorkspaceAndSession(ctx);
     const defaulted = await ctx.manager.createSession({ workspaceId, agent: 'codex' });

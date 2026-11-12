@@ -70,6 +70,9 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'settings/update',
   'credentials/set',
   'commands/execute',
+  'commands/list',
+  'subagents/prompt',
+  'subagents/interruptByUser',
   '$events',
   '$events/result',
   'userQuestions/answer',
@@ -328,15 +331,33 @@ export class DshAdapter implements AgentAdapter {
     const client = await this.ensureSidecar().catch(() => null);
     if (client === null) return [];
     try {
-      const result = await client.rpc<{ commands?: { name?: string; description?: string }[] }>('commands/list', {
+      const result = await this.call<{ commands?: { name?: string; description?: string }[] } | { name?: string; description?: string }[]>(client, 'commands/list', {
         agentId: runtime?.nativeId ?? '',
       });
-      return (result.commands ?? [])
+      const commands = Array.isArray(result) ? result : result.commands ?? [];
+      return commands
         .filter((command) => typeof command.name === 'string')
         .map((command) => ({ name: `/${String(command.name)}`, ...(command.description === undefined ? {} : { description: command.description }) }));
     } catch {
       return [];
     }
+  }
+
+  async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
+    this.require(sessionId);
+    const client = await this.ensureSidecar();
+    await this.call(client, 'subagents/prompt', {
+      requestId: ulid(),
+      childSessionId,
+      delivery: 'queue',
+      content: [{ type: 'text', text }],
+    });
+  }
+
+  async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
+    this.require(sessionId);
+    const client = await this.ensureSidecar();
+    await this.call(client, 'subagents/interruptByUser', { childSessionId });
   }
 
   /** 运行中切换访问模式（F6）：/permission <preset> 只影响这一个会话 */
@@ -642,6 +663,21 @@ export class DshAdapter implements AgentAdapter {
     };
 
     switch (type) {
+      case 'subagent/catalog':
+      case 'subagent/start':
+      case 'subagent/updated':
+      case 'subagent/end': {
+        const childId = String(data['childId'] ?? data['child_id'] ?? data['agentId'] ?? '');
+        const label = String(data['label'] ?? data['name'] ?? data['mode'] ?? 'DSH 子 Agent');
+        const terminal = type === 'subagent/end' || data['status'] === 'completed' || data['status'] === 'failed';
+        complete(`subagent-${childId || nativeSeq}`, 'tool.call', {
+          name: 'subagent',
+          label,
+          input: { childId, ...(data['name'] === undefined ? {} : { name: String(data['name']) }), ...(data['mode'] === undefined ? {} : { mode: String(data['mode']) }), ...(data['status'] === undefined ? {} : { status: String(data['status']) }) },
+          status: terminal ? 'completed' : 'running',
+        });
+        return;
+      }
       case 'turn/start': {
         runtime.assistantKey = '';
         runtime.assistantText = '';

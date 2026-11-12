@@ -377,9 +377,21 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const { id } = request.params as { id: string };
     const session = store.getSession(id);
     if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
-    const adapter = manager.adaptersList().find((item) => item.id === session.agent);
-    if (adapter?.slashCommands === undefined) return { commands: [] };
-    return { commands: await adapter.slashCommands(id).catch(() => []) };
+    return { commands: await manager.slashCommands(id).catch(() => []) };
+  });
+
+  app.post('/api/sessions/:id/subagents/:childId/prompt', async (request) => {
+    const { id, childId } = request.params as { id: string; childId: string };
+    const body = request.body as { text?: string };
+    if (typeof body?.text !== 'string' || body.text.trim() === '') throw badRequest('需要子 Agent 消息');
+    await manager.sendSubagent(id, childId, body.text);
+    return { accepted: true };
+  });
+
+  app.post('/api/sessions/:id/subagents/:childId/interrupt', async (request) => {
+    const { id, childId } = request.params as { id: string; childId: string };
+    await manager.interruptSubagent(id, childId);
+    return { accepted: true };
   });
 
   app.get('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {

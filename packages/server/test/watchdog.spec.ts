@@ -258,4 +258,31 @@ describe('Codex Watchdog', () => {
     expect(ctx.store.watchdogJob(child)).toMatchObject({ status: 'scheduled', action: 'continue', attempts: 1, handoffs: 1 });
     expect(ctx.store.getSession(child)?.parentId).toBe(sessionId);
   });
+
+  it('用户排队的消息优先于失败轮次的自动恢复', async () => {
+    enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '第一轮' });
+    const queued = await ctx.manager.send(sessionId, { text: '用户的下一步' });
+    expect(queued.queued).toBe(true);
+    codex.finish(sessionId, 'failed', '429 token rate limit exceeded');
+    expect(codex.sent.map((item) => item.input.text)).toEqual(['第一轮', '用户的下一步']);
+    expect(ctx.store.watchdogJob(sessionId)).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(60_000); expect(codex.sent).toHaveLength(2);
+  });
+
+  it('正在运行的会话不排队自动恢复消息', async () => {
+    enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '第一轮' });
+    await expect(ctx.manager.send(sessionId, { text: '自动恢复' }, 'watchdog:test', () => true)).rejects.toThrow('正在运行');
+    expect(ctx.manager.getRuntime(sessionId)?.queued).toHaveLength(0);
+  });
+
+  it('回收会话时不会提交剩余队列中的消息', async () => {
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '第一轮' });
+    await ctx.manager.send(sessionId, { text: '排队的第二轮' });
+    await ctx.manager.dispose(sessionId);
+    expect(codex.sent).toHaveLength(1);
+    expect(ctx.manager.getRuntime(sessionId)).toBeUndefined();
+  });
 });
