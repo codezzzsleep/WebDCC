@@ -413,6 +413,22 @@ export class SessionManager {
     return runtime.adapter.slashCommands?.(sessionId) ?? [];
   }
 
+  async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    if (runtime.adapter.sendSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持继续子 Agent'), { statusCode: 400 });
+    await runtime.adapter.sendSubagent(sessionId, childSessionId, text);
+  }
+
+  async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
+    const session = this.requireSession(sessionId);
+    const workspace = this.requireWorkspace(session.workspaceId);
+    const runtime = await this.ensureReady(session, workspace.path);
+    if (runtime.adapter.interruptSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持打断子 Agent'), { statusCode: 400 });
+    await runtime.adapter.interruptSubagent(sessionId, childSessionId);
+  }
+
   async setReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);

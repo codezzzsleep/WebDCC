@@ -4,6 +4,7 @@ import type { EventData, LiveItem, StoredEvent, TurnView as ProtocolTurnView, Us
 import { isValidEventData } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
+import { api } from '../lib/api.js';
 import { duration, shortNumber } from '../lib/format.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Icon, Spinner, type IconName } from './Icon.js';
@@ -363,6 +364,8 @@ function StepRow({
   onOpenDiff: (fileId: string, path: string) => void;
 }): React.ReactElement | null {
   const [open, setOpen] = useState(false);
+  const [subagentText, setSubagentText] = useState('');
+  const [subagentBusy, setSubagentBusy] = useState(false);
   const className = `step-row ${highlight === true ? 'highlight' : ''}`;
   // 渲染前再校验一次：不合格的事件显示占位，而不是让组件崩掉（F2）
   if (!isValidEventData(event.kind, event.data)) {
@@ -426,6 +429,27 @@ function StepRow({
     }
     case 'tool.call': {
       const data = event.data as EventData['tool.call'];
+      const toolInput = data.input as Record<string, unknown>;
+      const childId = data.name === 'subagent' && typeof toolInput?.['childId'] === 'string' ? toolInput['childId'] : undefined;
+      const sendSubagent = async (): Promise<void> => {
+        if (childId === undefined || subagentText.trim() === '') return;
+        setSubagentBusy(true);
+        try {
+          await api.sendSubagent(event.sessionId, childId, subagentText.trim());
+          setSubagentText('');
+        } finally {
+          setSubagentBusy(false);
+        }
+      };
+      const stopSubagent = async (): Promise<void> => {
+        if (childId === undefined) return;
+        setSubagentBusy(true);
+        try {
+          await api.interruptSubagent(event.sessionId, childId);
+        } finally {
+          setSubagentBusy(false);
+        }
+      };
       return (
         <div className={className}>
           <StepLine
@@ -442,6 +466,7 @@ function StepRow({
               {data.output === undefined ? '' : `\n\n→ ${typeof data.output === 'string' ? data.output : JSON.stringify(data.output, null, 2)}`}
             </pre>
           ) : null}
+          {childId !== undefined ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
         </div>
       );
     }

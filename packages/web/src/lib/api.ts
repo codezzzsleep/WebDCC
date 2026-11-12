@@ -66,6 +66,10 @@ export const api = {
   providers: () => request<ProviderDto[]>('/api/providers'),
   slashCommands: (sessionId: string) =>
     request<{ commands: { name: string; description?: string }[] }>(`/api/sessions/${sessionId}/slash-commands`),
+  sendSubagent: (sessionId: string, childSessionId: string, text: string) =>
+    request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/prompt`, { method: 'POST', body: JSON.stringify({ text }) }),
+  interruptSubagent: (sessionId: string, childSessionId: string) =>
+    request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/interrupt`, { method: 'POST' }),
   models: async (agent: string, providerId: string | null): Promise<string[]> => {
     const query = `agent=${encodeURIComponent(agent)}${providerId === null ? '' : `&providerId=${encodeURIComponent(providerId)}`}`;
     const result = await request<{ models: string[] }>(`/api/models?${query}`);

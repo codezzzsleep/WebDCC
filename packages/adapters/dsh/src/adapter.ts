@@ -71,6 +71,8 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'credentials/set',
   'commands/execute',
   'commands/list',
+  'subagents/prompt',
+  'subagents/interruptByUser',
   '$events',
   '$events/result',
   'userQuestions/answer',
@@ -339,6 +341,23 @@ export class DshAdapter implements AgentAdapter {
     } catch {
       return [];
     }
+  }
+
+  async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
+    const runtime = this.require(sessionId);
+    const client = await this.ensureSidecar();
+    await this.call(client, 'subagents/prompt', {
+      requestId: ulid(),
+      childSessionId,
+      delivery: 'queue',
+      content: [{ type: 'text', text }],
+    });
+  }
+
+  async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
+    this.require(sessionId);
+    const client = await this.ensureSidecar();
+    await this.call(client, 'subagents/interruptByUser', { childSessionId });
   }
 
   /** 运行中切换访问模式（F6）：/permission <preset> 只影响这一个会话 */

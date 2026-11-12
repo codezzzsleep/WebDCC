@@ -368,6 +368,20 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return { commands: await manager.slashCommands(id).catch(() => []) };
   });
 
+  app.post('/api/sessions/:id/subagents/:childId/prompt', async (request) => {
+    const { id, childId } = request.params as { id: string; childId: string };
+    const body = request.body as { text?: string };
+    if (typeof body?.text !== 'string' || body.text.trim() === '') throw badRequest('需要子 Agent 消息');
+    await manager.sendSubagent(id, childId, body.text);
+    return { accepted: true };
+  });
+
+  app.post('/api/sessions/:id/subagents/:childId/interrupt', async (request) => {
+    const { id, childId } = request.params as { id: string; childId: string };
+    await manager.interruptSubagent(id, childId);
+    return { accepted: true };
+  });
+
   app.get('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {
     const { id } = request.params as { id: string };
     if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });

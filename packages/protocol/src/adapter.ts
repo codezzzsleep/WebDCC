@@ -106,6 +106,8 @@ export interface AgentAdapter {
   setAccessMode?(sessionId: string, mode: string): Promise<{ accessMode: string } | void>;
   /** 斜杠命令目录（F8）：Claude 来自 init 消息，DSH 来自 commands/list */
   slashCommands?(sessionId: string): Promise<{ name: string; description?: string }[]>;
+  sendSubagent?(sessionId: string, childSessionId: string, text: string): Promise<void>;
+  interruptSubagent?(sessionId: string, childSessionId: string): Promise<void>;
   dispose(sessionId: string): Promise<void>;
   onEvent(cb: (sessionId: string, e: AdapterEvent) => void): void;
 }
