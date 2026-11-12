@@ -13,7 +13,7 @@ interface HandoffDialogProps {
   onClose: () => void;
   /** 放进已有会话 */
   onHanded: (targetSessionId: string, title: string) => void;
-  /** 在另一个 Agent 中继续：新建接续会话 */
+  /** 在所选 Agent 中继续：新建接续会话 */
   onContinueIn: (agent: string, text: string) => void;
 }
 
@@ -22,7 +22,6 @@ export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHan
   useStoreVersion();
   const { meta } = useAppData();
   const [busy, setBusy] = useState(false);
-  const from = store.getSession(fromSessionId);
   const targets = useMemo(
     () =>
       store
@@ -52,8 +51,8 @@ export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHan
           回答原文会放进目标会话的输入框，你可以先改再发。WebDCC 不会替你发送任何东西。
         </p>
         <div className="menu" style={{ position: 'static', boxShadow: 'none', maxWidth: 'none', width: '100%' }}>
-          <div className="menu-group-title">在另一个 Agent 中继续（新建接续会话）</div>
-          {AGENT_IDS.filter((id) => id !== from?.agent).map((id) => (
+          <div className="menu-group-title">在 Agent 中继续（新建接续会话）</div>
+          {AGENT_IDS.map((id) => (
             <button
               key={id}
               type="button"
