@@ -3,7 +3,7 @@ import type { ProviderDto } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
-import { AGENT_IDS, agentAvailable, agentText, modelGroups, type ModelChoice } from '../lib/agents.js';
+import { AGENT_IDS, agentAvailable, agentText, rememberAccessMode, rememberReasoning, modelGroups, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { shortNumber } from '../lib/format.js';
 import { AgentMark } from './AgentMark.js';
@@ -133,7 +133,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const providerOf = (id: string | null | undefined): ProviderDto | undefined => providers.find((provider) => provider.id === id);
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
   const currentModel = mode.kind === 'session' ? (session?.model ?? '') : mode.choice.model;
-  const currentReasoning = mode.kind === 'session' ? sessionReasoning : (mode.choice.reasoningEffort ?? 'medium');
+  const currentReasoning = agent === 'dsh' && mode.kind === 'session'
+    ? (session?.reasoningEffort ?? '未确定')
+    : mode.kind === 'session' ? sessionReasoning : (mode.choice.reasoningEffort ?? 'medium');
   const reasoningEfforts = agent === 'claude-code' ? CLAUDE_REASONING_EFFORTS : CODEX_REASONING_EFFORTS;
   const currentProvider = providerOf(currentProviderId);
   const providerLabel = currentProvider?.name ?? agentText(agent).nativeLabel;
@@ -322,6 +324,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   const pickReasoning = (effort: string): void => {
     setMenu(null);
+    rememberReasoning(agent, effort);
     if (mode.kind === 'new') mode.onChoice({ ...mode.choice, reasoningEffort: effort });
     else if (sessionId !== null) {
       setSessionReasoning(effort);
@@ -564,6 +567,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                         onClick={() => {
                           setMenu(null);
                           if (mode.kind === 'session') {
+                            rememberAccessMode(agent, item.id);
                             if (sessionId !== null) store.setAccessMode(sessionId, item.id);
                           } else {
                             mode.onAccessMode(item.id);
@@ -680,6 +684,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               ) : null}
             </span>
           ) : null}
+          {agent === 'dsh' && mode.kind === 'session' ? <span className="pill" title="DSH 的实际思考等级来自原生 request/header 回报"><span className="pill-text">思考 {currentReasoning}</span></span> : null}
 
           {running ? (
             <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label="停止" title="停止" data-testid="stop-button">

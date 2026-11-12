@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { store } from '../lib/store.js';
-import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, type ModelChoice } from '../lib/agents.js';
+import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, rememberAccessMode, rememberReasoning, rememberedAccessMode, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { AgentMark } from '../components/AgentMark.js';
 import { Composer } from '../components/Composer.js';
@@ -47,6 +47,9 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
 
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const choice = choiceOverride[agent] ?? defaultChoice(agent, meta?.agents[agent], providers);
+  const availableAccessModes = meta?.agents[agent]?.accessModes ?? [];
+  const rememberedMode = rememberedAccessMode(agent);
+  const selectedMode = accessModes[agent] ?? (rememberedMode !== undefined && availableAccessModes.some((mode) => mode.id === rememberedMode) ? rememberedMode : availableAccessModes[0]?.id);
 
   const cards = useMemo(
     () =>
@@ -69,7 +72,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
 
   const submit = async (text: string, images: string[]): Promise<void> => {
     if (workspaceId === '') throw new Error('先添加一个工作区');
-    const accessMode = accessModes[agent];
+    const accessMode = selectedMode;
     const sessionId = await store.createSession({
       workspaceId,
       agent,
@@ -172,9 +175,15 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
             agent,
             onAgentChange: pickAgent,
             choice,
-            onChoice: (next) => setChoiceOverride((prev) => ({ ...prev, [agent]: next })),
-            accessMode: accessModes[agent],
-            onAccessMode: (modeId) => setAccessModes((prev) => ({ ...prev, [agent]: modeId })),
+            onChoice: (next) => {
+              if (next.reasoningEffort !== undefined) rememberReasoning(agent, next.reasoningEffort);
+              setChoiceOverride((prev) => ({ ...prev, [agent]: next }));
+            },
+            accessMode: selectedMode,
+            onAccessMode: (modeId) => {
+              rememberAccessMode(agent, modeId);
+              setAccessModes((prev) => ({ ...prev, [agent]: modeId }));
+            },
             onSubmit: submit,
           }}
         />

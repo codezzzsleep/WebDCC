@@ -378,7 +378,6 @@ export function buildThreadStartParams(opts: CreateOpts): Record<string, unknown
   return {
     cwd: opts.cwd,
     ...(opts.model === undefined ? {} : { model: opts.model }),
-    ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
     ...accessParams(opts.accessMode),
   };
 }
@@ -400,7 +399,7 @@ export function buildTurnStartParams(
       { type: 'text', text, text_elements: [] },
     ],
     ...(model === undefined || model === null ? {} : { model }),
-    ...(reasoningEffort === undefined || reasoningEffort === null ? {} : { reasoningEffort }),
+    ...(reasoningEffort === undefined || reasoningEffort === null ? {} : { effort: reasoningEffort }),
     ...(accessMode === undefined || accessMode === null ? {} : accessParams(accessMode)),
   };
 }
@@ -591,7 +590,6 @@ export class CodexAdapter implements AgentAdapter {
       threadId: opts.nativeId,
       excludeTurns: true,
       ...(opts.model === undefined ? {} : { model: opts.model }),
-      ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
       ...accessParams(opts.accessMode),
     });
     runtime.nativeId = response.thread.id;

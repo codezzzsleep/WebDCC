@@ -103,6 +103,10 @@ export class SessionManager {
   }
 
   /** 权限档位是安全边界，不能只依赖前端菜单的可见项。 */
+  private defaultAccessMode(adapter: AgentAdapter): string | undefined {
+    return adapter.accessModes()[0]?.id;
+  }
+
   private assertAccessMode(adapter: AgentAdapter, mode: string | undefined): void {
     if (mode === undefined || mode === '') return;
     const allowed = new Set(adapter.accessModes().map((item) => item.id));
@@ -143,7 +147,8 @@ export class SessionManager {
   }): Promise<SessionDto> {
     const adapter = this.adapters.get(input.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${input.agent} adapter`), { statusCode: 400 });
-    this.assertAccessMode(adapter, input.accessMode);
+    const accessMode = input.accessMode ?? this.defaultAccessMode(adapter);
+    this.assertAccessMode(adapter, accessMode);
     const workspace = this.store.getWorkspace(input.workspaceId);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
 
@@ -153,7 +158,7 @@ export class SessionManager {
       providerId: input.providerId ?? null,
       model: input.model ?? null,
       reasoningEffort: input.reasoningEffort ?? null,
-      accessMode: input.accessMode ?? null,
+      accessMode: accessMode ?? null,
       title: input.title ?? null,
       parentId: input.parentId !== undefined && this.store.getSession(input.parentId) !== undefined ? input.parentId : null,
     });
@@ -168,7 +173,7 @@ export class SessionManager {
         provider,
         ...(input.model === undefined ? {} : { model: input.model }),
         ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
-        ...(input.accessMode === undefined ? {} : { accessMode: input.accessMode }),
+        ...(accessMode === undefined ? {} : { accessMode }),
       });
     } catch (error) {
       // 建会话失败就回滚，不留 native_id 为空的孤儿记录（SPEC-M8 F1）
@@ -224,7 +229,8 @@ export class SessionManager {
   private async ensureReady(session: SessionDto, workspacePath: string): Promise<Runtime> {
     const adapter = this.adapters.get(session.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${session.agent} adapter`), { statusCode: 400 });
-    this.assertAccessMode(adapter, session.accessMode);
+    const accessMode = session.accessMode ?? this.defaultAccessMode(adapter);
+    this.assertAccessMode(adapter, accessMode);
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) return existing;
     if (session.nativeId === undefined) throw Object.assign(new Error('会话缺少原生 id，无法恢复'), { statusCode: 500 });
@@ -235,10 +241,13 @@ export class SessionManager {
       provider: this.options.resolveProvider?.(session.providerId ?? null) ?? null,
       ...(session.model === undefined ? {} : { model: session.model }),
       ...(session.reasoningEffort === undefined ? {} : { reasoningEffort: session.reasoningEffort }),
-      ...(session.accessMode === undefined ? {} : { accessMode: session.accessMode }),
+      ...(accessMode === undefined ? {} : { accessMode }),
       nativeId: session.nativeId,
     });
-    const runtime = this.ensureRuntime(session, adapter, workspacePath, session.nativeId);
+    const effectiveSession = session.accessMode === undefined && accessMode !== undefined
+      ? this.store.updateSessionAndFeed(session.id, { accessMode }, { accessMode }).session ?? session
+      : session;
+    const runtime = this.ensureRuntime(effectiveSession, adapter, workspacePath, session.nativeId);
     runtime.status = session.status;
     return runtime;
   }
@@ -444,9 +453,36 @@ export class SessionManager {
 
   // ---------- adapter 事件 ----------
 
+  private nativeReasoningEffort(event: AdapterEvent): string | undefined {
+    if (event.type !== 'item.complete' || event.native === undefined) return undefined;
+    if (typeof event.native !== 'object' || event.native === null) return undefined;
+    const native = event.native as Record<string, unknown>;
+    // Claude SDK: this is the effort actually applied after model/org caps.
+    if (native['type'] === 'system' && native['subtype'] === 'init' && typeof native['effort'] === 'string') return native['effort'];
+    // DSH: request/header is emitted for every model request and carries the
+    // resolved adapter config, including the effective reasoning level.
+    if (native['type'] === 'request/header') {
+      const data = native['data'];
+      if (typeof data === 'object' && data !== null) {
+        const header = (data as Record<string, unknown>)['header'];
+        if (typeof header === 'object' && header !== null) {
+          const config = (header as Record<string, unknown>)['config'];
+          if (typeof config === 'object' && config !== null && typeof (config as Record<string, unknown>)['reasoningEffort'] === 'string') {
+            return (config as Record<string, unknown>)['reasoningEffort'] as string;
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
   private handleAdapterEvent(sessionId: string, event: AdapterEvent): void {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
+    const nativeEffort = this.nativeReasoningEffort(event);
+    if (nativeEffort !== undefined && this.store.getSession(sessionId)?.reasoningEffort !== nativeEffort) {
+      this.updateSessionAndFeed(sessionId, { reasoningEffort: nativeEffort }, { reasoningEffort: nativeEffort });
+    }
     const assignment = this.turns.observe(sessionId, event);
     const turnId = assignment.turnId;
     // Keep extending the settle window while frames for the pending turn are

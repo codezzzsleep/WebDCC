@@ -4,7 +4,7 @@ import type { EventData } from '@webdcc/protocol';
 import { api } from './lib/api.js';
 import { useStoreVersion } from './lib/hooks.js';
 import { store } from './lib/store.js';
-import { agentText, defaultChoice } from './lib/agents.js';
+import { agentText, defaultChoice, rememberedAccessMode } from './lib/agents.js';
 import { refreshWorkspaces, useAppData } from './lib/appData.js';
 import { Sidebar } from './components/Sidebar.js';
 import { RelayBar, SessionHeader } from './components/SessionHeader.js';
@@ -247,11 +247,16 @@ function SessionPage(): React.ReactElement {
     setHandoffText(null);
     try {
       const choice = defaultChoice(agent, meta?.agents[agent], providers);
+      const availableModes = meta?.agents[agent]?.accessModes ?? [];
+      const rememberedMode = rememberedAccessMode(agent);
+      const accessMode = rememberedMode !== undefined && availableModes.some((mode) => mode.id === rememberedMode) ? rememberedMode : availableModes[0]?.id;
       const id = await store.createSession({
         workspaceId: session.workspaceId,
         agent,
         providerId: choice.providerId,
         ...(choice.model === '' ? {} : { model: choice.model }),
+        ...(choice.reasoningEffort === undefined ? {} : { reasoningEffort: choice.reasoningEffort }),
+        ...(accessMode === undefined ? {} : { accessMode }),
         parentId: mainId,
       });
       if (id === '') throw new Error('服务端没有返回会话 id');

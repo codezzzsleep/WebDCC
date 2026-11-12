@@ -33,9 +33,9 @@ describe('原装原则：Codex（SPEC 3.3）', () => {
     expect(input[0]?.text).toBe(text);
   });
 
-  it('Codex 思考强度透传到原生 reasoningEffort', () => {
-    expect(buildThreadStartParams({ ...opts, reasoningEffort: 'high' })).toMatchObject({ reasoningEffort: 'high' });
-    expect(buildTurnStartParams('thread-1', 'hello', null, null, 'xhigh')).toMatchObject({ reasoningEffort: 'xhigh' });
+  it('Codex 思考强度使用原生 effort 字段透传到 turn/start', () => {
+    expect(buildThreadStartParams({ ...opts, reasoningEffort: 'high' })).not.toHaveProperty('reasoningEffort');
+    expect(buildTurnStartParams('thread-1', 'hello', null, null, 'xhigh')).toMatchObject({ effort: 'xhigh' });
   });
 
   it('buildLaunchSpec 的 -c 覆盖只含白名单键', () => {

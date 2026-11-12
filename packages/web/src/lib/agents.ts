@@ -70,6 +70,44 @@ export interface ModelChoice {
   reasoningEffort?: string;
 }
 
+const REASONING_DEFAULT_PREFIX = 'wdcc:reasoning-default:';
+const ACCESS_MODE_DEFAULT_PREFIX = 'wdcc:access-mode-default:';
+
+function readPreference(prefix: string, agent: string): string | undefined {
+  try {
+    const value = window.localStorage.getItem(prefix + agent);
+    return value === null || value.trim() === '' ? undefined : value;
+  } catch {
+    return undefined;
+  }
+}
+
+function writePreference(prefix: string, agent: string, value: string): void {
+  try {
+    window.localStorage.setItem(prefix + agent, value);
+  } catch {
+    // Browser storage may be unavailable; the current session still works.
+  }
+}
+
+/** Last user-selected reasoning level used as the next-session default. */
+export function rememberedReasoning(agent: string): string | undefined {
+  return readPreference(REASONING_DEFAULT_PREFIX, agent);
+}
+
+export function rememberReasoning(agent: string, effort: string): void {
+  writePreference(REASONING_DEFAULT_PREFIX, agent, effort);
+}
+
+/** Last user-selected access mode used as the next-session default. */
+export function rememberedAccessMode(agent: string): string | undefined {
+  return readPreference(ACCESS_MODE_DEFAULT_PREFIX, agent);
+}
+
+export function rememberAccessMode(agent: string, mode: string): void {
+  writePreference(ACCESS_MODE_DEFAULT_PREFIX, agent, mode);
+}
+
 export function modelGroups(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelGroup[] {
   const groups: ModelGroup[] = [];
   if (agent === 'dsh') {
@@ -101,7 +139,8 @@ export function defaultChoice(agent: string, meta: AgentMeta | undefined, provid
   const compatible = providers.filter((provider) => isCompatible(agent, provider));
   const preferred =
     compatible.find((provider) => provider.source === sameSource && provider.models.length > 0) ?? compatible.find((provider) => provider.models.length > 0);
-  const withDefaultReasoning = agent === 'codex' || agent === 'claude-code' ? { reasoningEffort: 'medium' } : {};
+  const remembered = rememberedReasoning(agent);
+  const withDefaultReasoning = agent === 'codex' || agent === 'claude-code' ? { reasoningEffort: remembered ?? 'medium' } : {};
   if (preferred !== undefined) return { providerId: preferred.id, model: preferred.models[0] ?? '', ...withDefaultReasoning };
   return { providerId: null, model: agent === 'dsh' ? (meta?.models?.[0]?.id ?? '') : '', ...withDefaultReasoning };
 }
