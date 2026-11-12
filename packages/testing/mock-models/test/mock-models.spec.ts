@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { countToolResults, createAnthropicMock, defaultToolInput, type RunningMock } from '../src/anthropic-server.js';
 import { pickToolName, resolveTool, stepAt } from '../src/plan.js';
 import { countFunctionCallOutputs } from '../src/responses-server.js';
+import { countResponses } from '../src/mock-control.js';
 
 describe('plan 工具匹配', () => {
   const codexTools = [
@@ -82,6 +83,18 @@ describe('工具结果计数（按当前轮）', () => {
     ];
     expect(countFunctionCallOutputs(input)).toBe(2);
     expect(countFunctionCallOutputs([...input, { type: 'message', id: 'u2', role: 'user' }])).toBe(0);
+  });
+
+  it('Responses：工具结果消息不计入历史用户消息数', () => {
+    const result = countResponses({
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: '第一轮' }] },
+        { type: 'custom_tool_call_output', output: 'ok' },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: '第二轮' }] },
+        { type: 'message', role: 'user', content: [{ type: 'custom_tool_call_output', output: 'ok' }] },
+      ],
+    });
+    expect(result.userMessageCount).toBe(2);
   });
 });
 

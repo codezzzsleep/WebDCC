@@ -112,8 +112,18 @@ export function countResponses(body: Record<string, unknown>): { userMessageCoun
   let imageCount = 0;
   for (const item of input) {
     if (item['type'] !== 'message' || item['role'] !== 'user') continue;
-    userMessageCount += 1;
     const content = item['content'];
+    if (!Array.isArray(content)) {
+      if (typeof content === 'string' && content.trim() !== '') userMessageCount += 1;
+      continue;
+    }
+    const hasToolResult = content.some(
+      (part) => typeof part === 'object' && part !== null && ['tool_result', 'function_call_output', 'custom_tool_call_output'].includes(String((part as { type?: unknown }).type ?? '')),
+    );
+    const hasText = content.some(
+      (part) => typeof part === 'object' && part !== null && ['text', 'input_text'].includes(String((part as { type?: unknown }).type ?? '')),
+    );
+    if (hasText && !hasToolResult) userMessageCount += 1;
     if (Array.isArray(content)) {
       for (const part of content) {
         const type = typeof part === 'object' && part !== null ? (part as { type?: string }).type : undefined;
