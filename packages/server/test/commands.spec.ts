@@ -113,4 +113,23 @@ describe('A6-6c / A6-6d 命令与审批的幂等', () => {
     const feed = ctx.store.feedSince(0, 1000).filter((entry) => entry.sessionId === sessionId);
     expect(feed.some((entry) => entry.patch.title === '新标题')).toBe(true);
   });
+
+  it('Codex 思考强度随会话保存并同步给页面', async () => {
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex', 'high');
+    expect(ctx.store.getSession(sessionId)?.reasoningEffort).toBe('high');
+
+    const detail = await ctx.app.inject({ method: 'GET', url: `/api/sessions/${sessionId}`, headers: { cookie: ctx.cookie } });
+    expect(detail.statusCode).toBe(200);
+    expect((detail.json() as { reasoningEffort?: string }).reasoningEffort).toBe('high');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/commands',
+      headers: { cookie: ctx.cookie },
+      payload: { command: { op: 'set-reasoning-effort', sessionId, reasoningEffort: 'xhigh', clientCommandId: 'REASONING-1' } },
+    });
+    expect((response.json() as { ok: boolean }).ok).toBe(true);
+    expect(ctx.store.getSession(sessionId)?.reasoningEffort).toBe('xhigh');
+    expect(ctx.store.feedSince(0, 1000).some((entry) => entry.sessionId === sessionId && entry.patch.reasoningEffort === 'xhigh')).toBe(true);
+  });
 });

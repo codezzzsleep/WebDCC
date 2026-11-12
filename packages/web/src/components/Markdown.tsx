@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 type Highlighter = {
@@ -7,6 +7,7 @@ type Highlighter = {
 };
 
 let highlighterPromise: Promise<Highlighter> | null = null;
+const remarkPlugins = [remarkGfm];
 
 function getHighlighter(): Promise<Highlighter> | null {
   if (highlighterPromise === null) {
@@ -50,27 +51,29 @@ function CodeBlock({ code, language }: { code: string; language: string }): Reac
   );
 }
 
+// Keep these component identities stable. Recreating the code renderer on
+// every Markdown render remounts CodeBlock, resets its async Shiki state to
+// <pre>, and can form a render/measure loop with the virtualized timeline.
+const markdownComponents: Components = {
+  code({ className, children }) {
+    const match = /language-(\w+)/.exec(className ?? '');
+    const content = String(children).replace(/\n$/, '');
+    if (match !== null) return <CodeBlock code={content} language={match[1] ?? ''} />;
+    return <code className="inline-code">{content}</code>;
+  },
+  a({ href, children }) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    );
+  },
+};
+
 export function Markdown({ text }: { text: string }): React.ReactElement {
   return (
     <div className="markdown">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({ className, children }) {
-            const match = /language-(\w+)/.exec(className ?? '');
-            const content = String(children).replace(/\n$/, '');
-            if (match !== null) return <CodeBlock code={content} language={match[1] ?? ''} />;
-            return <code className="inline-code">{content}</code>;
-          },
-          a({ href, children }) {
-            return (
-              <a href={href} target="_blank" rel="noreferrer">
-                {children}
-              </a>
-            );
-          },
-        }}
-      >
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
         {text}
       </ReactMarkdown>
     </div>

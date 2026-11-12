@@ -75,8 +75,8 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   }, [sessionId]);
 
   useEffect(() => {
-    if (session?.agent === 'codex') setSessionReasoning('medium');
-  }, [sessionId, session?.agent]);
+    if (session?.agent === 'codex') setSessionReasoning(session.reasoningEffort ?? 'medium');
+  }, [sessionId, session?.agent, session?.reasoningEffort]);
 
   useEffect(() => {
     if (!mention.open || workspaceId === '') return;

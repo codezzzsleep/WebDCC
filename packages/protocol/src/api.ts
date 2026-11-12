@@ -32,6 +32,7 @@ export interface SessionDto {
   title?: string;
   providerId?: string | null;
   model?: string;
+  reasoningEffort?: string;
   accessMode?: string;
   /** 接续会话的上一棒（"在另一个 Agent 中继续"） */
   parentId?: string;

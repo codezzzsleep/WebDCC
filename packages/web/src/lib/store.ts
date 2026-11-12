@@ -16,6 +16,7 @@ export interface SessionMeta {
   archived?: boolean;
   providerId?: string | null;
   model?: string;
+  reasoningEffort?: string;
   accessMode?: string;
   createdAt?: string;
   lastSeq?: number;
@@ -180,6 +181,7 @@ export class AppStore {
           ...(patch['archived'] === undefined ? {} : { archived: Boolean(patch['archived']) }),
           ...(patch['pinned'] === undefined ? {} : { pinned: Boolean(patch['pinned']) }),
           ...(patch['model'] === undefined ? {} : { model: String(patch['model']) }),
+          ...(patch['reasoningEffort'] === undefined ? {} : { reasoningEffort: String(patch['reasoningEffort']) }),
           ...(patch['accessMode'] === undefined ? {} : { accessMode: String(patch['accessMode']) }),
           ...(patch['providerId'] === undefined ? {} : { providerId: patch['providerId'] === null ? null : String(patch['providerId']) }),
           ...(typeof patch['parentId'] === 'string' ? { parentId: patch['parentId'] } : {}),

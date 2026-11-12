@@ -147,6 +147,7 @@ export interface FeedPatch {
   /** 访问模式 / 模型 / Provider 变化（F6、AG-*-12） */
   accessMode?: string;
   model?: string;
+  reasoningEffort?: string;
   providerId?: string | null;
   /** 接续会话的上一棒 */
   parentId?: string;

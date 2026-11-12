@@ -13,6 +13,7 @@ export interface CachedSession {
   archived?: boolean;
   providerId?: string | null;
   model?: string;
+  reasoningEffort?: string;
   accessMode?: string;
 }
 

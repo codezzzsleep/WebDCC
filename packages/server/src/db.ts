@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS providers (
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id),
   agent TEXT NOT NULL, native_id TEXT, title TEXT,
-  provider_id TEXT REFERENCES providers(id), model TEXT, access_mode TEXT,
+  provider_id TEXT REFERENCES providers(id), model TEXT, reasoning_effort TEXT, access_mode TEXT,
   status TEXT NOT NULL DEFAULT 'idle', pinned INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
   last_seq INTEGER NOT NULL DEFAULT 0, native_meta TEXT, title_source TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
@@ -66,6 +66,7 @@ export function openDb(file: string): Db {
   if (!has('note')) db.exec('ALTER TABLE providers ADD COLUMN note TEXT');
   // M8 C1：用户改过名字的会话不被原生标题覆盖
   const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  if (!sessionColumns.some((column) => column.name === 'reasoning_effort')) db.exec('ALTER TABLE sessions ADD COLUMN reasoning_effort TEXT');
   if (!sessionColumns.some((column) => column.name === 'title_source')) db.exec('ALTER TABLE sessions ADD COLUMN title_source TEXT');
   // 接续会话：记录上一棒（"在另一个 Agent 中继续"）
   if (!sessionColumns.some((column) => column.name === 'parent_id')) db.exec('ALTER TABLE sessions ADD COLUMN parent_id TEXT');

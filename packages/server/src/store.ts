@@ -19,6 +19,7 @@ interface SessionRow {
   title: string | null;
   provider_id: string | null;
   model: string | null;
+  reasoning_effort: string | null;
   access_mode: string | null;
   status: string;
   pinned: number;
@@ -125,6 +126,7 @@ export interface CreateSessionInput {
   agent: string;
   providerId?: string | null;
   model?: string | null;
+  reasoningEffort?: string | null;
   accessMode?: string | null;
   title?: string | null;
   parentId?: string | null;
@@ -139,6 +141,7 @@ function toSessionDto(row: SessionRow): SessionDto {
     ...(row.title === null ? {} : { title: row.title }),
     providerId: row.provider_id,
     ...(row.model === null ? {} : { model: row.model }),
+    ...(row.reasoning_effort === null ? {} : { reasoningEffort: row.reasoning_effort }),
     ...(row.access_mode === null ? {} : { accessMode: row.access_mode }),
     ...(row.parent_id === null || row.parent_id === undefined ? {} : { parentId: row.parent_id }),
     status: row.status as SessionDto['status'],
@@ -221,10 +224,10 @@ export class Store {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, access_mode, status, title, parent_id, last_seq, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, ?, ?)`,
+        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, reasoning_effort, access_mode, status, title, parent_id, last_seq, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, ?, ?)`,
       )
-      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, at, at);
+      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.reasoningEffort ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, at, at);
     return this.getSession(id) as SessionDto;
   }
 
@@ -242,6 +245,7 @@ export class Store {
       status?: SessionDto['status'];
       nativeId?: string | null;
       model?: string | null;
+      reasoningEffort?: string | null;
       accessMode?: string | null;
       providerId?: string | null;
       pinned?: boolean;
@@ -260,6 +264,7 @@ export class Store {
     if (patch.status !== undefined) push('status', patch.status);
     if (patch.nativeId !== undefined) push('native_id', patch.nativeId);
     if (patch.model !== undefined) push('model', patch.model);
+    if (patch.reasoningEffort !== undefined) push('reasoning_effort', patch.reasoningEffort);
     if (patch.accessMode !== undefined) push('access_mode', patch.accessMode);
     if (patch.providerId !== undefined) push('provider_id', patch.providerId);
     if (patch.pinned !== undefined) push('pinned', patch.pinned ? 1 : 0);

@@ -136,6 +136,7 @@ export class SessionManager {
       agent: input.agent,
       providerId: input.providerId ?? null,
       model: input.model ?? null,
+      reasoningEffort: input.reasoningEffort ?? null,
       accessMode: input.accessMode ?? null,
       title: input.title ?? null,
       parentId: input.parentId !== undefined && this.store.getSession(input.parentId) !== undefined ? input.parentId : null,
@@ -173,6 +174,7 @@ export class SessionManager {
       createdAt: updated?.createdAt ?? new Date().toISOString(),
       ...(updated?.title === undefined || updated.title === null ? {} : { title: updated.title }),
       ...(updated?.model === undefined ? {} : { model: updated.model }),
+      ...(updated?.reasoningEffort === undefined ? {} : { reasoningEffort: updated.reasoningEffort }),
       ...(updated?.accessMode === undefined ? {} : { accessMode: updated.accessMode }),
       providerId: updated?.providerId ?? null,
       ...(updated?.parentId === undefined ? {} : { parentId: updated.parentId }),
@@ -215,6 +217,7 @@ export class SessionManager {
       providerId: session.providerId ?? null,
       provider: this.options.resolveProvider?.(session.providerId ?? null) ?? null,
       ...(session.model === undefined ? {} : { model: session.model }),
+      ...(session.reasoningEffort === undefined ? {} : { reasoningEffort: session.reasoningEffort }),
       ...(session.accessMode === undefined ? {} : { accessMode: session.accessMode }),
       nativeId: session.nativeId,
     });
@@ -369,6 +372,7 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.setReasoningEffort?.(sessionId, reasoningEffort);
+    this.updateSessionAndFeed(sessionId, { reasoningEffort }, { reasoningEffort });
   }
 
   /** 切换访问模式（F6）：记一个事件，轨迹里可见；实际生效的模式由 adapter 回报 */

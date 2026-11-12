@@ -89,10 +89,10 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
 }
 
 /** 造一个工作区 + 会话，返回 id */
-export async function seedWorkspaceAndSession(ctx: TestApp, agent = 'dsh'): Promise<{ workspaceId: string; sessionId: string }> {
+export async function seedWorkspaceAndSession(ctx: TestApp, agent = 'dsh', reasoningEffort?: string): Promise<{ workspaceId: string; sessionId: string }> {
   const path = join(ctx.dataDir, `ws-${randomBytes(4).toString('hex')}`);
   await mkdir(path, { recursive: true });
   const workspace = ctx.store.createWorkspace('测试工作区', path);
-  const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent: agent as never });
+  const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent: agent as never, ...(reasoningEffort === undefined ? {} : { reasoningEffort }) });
   return { workspaceId: workspace.id, sessionId: session.id };
 }
