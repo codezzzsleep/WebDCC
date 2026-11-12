@@ -157,6 +157,18 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { store, files, manager, dispatcher } = deps;
   const metrics = new SystemMetricsReader(deps.dataDir);
 
+  app.get('/api/watchdog', async () => manager.watchdog.view());
+  app.patch('/api/watchdog', async (request) => {
+    try { return manager.watchdog.configure(request.body); }
+    catch (error) { throw badRequest(error instanceof Error ? error.message : '无效 Watchdog 设置'); }
+  });
+  app.post('/api/watchdog/sessions/:id/cancel', async (request) => {
+    const { id } = request.params as { id: string };
+    manager.requireSession(id);
+    manager.watchdog.cancel(id);
+    return manager.watchdog.view();
+  });
+
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_request, body, done) => {
     done(null, body);
   });

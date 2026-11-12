@@ -831,6 +831,7 @@ export class CodexAdapter implements AgentAdapter {
           itemKey: `error-${frameKey}`,
           kind: 'error',
           data: { message: typeof message === 'string' ? message : JSON.stringify(message) },
+          native: params,
         });
         return;
       }

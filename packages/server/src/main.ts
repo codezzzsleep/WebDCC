@@ -41,6 +41,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   await dshStore.init();
   const manager = new SessionManager(store, {
     idleDisposeMin: config.idleDisposeMin,
+    watchdogDataDir: config.dataDir,
     resolveProvider: (id) => providers.runtimeConfig(id),
     saveDiff: (name, diff) => files.putBufferSync(Buffer.from(diff, 'utf8'), name, 'text/x-diff').id,
   });

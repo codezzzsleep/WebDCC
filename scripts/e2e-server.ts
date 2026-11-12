@@ -7,6 +7,21 @@ import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { loadConfig } from '../packages/server/src/config.js';
 import { start } from '../packages/server/src/main.js';
 import { isolatedEnv } from '../packages/server/src/test-isolation.js';
+import type { AdapterEvent, UserInput } from '../packages/protocol/src/index.js';
+import { ulid } from '../packages/protocol/src/index.js';
+
+/** Deterministic terminal failures for Watchdog browser tests; no real API. */
+class WatchdogFixture extends FakeAdapter {
+  private callbacks: ((sessionId: string, event: AdapterEvent) => void)[] = [];
+  override onEvent(cb: (sessionId: string, event: AdapterEvent) => void): void { super.onEvent(cb); this.callbacks.push(cb); }
+  override async send(sessionId: string, input: UserInput): Promise<void> {
+    const message = input.text.startsWith('[watchdog-rate-limit]') ? '429 token rate limit exceeded' : input.text.startsWith('[watchdog-resource]') ? 'The requested item was created under a different Azure OpenAI resource. Use the same resource that created the item to access it.' : undefined;
+    if (message === undefined) return super.send(sessionId, input);
+    const nativeTurnId = ulid();
+    for (const cb of this.callbacks) cb(sessionId, { type: 'turn.start', nativeTurnId });
+    for (const cb of this.callbacks) cb(sessionId, { type: 'turn.end', nativeTurnId, status: 'failed', native: { turn: { id: nativeTurnId, status: 'failed', error: { message } } } });
+  }
+}
 
 // 测试隔离（SPEC-M8 1.4/1.6.2）：绝不读取用户真实的 ~/.codex、~/.claude、~/.dsh
 const { env, dirs } = isolatedEnv(process.env, 'wdcc-fake-e2e');
@@ -20,7 +35,7 @@ void dirs;
 const config = loadConfig();
 const adapters = [
   new FakeAdapter({ id: 'dsh', delayMs: 2, itemsPerTurn: 95, injectUnknown: true, injectInternal: true }),
-  new FakeAdapter({ id: 'codex', delayMs: 4, itemsPerTurn: 20 }),
+  new WatchdogFixture({ id: 'codex', delayMs: 4, itemsPerTurn: 20 }),
   new FakeAdapter({ id: 'claude-code', delayMs: 20, itemsPerTurn: 4, injectApproval: true, injectQuestion: true }),
 ];
 const server = await start(config, { adapters });

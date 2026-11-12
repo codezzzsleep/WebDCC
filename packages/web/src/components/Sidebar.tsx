@@ -152,6 +152,10 @@ export function Sidebar({
           <Icon name="sliders" />
           Agent 与 Provider
         </Link>
+        <Link to="/settings/watchdog" className="nav-item" activeProps={{ className: 'nav-item active' }} data-testid="nav-watchdog" onClick={() => onNavigate?.()}>
+          <Icon name="shield" />
+          Watchdog 看门狗
+        </Link>
       </nav>
 
       <div className="sidebar-section-title">

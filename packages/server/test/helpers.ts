@@ -44,7 +44,7 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
   await files.init();
   const providers = new ProviderRegistry(store, dataDir);
   await providers.init();
-  const manager = new SessionManager(store, { idleDisposeMin: 0, resolveProvider: (id) => providers.runtimeConfig(id) });
+  const manager = new SessionManager(store, { idleDisposeMin: 0, watchdogDataDir: dataDir, resolveProvider: (id) => providers.runtimeConfig(id) });
   manager.registerAdapter(new FakeAdapter(adapterOptions));
   manager.registerAdapter(new FakeAdapter({ ...adapterOptions, id: 'codex' }));
   manager.registerAdapter(new FakeAdapter({ ...adapterOptions, id: 'claude-code' }));

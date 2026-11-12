@@ -15,6 +15,7 @@ import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
+import { CodexWatchdog } from './watchdog.js';
 
 const TURN_SETTLE_MS = 1_500;
 
@@ -49,6 +50,7 @@ export interface ManagerHooks {
 }
 
 export class SessionManager {
+  readonly watchdog: CodexWatchdog;
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly runtimes = new Map<string, Runtime>();
   private readonly turns = new TurnTracker();
@@ -67,6 +69,7 @@ export class SessionManager {
       resolveProvider?: (id: string | null) => ProviderRuntimeConfig | null;
       /** 把 diff 文本存成文件，返回 fileId（C2 / F10） */
       saveDiff?: (name: string, diff: string) => string;
+      watchdogDataDir?: string;
     },
   ) {
     // A previous process may have stopped after writing turn.started. Close
@@ -87,11 +90,33 @@ export class SessionManager {
         this.store.updateSession(session.id, { status: 'idle' });
       }
     }
+    this.watchdog = new CodexWatchdog(store, {
+      isActive: (id) => {
+        const runtime = this.runtimes.get(id);
+        const unanswered = this.store.allEvents(id).filter((event) => event.kind === 'question');
+        const lastQuestions = new Map(unanswered.map((event) => [(event.data as EventData['question']).questionId, event.data as EventData['question']]));
+        return runtime?.turnId != null || runtime?.status === 'waiting' || runtime?.status === 'running' || this.pendingApprovalIds(id).length > 0 || [...lastQuestions.values()].some((question) => question.status !== 'answered' && question.status !== 'skipped');
+      },
+      create: (source) => this.createSession({
+        workspaceId: source.workspaceId, agent: 'codex', providerId: source.providerId ?? null,
+        ...(source.model === undefined ? {} : { model: source.model }),
+        ...(source.reasoningEffort === undefined ? {} : { reasoningEffort: source.reasoningEffort }),
+        ...(source.accessMode === undefined ? {} : { accessMode: source.accessMode }),
+        title: `${source.title ?? 'Codex 任务'} · 自动接续`, parentId: source.id,
+      }),
+      send: async (id, text, commandId, allowed) => { await this.send(id, { text }, commandId, allowed); },
+      dispose: (id) => this.dispose(id),
+      notice: (id, text) => {
+        const event = this.store.appendEvent({ sessionId: id, turnId: null, itemKey: `watchdog-${ulid()}`, kind: 'notice', data: { level: 'info', text, nativeType: 'watchdog' } });
+        this.hooks.onEvent(event);
+      },
+    }, options.watchdogDataDir);
   }
 
   registerAdapter(adapter: AgentAdapter): void {
     this.adapters.set(adapter.id, adapter);
     adapter.onEvent((sessionId, event) => this.handleAdapterEvent(sessionId, event));
+    if (adapter.id === 'codex') this.watchdog.start();
   }
 
   adapter(id: AgentId): AgentAdapter | undefined {
@@ -254,10 +279,18 @@ export class SessionManager {
 
   // ---------- 发送 / 介入 ----------
 
-  async send(sessionId: string, input: UserInput, clientCommandId?: string): Promise<{ turnId: string }> {
+  async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string }> {
     const session = this.requireSession(sessionId);
+    if (automatic === undefined) {
+      const job = this.store.watchdogJob(sessionId);
+      if (job !== undefined && this.store.watchdogJobs().some((candidate) => candidate.rootSessionId === job.rootSessionId && candidate.sessionId !== sessionId && this.runtimes.get(candidate.sessionId)?.turnId != null)) throw Object.assign(new Error('任务已在接续会话中执行，请在那里继续或先停止该会话'), { statusCode: 409 });
+      if (this.runtimes.get(sessionId)?.turnId != null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
+      this.watchdog.userInput(sessionId);
+    }
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
+    if (automatic !== undefined && !automatic()) throw new Error('Watchdog 已取消');
+    if (runtime.turnId !== null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
 
     const turnId = ulid();
     runtime.turnId = turnId;
@@ -303,7 +336,7 @@ export class SessionManager {
       this.finishTurn(runtime, 'failed', message);
       throw error;
     }
-    this.setStatus(runtime, 'running');
+    if (runtime.turnId === turnId) this.setStatus(runtime, 'running');
     this.touchIdle(runtime);
     return { turnId };
   }
@@ -354,6 +387,17 @@ export class SessionManager {
 
   async interrupt(sessionId: string): Promise<void> {
     const session = this.requireSession(sessionId);
+    const job = this.store.watchdogJob(sessionId);
+    const delegated = job === undefined ? [] : this.store.watchdogJobs().filter((candidate) => candidate.rootSessionId === job.rootSessionId && candidate.sessionId !== sessionId && this.runtimes.get(candidate.sessionId)?.turnId != null);
+    this.watchdog.cancel(sessionId, '用户停止了会话，取消自动恢复');
+    for (const child of delegated) {
+      const runtime = this.runtimes.get(child.sessionId);
+      if (runtime !== undefined) {
+        await runtime.adapter.interrupt(child.sessionId);
+        await runtime.adapter.cancelPending?.(child.sessionId);
+      }
+    }
+    if (!this.runtimes.has(sessionId)) return;
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.interrupt(sessionId);
@@ -430,6 +474,7 @@ export class SessionManager {
   }
 
   async archive(sessionId: string, archived: boolean): Promise<void> {
+    if (archived) this.watchdog.cancel(sessionId, '会话已归档，取消自动恢复');
     this.updateSessionAndFeed(sessionId, { archived }, { archived });
   }
 
@@ -448,6 +493,7 @@ export class SessionManager {
   }
 
   async disposeAll(): Promise<void> {
+    this.watchdog.stop();
     for (const sessionId of [...this.runtimes.keys()]) await this.dispose(sessionId);
   }
 
@@ -655,6 +701,9 @@ export class SessionManager {
     runtime.turnId = null;
     runtime.turnStartedAt = null;
     this.setStatus(runtime, 'idle');
+    const terminalNative = (native ?? existing?.native) as { turn?: { error?: unknown }; error?: unknown } | undefined;
+    const lastError = events.filter((event) => event.kind === 'error').at(-1)?.data as { message?: string } | undefined;
+    this.watchdog.terminal(runtime.sessionId, turnId, status, terminalNative?.turn?.error ?? terminalNative?.error ?? reason ?? lastError?.message);
   }
 
   private armFinishTimer(runtime: Runtime): void {
