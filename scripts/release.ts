@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cp, mkdir, readdir, readFile, readlink, rm, symlink, lstat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, readlink, rm, symlink, lstat, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -45,6 +45,26 @@ try {
   await cp(join(checkout, 'packages/server/dist'), join(target, 'packages/server/dist'), { recursive: true });
   await cp(join(checkout, 'packages/web/dist'), join(target, 'packages/web/dist'), { recursive: true });
   await cp(join(checkout, 'node_modules'), join(target, 'node_modules'), { recursive: true, dereference: true });
+  // pnpm keeps Claude Agent SDK's platform binary as an optional dependency
+  // in the virtual-store hoist. The SDK resolves it relative to its own
+  // package, so a release must also materialize the runtime package there;
+  // copying the root node_modules alone leaves the binary present but
+  // unresolvable and Claude fails with "Native CLI binary ... not found".
+  const claudeSdkPackage = join(target, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
+  const optionalSource = join(checkout, 'node_modules', '.pnpm', 'node_modules', '@anthropic-ai');
+  const optionalTarget = join(claudeSdkPackage, 'node_modules', '@anthropic-ai');
+  const optionalNames: string[] = await readdir(optionalSource).catch(() => [] as string[]);
+  for (const name of optionalNames.filter((entry) => entry.startsWith('claude-agent-sdk-'))) {
+    await cp(join(optionalSource, name), join(optionalTarget, name), { recursive: true, dereference: true });
+  }
+  if (optionalNames.includes('claude-agent-sdk-linux-x64')) {
+    const binary = join(optionalTarget, 'claude-agent-sdk-linux-x64', 'claude');
+    try {
+      await stat(binary);
+    } catch {
+      throw new Error('发布包缺少 Claude Agent SDK linux-x64 原生 CLI');
+    }
+  }
   // The server bundle leaves native modules external. Workspace package
   // dependencies are linked from packages/server/node_modules, so the root
   // node_modules copy does not reliably include them (for example
