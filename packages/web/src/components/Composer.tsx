@@ -3,7 +3,7 @@ import type { ProviderDto } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
-import { AGENT_IDS, agentAvailable, agentText, rememberAccessMode, rememberReasoning, modelGroups, type ModelChoice } from '../lib/agents.js';
+import { AGENT_IDS, agentAvailable, agentText, rememberAccessMode, rememberModel, rememberReasoning, modelGroups, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { shortNumber } from '../lib/format.js';
 import { AgentMark } from './AgentMark.js';
@@ -315,6 +315,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   const pickModel = (providerId: string | null, model: string): void => {
     setMenu(null);
+    if (model !== '') rememberModel(agent, providerId, model);
     if (mode.kind === 'new') {
       mode.onChoice({ ...mode.choice, providerId, model });
     } else if (sessionId !== null && model !== '' && model !== session?.model) {

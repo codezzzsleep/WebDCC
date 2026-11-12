@@ -72,6 +72,7 @@ export interface ModelChoice {
 
 const REASONING_DEFAULT_PREFIX = 'wdcc:reasoning-default:';
 const ACCESS_MODE_DEFAULT_PREFIX = 'wdcc:access-mode-default:';
+const MODEL_DEFAULT_PREFIX = 'wdcc:model-default:';
 
 function readPreference(prefix: string, agent: string): string | undefined {
   try {
@@ -108,6 +109,33 @@ export function rememberAccessMode(agent: string, mode: string): void {
   writePreference(ACCESS_MODE_DEFAULT_PREFIX, agent, mode);
 }
 
+interface ModelPreference {
+  providerId: string | null;
+  model: string;
+}
+
+/** Last user-selected model/provider used as the next-session default. */
+export function rememberedModel(agent: string): ModelPreference | undefined {
+  try {
+    const raw = window.localStorage.getItem(MODEL_DEFAULT_PREFIX + agent);
+    if (raw === null) return undefined;
+    const value = JSON.parse(raw) as { providerId?: unknown; model?: unknown };
+    if ((typeof value.providerId !== 'string' && value.providerId !== null) || typeof value.model !== 'string' || value.model.trim() === '') return undefined;
+    return { providerId: value.providerId, model: value.model };
+  } catch {
+    return undefined;
+  }
+}
+
+export function rememberModel(agent: string, providerId: string | null, model: string): void {
+  if (model.trim() === '') return;
+  try {
+    window.localStorage.setItem(MODEL_DEFAULT_PREFIX + agent, JSON.stringify({ providerId, model } satisfies ModelPreference));
+  } catch {
+    // Browser storage may be unavailable; the current session still works.
+  }
+}
+
 export function modelGroups(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelGroup[] {
   const groups: ModelGroup[] = [];
   if (agent === 'dsh') {
@@ -135,12 +163,22 @@ export function modelGroups(agent: string, meta: AgentMeta | undefined, provider
 
 /** 默认选择第一个可用 Provider；Provider 是 Agent 选择模型的唯一来源。 */
 export function defaultChoice(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelChoice {
+  const storedModel = rememberedModel(agent);
+  const rememberedReasoningLevel = rememberedReasoning(agent);
+  const withDefaultReasoning = agent === 'codex' || agent === 'claude-code' ? { reasoningEffort: rememberedReasoningLevel ?? 'medium' } : {};
+  if (agent === 'dsh') {
+    const models = (meta?.models ?? []).map((model) => model.id);
+    let model = models[0] ?? '';
+    if (storedModel !== undefined && storedModel.providerId === null && models.includes(storedModel.model)) model = storedModel.model;
+    return { providerId: null, model, ...withDefaultReasoning };
+  }
   const sameSource = agent === 'codex' ? 'codex-config' : agent === 'claude-code' ? 'claude-settings' : '';
   const compatible = providers.filter((provider) => isCompatible(agent, provider));
+  const storedModelId = storedModel?.model;
+  const rememberedProvider = storedModelId === undefined ? undefined : compatible.find((provider) => provider.id === storedModel?.providerId && provider.models.includes(storedModelId));
+  if (rememberedProvider !== undefined && storedModelId !== undefined) return { providerId: rememberedProvider.id, model: storedModelId, ...withDefaultReasoning };
   const preferred =
     compatible.find((provider) => provider.source === sameSource && provider.models.length > 0) ?? compatible.find((provider) => provider.models.length > 0);
-  const remembered = rememberedReasoning(agent);
-  const withDefaultReasoning = agent === 'codex' || agent === 'claude-code' ? { reasoningEffort: remembered ?? 'medium' } : {};
   if (preferred !== undefined) return { providerId: preferred.id, model: preferred.models[0] ?? '', ...withDefaultReasoning };
   return { providerId: null, model: agent === 'dsh' ? (meta?.models?.[0]?.id ?? '') : '', ...withDefaultReasoning };
 }
