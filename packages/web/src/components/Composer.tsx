@@ -60,6 +60,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [sessionModels, setSessionModels] = useState<string[]>([]);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashCommands, setSlashCommands] = useState<{ name: string; description?: string }[]>([]);
+  const [slashStatus, setSlashStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable' | 'error'>('idle');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [freeModel, setFreeModel] = useState('');
@@ -100,11 +101,23 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   }, [session?.agent, session?.providerId, sessionId]);
 
   useEffect(() => {
-    if (!slashOpen || sessionId === null) return;
+    if (!slashOpen) return;
+    if (sessionId === null) {
+      setSlashCommands([]);
+      setSlashStatus('unavailable');
+      return;
+    }
+    setSlashStatus('loading');
     void api
       .slashCommands(sessionId)
-      .then((result) => setSlashCommands(result.commands))
-      .catch(() => setSlashCommands([]));
+      .then((result) => {
+        setSlashCommands(result.commands);
+        setSlashStatus('ready');
+      })
+      .catch(() => {
+        setSlashCommands([]);
+        setSlashStatus('error');
+      });
   }, [slashOpen, sessionId]);
 
   // 点菜单外面关闭菜单
@@ -727,7 +740,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <span className="menu-item-sub">打开 Provider 和模型选择</span>
                 </button>
               ) : null}
-              {slashCommands.length === 0 && !(agent === 'codex' && text === '/model') ? <div className="menu-note">这个 Agent 现在没有可用的斜杠命令</div> : null}
+              {slashCommands.length === 0 && !(agent === 'codex' && (text === '/' || text === '/model')) ? <div className="menu-note">{sessionId === null ? '新会话尚未建立，发送第一条消息后才能读取原生命令目录' : slashStatus === 'loading' ? '正在读取原生命令目录…' : slashStatus === 'error' ? '原生命令目录读取失败，请稍后重试' : '该 Harness 没有返回可用的斜杠命令'}</div> : null}
               {slashCommands
                 .filter((command) => command.name.startsWith(text) && !(agent === 'codex' && command.name === '/model' && text === '/model'))
                 .slice(0, 12)
