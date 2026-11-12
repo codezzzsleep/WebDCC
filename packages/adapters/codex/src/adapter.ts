@@ -791,9 +791,9 @@ export class CodexAdapter implements AgentAdapter {
       }
       case 'tokenUsage': {
         const tokenUsage = (params['tokenUsage'] ?? {}) as { total?: Record<string, number>; last?: Record<string, number> };
-        const total = tokenUsage.total ?? tokenUsage.last ?? {};
-        const inputTokens = Number(total['inputTokens'] ?? 0);
-        const outputTokens = Number(total['outputTokens'] ?? 0);
+        const currentTurn = tokenUsage.last ?? tokenUsage.total ?? {};
+        const inputTokens = Number(currentTurn['inputTokens'] ?? 0);
+        const outputTokens = Number(currentTurn['outputTokens'] ?? 0);
         if (inputTokens === 0 && outputTokens === 0) return;
         this.emit(sessionId, {
           type: 'item.complete',

@@ -5,6 +5,7 @@ import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { AGENT_IDS, agentAvailable, agentText, modelGroups, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
+import { shortNumber } from '../lib/format.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
 
@@ -216,13 +217,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   /** 分片上传一个文件，返回 fileId（断点续传：按服务端已收到的分片续传） */
   const uploadOne = async (file: File): Promise<string> => {
     const buffer = await file.arrayBuffer();
-    const digest = await crypto.subtle.digest('SHA-256', buffer);
-    const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const subtle = globalThis.crypto?.subtle;
+    const digest = subtle === undefined ? undefined : await subtle.digest('SHA-256', buffer);
+    const sha256 = digest === undefined ? '' : [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
     const response = await fetch('/api/uploads', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: file.name, size: file.size, sha256, mime: file.type || 'application/octet-stream' }),
+      body: JSON.stringify({ name: file.name, size: file.size, ...(sha256 === '' ? {} : { sha256 }), mime: file.type || 'application/octet-stream' }),
     });
     if (!response.ok) throw new Error(`上传失败：${response.status}`);
     const init = (await response.json()) as { uploadId: string; chunkSize: number; received: number[]; existingFileId?: string };
@@ -794,8 +796,11 @@ function statsFor(sessionId: string): string {
     events.filter((event) => event.kind === 'user.message' && event.turnId !== null).map((event) => event.turnId as string),
   ).size;
   const steps = events.filter((event) => event.kind === 'command' || event.kind === 'tool.call' || event.kind === 'file.change' || event.kind === 'file.read').length;
-  const usage = events.filter((event) => event.kind === 'usage').at(-1);
-  const data = usage?.data as { inputTokens?: number; outputTokens?: number } | undefined;
-  const tokens = (data?.inputTokens ?? 0) + (data?.outputTokens ?? 0);
-  return `${turns} 轮 · ${steps} 步${tokens > 0 ? ` · ${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}K` : tokens} tok` : ''}`;
+  const usageByTurn = new Map<string, { inputTokens?: number; outputTokens?: number }>();
+  for (const event of events) {
+    if (event.kind !== 'usage') continue;
+    usageByTurn.set(event.turnId ?? `event-${event.seq}`, event.data as { inputTokens?: number; outputTokens?: number });
+  }
+  const tokens = [...usageByTurn.values()].reduce((sum, data) => sum + (data.inputTokens ?? 0) + (data.outputTokens ?? 0), 0);
+  return `${turns} 轮 · ${steps} 步${tokens > 0 ? ` · 累计 ${shortNumber(tokens)} tok` : ''}`;
 }

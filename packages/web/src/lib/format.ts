@@ -23,7 +23,7 @@ export function duration(ms: number): string {
 export function shortNumber(value: number | undefined): string {
   if (value === undefined) return '0';
   if (value < 1000) return String(value);
-  if (value < 1_000_000) return `${(value / 1000).toFixed(1)}k`;
+  if (value < 1_000_000) return `${(value / 1000).toFixed(1)}K`;
   return `${(value / 1_000_000).toFixed(1)}M`;
 }
 

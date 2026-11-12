@@ -72,17 +72,17 @@ export class FileStore {
 
   // ---------- 可续传上传 ----------
 
-  async initUpload(input: { name: string; size: number; sha256: string; mime: string }): Promise<UploadInitResponse & { existingFileId?: string }> {
+  async initUpload(input: { name: string; size: number; sha256?: string; mime: string }): Promise<UploadInitResponse & { existingFileId?: string }> {
     if (input.size > MAX_FILE_SIZE) {
       throw Object.assign(new Error(`文件超过 100 MB 上限（${Math.round(input.size / 1024 / 1024)} MB）`), { statusCode: 413 });
     }
-    const existing = this.store.getFileBySha(input.sha256);
+    const existing = input.sha256 === undefined || input.sha256 === '' ? undefined : this.store.getFileBySha(input.sha256);
     if (existing !== undefined) {
       return { uploadId: '', chunkSize: CHUNK_SIZE, received: [], existingFileId: existing.id };
     }
     const uploadId = randomUUID();
     await mkdir(join(this.uploadsDir, uploadId), { recursive: true });
-    this.store.createUpload({ id: uploadId, ...input });
+    this.store.createUpload({ id: uploadId, ...input, sha256: input.sha256 ?? '' });
     return { uploadId, chunkSize: CHUNK_SIZE, received: [] };
   }
 
@@ -124,7 +124,7 @@ export class FileStore {
       throw Object.assign(new Error(`上传不完整：已收到 ${total} 字节，期望 ${upload.size}`), { statusCode: 400 });
     }
     const sha256 = hash.digest('hex');
-    if (sha256 !== upload.sha256) {
+    if (upload.sha256 !== '' && sha256 !== upload.sha256) {
       throw Object.assign(new Error('sha256 校验失败'), { statusCode: 400 });
     }
     const existing = this.store.getFileBySha(sha256);

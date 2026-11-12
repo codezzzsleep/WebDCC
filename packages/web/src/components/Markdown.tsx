@@ -14,7 +14,7 @@ function getHighlighter(): Promise<Highlighter> | null {
     highlighterPromise = import('shiki/bundle/web')
       .then((shiki) =>
         shiki.createHighlighter({
-          themes: ['github-light'],
+          themes: ['github-light', 'github-dark'],
           langs: ['ts', 'tsx', 'js', 'json', 'bash', 'shell', 'markdown', 'python', 'css', 'html', 'yaml'],
         }),
       )
@@ -26,6 +26,17 @@ function getHighlighter(): Promise<Highlighter> | null {
 
 function CodeBlock({ code, language }: { code: string; language: string }): React.ReactElement {
   const [html, setHtml] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'github-light' | 'github-dark'>(() => currentCodeTheme());
+  useEffect(() => {
+    const update = (): void => setTheme(currentCodeTheme());
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    media.addEventListener('change', update);
+    window.addEventListener('wdcc-theme-change', update);
+    return () => {
+      media.removeEventListener('change', update);
+      window.removeEventListener('wdcc-theme-change', update);
+    };
+  }, []);
   useEffect(() => {
     let cancelled = false;
     const highlighter = getHighlighter();
@@ -33,7 +44,7 @@ function CodeBlock({ code, language }: { code: string; language: string }): Reac
     void highlighter.then((instance) => {
       if (cancelled || instance.codeToHtml === undefined) return;
       try {
-        setHtml(instance.codeToHtml(code, { lang: language === '' ? 'text' : language, theme: 'github-light' }));
+        setHtml(instance.codeToHtml(code, { lang: language === '' ? 'text' : language, theme }));
       } catch {
         setHtml(null);
       }
@@ -41,7 +52,7 @@ function CodeBlock({ code, language }: { code: string; language: string }): Reac
     return () => {
       cancelled = true;
     };
-  }, [code, language]);
+  }, [code, language, theme]);
 
   if (html !== null) return <div className="code-block" dangerouslySetInnerHTML={{ __html: html }} />;
   return (
@@ -49,6 +60,12 @@ function CodeBlock({ code, language }: { code: string; language: string }): Reac
       <code>{code}</code>
     </pre>
   );
+}
+
+function currentCodeTheme(): 'github-light' | 'github-dark' {
+  const manual = document.documentElement.dataset.theme;
+  const dark = manual === 'dark' || (manual !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  return dark ? 'github-dark' : 'github-light';
 }
 
 // Keep these component identities stable. Recreating the code renderer on

@@ -198,6 +198,15 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnVi
     summary,
     ...(latestPlan === undefined ? {} : { plan: (latestPlan.data as EventData['plan']).items }),
     ...(latestGoal === undefined ? {} : { goal: latestGoal.data as EventData['goal'] }),
-    ...(latestUsage === undefined ? {} : { usage: latestUsage.data as UsageData }),
+    ...(latestUsage === undefined
+      ? {}
+      : {
+          usage: {
+            ...(latestUsage.data as UsageData),
+            ...((completedData?.durationMs ?? 0) > 0 && (latestUsage.data as UsageData).tokensPerSecond === undefined && (latestUsage.data as UsageData).outputTokens !== undefined
+              ? { tokensPerSecond: (latestUsage.data as UsageData).outputTokens! / ((completedData?.durationMs ?? 0) / 1000) }
+              : {}),
+          },
+        }),
   };
 }

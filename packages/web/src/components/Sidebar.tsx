@@ -6,6 +6,7 @@ import { store, type SessionMeta } from '../lib/store.js';
 import { relativeTime } from '../lib/format.js';
 import { AGENT_IDS, agentText } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
+import { applyTheme, readTheme, type Theme } from '../lib/theme.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon, Spinner } from './Icon.js';
 
@@ -76,6 +77,7 @@ export function Sidebar({
   const { meta, dsh } = useAppData();
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
+  const [theme, setTheme] = useState<Theme>(() => readTheme());
   const sessions = store.getSessions();
 
   const grouped = useMemo(() => {
@@ -92,6 +94,11 @@ export function Sidebar({
   }, [sessions, query]);
 
   const archived = sessions.filter((session) => session.archived === true);
+  const toggleTheme = (): void => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    applyTheme(next);
+  };
 
   if (collapsed) {
     return (
@@ -105,6 +112,9 @@ export function Sidebar({
         <Link to="/settings/providers" className="icon-btn" aria-label="Agent 与 Provider" title="Agent 与 Provider">
           <Icon name="sliders" size={18} />
         </Link>
+        <button type="button" className="icon-btn" onClick={toggleTheme} aria-label="切换亮暗色" title={theme === 'dark' ? '切换到亮色' : '切换到暗色'}>
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
+        </button>
       </aside>
     );
   }
@@ -118,6 +128,9 @@ export function Sidebar({
         </Link>
         <button type="button" className="icon-btn" onClick={onToggle} aria-label="收起侧边栏" title="收起侧边栏">
           <Icon name="panelLeft" size={18} />
+        </button>
+        <button type="button" className="icon-btn" onClick={toggleTheme} aria-label="切换亮暗色" title={theme === 'dark' ? '切换到亮色' : '切换到暗色'}>
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
         </button>
       </div>
 

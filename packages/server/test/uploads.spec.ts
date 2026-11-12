@@ -112,6 +112,26 @@ describe('A6-6f 可续传上传', () => {
     expect(complete.statusCode).toBe(400);
   });
 
+  it('没有客户端 sha256 时由服务端完成校验并保存', async () => {
+    const payload = Buffer.from('insecure-http-upload');
+    const init = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/uploads',
+      headers: { cookie: ctx.cookie },
+      payload: { name: 'fallback.txt', size: payload.byteLength, mime: 'text/plain' },
+    });
+    expect(init.statusCode).toBe(200);
+    const { uploadId } = init.json() as { uploadId: string };
+    await ctx.app.inject({
+      method: 'PUT',
+      url: `/api/uploads/${uploadId}/chunks/0`,
+      headers: { cookie: ctx.cookie, 'content-type': 'application/octet-stream' },
+      payload,
+    });
+    const complete = await ctx.app.inject({ method: 'POST', url: `/api/uploads/${uploadId}/complete`, headers: { cookie: ctx.cookie } });
+    expect(complete.statusCode).toBe(200);
+  });
+
   it('无 Cookie 访问上传与文件一律 401', async () => {
     const response = await ctx.app.inject({ method: 'GET', url: '/files/whatever' });
     expect(response.statusCode).toBe(401);

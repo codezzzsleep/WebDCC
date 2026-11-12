@@ -95,7 +95,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
 
     --bg: #151517;
@@ -147,4 +147,49 @@
     --shadow-composer: 0 4px 18px rgba(0, 0, 0, 0.35);
     --shadow-card: none;
   }
+}
+
+/* 手动暗色模式：不依赖系统偏好 */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #151517;
+  --bg-sidebar: #1b1b1c;
+  --bg-subtle: #232324;
+  --bg-muted: #2c2c2e;
+  --bg-strong: #353638;
+  --bg-overlay: #353638;
+  --bg-mask: rgba(0, 0, 0, 0.5);
+  --hover: rgba(255, 255, 255, 0.08);
+  --active: rgba(255, 255, 255, 0.14);
+  --hover-accent: rgba(255, 255, 255, 0.24);
+  --border-l1: rgba(255, 255, 255, 0.06);
+  --border-l2: rgba(255, 255, 255, 0.12);
+  --border-l3: rgba(255, 255, 255, 0.16);
+  --border-l4: rgba(255, 255, 255, 0.2);
+  --text: #f9fafb;
+  --text-2: #e1e5ee;
+  --text-secondary: #cfd3d6;
+  --text-tertiary: #979da6;
+  --text-disabled: #61666b;
+  --text-inverted: #0f1115;
+  --brand: #5686fe;
+  --brand-strong: #7aaaff;
+  --brand-soft: #283142;
+  --brand-soft-2: #34415b;
+  --brand-muted: #34415b;
+  --link: #7aaaff;
+  --primary: #f9fafb;
+  --primary-text: #0f1115;
+  --success: #51cf66;
+  --success-soft: rgba(81, 207, 102, 0.12);
+  --danger: #ff6b6b;
+  --danger-soft: rgba(242, 90, 90, 0.15);
+  --warning: #f59f00;
+  --warning-soft: rgba(245, 159, 0, 0.12);
+  --diff-add: #51cf66;
+  --diff-del: #ff6b6b;
+  --user-bubble: #283142;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-composer: 0 4px 18px rgba(0, 0, 0, 0.35);
+  --shadow-card: none;
 }

@@ -594,8 +594,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   // ---------- uploads ----------
   app.post('/api/uploads', async (request): Promise<UploadInitResponse & { existingFileId?: string }> => {
     const body = request.body as { name?: string; size?: number; sha256?: string; mime?: string };
-    if (typeof body?.name !== 'string' || typeof body?.size !== 'number' || typeof body?.sha256 !== 'string') {
-      throw badRequest('需要 name、size、sha256');
+    if (typeof body?.name !== 'string' || typeof body?.size !== 'number' || (body?.sha256 !== undefined && typeof body.sha256 !== 'string')) {
+      throw badRequest('需要 name、size；sha256 可选');
     }
     return files.initUpload({ name: body.name, size: body.size, sha256: body.sha256, mime: body.mime ?? 'application/octet-stream' });
   });
