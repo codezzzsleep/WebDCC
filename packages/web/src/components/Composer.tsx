@@ -13,7 +13,7 @@ type ComposerMode =
   | {
       kind: 'session';
       sessionId: string;
-      /** "在另一个 Agent 中继续…" */
+      /** "在所选 Agent 中继续…" */
       onContinueIn: (agent: string) => void;
     }
   | {
@@ -494,10 +494,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <>
                     <div className="menu-head">
                       <strong>这个会话由 {agentText(agent).name} 运行</strong>
-                      <span>每个会话就是该 Agent 自己的一条原生线程，创建后不能换 Agent。要换，就开一个接续会话。</span>
+                      <span>新建接续会话可选择当前 Agent 或其他 Agent，最后一条回答会放入新会话的输入框。</span>
                     </div>
                     <div className="menu-sep" />
-                    {AGENT_IDS.filter((id) => id !== agent).map((id) => (
+                    {AGENT_IDS.map((id) => (
                       <button
                         key={id}
                         type="button"

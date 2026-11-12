@@ -243,7 +243,7 @@ function SessionPage(): React.ReactElement {
     void navigate({ to: '/s/$sid', params: { sid: mainId }, search: { dock: `diff:${fileId}`, path } });
   };
 
-  /** 在另一个 Agent 中继续：新建接续会话，把回答原文放进它的输入框（不发送），上一棒放在右侧对照 */
+  /** 在所选 Agent 中继续：新建接续会话，把回答原文放进它的输入框（不发送），上一棒放在右侧对照 */
   const continueIn = async (agent: string, text?: string): Promise<void> => {
     if (session === undefined) return;
     setHandoffText(null);
