@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S07",
+  "model": "claude-sonnet-5-5",
+  "prompt": "这个任务分三步做，先给出计划再执行：1) 新建 a.txt 写入 1；2) 新建 b.txt 写入 2；3) 把两个数相加写入 sum.txt。",
+  "recordedAt": "2026-11-11T23:35:06.853Z",
+  "notTriggered": []
+}

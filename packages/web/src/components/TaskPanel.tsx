@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { EventData } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { agentText } from '../lib/agents.js';
@@ -20,16 +19,14 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
   useStoreVersion();
   const [planOpen, setPlanOpen] = useState(false);
   const session = store.getSession(sessionId);
-  const events = store.getEvents(sessionId);
-  const plan = [...events].reverse().find((event) => event.kind === 'plan');
-  const goal = [...events].reverse().find((event) => event.kind === 'goal');
-  const goalData = goal?.data as EventData['goal'] | undefined;
+  const turns = store.getTurns(sessionId);
+  const plan = [...turns].reverse().find((turn) => turn.plan !== undefined)?.plan;
+  const goalData = [...turns].reverse().find((turn) => turn.goal !== undefined)?.goal;
   const showGoal = goalData !== undefined && goalData.status !== 'cleared' && goalData.objective !== '';
   if (plan === undefined && !showGoal) return null;
 
   const agentName = agentText(session?.agent ?? '').name;
-  const planData = plan?.data as EventData['plan'] | undefined;
-  const items = planData?.items ?? [];
+  const items = plan ?? [];
   const done = items.filter((item) => item.status === 'completed').length;
   const doing = items.filter((item) => item.status === 'in_progress').length;
 

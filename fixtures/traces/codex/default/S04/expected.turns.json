@@ -1,0 +1,201 @@
+[
+  {
+    "turnId": "trace:codex:S04:turn:2",
+    "state": "completed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:13.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:codex:S04",
+        "seq": 15,
+        "turnId": "trace:codex:S04:turn:2",
+        "kind": "reasoning",
+        "itemKey": "item-rs_0c221446ad2e7d02016af4fa2cafb487d09cdd1c5ab73ae907",
+        "data": {
+          "text": ""
+        },
+        "at": "1970-01-01T00:00:15.000Z",
+        "native": {
+          "type": "reasoning",
+          "id": "rs_0c221446ad2e7d02016af4fa2cafb487d09cdd1c5ab73ae907",
+          "summary": [],
+          "content": [],
+          "startedAtMs": 1794439727484,
+          "completedAtMs": 1794439727486
+        }
+      },
+      {
+        "sessionId": "trace:codex:S04",
+        "seq": 16,
+        "turnId": "trace:codex:S04:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-msg_0c221446ad2e7d02016af4fa2ce89087d0979012605ed20889",
+        "data": {
+          "text": "我会在 `/tmp` 创建 `wdcc-trace-probe.txt`，并写入 `ok`。",
+          "phase": "interim",
+          "nativePhase": "commentary"
+        },
+        "at": "1970-01-01T00:00:16.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "msg_0c221446ad2e7d02016af4fa2ce89087d0979012605ed20889",
+          "text": "我会在 `/tmp` 创建 `wdcc-trace-probe.txt`，并写入 `ok`。",
+          "phase": "commentary",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null,
+          "startedAtMs": 1794439727488,
+          "completedAtMs": 1794439727489
+        }
+      },
+      {
+        "sessionId": "trace:codex:S04",
+        "seq": 17,
+        "turnId": "trace:codex:S04:turn:2",
+        "kind": "command",
+        "itemKey": "item-exec-340f53b1-52df-44fe-ac54-58bee0550fdc",
+        "data": {
+          "command": "/bin/bash -lc \"printf '%s' 'ok' > /tmp/wdcc-trace-probe.txt && cat /tmp/wdcc-trace-probe.txt\"",
+          "cwd": "/tmp/wdcc-real-trace-32lDfK/sample-repo",
+          "exitCode": 0,
+          "outputTail": "ok",
+          "status": "completed"
+        },
+        "at": "1970-01-01T00:00:17.000Z",
+        "native": {
+          "type": "commandExecution",
+          "id": "exec-340f53b1-52df-44fe-ac54-58bee0550fdc",
+          "pluginId": null,
+          "scriptPath": null,
+          "command": "/bin/bash -lc \"printf '%s' 'ok' > /tmp/wdcc-trace-probe.txt && cat /tmp/wdcc-trace-probe.txt\"",
+          "cwd": "/tmp/wdcc-real-trace-32lDfK/sample-repo",
+          "processId": "45047",
+          "source": "unifiedExecStartup",
+          "status": "completed",
+          "commandActions": [
+            {
+              "type": "unknown",
+              "command": "printf '%s' 'ok' > /tmp/wdcc-trace-probe.txt && cat /tmp/wdcc-trace-probe.txt"
+            }
+          ],
+          "aggregatedOutput": "ok",
+          "exitCode": 0,
+          "durationMs": 0,
+          "startedAtMs": 1794439727589,
+          "completedAtMs": 1794439727589
+        }
+      },
+      {
+        "sessionId": "trace:codex:S04",
+        "seq": 18,
+        "turnId": "trace:codex:S04:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-45",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:18.000Z",
+        "native": {
+          "threadId": "01a1ccf1-36b5-72a2-8b02-0f063cd8f950",
+          "turnId": "01a1ccf1-36ce-73d3-8624-3c02ae1371cd",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 16101,
+              "inputTokens": 15964,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 137,
+              "reasoningOutputTokens": 18
+            },
+            "last": {
+              "totalTokens": 16101,
+              "inputTokens": 15964,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 137,
+              "reasoningOutputTokens": 18
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      },
+      {
+        "sessionId": "trace:codex:S04",
+        "seq": 20,
+        "turnId": "trace:codex:S04:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-msg_0c221446ad2e7d02016af4fa30bcf087d08b1869d6c0738dfc",
+        "data": {
+          "text": "已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。",
+          "phase": "final",
+          "nativePhase": "final_answer"
+        },
+        "at": "1970-01-01T00:00:20.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "msg_0c221446ad2e7d02016af4fa30bcf087d08b1869d6c0738dfc",
+          "text": "已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。",
+          "phase": "final_answer",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null,
+          "startedAtMs": 1794439729296,
+          "completedAtMs": 1794439729296
+        }
+      },
+      {
+        "sessionId": "trace:codex:S04",
+        "seq": 21,
+        "turnId": "trace:codex:S04:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-68",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:21.000Z",
+        "native": {
+          "threadId": "01a1ccf1-36b5-72a2-8b02-0f063cd8f950",
+          "turnId": "01a1ccf1-36ce-73d3-8624-3c02ae1371cd",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 32249,
+              "inputTokens": 32089,
+              "cachedInputTokens": 26624,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 160,
+              "reasoningOutputTokens": 18
+            },
+            "last": {
+              "totalTokens": 16148,
+              "inputTokens": 16125,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 23,
+              "reasoningOutputTokens": 0
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "item-msg_0c221446ad2e7d02016af4fa30bcf087d08b1869d6c0738dfc",
+        "text": "已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 1,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

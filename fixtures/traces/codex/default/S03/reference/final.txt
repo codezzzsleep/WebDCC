@@ -1,0 +1,8 @@
+已完成修改：
+
+- 新建 `notes.txt`，内容为：
+  ```
+  alpha
+  beta
+  ```
+- 将 `README.md` 标题改为 `Sample Repo (edited)`。

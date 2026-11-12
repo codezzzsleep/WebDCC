@@ -5,10 +5,11 @@
 import { build } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
 
-await mkdir('packages/server/dist', { recursive: true });
+const output = process.env['WDCC_SERVER_OUT'] ?? 'packages/server/dist/main.js';
+await mkdir(output.slice(0, output.lastIndexOf('/')) || '.', { recursive: true });
 await build({
   entryPoints: ['packages/server/src/main.ts'],
-  outfile: 'packages/server/dist/main.js',
+  outfile: output,
   bundle: true,
   platform: 'node',
   format: 'esm',

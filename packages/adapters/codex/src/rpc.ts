@@ -15,6 +15,7 @@ export interface StartOptions {
   /** 每一帧（收/发）都会回调，用于录制 fixtures */
   onFrame?: (direction: 'in' | 'out', frame: Frame) => void;
   onStderr?: (line: string) => void;
+  onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
 }
 
 interface Pending {
@@ -55,6 +56,7 @@ export class JsonRpcStdio {
     child.stdin.on('error', () => undefined);
     child.on('exit', (code, signal) => {
       this.closed = true;
+      this.options.onExit?.(code, signal);
       for (const [, p] of this.pending) {
         clearTimeout(p.timer);
         p.reject(new Error(`子进程退出（code=${String(code)}, signal=${String(signal)}），请求 ${p.method} 未完成`));

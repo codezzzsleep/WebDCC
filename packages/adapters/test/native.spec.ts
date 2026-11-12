@@ -5,7 +5,7 @@ import {
   CodexAdapter,
 } from '../codex/src/adapter.js';
 import { ClaudeAdapter } from '../claude/src/adapter.js';
-import { ALLOWED_ENDPOINTS, DshAdapter, isAllowedCommandLine, isAllowedEndpoint } from '../dsh/src/adapter.js';
+import { ALLOWED_ENDPOINTS, DshAdapter, isAllowedCommandLine, isAllowedEndpoint, providerForModel } from '../dsh/src/adapter.js';
 
 const FORBIDDEN = ['baseInstructions', 'developerInstructions'];
 const ALLOWED_CONFIG_KEYS = [
@@ -163,5 +163,15 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
   it('四档访问模式与界面文字一致', () => {
     const adapter = new DshAdapter();
     expect(adapter.accessModes().map((mode) => mode.id)).toEqual(['read-only', 'workspace-write', 'danger-full-access', 'auto']);
+  });
+
+  it('切换模型时从 DSH catalog 找到 provider，并拒绝未知模型', () => {
+    const catalog = {
+      default: { provider: 'deepseek-official', model: 'deepseek-flash' },
+      groups: [{ id: 'openai-next', models: [{ id: 'deepseek-v4-1-flash-261017' }] }],
+    };
+    expect(providerForModel(catalog, 'deepseek-v4-1-flash-261017')).toBe('openai-next');
+    expect(providerForModel(catalog, 'deepseek-flash')).toBe('deepseek-official');
+    expect(providerForModel(catalog, 'missing-model')).toBeUndefined();
   });
 });

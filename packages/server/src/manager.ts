@@ -13,6 +13,8 @@ import type {
 } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
+import { resolveAnswer } from '@webdcc/protocol';
+import { TurnTracker } from './turn-tracker.js';
 
 export interface HotItem {
   itemKey: string;
@@ -29,8 +31,6 @@ export interface Runtime {
   status: Exclude<SessionDto['status'], never>;
   turnId: string | null;
   turnStartedAt: number | null;
-  /** 本轮的 turn.started 是否已经由服务端写入（F4） */
-  turnStartedStored: boolean;
   hot: Map<string, HotItem>;
   idleTimer: NodeJS.Timeout | null;
 }
@@ -46,6 +46,7 @@ export interface ManagerHooks {
 export class SessionManager {
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly runtimes = new Map<string, Runtime>();
+  private readonly turns = new TurnTracker();
   private hooks: ManagerHooks = {
     onFeed: () => undefined,
     onEvent: () => undefined,
@@ -62,7 +63,26 @@ export class SessionManager {
       /** 把 diff 文本存成文件，返回 fileId（C2 / F10） */
       saveDiff?: (name: string, diff: string) => string;
     },
-  ) {}
+  ) {
+    // A previous process may have stopped after writing turn.started. Close
+    // those turns before adapters are resumed so refresh never shows a
+    // permanently running turn.
+    for (const session of this.store.listSessions(true)) {
+      const events = this.store.allEvents(session.id);
+      const started = events.filter((event) => event.kind === 'turn.started');
+      for (const begin of started) {
+        if (events.some((event) => event.turnId === begin.turnId && event.kind === 'turn.completed')) continue;
+        this.store.appendEvent({
+          sessionId: session.id,
+          turnId: begin.turnId,
+          itemKey: `turn-recovered-${begin.turnId}`,
+          kind: 'turn.completed',
+          data: { status: 'interrupted', durationMs: 0, answerItemKeys: [], reason: 'server-restart' },
+        });
+        this.store.updateSession(session.id, { status: 'idle' });
+      }
+    }
+  }
 
   registerAdapter(adapter: AgentAdapter): void {
     this.adapters.set(adapter.id, adapter);
@@ -168,7 +188,6 @@ export class SessionManager {
       status: session.status,
       turnId: null,
       turnStartedAt: null,
-      turnStartedStored: false,
       hot: new Map(),
       idleTimer: null,
     };
@@ -207,7 +226,6 @@ export class SessionManager {
     const turnId = ulid();
     runtime.turnId = turnId;
     runtime.turnStartedAt = Date.now();
-    runtime.turnStartedStored = true;
 
     const userEvent = this.store.appendEvent({
       sessionId,
@@ -230,14 +248,25 @@ export class SessionManager {
       data: {},
     });
     this.hooks.onEvent(startEvent);
+    this.turns.start(sessionId, turnId, runtime.turnStartedAt);
 
     if (session.title === undefined || session.title === null || session.title === '') {
       const title = firstLine(input.text);
+      // The first user prompt is the stable session label. Native title
+      // notifications may arrive later (and in some harnesses are generated
+      // from an auxiliary request), so they must not replace this label.
+      this.store.setTitleSource(sessionId, 'user');
       const updated = this.updateSessionAndFeed(sessionId, { title }, { title });
       void updated;
     }
 
-    await runtime.adapter.send(sessionId, input);
+    try {
+      await runtime.adapter.send(sessionId, input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.finishTurn(runtime, 'failed', message);
+      throw error;
+    }
     this.setStatus(runtime, 'running');
     this.touchIdle(runtime);
     return { turnId };
@@ -248,6 +277,8 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.respond(sessionId, decision);
+    this.turns.resume(sessionId);
+    if (runtime.turnId !== null) this.setStatus(runtime, 'running');
     // 轮次已经结束之后才到的审批：处理完不要停在"待批准"
     if (runtime.turnId === null) this.setStatus(runtime, 'idle');
     const resolvedTurn = runtime.turnId;
@@ -268,6 +299,20 @@ export class SessionManager {
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.answer === undefined) throw Object.assign(new Error('该 Agent 不支持回答问题'), { statusCode: 400 });
     await runtime.adapter.answer(sessionId, questionId, answer);
+    this.turns.resume(sessionId);
+    const question = this.store.allEvents(sessionId).find((event) => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId);
+    if (question !== undefined) {
+      const data = question.data as EventData['question'];
+      const resolved = this.store.appendEvent({
+        sessionId,
+        turnId: runtime.turnId,
+        itemKey: `question-resolved-${questionId}`,
+        kind: 'question',
+        data: { ...data, status: 'answered' },
+      });
+      this.hooks.onEvent(resolved);
+    }
+    if (runtime.turnId !== null) this.setStatus(runtime, 'running');
     this.touchIdle(runtime);
   }
 
@@ -354,6 +399,7 @@ export class SessionManager {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
     if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
+    if (runtime.turnId !== null) this.finishTurn(runtime, 'interrupted', 'session-disposed');
     await runtime.adapter.dispose(sessionId);
     this.runtimes.delete(sessionId);
     // 回收之后状态回到空闲，否则界面上会一直显示"停止"（AG-*-11）
@@ -369,9 +415,8 @@ export class SessionManager {
   private handleAdapterEvent(sessionId: string, event: AdapterEvent): void {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
-    // 一轮的 turnId 一律以 manager 在 send() 时分配的为准；原生 turn id 只保留在 native 里。
-    // 轮次之外的事件 turnId 为 null：不构成一轮，只进轨迹（F4）
-    const turnId = runtime.turnId;
+    const assignment = this.turns.observe(sessionId, event);
+    const turnId = assignment.turnId;
 
     switch (event.type) {
       case 'item.start': {
@@ -401,12 +446,16 @@ export class SessionManager {
         this.hooks.onUpdate(sessionId, event.itemKey, event.data, item?.turnId ?? turnId);
         break;
       }
+      case 'item.cancel': {
+        runtime.hot.delete(event.itemKey);
+        break;
+      }
       case 'item.complete': {
         runtime.hot.delete(event.itemKey);
         // 改动卡片的数据来源：把 diff 文本存成文件，前端据此打开 diff 标签（C2）
         let completeData = event.data as EventData[EventKind];
-        if (event.kind === 'file.change') {
-          const data = completeData as EventData['file.change'];
+        if (event.kind === 'file.change' || event.kind === 'turn.diff') {
+          const data = completeData as EventData['file.change'] | EventData['turn.diff'];
           const changes = data.changes.map((change) => {
             if (change.diff === undefined || this.options.saveDiff === undefined) return change;
             const fileId = this.options.saveDiff(`${change.path}.diff`, change.diff);
@@ -414,11 +463,15 @@ export class SessionManager {
             void _diff;
             return { ...rest, diffFileId: fileId };
           });
-          completeData = { ...data, changes };
+          completeData = { ...data, changes } as EventData[EventKind];
         }
-        // adapter 也发 turn.started 时，服务端已经发过一条：重复的降级为 internal（只进轨迹）
-        const kind = event.kind === 'turn.started' && runtime.turnStartedStored ? 'internal' : event.kind;
-        if (event.kind === 'turn.started') runtime.turnStartedStored = true;
+        if (event.kind === 'turn.completed' && turnId !== null) {
+          const previous = this.store.allEvents(sessionId).filter((candidate) => candidate.turnId === turnId);
+          const data = completeData as EventData['turn.completed'];
+          completeData = { ...data, answerItemKeys: data.answerItemKeys ?? resolveAnswer(previous).map((item) => item.itemKey) };
+        }
+        const duplicateStart = event.kind === 'turn.started' && turnId !== null && this.store.allEvents(sessionId).some((candidate) => candidate.turnId === turnId && candidate.kind === 'turn.started');
+        const kind = duplicateStart ? 'internal' : event.kind;
         const stored = this.store.appendEvent({
           sessionId,
           turnId,
@@ -427,6 +480,7 @@ export class SessionManager {
           data: (kind === 'internal' ? { nativeType: 'turn.started' } : completeData) as EventData[EventKind],
           ...(event.native === undefined ? {} : { native: event.native }),
           ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
+          ...(assignment.late ? { late: true } : {}),
         });
         // 原生标题：用户没改过名字时才生效（C1）
         if (kind === 'internal') {
@@ -439,19 +493,23 @@ export class SessionManager {
           }
         }
         this.hooks.onEvent(stored);
+        if (event.kind === 'approval.request' || event.kind === 'question') this.setStatus(runtime, 'waiting');
         if (event.kind === 'turn.completed') {
-          runtime.hot.clear();
-          runtime.turnId = null;
-          runtime.turnStartedAt = null;
-          runtime.turnStartedStored = false;
-          this.setStatus(runtime, 'idle');
+          this.finishTurn(runtime, (completeData as EventData['turn.completed']).status, undefined, stored);
         }
         break;
       }
+      case 'turn.start': {
+        if (runtime.turnId !== null) this.turns.bindNative(runtime.turnId, event.nativeTurnId);
+        if (runtime.turnId !== null) this.setStatus(runtime, 'running');
+        break;
+      }
+      case 'turn.end': {
+        if (turnId !== null) this.finishTurn(runtime, event.status, undefined, undefined, event.usage, event.native);
+        break;
+      }
       case 'status': {
-        // 轮次已经结束时，adapter 迟到的 waiting/running 不再改变状态（避免卡在"待批准"）
-        if (runtime.turnId === null && event.status !== 'idle') break;
-        this.setStatus(runtime, event.status);
+        if (runtime.turnId !== null || event.status === 'idle') this.setStatus(runtime, event.status);
         break;
       }
       case 'native-id': {
@@ -460,6 +518,43 @@ export class SessionManager {
         break;
       }
     }
+  }
+
+  /** Persist exactly one terminal event and close all live items for a turn. */
+  private finishTurn(
+    runtime: Runtime,
+    status: 'completed' | 'interrupted' | 'failed',
+    reason?: string,
+    existing?: StoredEvent,
+    usage?: EventData['usage'],
+    native?: unknown,
+  ): void {
+    const turnId = runtime.turnId;
+    if (turnId === null) return;
+    const events = this.store.allEvents(runtime.sessionId).filter((event) => event.turnId === turnId);
+    const answerItemKeys = resolveAnswer(events).map((item) => item.itemKey);
+    if (existing === undefined) {
+      const event = this.store.appendEvent({
+        sessionId: runtime.sessionId,
+        turnId,
+        itemKey: `turn-end-${turnId}`,
+        kind: 'turn.completed',
+        data: {
+          status,
+          durationMs: runtime.turnStartedAt === null ? 0 : Math.max(0, Date.now() - runtime.turnStartedAt),
+          answerItemKeys,
+          ...(usage === undefined ? {} : { usage }),
+          ...(reason === undefined ? {} : { reason }),
+        },
+        ...(native === undefined ? {} : { native }),
+      });
+      this.hooks.onEvent(event);
+    }
+    runtime.hot.clear();
+    this.turns.end(runtime.sessionId, turnId, status);
+    runtime.turnId = null;
+    runtime.turnStartedAt = null;
+    this.setStatus(runtime, 'idle');
   }
 
   private setStatus(runtime: Runtime, status: SessionDto['status']): void {

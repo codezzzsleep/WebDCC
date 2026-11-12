@@ -10,6 +10,7 @@ import type {
   UserInput,
 } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
+export * from './replay.js';
 
 export interface FakeAdapterOptions {
   id?: AgentId;

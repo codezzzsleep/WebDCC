@@ -7,6 +7,7 @@ export type EventKind =
   | 'command'
   | 'file.read'
   | 'file.change'
+  | 'turn.diff'
   | 'tool.call'
   | 'plan'
   | 'goal'
@@ -64,7 +65,9 @@ export interface PlanItem {
 
 export interface EventData {
   'user.message': { text: string; images?: string[]; clientCommandId?: string };
-  'assistant.message': { text: string; phase?: 'interim' | 'final' };
+  /** `phase` is retained for old rows. New translations preserve the native
+   * phase in `nativePhase`; the turn reducer is the sole final-answer authority. */
+  'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string };
   reasoning: { text: string; summary?: boolean };
   command: {
     command: string;
@@ -79,9 +82,11 @@ export interface EventData {
   'file.change': {
     changes: FileChangeEntry[];
     status: 'running' | 'completed' | 'failed';
-    /** 累计快照（例如 Codex 的 turn/diff/updated）：后到的覆盖前面的，不累加 */
+    /** @deprecated Codex cumulative snapshots use turn.diff. */
     snapshot?: boolean;
   };
+  /** A cumulative diff emitted by an Agent for the current turn. */
+  'turn.diff': { changes: FileChangeEntry[]; status?: 'running' | 'completed' | 'failed' };
   'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' };
   plan: { items: PlanItem[] };
   /** Codex 的"目标"（thread/goal/updated）：原生界面会显示，WebDCC 也必须显示 */
@@ -103,7 +108,13 @@ export interface EventData {
   'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' | 'other' };
   question: QuestionItem;
   'turn.started': Record<string, never>;
-  'turn.completed': { status: 'completed' | 'interrupted' | 'failed'; durationMs: number; usage?: UsageData };
+  'turn.completed': {
+    status: 'completed' | 'interrupted' | 'failed';
+    durationMs: number;
+    usage?: UsageData;
+    answerItemKeys?: string[];
+    reason?: string;
+  };
   usage: UsageData;
   error: { message: string };
   unknown: { nativeType: string };
@@ -121,6 +132,7 @@ export interface StoredEvent<K extends EventKind = EventKind> {
   data: EventData[K];
   native?: unknown;
   nativeSeq?: number;
+  late?: boolean;
 }
 
 export const INTERNAL_KINDS: ReadonlySet<EventKind> = new Set<EventKind>(['internal']);

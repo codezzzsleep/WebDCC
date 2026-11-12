@@ -1,0 +1,486 @@
+{
+  "commit": "fc800e1295b3",
+  "pass": 1,
+  "startedAt": "2026-11-11T23:57:39.857Z",
+  "finishedAt": "2026-11-12T00:09:59.549Z",
+  "expectedCount": 138,
+  "executedCount": 40,
+  "passedCount": 32,
+  "results": [
+    {
+      "title": "AG-dsh-01 新建会话：标识与访问模式",
+      "id": "AG-dsh-01",
+      "status": "passed",
+      "durationMs": 1607,
+      "shots": [
+        "shots/AG-dsh-01-AG-dsh-01-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-02 流式输出",
+      "id": "AG-dsh-02",
+      "status": "passed",
+      "durationMs": 1653,
+      "shots": [
+        "shots/AG-dsh-02-AG-dsh-02-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-04 任务面板",
+      "id": "AG-dsh-04",
+      "status": "passed",
+      "durationMs": 5180,
+      "shots": [
+        "shots/AG-dsh-04-AG-dsh-04-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-01 新建会话：标识与访问模式",
+      "id": "AG-codex-01",
+      "status": "passed",
+      "durationMs": 1699,
+      "shots": [
+        "shots/AG-codex-01-AG-codex-01-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-02 流式输出",
+      "id": "AG-codex-02",
+      "status": "passed",
+      "durationMs": 2200,
+      "shots": [
+        "shots/AG-codex-02-AG-codex-02-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-04 任务面板",
+      "id": "AG-codex-04",
+      "status": "passed",
+      "durationMs": 6430,
+      "shots": [
+        "shots/AG-codex-04-AG-codex-04-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-01 新建会话：标识与访问模式",
+      "id": "AG-claude-01",
+      "status": "passed",
+      "durationMs": 1259,
+      "shots": [
+        "shots/AG-claude-01-AG-claude-01-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-02 流式输出",
+      "id": "AG-claude-02",
+      "status": "passed",
+      "durationMs": 2758,
+      "shots": [
+        "shots/AG-claude-02-AG-claude-02-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-04 任务面板",
+      "id": "AG-claude-04",
+      "status": "passed",
+      "durationMs": 7023,
+      "shots": [
+        "shots/AG-claude-04-AG-claude-04-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-03 改动卡片与 diff",
+      "id": "AG-dsh-03",
+      "status": "passed",
+      "durationMs": 5566,
+      "shots": [
+        "shots/AG-dsh-03-AG-dsh-03-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-07 轮次与已完成",
+      "id": "AG-dsh-07",
+      "status": "passed",
+      "durationMs": 5502,
+      "shots": [
+        "shots/AG-dsh-07-AG-dsh-07-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-08 刷新与另一上下文一致",
+      "id": "AG-dsh-08",
+      "status": "passed",
+      "durationMs": 8067,
+      "shots": [
+        "shots/AG-dsh-08-AG-dsh-08-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-10 第二轮",
+      "id": "AG-dsh-10",
+      "status": "passed",
+      "durationMs": 5763,
+      "shots": [
+        "shots/AG-dsh-10-AG-dsh-10-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-11 dispose 后继续",
+      "id": "AG-dsh-11",
+      "status": "passed",
+      "durationMs": 9628,
+      "shots": [
+        "shots/AG-dsh-11-AG-dsh-11-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-12 换模型",
+      "id": "AG-dsh-12",
+      "status": "passed",
+      "durationMs": 9373,
+      "shots": [
+        "shots/AG-dsh-12-AG-dsh-12-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-03 改动卡片与 diff",
+      "id": "AG-codex-03",
+      "status": "passed",
+      "durationMs": 6949,
+      "shots": [
+        "shots/AG-codex-03-AG-codex-03-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-07 轮次与已完成",
+      "id": "AG-codex-07",
+      "status": "passed",
+      "durationMs": 6667,
+      "shots": [
+        "shots/AG-codex-07-AG-codex-07-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-08 刷新与另一上下文一致",
+      "id": "AG-codex-08",
+      "status": "failed",
+      "durationMs": 8221,
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\n\u001b[32m- Expected  - 2\u001b[39m\n\u001b[31m+ Received  + 8\u001b[39m\n\n\u001b[2m  刷新一致性\u001b[22m\n\n\u001b[2m  07:59\u001b[22m\n\u001b[2m  已完成，用时 3秒\u001b[22m\n\u001b[32m- 更新了目标，执行了 \u001b[7m2\u001b[27m 条命令，编辑了 9 个文件\u001b[39m\n\u001b[31m+ 更新了目标，执行了 \u001b[7m4\u001b[27m 条命令，编辑了 9 个文件\u001b[39m\n\u001b[2m  已允许一次\u001b[22m\n\u001b[2m  · {\u001b[22m\n\u001b[2m  已允许一次\u001b[22m\n\u001b[2m  · {\u001b[22m\n\n\u001b[2m  全部完成：列目录、读 README、写 notes.txt、改 README。\u001b[22m\n\n\u001b[31m+ apply_patch\u001b[39m\n\u001b[31m+ {\u001b[39m\n\u001b[31m+ 详情\u001b[39m\n\u001b[31m+ 允许一次\u001b[39m\n\u001b[31m+ 本会话都允许\u001b[39m\n\u001b[31m+ 拒绝\u001b[39m\n\u001b[2m  已编辑 2 个文件\u001b[22m\n\u001b[2m  +3 -1\u001b[22m\n\u001b[2m  README.md\u001b[22m\n\u001b[2m  +1 -1\u001b[22m\n\u001b[2m  notes.txt\u001b[22m\n\u001b[2m  +2 -0\u001b[22m\n\u001b[2m  带到…\u001b[22m\n\u001b[32m- 用量 1.\u001b[7m1\u001b[27mk tok\u001b[39m\n\u001b[31m+ 用量 1.\u001b[7m4\u001b[27mk tok\u001b[39m\n\u001b[2m  07:59\u001b[22m",
+      "shots": [
+        "shots/AG-codex-08-AG-codex-08-end.jpg",
+        "shots/AG-codex-08-error-context.md"
+      ]
+    },
+    {
+      "title": "AG-codex-10 第二轮",
+      "id": "AG-codex-10",
+      "status": "passed",
+      "durationMs": 6984,
+      "shots": [
+        "shots/AG-codex-10-AG-codex-10-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-11 dispose 后继续",
+      "id": "AG-codex-11",
+      "status": "failed",
+      "durationMs": 128740,
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\nExpected substring: \u001b[32m\"历史用户消息 3 条\"\u001b[39m\nReceived string:    \u001b[31m\"历史用户消息 54 条\"\u001b[39m\n\nCall Log:\n- Timeout 120000ms exceeded while waiting on the predicate",
+      "shots": [
+        "shots/AG-codex-11-AG-codex-11-end.jpg",
+        "shots/AG-codex-11-error-context.md"
+      ]
+    },
+    {
+      "title": "AG-codex-12 换模型",
+      "id": "AG-codex-12",
+      "status": "failed",
+      "durationMs": 11739,
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m",
+      "shots": [
+        "shots/AG-codex-12-AG-codex-12-end.jpg",
+        "shots/AG-codex-12-error-context.md"
+      ]
+    },
+    {
+      "title": "AG-claude-03 改动卡片与 diff",
+      "id": "AG-claude-03",
+      "status": "passed",
+      "durationMs": 11207,
+      "shots": [
+        "shots/AG-claude-03-AG-claude-03-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-07 轮次与已完成",
+      "id": "AG-claude-07",
+      "status": "passed",
+      "durationMs": 10395,
+      "shots": [
+        "shots/AG-claude-07-AG-claude-07-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-08 刷新与另一上下文一致",
+      "id": "AG-claude-08",
+      "status": "passed",
+      "durationMs": 14041,
+      "shots": [
+        "shots/AG-claude-08-AG-claude-08-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-10 第二轮",
+      "id": "AG-claude-10",
+      "status": "passed",
+      "durationMs": 10713,
+      "shots": [
+        "shots/AG-claude-10-AG-claude-10-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-11 dispose 后继续",
+      "id": "AG-claude-11",
+      "status": "passed",
+      "durationMs": 12891,
+      "shots": [
+        "shots/AG-claude-11-AG-claude-11-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-12 换模型",
+      "id": "AG-claude-12",
+      "status": "failed",
+      "durationMs": 10729,
+      "error": "Error: 换模型后请求里的 model 应为 mock-claude-b\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\nExpected value: \u001b[32m\"mock-claude-b\"\u001b[39m\nReceived array: \u001b[31m[\"mock-claude-a\", \"mock-claude-a\"]\u001b[39m",
+      "shots": [
+        "shots/AG-claude-12-AG-claude-12-end.jpg",
+        "shots/AG-claude-12-error-context.md"
+      ]
+    },
+    {
+      "title": "AG-dsh-05 允许一次",
+      "id": "AG-dsh-05",
+      "status": "passed",
+      "durationMs": 7998,
+      "shots": [
+        "shots/AG-dsh-05-AG-dsh-05-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-06 拒绝",
+      "id": "AG-dsh-06",
+      "status": "passed",
+      "durationMs": 7438,
+      "shots": [
+        "shots/AG-dsh-06-AG-dsh-06-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-dsh-09 停止与挂起审批取消",
+      "id": "AG-dsh-09",
+      "status": "passed",
+      "durationMs": 11478,
+      "shots": [
+        "shots/AG-dsh-09-AG-dsh-09-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-05 允许一次",
+      "id": "AG-codex-05",
+      "status": "passed",
+      "durationMs": 7573,
+      "shots": [
+        "shots/AG-codex-05-AG-codex-05-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-06 拒绝",
+      "id": "AG-codex-06",
+      "status": "passed",
+      "durationMs": 8246,
+      "shots": [
+        "shots/AG-codex-06-AG-codex-06-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-codex-09 停止与挂起审批取消",
+      "id": "AG-codex-09",
+      "status": "passed",
+      "durationMs": 12755,
+      "shots": [
+        "shots/AG-codex-09-AG-codex-09-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-05 允许一次",
+      "id": "AG-claude-05",
+      "status": "passed",
+      "durationMs": 7983,
+      "shots": [
+        "shots/AG-claude-05-AG-claude-05-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-06 拒绝",
+      "id": "AG-claude-06",
+      "status": "passed",
+      "durationMs": 8172,
+      "shots": [
+        "shots/AG-claude-06-AG-claude-06-end.jpg"
+      ]
+    },
+    {
+      "title": "AG-claude-09 停止与挂起审批取消",
+      "id": "AG-claude-09",
+      "status": "passed",
+      "durationMs": 13269,
+      "shots": [
+        "shots/AG-claude-09-AG-claude-09-end.jpg"
+      ]
+    },
+    {
+      "title": "DOCK-01 移到主栏、刷新与前进后退还原",
+      "id": "DOCK-01",
+      "status": "failed",
+      "durationMs": 36306,
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoContain\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // indexOf\u001b[22m\n\nExpected substring: \u001b[32m\"01M76H43QSV4RQYNK9BWEX7AZD+01M76H3WS9VA51A6BC1PFTACTS\"\u001b[39m\nReceived string:    \u001b[31m\"http://127.0.0.1:40955/s/01M76H43QSV4RQYNK9BWEX7AZD%2B01M76H3WS9VA51A6BC1PFTACTS\"\u001b[39m\n\nCall Log:\n- Timeout 15000ms exceeded while waiting on the predicate",
+      "shots": [
+        "shots/DOCK-01-DOCK-01-end.jpg",
+        "shots/DOCK-01-error-context.md"
+      ]
+    },
+    {
+      "title": "DOCK-03 改动卡片打开 diff 标签、文件标签与直接地址",
+      "id": "DOCK-03",
+      "status": "failed",
+      "durationMs": 16141,
+      "error": "Error: 页面不应有错误\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"console.error: Failed to load resource: the server responded with a status of 404 (Not Found)\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+      "shots": [
+        "shots/DOCK-03-DOCK-03-end.jpg",
+        "shots/DOCK-03-error-context.md"
+      ]
+    },
+    {
+      "title": "MOB-01 390×844 抽屉里切换会话",
+      "id": "MOB-01",
+      "status": "failed",
+      "durationMs": 180291,
+      "error": "\u001b[31mTest timeout of 180000ms exceeded.\u001b[39m",
+      "shots": [
+        "shots/MOB-01-MOB-01-end.jpg",
+        "shots/MOB-01-error-context.md"
+      ]
+    },
+    {
+      "title": "MOB-02 390×844 新建并跑完一轮，输入框贴底",
+      "id": "MOB-02",
+      "status": "failed",
+      "durationMs": 102277,
+      "shots": [
+        "shots/MOB-02-MOB-02-end.jpg"
+      ]
+    }
+  ],
+  "missing": [
+    "AG-claude-04b",
+    "AG-claude-13",
+    "AG-claude-15",
+    "AG-claude-16",
+    "AG-codex-13",
+    "AG-codex-14",
+    "AG-codexd-01",
+    "AG-codexd-03",
+    "AG-codexd-05",
+    "AG-codexd-09",
+    "AG-codexd-11",
+    "AG-dsh-13",
+    "AG-dsh-14",
+    "ATT-02",
+    "ATT-03",
+    "ATT-04",
+    "ATT-05",
+    "ATT-claude-01",
+    "ATT-codex-01",
+    "ATT-dsh-01",
+    "AUTH-01",
+    "AUTH-02",
+    "AUTH-03",
+    "AUTH-04",
+    "AUTH-05",
+    "DOCK-02",
+    "DSHX-00",
+    "DSHX-01",
+    "DSHX-02",
+    "DSHX-03",
+    "DSHX-04",
+    "DSHX-05",
+    "DSHX-06",
+    "DSHX-07",
+    "DSHX-08",
+    "FIN-01",
+    "FIN-02",
+    "FIN-03",
+    "FIN-04",
+    "HO-01",
+    "HO-02",
+    "HO-03",
+    "MOB-03",
+    "MOB-04",
+    "MODE-claude-01",
+    "MODE-claude-02",
+    "MODE-claude-03",
+    "MODE-codex-01",
+    "MODE-codex-02",
+    "MODE-codex-03",
+    "MODE-dsh-01",
+    "MODE-dsh-02",
+    "MODE-dsh-03",
+    "NAT-02",
+    "NAT-claude-01",
+    "NAT-codex-01",
+    "NAT-dsh-01",
+    "NET-01",
+    "NET-02",
+    "NET-03",
+    "NET-04",
+    "NET-05",
+    "NET-06",
+    "NET-07",
+    "NET-08",
+    "NEW-01",
+    "NEW-02",
+    "NEW-03",
+    "NEW-04",
+    "NEW-05",
+    "NEW-06",
+    "NEW-07",
+    "NOTIF-01",
+    "PRV-01",
+    "PRV-02",
+    "PRV-03",
+    "PRV-04",
+    "PRV-05",
+    "PRV-06",
+    "PRV-07",
+    "PRV-08",
+    "PRV-09",
+    "ROB-01",
+    "ROB-02",
+    "ROB-03",
+    "ROB-04",
+    "S-01",
+    "S-02",
+    "S-03",
+    "S-04",
+    "SES-01",
+    "SES-02",
+    "SES-03",
+    "SES-04",
+    "SL-01",
+    "SL-02",
+    "SL-03",
+    "UI-01"
+  ],
+  "extra": []
+}

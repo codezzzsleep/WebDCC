@@ -20,6 +20,8 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
       return typeof data['path'] === 'string';
     case 'file.change':
       return Array.isArray(data['changes']) && typeof data['status'] === 'string';
+    case 'turn.diff':
+      return Array.isArray(data['changes']) && (data['status'] === undefined || typeof data['status'] === 'string');
     case 'tool.call':
       return typeof data['name'] === 'string' && typeof data['status'] === 'string';
     case 'plan':

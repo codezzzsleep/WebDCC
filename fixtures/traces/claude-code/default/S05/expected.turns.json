@@ -1,0 +1,74 @@
+[
+  {
+    "turnId": "trace:claude-code:S05:turn:1",
+    "state": "failed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:02.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:claude-code:S05",
+        "seq": 23,
+        "turnId": "trace:claude-code:S05:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-sdk-28",
+        "data": {
+          "text": "The file may already exist. I'll read it first."
+        },
+        "at": "1970-01-01T00:00:23.000Z",
+        "native": {
+          "type": "assistant",
+          "message": {
+            "id": "msg_01xMj2dHwegLqF0L0adLmwEZ",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-5-5",
+            "content": [
+              {
+                "text": "The file may already exist. I'll read it first.",
+                "type": "text"
+              }
+            ],
+            "stop_reason": null,
+            "stop_sequence": null,
+            "stop_details": null,
+            "usage": {
+              "input_tokens": 2,
+              "cache_creation_input_tokens": 131,
+              "cache_read_input_tokens": 18025,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 131,
+                "ephemeral_1h_input_tokens": 0
+              },
+              "output_tokens": 0,
+              "service_tier": "standard"
+            },
+            "context_management": null
+          },
+          "parent_tool_use_id": null,
+          "session_id": "98f9f7ba-1eb2-444c-9c67-2f881898d5d9",
+          "uuid": "3f7e1d9d-d4fa-447b-b59f-1c83bcecb2c6",
+          "timestamp": "2026-11-11T23:34:27.927Z"
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "msg-sdk-28",
+        "text": "The file may already exist. I'll read it first."
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 0,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

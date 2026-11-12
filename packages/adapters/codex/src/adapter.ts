@@ -10,7 +10,9 @@ import type {
   ModelOption,
   ProbeResult,
   UserInput,
+  TraceSink,
 } from '@webdcc/protocol';
+import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 
@@ -22,6 +24,7 @@ export interface CodexAdapterOptions {
   configOverrides?: string[];
   env?: NodeJS.ProcessEnv;
   onTitle?: (sessionId: string, title: string) => void;
+  traceSink?: TraceSink;
 }
 
 interface PendingApproval {
@@ -45,6 +48,7 @@ interface SessionRuntime {
   model: string | null;
   reasoningEffort: string | null;
   turnId: string | null;
+  frameSeq: number;
   turnStartedAt: number;
   approvals: Map<string, PendingApproval>;
   lastAssistantText: string;
@@ -306,7 +310,11 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
   const type = String(item['type'] ?? '');
   switch (type) {
     case 'agentMessage':
-      return { text: String(item['text'] ?? ''), phase: item['phase'] === 'final' ? 'final' : 'interim' };
+      {
+        const nativePhase = typeof item['phase'] === 'string' ? item['phase'] : undefined;
+        const phase = nativePhase === 'final_answer' || nativePhase === 'partial_answer' ? 'final' : 'interim';
+        return { text: String(item['text'] ?? ''), phase, ...(nativePhase === undefined ? {} : { nativePhase }) };
+      }
     case 'reasoning':
       return { text: Array.isArray(item['summary']) ? (item['summary'] as { text?: string }[]).map((part) => part.text ?? '').join('') : '' };
     case 'commandExecution':
@@ -470,6 +478,7 @@ export class CodexAdapter implements AgentAdapter {
   async setModel(sessionId: string, model: string): Promise<void> {
     const runtime = this.require(sessionId);
     runtime.model = model;
+    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] model set', sessionId, model);
   }
 
   async setReasoningEffort(sessionId: string, effort: string): Promise<void> {
@@ -510,11 +519,18 @@ export class CodexAdapter implements AgentAdapter {
 
   private startProcess(sessionId: string, opts: CreateOpts): SessionRuntime {
     const spec = this.buildLaunchSpec(opts);
+    let traceIndex = 0;
+    const traceStarted = Date.now();
+    const runtimeRef: { current?: SessionRuntime } = {};
     const rpc = JsonRpcStdio.start({
       command: spec.command ?? 'codex',
       args: spec.args ?? [],
       cwd: opts.cwd,
       env: { ...(this.options.env ?? process.env), ...spec.env },
+      onFrame: (direction, frame) => traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++traceIndex, t: Date.now() - traceStarted, dir: direction, ch: 'rpc', frame }),
+      onExit: () => {
+        if (runtimeRef.current?.turnId !== null && runtimeRef.current?.turnId !== undefined) this.emit(sessionId, { type: 'turn.end', nativeTurnId: runtimeRef.current.turnId, status: 'failed', native: { reason: 'process-exited' } });
+      },
     });
     let markReady: () => void = () => undefined;
     const ready = new Promise<void>((resolve) => {
@@ -531,11 +547,13 @@ export class CodexAdapter implements AgentAdapter {
       model: opts.model ?? null,
       reasoningEffort: opts.reasoningEffort ?? null,
       turnId: null,
+      frameSeq: 0,
       turnStartedAt: 0,
       approvals: new Map(),
       lastAssistantText: '',
       started: new Set(),
     };
+    runtimeRef.current = runtime;
     rpc.onNotification((frame) => {
       if (frame['method'] === 'thread/started') markReady();
       this.onNotification(sessionId, frame);
@@ -568,6 +586,7 @@ export class CodexAdapter implements AgentAdapter {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] initialize done, resuming');
     const response = await runtime.rpc.request<{ thread: { id: string } }>('thread/resume', {
       threadId: opts.nativeId,
+      excludeTurns: true,
       ...(opts.model === undefined ? {} : { model: opts.model }),
       ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
       ...accessParams(opts.accessMode),
@@ -580,9 +599,10 @@ export class CodexAdapter implements AgentAdapter {
 
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
+    runtime.started.clear();
     const startedAt = Date.now();
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
-    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId);
+    if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
     const response = await runtime.rpc.request<{ turn: { id: string } }>(
       'turn/start',
       buildTurnStartParams(runtime.nativeId, input.text, runtime.accessMode, runtime.model, runtime.reasoningEffort, input.images),
@@ -645,6 +665,15 @@ export class CodexAdapter implements AgentAdapter {
     return runtime;
   }
 
+  private nativeTurnId(params: Record<string, unknown>): string | undefined {
+    const fromParams = typeof params['turnId'] === 'string' ? params['turnId'] : undefined;
+    const turn = params['turn'];
+    const fromTurn = typeof turn === 'object' && turn !== null && typeof (turn as { id?: unknown }).id === 'string' ? String((turn as { id: string }).id) : undefined;
+    const item = params['item'];
+    const fromItem = typeof item === 'object' && item !== null && typeof (item as { turnId?: unknown }).turnId === 'string' ? String((item as { turnId: string }).turnId) : undefined;
+    return fromParams ?? fromTurn ?? fromItem;
+  }
+
   // ---------- 通知 ----------
 
   private onNotification(sessionId: string, frame: Frame): void {
@@ -652,33 +681,32 @@ export class CodexAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     const method = String(frame['method'] ?? '');
     const params = (frame['params'] ?? {}) as Record<string, unknown>;
+    const route = routeNotification(method);
+    runtime.frameSeq += 1;
+    const frameKey = `${method.replace(/[^a-zA-Z0-9]+/g, '-')}-${runtime.frameSeq}`;
 
-    switch (routeNotification(method)) {
+    switch (route) {
       case 'turn/started': {
-        this.emit(sessionId, { type: 'status', status: 'running' });
-        // turn.started 由服务端在 send() 时写入，这里不再重复发（F4）
+        this.emit(sessionId, { type: 'turn.start', nativeTurnId: this.nativeTurnId(params), native: params });
         return;
       }
       case 'turn/completed': {
         const turn = (params['turn'] ?? {}) as { id?: string; status?: string };
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
         this.emit(sessionId, {
-          type: 'item.complete',
-          itemKey: `turn-${turn.id ?? runtime.turnId ?? 'unknown'}`,
-          kind: 'turn.completed',
-          data: {
-            status: turn.status === 'interrupted' ? 'interrupted' : turn.status === 'failed' ? 'failed' : 'completed',
-            durationMs: Date.now() - runtime.turnStartedAt,
-            ...(usage === undefined ? {} : { usage }),
-          },
+          type: 'turn.end',
+          nativeTurnId: turn.id ?? this.nativeTurnId(params),
+          status: turn.status === 'interrupted' ? 'interrupted' : turn.status === 'failed' ? 'failed' : 'completed',
+          ...(usage === undefined ? {} : { usage }),
+          native: params,
         });
         runtime.turnId = null;
-        this.emit(sessionId, { type: 'status', status: 'idle' });
+        runtime.started.clear();
         return;
       }
       case 'item/started': {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
-        const itemId = String(item['id'] ?? '');
+        const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
         const kind = mapItemKind(type);
         if (kind === 'internal') return;
@@ -687,12 +715,14 @@ export class CodexAdapter implements AgentAdapter {
           itemKey: itemId,
           kind,
           data: mapItemData(item),
+          nativeTurnId: this.nativeTurnId(params),
+          native: item,
         });
         return;
       }
       case 'item/completed': {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
-        const itemId = String(item['id'] ?? '');
+        const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
         if (type === 'agentMessage') runtime.lastAssistantText = String(item['text'] ?? '');
         const kind = mapItemKind(type);
@@ -703,6 +733,7 @@ export class CodexAdapter implements AgentAdapter {
             kind: 'internal',
             data: { nativeType: type === '' ? 'item' : type },
             native: item,
+            nativeTurnId: this.nativeTurnId(params),
           });
           return;
         }
@@ -715,14 +746,13 @@ export class CodexAdapter implements AgentAdapter {
             path: change.path.startsWith(runtime.cwd) ? change.path.slice(runtime.cwd.length).replace(/^\/+/, '') : change.path,
           }));
         }
-        // 空的 reasoning 不显示（F12）
-        if (kind === 'reasoning' && (data as { text?: string }).text === '') return;
         this.emit(sessionId, {
           type: 'item.complete',
           itemKey: itemId,
           kind,
           data,
           native: item,
+          nativeTurnId: this.nativeTurnId(params),
         });
         return;
       }
@@ -730,7 +760,7 @@ export class CodexAdapter implements AgentAdapter {
         const itemId = String(params['itemId'] ?? '');
         if (!runtime.started.has(itemId)) {
           runtime.started.add(itemId);
-          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'assistant.message', data: { text: '' } });
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'assistant.message', data: { text: '' }, nativeTurnId: this.nativeTurnId(params) });
         }
         this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
         return;
@@ -739,7 +769,7 @@ export class CodexAdapter implements AgentAdapter {
         const itemId = String(params['itemId'] ?? '');
         if (!runtime.started.has(itemId)) {
           runtime.started.add(itemId);
-          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'reasoning', data: { text: '' } });
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'reasoning', data: { text: '' }, nativeTurnId: this.nativeTurnId(params) });
         }
         this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
         return;
@@ -767,7 +797,7 @@ export class CodexAdapter implements AgentAdapter {
         if (inputTokens === 0 && outputTokens === 0) return;
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `usage-${Date.now().toString(36)}`,
+          itemKey: `usage-${frameKey}`,
           kind: 'usage',
           data: { inputTokens, outputTokens },
         });
@@ -778,7 +808,7 @@ export class CodexAdapter implements AgentAdapter {
         if (title !== '') this.options.onTitle?.(sessionId, title);
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `internal-title-${Date.now().toString(36)}`,
+          itemKey: `internal-title-${frameKey}`,
           kind: 'internal',
           data: { nativeType: 'thread/name/updated', ...(title === '' ? {} : { title }) },
           native: params,
@@ -789,7 +819,7 @@ export class CodexAdapter implements AgentAdapter {
         const message = (params['message'] ?? params['error'] ?? '未知错误') as unknown;
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `error-${Date.now().toString(36)}`,
+          itemKey: `error-${frameKey}`,
           kind: 'error',
           data: { message: typeof message === 'string' ? message : JSON.stringify(message) },
         });
@@ -800,7 +830,7 @@ export class CodexAdapter implements AgentAdapter {
         const status = goal.status === 'completed' || goal.status === 'paused' ? goal.status : goal.status === 'cleared' ? 'cleared' : 'active';
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `goal-${Date.now().toString(36)}`,
+          itemKey: `goal-${frameKey}`,
           kind: 'goal',
           data: {
             objective: String(goal.objective ?? ''),
@@ -814,7 +844,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'goal/cleared': {
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `goal-cleared-${Date.now().toString(36)}`,
+          itemKey: `goal-cleared-${frameKey}`,
           kind: 'goal',
           data: { objective: '', status: 'cleared' },
           native: params,
@@ -824,7 +854,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'plan/updated': {
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `plan-${Date.now().toString(36)}`,
+          itemKey: `plan-${frameKey}`,
           kind: 'plan',
           data: { items: mapPlanItems(params) },
           native: params,
@@ -834,7 +864,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'plan/item': {
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `plan-item-${String(params['itemId'] ?? Date.now().toString(36))}-${Date.now().toString(36)}`,
+          itemKey: `plan-item-${String(params['itemId'] ?? frameKey)}-${frameKey}`,
           kind: 'plan',
           data: { items: mapPlanItems(params) },
           native: params,
@@ -852,10 +882,11 @@ export class CodexAdapter implements AgentAdapter {
         }));
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `diff-${String(params['turnId'] ?? runtime.turnId ?? '')}-${Date.now().toString(36)}`,
-          kind: 'file.change',
-          data: { changes, status: 'completed', snapshot: true },
+          itemKey: `diff-${String(params['turnId'] ?? runtime.turnId ?? frameKey)}`,
+          kind: 'turn.diff',
+          data: { changes, status: 'completed' },
           native: params,
+          nativeTurnId: this.nativeTurnId(params),
         });
         return;
       }
@@ -863,7 +894,7 @@ export class CodexAdapter implements AgentAdapter {
         const text = String(params['summary'] ?? params['message'] ?? params['details'] ?? method);
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `notice-${method}-${Date.now().toString(36)}`,
+          itemKey: `notice-${method}-${frameKey}`,
           kind: 'notice',
           data: { level: method === 'warning' ? 'warning' : 'info', text, nativeType: method },
           native: params,
@@ -873,7 +904,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'internal': {
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `internal-${method}-${Date.now().toString(36)}`,
+          itemKey: `internal-${method}-${frameKey}`,
           kind: 'internal',
           data: { nativeType: method },
           native: params,
@@ -883,7 +914,7 @@ export class CodexAdapter implements AgentAdapter {
       default: {
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `unknown-${method}-${Date.now().toString(36)}`,
+          itemKey: `unknown-${method}-${frameKey}`,
           kind: 'unknown',
           data: { nativeType: method },
           native: params,
@@ -958,7 +989,6 @@ export class CodexAdapter implements AgentAdapter {
         options,
       },
     });
-    this.emit(sessionId, { type: 'status', status: 'waiting' });
     // 真实决定由 respond() 通过 rpc.respond 发出；这里返回 undefined 让 JsonRpcStdio 不要立即回包
     return undefined;
   }

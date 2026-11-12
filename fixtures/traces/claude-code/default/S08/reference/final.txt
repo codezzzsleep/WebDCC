@@ -1,0 +1,1 @@
+你还没有回答，所以我先不写。你想用 Python 还是 JavaScript 写 hello world？告诉我之后我就动手。

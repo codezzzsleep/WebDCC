@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S09",
+  "model": "claude-sonnet-5-5",
+  "prompt": "运行命令 false-command-wdcc（它不存在），把报错原样告诉我，不要重试。",
+  "recordedAt": "2026-11-11T23:35:28.517Z",
+  "notTriggered": []
+}

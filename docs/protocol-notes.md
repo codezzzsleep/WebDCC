@@ -544,3 +544,12 @@ Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools
 - 现象：给 Claude 会话选了 Provider 后，SDK `options.env` 注入的 `ANTHROPIC_AUTH_TOKEN` 不生效，实际请求仍用 `settings.json` 里的 token（NEW-07 首轮失败，mock 收到的授权头是 `sk-wdcc-test-claude-*` 而不是手动 Provider 的 Key）。
 - 修法：Provider 的 env 同时放进 **flag 级 settings**：`options.settings = { env: { ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY: '' } }`。SDK 类型里 `Options.settings` 等价于 `--settings`，优先级高于用户设置，且不需要修改 `settings.json`（满足 R3）。
 - 实测：修好后同一个用例里 mock 收到 6 次请求，授权头全部是手动 Provider 的 Key。
+
+## 8 M9 轨迹核实与统一模型
+
+- H1 轨迹：`~/.webdcc/webdcc.db` 中导出的 12 条 Codex `assistant.message` 原生消息位于 `fixtures/codex/real-agent-messages.json`。5 条 `phase=final_answer`、7 条 `phase=commentary`；翻译层分别映射为 `final` 与 `interim`，并保留 `nativePhase`。
+- H2 轨迹：真实 reasoning 条目的原生文本为空。空文本仍发送 `item.complete`，因此 `reduceTurn` 可以关闭 live 条目，界面只隐藏空步骤。
+- 原生轮次编号只作为 `nativeTurnId` 绑定属性，服务端生成的 ULID 是唯一的 `turnId`。迟到的 `turn/diff/updated` 和条目收尾由 `TurnTracker` 在 10 秒窗口内归属上一轮。
+- Codex `turn/diff/updated` 表示累计 diff，翻译为 `turn.diff`；`reduceTurn` 取最后一个累计快照。其它来源使用逐条 `file.change` 后到覆盖。
+- 三个翻译器均使用原生 id 或通道加帧号生成 itemKey；不读取时钟、不使用随机数。delta 通知登记在各自导出的 `DELTA_FRAMES` 中。
+- DSH 真实采集：本机 Provider 注册表只有 Codex Responses 和 Claude Messages，没有 DSH Provider/Key。临时 DSH 实例无法在不读取用户 DSH 配置的前提下连接真实模型，因此按 SPEC-M9 3.3 的降级规则只记录 `notTriggered`，未连接 3080。

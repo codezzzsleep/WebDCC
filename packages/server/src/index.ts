@@ -4,3 +4,4 @@ export const PACKAGE = '@webdcc/server';
 
 export { assertTestIsolation, isolatedDirs, isolatedEnv, ISOLATED_KEYS, realUserHome } from './test-isolation.js';
 export type { IsolatedDirs } from './test-isolation.js';
+export { TurnTracker } from './turn-tracker.js';

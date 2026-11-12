@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "agent": "dsh",
+  "scenario": "S07",
+  "model": null,
+  "prompt": "这个任务分三步做，先给出计划再执行：1) 新建 a.txt 写入 1；2) 新建 b.txt 写入 2；3) 把两个数相加写入 sum.txt。",
+  "recordedAt": "2026-11-12T00:16:22.110Z",
+  "notTriggered": [
+    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S07 --out /tmp/wdcc-trace-mwcss3c4-1125698/S07"
+  ]
+}

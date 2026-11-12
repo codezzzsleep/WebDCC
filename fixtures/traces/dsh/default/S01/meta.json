@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "agent": "dsh",
+  "scenario": "S01",
+  "model": null,
+  "prompt": "用一句话解释什么是幂等。不要使用任何工具。",
+  "recordedAt": "2026-11-12T00:16:19.448Z",
+  "notTriggered": [
+    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S01 --out /tmp/wdcc-trace-mwcss3c4-1125698/S01"
+  ]
+}

@@ -6,6 +6,8 @@
 >
 > **v2.1 变更**（按 M0 核实结果修订，证据见 `docs/protocol-notes.md`）：重写 5.4 DSH 接口；5.2、5.3 写入 Codex、Claude Code 的实测结论；6.1、6.2 增加 `nativeSeq` 与内部事件规则，明确 seq 由我方自己连续编号；6.3 映射表按实测事件名重写；9.6 访问模式按三个 Agent 的原生枚举重写；3.2、3.3、10.3 去掉已证实不需要的备选方案；4.1、12.3 按实际锁定版本和硬件限制更新；13 按已实现的假模型服务更新；M3、M5 增加开工前置步骤；15、16、18 相应更新。
 
+> **M9 覆盖说明**：`docs/specs/SPEC-M9.md` 覆盖本文中关于轮次归属、最终回答、进行中条目、改动汇总、轨迹回放和验收构建产物的冲突内容。统一实现位于 `packages/protocol/src/turn.ts`，界面只消费 `TurnView`。
+
 ---
 
 ## 0. 给执行者的说明
@@ -487,7 +489,7 @@ export type EventKind =
 - 进行中的条目按 `itemKey` 在内存里维护快照。订阅时先补发 `seq > afterSeq` 的已存事件，再发所有进行中条目的快照，之后接续增量。
 - 客户端收到 `event` 时，若本地有同 `itemKey` 的进行中条目，用它替换。
 - `command` 输出只在事件里保留末尾 200 行（`outputTail`），全文存 File Store，用 `outputFileId` 引用；`file.change` 的 diff 一律存 File Store。
-- `assistant.message.phase`：一轮里最后一条助手消息标为 `final`，其余为 `interim`（用于第 9.4 节的折叠显示）。原生协议有阶段信息时照搬（例如 Codex `agentMessage.phase`），没有时在 `turn.completed` 到达后把该轮最后一条标为 `final`。
+- `assistant.message.phase`：历史字段，仅为兼容旧事件保留。新事件把 Codex 原生值放在 `nativePhase`，最终回答由 M9 的 `resolveAnswer` 在轮次终止时一次确定，界面读取 `TurnView.answer`。
 
 ### 6.3 映射表
 

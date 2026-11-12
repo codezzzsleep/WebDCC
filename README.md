@@ -97,6 +97,17 @@ M8 真实 Agent 验收：
 pnpm accept:m8
 ```
 
+M9 轨迹与统一轮次验收：
+
+```bash
+pnpm trace:record --agent codex --scenario S01
+pnpm trace:redact <trace-dir>
+pnpm trace:scan
+pnpm accept:m9 --skip-e2e
+```
+
+轨迹录制只由人显式运行；`TurnView`、`TraceSink` 和翻译器回放说明见 [docs/specs/SPEC-M9.md](docs/specs/SPEC-M9.md)。验收构建输出到临时目录，不覆盖仓库的 `dist`。
+
 验收规则和当前进度见 [docs/specs/SPEC-M8.md](docs/specs/SPEC-M8.md)、[docs/progress.md](docs/progress.md) 和 [docs/acceptance/M8/README.md](docs/acceptance/M8/README.md)。
 
 ## 界面说明

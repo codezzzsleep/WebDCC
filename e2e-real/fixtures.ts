@@ -93,9 +93,10 @@ export async function spawnServer(overrides: {
     WDCC_TEST_HOOKS: overrides.testHooks === false ? '0' : '1',
     DEEPSEEK_BASE_URL: run.mocks.anthDsh,
     NO_COLOR: '1',
+    ...(process.env['WDCC_WEB_DIST'] === undefined ? {} : { WDCC_WEB_DIST: process.env['WDCC_WEB_DIST'] }),
     ...(overrides.env ?? {}),
   };
-  const child = spawn(process.execPath, [join(REPO_ROOT, 'packages/server/dist/main.js')], {
+  const child = spawn(process.execPath, [process.env['WDCC_SERVER_ENTRY'] ?? join(REPO_ROOT, 'packages/server/dist/main.js')], {
     cwd: REPO_ROOT,
     env,
     stdio: 'ignore',
@@ -180,20 +181,16 @@ export const test = base.extend<AppFixtures>({
       const text = message.text();
       if (text.includes('sk-wdcc-test-')) secrets.push(`console: ${text.slice(0, 120)}`);
     });
-    page.on('response', async (response) => {
+    page.on('response', (response) => {
       if (response.status() >= 500) errors.push(`http ${response.status()}: ${response.url()}`);
-      const type = response.headers()['content-type'] ?? '';
-      const length = Number(response.headers()['content-length'] ?? '0');
-      // 大响应不读正文：只检查小响应里有没有测试 Key（避免把内存吃满）
-      if ((type.includes('json') || type.includes('text')) && length < 2_000_000) {
-        const body = await response.text().catch(() => '');
-        if (body.includes('sk-wdcc-test-')) secrets.push(`response: ${response.url()}`);
-      }
     });
 
     const mockResponses = mockApi(run.mocks.responses);
     const mockClaude = mockApi(run.mocks.anthClaude);
     const mockDsh = mockApi(run.mocks.anthDsh);
+    // 每个用例独立检查自己的上游请求。Codex 请求包含完整上下文，若跨用例
+    // 保留会让 mock 进程和 Playwright 主进程的内存线性增长。
+    await Promise.all([mockResponses.reset(), mockClaude.reset(), mockDsh.reset()]);
 
     const login = async (): Promise<void> => {
       await page.goto(`${run.baseURL}/?token=${run.token}`);

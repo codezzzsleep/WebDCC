@@ -79,6 +79,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
       ...(accessMode === undefined ? {} : { accessMode }),
     });
     if (sessionId === '') throw new Error('服务端没有返回会话 id');
+    store.setDrawer(false);
     store.sendMessage(sessionId, text, images);
     await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
   };

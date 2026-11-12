@@ -1972,6 +1972,16 @@ button.step-line:hover {
     background: var(--bg-mask);
     z-index: 85;
   }
+  /* The new-session chooser remains interactive if a mobile drawer was
+     opened before choosing an Agent (the chooser itself is the navigation
+     surface on this route). */
+  .app-shell.new-page.drawer-open .sidebar {
+    transform: translateX(-100%);
+    pointer-events: none;
+  }
+  .app-shell.new-page.drawer-open .drawer-backdrop {
+    display: none;
+  }
   .drawer-toggle {
     display: inline-flex;
   }

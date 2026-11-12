@@ -40,6 +40,7 @@ interface EventRow {
   data: string;
   native: string | null;
   at: string;
+  late: number;
 }
 
 export interface ProviderRecord {
@@ -116,6 +117,7 @@ export interface AppendEventInput {
   data: EventData[EventKind];
   native?: unknown;
   nativeSeq?: number;
+  late?: boolean;
 }
 
 export interface CreateSessionInput {
@@ -159,6 +161,7 @@ function toEvent(row: EventRow): StoredEvent {
     data: JSON.parse(row.data) as EventData[EventKind],
     ...(row.native === null ? {} : { native: JSON.parse(row.native) as unknown }),
     ...(row.native_seq === null ? {} : { nativeSeq: row.native_seq }),
+    ...(row.late === 1 ? { late: true } : {}),
   };
 }
 
@@ -382,8 +385,8 @@ export class Store {
       const seq = current.last_seq + 1;
       this.db
         .prepare(
-          `INSERT INTO events (session_id, seq, turn_id, item_key, kind, native_seq, data, native, at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO events (session_id, seq, turn_id, item_key, kind, native_seq, data, native, at, late)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           event.sessionId,
@@ -395,6 +398,7 @@ export class Store {
           JSON.stringify(event.data),
           event.native === undefined ? null : JSON.stringify(event.native),
           at,
+          event.late === true ? 1 : 0,
         );
       this.db.prepare('UPDATE sessions SET last_seq = ?, updated_at = ? WHERE id = ?').run(seq, at, event.sessionId);
       return {
@@ -407,6 +411,7 @@ export class Store {
         data: event.data,
         ...(event.native === undefined ? {} : { native: event.native }),
         ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
+        ...(event.late === true ? { late: true } : {}),
       };
     });
     return tx(input);

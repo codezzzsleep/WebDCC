@@ -13,8 +13,9 @@ import type {
   ModelOption,
   ProbeResult,
   UserInput,
+  TraceSink,
 } from '@webdcc/protocol';
-import { buildFileChanges, isValidEventData, ulid } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame, ulid } from '@webdcc/protocol';
 import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
@@ -28,6 +29,7 @@ export interface DshAdapterOptions {
   mode?: 'attach' | 'spawn';
   attachUrl?: string;
   attachCookie?: string;
+  traceSink?: TraceSink;
 }
 
 /** 扫描 /proc，找同一 DSH_HOME 上已在运行的 dsh 进程（spawn 模式的冲突检查） */
@@ -136,6 +138,9 @@ interface PendingInteraction {
 interface SessionRuntime {
   nativeId: string;
   workspaceId: string;
+  model?: string;
+  modelProvider?: string;
+  reasoningEffort?: string;
   followStream: string | null;
   lastSeq: number;
   turnStartedAt: number;
@@ -149,6 +154,32 @@ interface SessionRuntime {
   reasoningText: string;
   streamedAssistant: boolean;
   streamedReasoning: boolean;
+  frameSeq: number;
+}
+
+interface DshCatalogModel {
+  id?: string;
+  name?: string;
+}
+
+interface DshCatalogGroup {
+  id?: string;
+  models?: DshCatalogModel[];
+}
+
+interface DshModelCatalog {
+  default?: { provider?: string; model?: string };
+  models?: DshCatalogModel[];
+  groups?: DshCatalogGroup[];
+}
+
+/** Return the provider required by DSH's session/selectModel RPC. */
+export function providerForModel(catalog: DshModelCatalog, model: string): string | undefined {
+  for (const group of catalog.groups ?? []) {
+    if (typeof group.id === 'string' && (group.models ?? []).some((candidate) => candidate.id === model)) return group.id;
+  }
+  if (catalog.default?.model === model && typeof catalog.default.provider === 'string') return catalog.default.provider;
+  return undefined;
 }
 
 export class DshAdapter implements AgentAdapter {
@@ -160,6 +191,7 @@ export class DshAdapter implements AgentAdapter {
   private clientId = '';
   private booting: Promise<void> | null = null;
   private options: DshAdapterOptions;
+  private traceSeq = 0;
 
   constructor(options: DshAdapterOptions = {}) {
     this.options = options;
@@ -205,10 +237,7 @@ export class DshAdapter implements AgentAdapter {
     try {
       const client = await this.ensureSidecar();
       // 形状：{ default, routableProviders, groups: [{ id, name, models: [{ id, name }] }] }
-      const catalog = await client.rpc<{
-        models?: { id?: string; name?: string }[];
-        groups?: { id?: string; models?: { id?: string; name?: string }[] }[];
-      }>('session/modelCatalog', {});
+      const catalog = await this.modelCatalog(client);
       const flat = catalog.models ?? (catalog.groups ?? []).flatMap((group) => group.models ?? []);
       return flat
         .filter((model) => typeof model.id === 'string')
@@ -216,6 +245,26 @@ export class DshAdapter implements AgentAdapter {
     } catch {
       return [];
     }
+  }
+
+  private async modelCatalog(client: DshHostClient): Promise<DshModelCatalog> {
+    return this.call<DshModelCatalog>(client, 'session/modelCatalog', {});
+  }
+
+  private async selectModel(client: DshHostClient, runtime: SessionRuntime, model: string, reasoningEffort?: string): Promise<void> {
+    const catalog = await this.modelCatalog(client);
+    const provider = providerForModel(catalog, model);
+    if (provider === undefined) throw new Error(`dsh: 模型 ${model} 不在当前 Provider 目录中`);
+    const request = {
+      sessionId: runtime.nativeId,
+      provider,
+      model,
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+    };
+    await this.call(client, 'session/selectModel', { request });
+    runtime.model = model;
+    runtime.modelProvider = provider;
+    if (reasoningEffort !== undefined) runtime.reasoningEffort = reasoningEffort;
   }
 
   accessModes(): { id: string; label: string }[] {
@@ -307,6 +356,7 @@ export class DshAdapter implements AgentAdapter {
   /** 所有 RPC 都经过白名单检查 */
   private async call<T>(client: DshHostClient, endpoint: string, args: Record<string, unknown> = {}): Promise<T> {
     if (!isAllowedEndpoint(endpoint)) throw new Error(`dsh: 端点不在白名单内：${endpoint}`);
+    traceFrame(this.options.traceSink, { i: ++this.traceSeq, t: 0, dir: 'out', ch: `rpc:${endpoint}`, frame: { endpoint, args } });
     return client.rpc<T>(endpoint, args);
   }
 
@@ -321,6 +371,8 @@ export class DshAdapter implements AgentAdapter {
     const runtime: SessionRuntime = {
       nativeId: created.sessionId,
       workspaceId: workspace.workspace.workspaceId,
+      ...(opts.model === undefined ? {} : { model: opts.model }),
+      ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
       followStream: null,
       lastSeq: 0,
       turnStartedAt: 0,
@@ -333,9 +385,11 @@ export class DshAdapter implements AgentAdapter {
       reasoningText: '',
       streamedAssistant: false,
       streamedReasoning: false,
+      frameSeq: 0,
     };
-    this.sessions.set(opts.sessionId, runtime);
     await this.permission(client, created.sessionId, opts.accessMode);
+    if (opts.model !== undefined && opts.model !== '') await this.selectModel(client, runtime, opts.model, opts.reasoningEffort);
+    this.sessions.set(opts.sessionId, runtime);
     this.openFollow(opts.sessionId, runtime);
     return { nativeId: created.sessionId };
   }
@@ -348,6 +402,8 @@ export class DshAdapter implements AgentAdapter {
     const runtime: SessionRuntime = {
       nativeId: opts.nativeId,
       workspaceId: workspace.workspace.workspaceId,
+      ...(opts.model === undefined ? {} : { model: opts.model }),
+      ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
       followStream: null,
       lastSeq: 0,
       turnStartedAt: 0,
@@ -360,6 +416,7 @@ export class DshAdapter implements AgentAdapter {
       reasoningText: '',
       streamedAssistant: false,
       streamedReasoning: false,
+      frameSeq: 0,
     };
     this.sessions.set(opts.sessionId, runtime);
     this.openFollow(opts.sessionId, runtime);
@@ -378,21 +435,20 @@ export class DshAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
+    traceFrame(this.options.traceSink, { i: ++this.traceSeq, t: 0, dir: 'out', ch: 'events-result', frame: input });
     // 第一行是命令时走 commands/execute，不走 session/prompt（F8 / SL-02）
     const firstLine = input.text.split(/\r?\n/)[0] ?? '';
     if (firstLine.startsWith('/') && isAllowedCommandLine(firstLine.trim(), input.text)) {
       await this.call(client, 'commands/execute', { agentId: runtime.nativeId, line: firstLine.trim(), submittedAttachments: [] });
       this.emit(sessionId, {
         type: 'item.complete',
-        itemKey: `command-${Date.now().toString(36)}`,
+        itemKey: `command-${++runtime.frameSeq}`,
         kind: 'internal',
         data: { nativeType: 'commands/execute', line: firstLine.trim() } as unknown as EventData[EventKind],
       });
       this.emit(sessionId, {
-        type: 'item.complete',
-        itemKey: `turn-${Date.now().toString(36)}`,
-        kind: 'turn.completed',
-        data: { status: 'completed', durationMs: 0 },
+        type: 'turn.end',
+        status: 'completed',
       });
       return;
     }
@@ -408,7 +464,19 @@ export class DshAdapter implements AgentAdapter {
   async setModel(sessionId: string, model: string): Promise<void> {
     const runtime = this.require(sessionId);
     const client = await this.ensureSidecar();
-    await this.call(client, 'session/selectModel', { request: { sessionId: runtime.nativeId, model } }).catch(() => undefined);
+    await this.selectModel(client, runtime, model);
+  }
+
+  async setReasoningEffort(sessionId: string, effort: string): Promise<void> {
+    const runtime = this.require(sessionId);
+    const client = await this.ensureSidecar();
+    let model = runtime.model;
+    if (model === undefined || model === '') {
+      const catalog = await this.modelCatalog(client);
+      model = catalog.default?.model;
+    }
+    if (model === undefined || model === '') throw new Error('dsh: 当前会话没有可切换思考强度的模型');
+    await this.selectModel(client, runtime, model, effort);
   }
 
   async interrupt(sessionId: string): Promise<void> {
@@ -508,6 +576,9 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private onEventFrame(sessionId: string, frame: StreamFrame): void {
+    const frameValue = this.frameValue(frame);
+    const traceIndex = Number(frameValue?.['seq'] ?? 0) || ++this.traceSeq;
+    traceFrame(this.options.traceSink, { i: traceIndex, t: 0, dir: 'in', ch: 'mux:$events', frame });
     const value = this.frameValue(frame);
     if (value === undefined) return;
 
@@ -537,6 +608,11 @@ export class DshAdapter implements AgentAdapter {
     this.onDshEvent(sessionId, runtime, type, data, seq, event);
   }
 
+  private nativeTurnId(data: Record<string, unknown>): string | undefined {
+    const value = data['turnId'] ?? data['turn_id'];
+    return typeof value === 'string' ? value : undefined;
+  }
+
   private onDshEvent(
     sessionId: string,
     runtime: SessionRuntime,
@@ -555,10 +631,11 @@ export class DshAdapter implements AgentAdapter {
           data: { nativeType: type },
           native: fallbackNative ?? { type, data },
           nativeSeq,
+          nativeTurnId: this.nativeTurnId(data),
         });
         return;
       }
-      this.emit(sessionId, { type: 'item.complete', itemKey, kind, data: eventData, nativeSeq, native });
+        this.emit(sessionId, { type: 'item.complete', itemKey, kind, data: eventData, nativeSeq, native, nativeTurnId: this.nativeTurnId(data) });
     };
 
     switch (type) {
@@ -569,13 +646,9 @@ export class DshAdapter implements AgentAdapter {
         runtime.reasoningText = '';
         runtime.streamedAssistant = false;
         runtime.streamedReasoning = false;
-        this.emit(sessionId, { type: 'status', status: 'running' });
         this.emit(sessionId, {
-          type: 'item.complete',
-          itemKey: `turn-start-${nativeSeq}`,
-          kind: 'turn.started',
-          data: {},
-          nativeSeq,
+          type: 'turn.start',
+          nativeTurnId: this.nativeTurnId(data),
           native,
         });
         return;
@@ -587,8 +660,7 @@ export class DshAdapter implements AgentAdapter {
         const reason = (data['reason'] ?? {}) as { kind?: string };
         const interrupted = reason.kind === 'interrupted' || reason.kind === 'cancelled' || reason.kind === 'aborted';
         const status = interrupted ? 'interrupted' : reason.kind === 'failed' || reason.kind === 'error' ? 'failed' : 'completed';
-        complete(`turn-end-${nativeSeq}`, 'turn.completed', { status, durationMs: Date.now() - runtime.turnStartedAt });
-        this.emit(sessionId, { type: 'status', status: 'idle' });
+        this.emit(sessionId, { type: 'turn.end', nativeTurnId: this.nativeTurnId(data), status, native });
         return;
       }
       case 'assistant/message': {
@@ -604,7 +676,7 @@ export class DshAdapter implements AgentAdapter {
         if (runtime.assistantKey !== '') {
           this.finishLiveAssistant(sessionId, runtime, text === '' ? undefined : text);
         } else if (text !== '' && !runtime.streamedAssistant) {
-          complete(`msg-${nativeSeq}`, 'assistant.message', { text, phase: 'final' });
+          complete(`msg-${nativeSeq}`, 'assistant.message', { text });
         }
         return;
       }
@@ -628,7 +700,7 @@ export class DshAdapter implements AgentAdapter {
               : { name, input, status: 'running' };
         runtime.toolCalls.set(callId, { itemKey: `tool-${callId}`, kind, data: eventData, name, input });
         runtime.toolInputs.set(callId, input);
-        this.emit(sessionId, { type: 'item.start', itemKey: `tool-${callId}`, kind, data: eventData, native });
+        this.emit(sessionId, { type: 'item.start', itemKey: `tool-${callId}`, kind, data: eventData, native, nativeTurnId: this.nativeTurnId(data) });
         return;
       }
       case 'tool/result': {
@@ -650,9 +722,10 @@ export class DshAdapter implements AgentAdapter {
             data: { ...(item.data as EventData['command']), status: isError ? 'failed' : 'completed', outputTail: output.slice(-4000) },
             nativeSeq,
             native,
+            nativeTurnId: this.nativeTurnId(data),
           });
         } else if (item.kind === 'file.read') {
-          this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'], nativeSeq, native });
+          this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'], nativeSeq, native, nativeTurnId: this.nativeTurnId(data) });
         } else if (item.kind === 'file.change') {
           // C2：DSH 的 write/edit 结果不带 diff，用入参算 hunk（第 2/3 级）
           this.emit(sessionId, {
@@ -662,6 +735,7 @@ export class DshAdapter implements AgentAdapter {
             data: { changes: buildFileChanges(item.name, item.input), status: isError ? 'failed' : 'completed' },
             nativeSeq,
             native,
+            nativeTurnId: this.nativeTurnId(data),
           });
         } else {
           this.emit(sessionId, {
@@ -671,6 +745,7 @@ export class DshAdapter implements AgentAdapter {
             data: { ...(item.data as EventData['tool.call']), status: isError ? 'failed' : 'completed', output },
             nativeSeq,
             native,
+            nativeTurnId: this.nativeTurnId(data),
           });
         }
         return;
@@ -735,13 +810,13 @@ export class DshAdapter implements AgentAdapter {
       if (blockType === 'reasoning') {
         this.finishLiveAssistant(sessionId, runtime);
         this.finishLiveReasoning(sessionId, runtime);
-        runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
+        runtime.reasoningKey = `reasoning-live-${++runtime.frameSeq}`;
         runtime.reasoningText = '';
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
       } else {
         this.finishLiveReasoning(sessionId, runtime);
         this.finishLiveAssistant(sessionId, runtime);
-        runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
+        runtime.assistantKey = `msg-live-${++runtime.frameSeq}`;
         runtime.assistantText = '';
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
       }
@@ -755,7 +830,7 @@ export class DshAdapter implements AgentAdapter {
     }
     if (kind === 'text-delta') {
       if (runtime.assistantKey === '') {
-        runtime.assistantKey = `msg-live-${Date.now().toString(36)}`;
+        runtime.assistantKey = `msg-live-${++runtime.frameSeq}`;
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.assistantKey, kind: 'assistant.message', data: { text: '' } });
       }
       const text = String(chunk['text'] ?? '');
@@ -765,7 +840,7 @@ export class DshAdapter implements AgentAdapter {
     }
     if (kind === 'reasoning-delta') {
       if (runtime.reasoningKey === '') {
-        runtime.reasoningKey = `reasoning-live-${Date.now().toString(36)}`;
+        runtime.reasoningKey = `reasoning-live-${++runtime.frameSeq}`;
         this.emit(sessionId, { type: 'item.start', itemKey: runtime.reasoningKey, kind: 'reasoning', data: { text: '' } });
       }
       const text = String(chunk['text'] ?? '');
@@ -777,7 +852,7 @@ export class DshAdapter implements AgentAdapter {
       const usage = (chunk['usage'] ?? {}) as { inputTokens?: number; outputTokens?: number };
       this.emit(sessionId, {
         type: 'item.complete',
-        itemKey: `usage-${Date.now().toString(36)}`,
+        itemKey: `usage-${++runtime.frameSeq}`,
         kind: 'usage',
         data: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
       });
@@ -790,10 +865,8 @@ export class DshAdapter implements AgentAdapter {
     const itemKey = runtime.assistantKey;
     runtime.assistantKey = '';
     runtime.assistantText = '';
-    if (text !== '') {
-      runtime.streamedAssistant = true;
-      this.emit(sessionId, { type: 'item.complete', itemKey, kind: 'assistant.message', data: { text, phase: 'final' } });
-    }
+    runtime.streamedAssistant = true;
+    this.emit(sessionId, { type: 'item.complete', itemKey, kind: 'assistant.message', data: { text } });
   }
 
   private finishLiveReasoning(sessionId: string, runtime: SessionRuntime, finalText?: string): void {
@@ -802,10 +875,8 @@ export class DshAdapter implements AgentAdapter {
     const itemKey = runtime.reasoningKey;
     runtime.reasoningKey = '';
     runtime.reasoningText = '';
-    if (text !== '') {
-      runtime.streamedReasoning = true;
-      this.emit(sessionId, { type: 'item.complete', itemKey, kind: 'reasoning', data: { text, summary: true } });
-    }
+    runtime.streamedReasoning = true;
+    this.emit(sessionId, { type: 'item.complete', itemKey, kind: 'reasoning', data: { text, summary: true } });
   }
 
   private onWaterfall(sessionId: string, value: Record<string, unknown>): void {
@@ -859,7 +930,6 @@ export class DshAdapter implements AgentAdapter {
           ],
         },
       });
-      this.emit(target, { type: 'status', status: 'waiting' });
       return;
     }
 
@@ -884,7 +954,6 @@ export class DshAdapter implements AgentAdapter {
           allowsFreeText: true,
         },
       });
-      this.emit(target, { type: 'status', status: 'waiting' });
     }
   }
 }

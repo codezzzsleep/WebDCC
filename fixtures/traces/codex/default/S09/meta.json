@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "codex",
+  "scenario": "S09",
+  "model": "gpt-6.1-sol",
+  "prompt": "运行命令 false-command-wdcc（它不存在），把报错原样告诉我，不要重试。",
+  "recordedAt": "2026-11-11T23:30:16.692Z",
+  "notTriggered": []
+}

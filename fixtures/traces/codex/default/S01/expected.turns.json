@@ -1,0 +1,87 @@
+[
+  {
+    "turnId": "trace:codex:S01:turn:2",
+    "state": "completed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:13.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:codex:S01",
+        "seq": 15,
+        "turnId": "trace:codex:S01:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-msg_0ee4018d7cec5d9a016af4f9f5336887d0811c3c3e0ea8a3e7",
+        "data": {
+          "text": "幂等是指一个操作执行一次或多次，产生的结果都相同。",
+          "phase": "final",
+          "nativePhase": "final_answer"
+        },
+        "at": "1970-01-01T00:00:15.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "msg_0ee4018d7cec5d9a016af4f9f5336887d0811c3c3e0ea8a3e7",
+          "text": "幂等是指一个操作执行一次或多次，产生的结果都相同。",
+          "phase": "final_answer",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null,
+          "startedAtMs": 1794439669892,
+          "completedAtMs": 1794439669893
+        }
+      },
+      {
+        "sessionId": "trace:codex:S01",
+        "seq": 16,
+        "turnId": "trace:codex:S01:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-36",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:16.000Z",
+        "native": {
+          "threadId": "01a1ccf0-5e06-72f1-af4a-5ff5d3f7b029",
+          "turnId": "01a1ccf0-5e22-7683-9f33-e52ae0f2f7d8",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 15029,
+              "inputTokens": 15005,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 24,
+              "reasoningOutputTokens": 0
+            },
+            "last": {
+              "totalTokens": 15029,
+              "inputTokens": 15005,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 24,
+              "reasoningOutputTokens": 0
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "item-msg_0ee4018d7cec5d9a016af4f9f5336887d0811c3c3e0ea8a3e7",
+        "text": "幂等是指一个操作执行一次或多次，产生的结果都相同。"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 0,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

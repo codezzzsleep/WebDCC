@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S01",
+  "model": "claude-sonnet-5-5",
+  "prompt": "用一句话解释什么是幂等。不要使用任何工具。",
+  "recordedAt": "2026-11-11T23:33:29.366Z",
+  "notTriggered": []
+}

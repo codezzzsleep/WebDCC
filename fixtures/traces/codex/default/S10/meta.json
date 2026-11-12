@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "codex",
+  "scenario": "S10",
+  "model": "gpt-6.1-sol",
+  "prompt": "读取 README.md 的第一行。",
+  "recordedAt": "2026-11-11T23:30:35.472Z",
+  "notTriggered": []
+}

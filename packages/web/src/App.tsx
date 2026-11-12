@@ -39,7 +39,7 @@ function RootLayout(): React.ReactElement {
   const [currentSessionId, dockSessionId] = (match?.[1] ?? '').split('+');
 
   return (
-    <div className={`app-shell ${store.drawerOpen ? 'drawer-open' : ''}`}>
+    <div className={`app-shell ${store.drawerOpen ? 'drawer-open' : ''} ${pathname === '/new' ? 'new-page' : ''}`}>
       <Sidebar
         currentSessionId={currentSessionId === '' || currentSessionId === undefined ? null : currentSessionId}
         dockSessionId={dockSessionId ?? null}
@@ -50,7 +50,7 @@ function RootLayout(): React.ReactElement {
         onNavigate={() => store.setDrawer(false)}
         settingsActive={pathname.startsWith('/settings')}
       />
-      <div className="drawer-backdrop" data-testid="drawer-backdrop" onClick={() => store.setDrawer(false)} />
+      {store.drawerOpen ? <div className="drawer-backdrop" data-testid="drawer-backdrop" onClick={() => store.setDrawer(false)} /> : null}
       <Outlet />
       {addOpen ? <AddWorkspaceDialog onClose={() => setAddOpen(false)} /> : null}
       <ConnectionBar />
@@ -371,7 +371,9 @@ const sessionRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([indexRoute, newRoute, providersRoute, sessionRoute]);
-export const router = createRouter({ routeTree });
+// 会话停靠区用 `main+side` 表示两个会话。`+` 是合法的路径分隔语义，
+// 不能被默认的 encodeURIComponent 编成 `%2B`，否则旧链接和验收地址都会改变。
+export const router = createRouter({ routeTree, pathParamsAllowedCharacters: ['+'] });
 
 declare module '@tanstack/react-router' {
   interface Register {

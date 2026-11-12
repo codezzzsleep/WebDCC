@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "agent": "dsh",
+  "scenario": "S03",
+  "model": null,
+  "prompt": "新建 notes.txt，内容两行：第一行 alpha，第二行 beta。然后把 README.md 的标题改成 \"Sample Repo (edited)\"。做完后告诉我改了什么。",
+  "recordedAt": "2026-11-12T00:16:20.335Z",
+  "notTriggered": [
+    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S03 --out /tmp/wdcc-trace-mwcss3c4-1125698/S03"
+  ]
+}

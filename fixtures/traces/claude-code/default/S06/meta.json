@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S06",
+  "model": "claude-sonnet-5-5",
+  "prompt": "运行 sleep 60，然后告诉我完成了。",
+  "recordedAt": "2026-11-11T23:34:46.582Z",
+  "notTriggered": []
+}

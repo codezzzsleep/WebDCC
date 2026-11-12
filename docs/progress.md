@@ -144,4 +144,15 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 - **界面方向待用户确认**：当前是自绘三栏 UI，没有复用 DSH 原版视觉；F15（对照 `docs/reference/dsh/` 打磨）未做。review 材料见 `docs/review/m8-current/README.md`。
 - 部署（第 9 节）与真实模型冒烟未做；`main` 分支保护未开。
 
+## M9（2026-11-12，进行中）
+
+- PR-0：已从线上数据库只读导出并脱敏 Codex 原生 assistant 消息；H1 按 `final_answer` / `commentary` / `partial_answer` 映射，H2 保留空 reasoning 的完成事件。
+- PR-1 基础：新增 `WDCC_WEB_DIST`、`/api/meta` 的 `commit`/`builtAt`，验收构建输出到临时目录；systemd 示例切换 `/opt/webdcc/current`，提供 `pnpm release`。
+- PR-2/3：已完成真实 Codex 与 Claude 轨迹采集（各 S01–S11，共 22 条），模型层和原生层均已脱敏入库；新增 `TraceSink`、模型透明代理、轨迹脱敏扫描入口、Codex/Claude/DSH 纯翻译器和 `ReplayAdapter`。
+- PR-4 基础：新增 `TurnTracker`、`resolveAnswer`、`reduceTurn`、`turn.diff` 事件和 adapter 生命周期事件；现有 UI 已由 `TurnView` 驱动并保留旧事件兼容。
+- DSH：本机 Provider 注册表没有 DSH 可用端点/Key；按 SPEC 的降级规则，11 个场景已生成 `notTriggered` 记录，未连接 3080，也未写入真实配置。
+- L1：22 条轨迹、1345 帧、不变量 1345/1345；`trace:scan` 命中 0。
+- 快速 UI 回放：18/18 通过。M8 棘轮在增大 Node 堆上限后实际跑到第 40 项，报告为 32 项通过、7 项既有回归，其余因长套件中止；回归证据包括 AG-codex-08/11/12、AG-claude-12、DOCK-01/03、MOB-01/02。
+- 尚未发布线上：`pnpm release` 已实现但本轮没有执行 systemd 重启，避免在未确认发布 commit 时改动线上服务。
+
 实时统计：`docs/acceptance/M8/report.json`（每次 `pnpm accept:m8 --ratchet` 覆盖）。

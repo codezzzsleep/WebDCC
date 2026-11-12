@@ -36,6 +36,8 @@ export interface RouteDeps {
   hub: LiveHub;
   dispatcher: CommandDispatcher;
   version: string;
+  commit?: string;
+  builtAt?: string;
 }
 
 const MAX_TEXT_READ = 1024 * 1024;
@@ -112,7 +114,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         models: await adapter.listModels(null).catch(() => []),
       };
     }
-    return { version: deps.version, agents, runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false };
+    return {
+      version: deps.version,
+      commit: deps.commit ?? process.env['WDCC_COMMIT'] ?? 'unknown',
+      builtAt: deps.builtAt ?? process.env['WDCC_BUILT_AT'] ?? new Date(0).toISOString(),
+      agents,
+      runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
+    };
   });
 
   // ---------- workspaces ----------

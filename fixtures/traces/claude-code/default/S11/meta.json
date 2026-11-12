@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S11",
+  "model": "claude-sonnet-5-5",
+  "prompt": "运行 seq 1 3000，然后只告诉我最后一个数字。",
+  "recordedAt": "2026-11-11T23:36:04.869Z",
+  "notTriggered": []
+}

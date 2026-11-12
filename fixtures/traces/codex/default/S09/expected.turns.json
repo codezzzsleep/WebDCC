@@ -1,0 +1,201 @@
+[
+  {
+    "turnId": "trace:codex:S09:turn:2",
+    "state": "completed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:13.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:codex:S09",
+        "seq": 15,
+        "turnId": "trace:codex:S09:turn:2",
+        "kind": "reasoning",
+        "itemKey": "item-rs_0efbdb2f2e8a2058016af4fa85355087d0bfed553f648e2950",
+        "data": {
+          "text": ""
+        },
+        "at": "1970-01-01T00:00:15.000Z",
+        "native": {
+          "type": "reasoning",
+          "id": "rs_0efbdb2f2e8a2058016af4fa85355087d0bfed553f648e2950",
+          "summary": [],
+          "content": [],
+          "startedAtMs": 1794439814906,
+          "completedAtMs": 1794439814908
+        }
+      },
+      {
+        "sessionId": "trace:codex:S09",
+        "seq": 16,
+        "turnId": "trace:codex:S09:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-msg_0efbdb2f2e8a2058016af4fa85591487d0bd1867c5a752a447",
+        "data": {
+          "text": "我现在运行指定命令一次，并原样返回错误。",
+          "phase": "interim",
+          "nativePhase": "commentary"
+        },
+        "at": "1970-01-01T00:00:16.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "msg_0efbdb2f2e8a2058016af4fa85591487d0bd1867c5a752a447",
+          "text": "我现在运行指定命令一次，并原样返回错误。",
+          "phase": "commentary",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null,
+          "startedAtMs": 1794439814910,
+          "completedAtMs": 1794439814911
+        }
+      },
+      {
+        "sessionId": "trace:codex:S09",
+        "seq": 17,
+        "turnId": "trace:codex:S09:turn:2",
+        "kind": "command",
+        "itemKey": "item-exec-216414b4-d026-4909-9c12-c251a0ea4075",
+        "data": {
+          "command": "/bin/bash -lc false-command-wdcc",
+          "cwd": "/tmp/wdcc-real-trace-sRijKy/sample-repo",
+          "exitCode": 127,
+          "outputTail": "/bin/bash: line 1: false-command-wdcc: command not found\n",
+          "status": "failed"
+        },
+        "at": "1970-01-01T00:00:17.000Z",
+        "native": {
+          "type": "commandExecution",
+          "id": "exec-216414b4-d026-4909-9c12-c251a0ea4075",
+          "pluginId": null,
+          "scriptPath": null,
+          "command": "/bin/bash -lc false-command-wdcc",
+          "cwd": "/tmp/wdcc-real-trace-sRijKy/sample-repo",
+          "processId": "49572",
+          "source": "unifiedExecStartup",
+          "status": "failed",
+          "commandActions": [
+            {
+              "type": "unknown",
+              "command": "false-command-wdcc"
+            }
+          ],
+          "aggregatedOutput": "/bin/bash: line 1: false-command-wdcc: command not found\n",
+          "exitCode": 127,
+          "durationMs": 0,
+          "startedAtMs": 1794439814975,
+          "completedAtMs": 1794439814975
+        }
+      },
+      {
+        "sessionId": "trace:codex:S09",
+        "seq": 18,
+        "turnId": "trace:codex:S09:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-34",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:18.000Z",
+        "native": {
+          "threadId": "01a1ccf2-91de-7570-afae-94415aaa739d",
+          "turnId": "01a1ccf2-91f6-7000-836a-708a25480c0b",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 15108,
+              "inputTokens": 15009,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 99,
+              "reasoningOutputTokens": 17
+            },
+            "last": {
+              "totalTokens": 15108,
+              "inputTokens": 15009,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 99,
+              "reasoningOutputTokens": 17
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      },
+      {
+        "sessionId": "trace:codex:S09",
+        "seq": 20,
+        "turnId": "trace:codex:S09:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-msg_0efbdb2f2e8a2058016af4fa88266087d0a55f5e6870a3ddc4",
+        "data": {
+          "text": "`/bin/bash: line 1: false-command-wdcc: command not found`",
+          "phase": "final",
+          "nativePhase": "final_answer"
+        },
+        "at": "1970-01-01T00:00:20.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "msg_0efbdb2f2e8a2058016af4fa88266087d0a55f5e6870a3ddc4",
+          "text": "`/bin/bash: line 1: false-command-wdcc: command not found`",
+          "phase": "final_answer",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null,
+          "startedAtMs": 1794439816633,
+          "completedAtMs": 1794439816634
+        }
+      },
+      {
+        "sessionId": "trace:codex:S09",
+        "seq": 21,
+        "turnId": "trace:codex:S09:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-56",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:21.000Z",
+        "native": {
+          "threadId": "01a1ccf2-91de-7570-afae-94415aaa739d",
+          "turnId": "01a1ccf2-91f6-7000-836a-708a25480c0b",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 30277,
+              "inputTokens": 30156,
+              "cachedInputTokens": 26624,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 121,
+              "reasoningOutputTokens": 17
+            },
+            "last": {
+              "totalTokens": 15169,
+              "inputTokens": 15147,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 22,
+              "reasoningOutputTokens": 0
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "item-msg_0efbdb2f2e8a2058016af4fa88266087d0a55f5e6870a3ddc4",
+        "text": "`/bin/bash: line 1: false-command-wdcc: command not found`"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 1,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

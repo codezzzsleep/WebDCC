@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-11-12T00:16:00.899Z",
+  "commit": "fc800e1295b34ae935971f779045bd5171e295eb",
+  "traces": 22,
+  "invariants": {
+    "passed": 1345,
+    "total": 1345
+  },
+  "replayUi": {
+    "passed": 18,
+    "total": 18
+  },
+  "m8Ratchet": {
+    "passed": 15,
+    "total": 125
+  },
+  "buildRoot": "/tmp/wdcc-accept-mwcsltee-1117783/build"
+}

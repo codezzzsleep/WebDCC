@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS events (
   session_id TEXT NOT NULL REFERENCES sessions(id), seq INTEGER NOT NULL,
   turn_id TEXT NOT NULL, item_key TEXT NOT NULL, kind TEXT NOT NULL, native_seq INTEGER,
-  data TEXT NOT NULL, native TEXT, at TEXT NOT NULL,
+  data TEXT NOT NULL, native TEXT, at TEXT NOT NULL, late INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (session_id, seq)
 ) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS feed (
@@ -69,5 +69,7 @@ export function openDb(file: string): Db {
   if (!sessionColumns.some((column) => column.name === 'title_source')) db.exec('ALTER TABLE sessions ADD COLUMN title_source TEXT');
   // 接续会话：记录上一棒（"在另一个 Agent 中继续"）
   if (!sessionColumns.some((column) => column.name === 'parent_id')) db.exec('ALTER TABLE sessions ADD COLUMN parent_id TEXT');
+  const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
+  if (!eventColumns.some((column) => column.name === 'late')) db.exec('ALTER TABLE events ADD COLUMN late INTEGER NOT NULL DEFAULT 0');
   return db;
 }

@@ -183,6 +183,9 @@ test.describe('7.4 改动卡片与轮次', () => {
       await expect(menu).toHaveAttribute('data-model', next);
       await sendMessage(app.page, '换模型之后再跑一轮');
       await expect.poll(async () => (await app.page.getByTestId('composer').innerText()), { timeout: 120_000 }).toContain('2 轮');
+      // “2 轮”只表示服务端已接受发送；等轮次完成后再检查 mock 请求，
+      // 否则 Codex 尚未发起上游请求时会把一次正常的异步过程误判成模型错误。
+      await waitTurnDone(app.page);
       const api = agent === 'codex' ? app.mockResponses : agent === 'claude' ? app.mockClaude : app.mockDsh;
       const requests = (await api.requests()).filter((request) => request.helper !== true);
       expect(requests.length).toBeGreaterThan(0);

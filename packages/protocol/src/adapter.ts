@@ -1,5 +1,6 @@
 /** AgentAdapter 统一接口（SPEC 5.1） */
-import type { EventKind } from './events.js';
+import type { EventKind, UsageData } from './events.js';
+import type { TraceSink } from './trace.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -36,6 +37,8 @@ export interface CreateOpts {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  /** Optional side-channel recorder; it never changes Agent input/output. */
+  traceSink?: TraceSink;
 }
 
 export interface UserInput {
@@ -57,10 +60,14 @@ export interface LaunchSpec {
 }
 
 export type AdapterEvent =
-  | { type: 'item.start'; itemKey: string; kind: EventKind; data: unknown; turnId?: string; native?: unknown }
+  | { type: 'item.start'; itemKey: string; kind: EventKind; data: unknown; nativeTurnId?: string; /** @deprecated use nativeTurnId */ turnId?: string; native?: unknown }
   | { type: 'item.delta'; itemKey: string; field: 'text' | 'output'; append: string }
   | { type: 'item.update'; itemKey: string; data: unknown }
-  | { type: 'item.complete'; itemKey: string; kind: EventKind; data: unknown; turnId?: string; native?: unknown; nativeSeq?: number }
+  | { type: 'item.complete'; itemKey: string; kind: EventKind; data: unknown; nativeTurnId?: string; /** @deprecated use nativeTurnId */ turnId?: string; native?: unknown; nativeSeq?: number }
+  | { type: 'item.cancel'; itemKey: string; nativeTurnId?: string; turnId?: string; native?: unknown }
+  | { type: 'turn.start'; nativeTurnId?: string; native?: unknown }
+  | { type: 'turn.end'; nativeTurnId?: string; status: 'completed' | 'interrupted' | 'failed'; usage?: UsageData; native?: unknown }
+  /** @deprecated adapters should derive session status from turn lifecycle */
   | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error' }
   /** 原生 id 迟到（Claude Code 要等首条消息才有 session_id）：manager 收到后落库 */
   | { type: 'native-id'; nativeId: string };

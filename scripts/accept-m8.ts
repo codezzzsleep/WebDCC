@@ -4,7 +4,7 @@
  *   pnpm accept:m8 --ratchet  开发期：只要求"之前通过的用例不能变红"
  */
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ratchet = process.argv.includes('--ratchet');
@@ -207,12 +207,20 @@ run('pnpm', ['typecheck'], 'typecheck');
 run('pnpm', ['lint'], 'lint');
 run('npx', ['vitest', 'run'], 'unit tests');
 run('npx', ['playwright', 'test', 'e2e/', '--reporter=list'], 'fake-adapter e2e');
-run('pnpm', ['build'], 'build');
+const acceptBuildRoot = join(process.env['TMPDIR'] ?? '/tmp', `wdcc-accept-build-${Date.now().toString(36)}-${process.pid}`);
+const acceptWeb = join(acceptBuildRoot, 'web');
+const acceptServer = join(acceptBuildRoot, 'server', 'main.js');
+mkdirSync(acceptWeb, { recursive: true });
+try { symlinkSync(join(process.cwd(), 'node_modules'), join(acceptBuildRoot, 'node_modules'), 'dir'); } catch { /* existing */ }
+try { symlinkSync(join(process.cwd(), 'packages/server/node_modules/better-sqlite3'), join(process.cwd(), 'node_modules/better-sqlite3'), 'dir'); } catch { /* existing */ }
+run('pnpm', ['--filter', '@webdcc/web', 'build'], 'isolated web build', { ...process.env, WDCC_BUILD_DIR: acceptWeb });
+run('pnpm', ['tsx', 'scripts/build-server.ts'], 'isolated server build', { ...process.env, WDCC_SERVER_OUT: acceptServer });
+const e2eEnv = { ...process.env, WDCC_WEB_DIST: acceptWeb, WDCC_SERVER_ENTRY: acceptServer };
 
 const passes = ratchet ? 1 : 2;
 for (let pass = 1; pass <= passes; pass += 1) {
   run('npx', ['playwright', 'test', '-c', 'playwright.real.config.ts'], `real acceptance pass ${pass}/${passes}`, {
-    ...process.env,
+    ...e2eEnv,
     M8_PASS: String(pass),
   });
 }

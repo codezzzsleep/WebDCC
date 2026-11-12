@@ -143,16 +143,20 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
     WDCC_DSH_URL: `http://127.0.0.1:${external.port}`,
     WDCC_DSH_PORT: String(dshPort),
     WDCC_TEST_HOOKS: '1',
+    // 真实套件会创建很多 Agent 进程；一分钟无活动后回收，避免长套件
+    // 把每个 Codex app-server 都留到全局 teardown 才释放。
+    WDCC_IDLE_DISPOSE_MIN: '1',
     WDCC_TEST_MOCKR_KEY: `sk-wdcc-test-mockr-${runId}`,
     WDCC_TEST_MOCKR2_KEY_MISSING: '',
     DEEPSEEK_BASE_URL: anthDsh.url,
     DEEPSEEK_API_KEY: `sk-wdcc-test-dsh-${runId}`,
     NO_COLOR: '1',
+    ...(process.env['WDCC_WEB_DIST'] === undefined ? {} : { WDCC_WEB_DIST: process.env['WDCC_WEB_DIST'] }),
   };
   const { spawn } = await import('node:child_process');
   const serverLog = await import('node:fs').then((fs) => fs.openSync(join(root, 'server.log'), 'a'));
   // 用 process.execPath 与仓库根目录：换机器复跑时不依赖 cwd 与 node 的名字（SPEC-M8 0.1 Q10）
-  const child = spawn(process.execPath, [join(REPO_ROOT, 'packages/server/dist/main.js')], {
+  const child = spawn(process.execPath, [process.env['WDCC_SERVER_ENTRY'] ?? join(REPO_ROOT, 'packages/server/dist/main.js')], {
     cwd: REPO_ROOT,
     env,
     stdio: ['ignore', serverLog, serverLog],

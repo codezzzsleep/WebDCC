@@ -83,6 +83,7 @@ export function ProvidersPage(): React.ReactElement {
           <div>
             <h1>Agent 与 Provider</h1>
             <p className="lead">Provider 是模型的容器：一个 Harness 可以有多个 Provider，一个 Provider 可以有多个模型；新建对话时从对应 Harness 的 Provider 和模型中选择。</p>
+            {meta !== null ? <p className="muted" style={{ fontSize: 12 }}>版本 {meta.version} · commit {meta.commit} · 构建于 {meta.builtAt}</p> : null}
           </div>
 
           <div className="agent-status-grid">

@@ -117,6 +117,10 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   useEffect(() => {
+    if (workspaceId === '') {
+      setListing(null);
+      return;
+    }
     void api
       .fs(workspaceId, path)
       .then((result) => {

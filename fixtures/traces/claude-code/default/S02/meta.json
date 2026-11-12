@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S02",
+  "model": "claude-sonnet-5-5",
+  "prompt": "先列出当前目录的文件，再读 README.md，然后用三句话告诉我这个仓库是做什么的。",
+  "recordedAt": "2026-11-11T23:33:43.097Z",
+  "notTriggered": []
+}

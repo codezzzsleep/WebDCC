@@ -1,0 +1,23 @@
+[
+  {
+    "turnId": "trace:claude-code:S03:turn:1",
+    "state": "failed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:02.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [],
+    "live": [],
+    "answer": [],
+    "changes": [],
+    "summary": {
+      "commands": 0,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

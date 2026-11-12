@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "codex",
+  "scenario": "S01",
+  "model": "gpt-6.1-sol",
+  "prompt": "用一句话解释什么是幂等。不要使用任何工具。",
+  "recordedAt": "2026-11-11T23:27:49.948Z",
+  "notTriggered": []
+}

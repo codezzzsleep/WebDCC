@@ -1,0 +1,244 @@
+[
+  {
+    "turnId": "trace:codex:S08:turn:2",
+    "state": "completed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:13.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 15,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "reasoning",
+        "itemKey": "item-rs_051737ff2d0768ed016af4fa6f010087d0a61c014ad9b7b2da",
+        "data": {
+          "text": ""
+        },
+        "at": "1970-01-01T00:00:15.000Z",
+        "native": {
+          "type": "reasoning",
+          "id": "rs_051737ff2d0768ed016af4fa6f010087d0a61c014ad9b7b2da",
+          "summary": [],
+          "content": [],
+          "startedAtMs": 1794439792257,
+          "completedAtMs": 1794439792258
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 16,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-17",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:16.000Z",
+        "native": {
+          "threadId": "01a1ccf2-34b4-7232-ba1a-afb01c5653a4",
+          "turnId": "01a1ccf2-34d0-7543-9096-35e0cf87b73c",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 15125,
+              "inputTokens": 15029,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 96,
+              "reasoningOutputTokens": 47
+            },
+            "last": {
+              "totalTokens": 15125,
+              "inputTokens": 15029,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 96,
+              "reasoningOutputTokens": 47
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 18,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "reasoning",
+        "itemKey": "item-rs_051737ff2d0768ed016af4fa71c95087d085de9db0d3c9d363",
+        "data": {
+          "text": ""
+        },
+        "at": "1970-01-01T00:00:18.000Z",
+        "native": {
+          "type": "reasoning",
+          "id": "rs_051737ff2d0768ed016af4fa71c95087d085de9db0d3c9d363",
+          "summary": [],
+          "content": [],
+          "startedAtMs": 1794439794835,
+          "completedAtMs": 1794439794835
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 19,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-call_0ecb3d6227fd4f2aba0402830ae4cb62",
+        "data": {
+          "text": "你想用哪种语言编写 hello world？\n- Python\n- JavaScript",
+          "phase": "final",
+          "nativePhase": "final_answer"
+        },
+        "at": "1970-01-01T00:00:19.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "call_0ecb3d6227fd4f2aba0402830ae4cb62",
+          "text": "你想用哪种语言编写 hello world？\n- Python\n- JavaScript",
+          "phase": "final_answer",
+          "memoryCitation": null,
+          "delivery": "async",
+          "questions": [
+            {
+              "title": "你想用哪种语言编写 hello world？",
+              "options": [
+                "Python",
+                "JavaScript"
+              ]
+            }
+          ],
+          "startedAtMs": 1794439794840,
+          "completedAtMs": 1794439794840
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 20,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-23",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:20.000Z",
+        "native": {
+          "threadId": "01a1ccf2-34b4-7232-ba1a-afb01c5653a4",
+          "turnId": "01a1ccf2-34d0-7543-9096-35e0cf87b73c",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 30348,
+              "inputTokens": 30193,
+              "cachedInputTokens": 28160,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 155,
+              "reasoningOutputTokens": 62
+            },
+            "last": {
+              "totalTokens": 15223,
+              "inputTokens": 15164,
+              "cachedInputTokens": 14848,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 59,
+              "reasoningOutputTokens": 15
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 22,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "reasoning",
+        "itemKey": "item-rs_051737ff2d0768ed016af4fa74136487d0af8198fe330393f8",
+        "data": {
+          "text": ""
+        },
+        "at": "1970-01-01T00:00:22.000Z",
+        "native": {
+          "type": "reasoning",
+          "id": "rs_051737ff2d0768ed016af4fa74136487d0af8198fe330393f8",
+          "summary": [],
+          "content": [],
+          "startedAtMs": 1794439796529,
+          "completedAtMs": 1794439796529
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 23,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-msg_051737ff2d0768ed016af4fa74398887d080e98356850fad65",
+        "data": {
+          "text": "请选择 Python 或 JavaScript。",
+          "phase": "final",
+          "nativePhase": "final_answer"
+        },
+        "at": "1970-01-01T00:00:23.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "msg_051737ff2d0768ed016af4fa74398887d080e98356850fad65",
+          "text": "请选择 Python 或 JavaScript。",
+          "phase": "final_answer",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null,
+          "startedAtMs": 1794439796531,
+          "completedAtMs": 1794439796532
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 24,
+        "turnId": "trace:codex:S08:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-35",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:24.000Z",
+        "native": {
+          "threadId": "01a1ccf2-34b4-7232-ba1a-afb01c5653a4",
+          "turnId": "01a1ccf2-34d0-7543-9096-35e0cf87b73c",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 45610,
+              "inputTokens": 45434,
+              "cachedInputTokens": 43136,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 176,
+              "reasoningOutputTokens": 71
+            },
+            "last": {
+              "totalTokens": 15262,
+              "inputTokens": 15241,
+              "cachedInputTokens": 14976,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 21,
+              "reasoningOutputTokens": 9
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "item-msg_051737ff2d0768ed016af4fa74398887d080e98356850fad65",
+        "text": "请选择 Python 或 JavaScript。"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 0,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

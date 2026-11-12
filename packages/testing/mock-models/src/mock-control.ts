@@ -63,6 +63,10 @@ export class MockControl {
 
   record(entry: RecordedRequest): void {
     this.requests.push(entry);
+    // Keep the mock bounded if an Agent reconnects and replays history. Tests
+    // only need the most recent requests; retaining every full context body can
+    // otherwise exhaust the Playwright process during a long acceptance run.
+    while (this.requests.length > 200) this.requests.shift();
   }
 
   /** 把 {{userMessageCount}} / {{imageCount}} / {{model}} 替换成请求里的实际值 */

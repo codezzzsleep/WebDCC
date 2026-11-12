@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S03",
+  "model": "claude-sonnet-5-5",
+  "prompt": "新建 notes.txt，内容两行：第一行 alpha，第二行 beta。然后把 README.md 的标题改成 \"Sample Repo (edited)\"。做完后告诉我改了什么。",
+  "recordedAt": "2026-11-11T23:33:55.528Z",
+  "notTriggered": []
+}

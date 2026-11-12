@@ -1,0 +1,132 @@
+import type { AdapterEvent } from '@webdcc/protocol';
+
+export type TurnState = 'starting' | 'running' | 'waiting' | 'completed' | 'interrupted' | 'failed';
+
+interface TurnRecord {
+  turnId: string;
+  state: TurnState;
+  startedAt: number;
+  endedAt?: number;
+  nativeTurnId?: string;
+  open: Set<string>;
+}
+
+export interface TurnAssignment {
+  turnId: string | null;
+  late: boolean;
+}
+
+/**
+ * Owns the only event-to-turn assignment rule.  Adapters may report a native
+ * turn id, but that id is only a binding hint; the public identity is always
+ * the id allocated by SessionManager when the user sends a message.
+ */
+export class TurnTracker {
+  private readonly turns = new Map<string, TurnRecord>();
+  private readonly nativeToTurn = new Map<string, string>();
+  private readonly active = new Map<string, string>();
+  private readonly lastEnded = new Map<string, { turnId: string; at: number }>();
+
+  constructor(private readonly lateWindowMs = 10_000) {}
+
+  start(sessionId: string, turnId: string, at = Date.now()): void {
+    const record: TurnRecord = { turnId, state: 'starting', startedAt: at, open: new Set() };
+    this.turns.set(turnId, record);
+    this.active.set(sessionId, turnId);
+  }
+
+  bindNative(turnId: string, nativeTurnId: string | undefined): void {
+    if (nativeTurnId === undefined || nativeTurnId === '') return;
+    const record = this.turns.get(turnId);
+    if (record === undefined) return;
+    record.nativeTurnId = nativeTurnId;
+    this.nativeToTurn.set(nativeTurnId, turnId);
+  }
+
+  assignment(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
+    const nativeTurnId = 'nativeTurnId' in event ? event.nativeTurnId : 'turnId' in event ? event.turnId : undefined;
+    if (nativeTurnId !== undefined) {
+      const known = this.nativeToTurn.get(nativeTurnId);
+      if (known !== undefined) return { turnId: known, late: this.isLate(sessionId, known, at) };
+      const current = this.active.get(sessionId);
+      if (current !== undefined) {
+        this.bindNative(current, nativeTurnId);
+        return { turnId: current, late: false };
+      }
+    }
+    const current = this.active.get(sessionId);
+    if (current !== undefined) return { turnId: current, late: false };
+    const previous = this.lastEnded.get(sessionId);
+    if (previous !== undefined && at - previous.at <= this.lateWindowMs && this.isClosing(event)) {
+      return { turnId: previous.turnId, late: true };
+    }
+    return { turnId: null, late: false };
+  }
+
+  observe(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
+    const assigned = this.assignment(sessionId, event, at);
+    if (assigned.turnId === null) return assigned;
+    const record = this.turns.get(assigned.turnId);
+    if (record === undefined) return assigned;
+    if (event.type === 'turn.start') record.state = 'running';
+    if (event.type === 'status') {
+      if (event.status === 'running') record.state = 'running';
+      if (event.status === 'waiting') record.state = 'waiting';
+    }
+    if (event.type === 'item.start') {
+      record.open.add(event.itemKey);
+      if (event.kind === 'approval.request' || event.kind === 'question') record.state = 'waiting';
+      else if (record.state !== 'waiting') record.state = 'running';
+    }
+    if (event.type === 'item.complete' && (event.kind === 'approval.request' || event.kind === 'question')) record.state = 'waiting';
+    if (event.type === 'item.complete' || event.type === 'item.cancel') record.open.delete(event.itemKey);
+    if (event.type === 'turn.end') this.end(sessionId, assigned.turnId, event.status, at);
+    return assigned;
+  }
+
+  end(sessionId: string, turnId: string | undefined = this.active.get(sessionId), status: 'completed' | 'interrupted' | 'failed' = 'completed', at = Date.now()): string[] {
+    if (turnId === undefined) return [];
+    const record = this.turns.get(turnId);
+    if (record === undefined || record.state === 'completed' || record.state === 'interrupted' || record.state === 'failed') return [];
+    const open = [...record.open];
+    record.open.clear();
+    record.state = status;
+    record.endedAt = at;
+    this.lastEnded.set(sessionId, { turnId, at });
+    if (this.active.get(sessionId) === turnId) this.active.delete(sessionId);
+    return open;
+  }
+
+  forceClose(sessionId: string, status: 'interrupted' | 'failed', at = Date.now()): { turnId: string; itemKeys: string[] } | undefined {
+    const turnId = this.active.get(sessionId);
+    if (turnId === undefined) return undefined;
+    return { turnId, itemKeys: this.end(sessionId, turnId, status, at) };
+  }
+
+  state(turnId: string): TurnState | undefined {
+    return this.turns.get(turnId)?.state;
+  }
+
+  activeTurn(sessionId: string): string | undefined {
+    return this.active.get(sessionId);
+  }
+
+  resume(sessionId: string): void {
+    const turnId = this.active.get(sessionId);
+    const record = turnId === undefined ? undefined : this.turns.get(turnId);
+    if (record !== undefined && record.state === 'waiting') record.state = 'running';
+  }
+
+  openItems(turnId: string): string[] {
+    return [...(this.turns.get(turnId)?.open ?? [])];
+  }
+
+  private isLate(sessionId: string, turnId: string, at: number): boolean {
+    const ended = this.lastEnded.get(sessionId);
+    return ended?.turnId === turnId && at - ended.at <= this.lateWindowMs;
+  }
+
+  private isClosing(event: AdapterEvent): boolean {
+    return event.type === 'item.complete' || event.type === 'item.cancel' || event.type === 'turn.end';
+  }
+}

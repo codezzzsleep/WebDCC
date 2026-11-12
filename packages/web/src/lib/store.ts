@@ -1,6 +1,6 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventKind, ServerMessage, StoredEvent } from '@webdcc/protocol';
-import { ulid } from '@webdcc/protocol';
+import type { Command, EventKind, OpenItem, ServerMessage, StoredEvent, TurnView } from '@webdcc/protocol';
+import { reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
 import { SyncConnection, type ConnectionState } from './connection.js';
@@ -37,15 +37,14 @@ export interface PendingMessage {
   status: 'pending' | 'sent' | 'failed';
 }
 
-export interface TurnModel {
-  turnId: string;
+export interface TurnModel extends TurnView {
   events: StoredEvent[];
-  user?: StoredEvent;
+  hot: HotItem[];
+  /** Legacy event handles used by non-timeline panels during migration. */
+  legacyUser?: StoredEvent;
   started?: StoredEvent;
   completed?: StoredEvent;
-  hot: HotItem[];
   pending?: PendingMessage;
-  startedAt: string;
 }
 
 function nowIso(): string {
@@ -207,12 +206,11 @@ export class AppStore {
       }
       case 'delta': {
         const map = this.hot.get(message.sessionId) ?? new Map<string, HotItem>();
-        let item = map.get(message.itemKey);
-        if (item === undefined) {
-          // 兜底：没收到 update 也要能接住增量
-          item = { itemKey: message.itemKey, kind: message.field === 'output' ? 'command' : 'assistant.message', data: {} };
-          map.set(message.itemKey, item);
-        }
+        const item = map.get(message.itemKey);
+        // A delta without a preceding item.start/update violates the adapter
+        // contract. Ignore it; manufacturing a live item makes refresh differ
+        // from streaming state and hides the real translator bug.
+        if (item === undefined) break;
         const data = item.data as { text?: string; outputTail?: string };
         if (message.field === 'text') data.text = (data.text ?? '') + message.append;
         else data.outputTail = (data.outputTail ?? '') + message.append;
@@ -304,10 +302,6 @@ ${text}`;
     this.events.set(event.sessionId, map);
     const hot = this.hot.get(event.sessionId);
     if (hot !== undefined) hot.delete(event.itemKey);
-    if (event.kind === 'turn.completed') {
-      // 一轮结束时流式条目都已经落库，热条目清空（否则刷新前后文本不一致）
-      this.hot.delete(event.sessionId);
-    }
     if (event.kind === 'turn.completed' || event.kind === 'approval.request') {
       this.bumpUnread(event.sessionId, this.sessions.get(event.sessionId)?.title ?? '会话');
     }
@@ -438,12 +432,12 @@ ${text}`;
       }
       let turn = byTurn.get(event.turnId);
       if (turn === undefined) {
-        turn = { turnId: event.turnId, events: [], hot: [], startedAt: event.at };
+        turn = { ...reduceTurn([], []), turnId: event.turnId, events: [], hot: [] };
         byTurn.set(event.turnId, turn);
         order.push(event.turnId);
       }
       turn.events.push(event);
-      if (event.kind === 'user.message') turn.user = event;
+      if (event.kind === 'user.message') turn.legacyUser = event;
       if (event.kind === 'turn.started') turn.started = event;
       if (event.kind === 'turn.completed') turn.completed = event;
     }
@@ -453,7 +447,7 @@ ${text}`;
       }
       let turn = byTurn.get(item.turnId);
       if (turn === undefined) {
-        turn = { turnId: item.turnId, events: [], hot: [], startedAt: nowIso() };
+        turn = { ...reduceTurn([], []), turnId: item.turnId, events: [], hot: [] };
         byTurn.set(item.turnId, turn);
         order.push(item.turnId);
       }
@@ -462,11 +456,24 @@ ${text}`;
     this.orphans.set(sessionId, orphans);
     for (const pending of this.getPending(sessionId)) {
       const turnId = `pending-${pending.clientCommandId}`;
-      const turn: TurnModel = { turnId, events: [], hot: [], startedAt: pending.at, pending };
+      const turn: TurnModel = {
+        ...reduceTurn([], []),
+        turnId,
+        state: 'starting',
+        user: { text: pending.text, at: pending.at },
+        startedAt: pending.at,
+        events: [],
+        hot: [],
+        pending,
+      };
       byTurn.set(turnId, turn);
       order.push(turnId);
     }
-    const turns = order.map((turnId) => byTurn.get(turnId) as TurnModel);
+    const turns = order.map((turnId) => {
+      const turn = byTurn.get(turnId) as TurnModel;
+      const view = reduceTurn(turn.events, turn.hot as unknown as OpenItem[]);
+      return { ...turn, ...view, turnId };
+    });
     this.derived.set(sessionId, { version: this.version, turns });
     return turns;
   }

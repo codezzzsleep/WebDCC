@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "agent": "dsh",
+  "scenario": "S09",
+  "model": null,
+  "prompt": "运行命令 false-command-wdcc（它不存在），把报错原样告诉我，不要重试。",
+  "recordedAt": "2026-11-12T00:16:22.995Z",
+  "notTriggered": [
+    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S09 --out /tmp/wdcc-trace-mwcss3c4-1125698/S09"
+  ]
+}

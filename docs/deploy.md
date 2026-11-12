@@ -73,9 +73,9 @@ After=network.target
 [Service]
 Type=simple
 User=webdcc
-WorkingDirectory=/opt/webdcc
+WorkingDirectory=/opt/webdcc/current
 EnvironmentFile=/etc/webdcc.env
-ExecStart=/usr/bin/node /opt/webdcc/packages/server/dist/main.js
+ExecStart=/usr/bin/node /opt/webdcc/current/packages/server/dist/main.js
 Restart=on-failure
 RestartSec=3
 
@@ -93,6 +93,10 @@ WDCC_DATA_DIR=/home/webdcc/.webdcc
 WDCC_DSH_PORT=3091
 WDCC_IDLE_DISPOSE_MIN=30
 ```
+
+正式发布使用 `pnpm release`。脚本要求工作区干净且当前 commit 已推送，
+在临时检出中安装依赖并构建，写入 `/opt/webdcc/releases/<commit>`，切换
+`/opt/webdcc/current` 后只重启 `webdcc.service`，失败会恢复上一个版本。
 
 ## 运行注意事项
 

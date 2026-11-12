@@ -1,0 +1,203 @@
+[
+  {
+    "turnId": "trace:codex:S02:turn:2",
+    "state": "completed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:13.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 15,
+        "turnId": "trace:codex:S02:turn:2",
+        "kind": "reasoning",
+        "itemKey": "item-rs_00b1842b79f86828016af4f9fce08487d093f7498f06690d8a",
+        "data": {
+          "text": ""
+        },
+        "at": "1970-01-01T00:00:15.000Z",
+        "native": {
+          "type": "reasoning",
+          "id": "rs_00b1842b79f86828016af4f9fce08487d093f7498f06690d8a",
+          "summary": [],
+          "content": [],
+          "startedAtMs": 1794439678352,
+          "completedAtMs": 1794439678352
+        }
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 16,
+        "turnId": "trace:codex:S02:turn:2",
+        "kind": "command",
+        "itemKey": "item-exec-cfeb47d8-d0ce-490f-9446-a37aff6c89ba",
+        "data": {
+          "command": "/bin/bash -lc 'ls -la && cat README.md'",
+          "cwd": "/tmp/wdcc-real-trace-5TvTnL/sample-repo",
+          "exitCode": 0,
+          "outputTail": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 07:27 .\ndrwx------ 5 root root 4096 Nov 12 07:27 ..\n-rw-r--r-- 1 root root   21 Nov 12 07:27 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 07:27 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 07:27 README.md\n-rw-r--r-- 1 root root   32 Nov 12 07:27 SPEC.md\n# Sample Repo\n\nWebDCC trace sample.\n",
+          "status": "completed"
+        },
+        "at": "1970-01-01T00:00:16.000Z",
+        "native": {
+          "type": "commandExecution",
+          "id": "exec-cfeb47d8-d0ce-490f-9446-a37aff6c89ba",
+          "pluginId": null,
+          "scriptPath": null,
+          "command": "/bin/bash -lc 'ls -la && cat README.md'",
+          "cwd": "/tmp/wdcc-real-trace-5TvTnL/sample-repo",
+          "processId": "1490",
+          "source": "unifiedExecStartup",
+          "status": "completed",
+          "commandActions": [
+            {
+              "type": "listFiles",
+              "command": "ls -la",
+              "path": null
+            },
+            {
+              "type": "read",
+              "command": "cat README.md",
+              "name": "README.md",
+              "path": "/tmp/wdcc-real-trace-5TvTnL/sample-repo/README.md"
+            }
+          ],
+          "aggregatedOutput": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 07:27 .\ndrwx------ 5 root root 4096 Nov 12 07:27 ..\n-rw-r--r-- 1 root root   21 Nov 12 07:27 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 07:27 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 07:27 README.md\n-rw-r--r-- 1 root root   32 Nov 12 07:27 SPEC.md\n# Sample Repo\n\nWebDCC trace sample.\n",
+          "exitCode": 0,
+          "durationMs": 0,
+          "startedAtMs": 1794439678419,
+          "completedAtMs": 1794439678419
+        }
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 17,
+        "turnId": "trace:codex:S02:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-19",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:17.000Z",
+        "native": {
+          "threadId": "01a1ccf0-7982-7981-9c43-9e17dda6dc6b",
+          "turnId": "01a1ccf0-799b-7990-bb9d-66f3f5eb3ab4",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 15102,
+              "inputTokens": 15019,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 83,
+              "reasoningOutputTokens": 22
+            },
+            "last": {
+              "totalTokens": 15102,
+              "inputTokens": 15019,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 83,
+              "reasoningOutputTokens": 22
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 19,
+        "turnId": "trace:codex:S02:turn:2",
+        "kind": "reasoning",
+        "itemKey": "item-rs_00b1842b79f86828016af4fa0045f487d0bb6019b05b955158",
+        "data": {
+          "text": ""
+        },
+        "at": "1970-01-01T00:00:19.000Z",
+        "native": {
+          "type": "reasoning",
+          "id": "rs_00b1842b79f86828016af4fa0045f487d0bb6019b05b955158",
+          "summary": [],
+          "content": [],
+          "startedAtMs": 1794439682101,
+          "completedAtMs": 1794439682101
+        }
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 20,
+        "turnId": "trace:codex:S02:turn:2",
+        "kind": "assistant.message",
+        "itemKey": "item-msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
+        "data": {
+          "text": "当前目录包含 `AGENTS.md`、`CLAUDE.md`、`README.md` 和 `SPEC.md`。  \nREADME 表明这是一个名为 Sample Repo 的示例仓库。  \n它用于 WebDCC trace 演示或测试。",
+          "phase": "final",
+          "nativePhase": "final_answer"
+        },
+        "at": "1970-01-01T00:00:20.000Z",
+        "native": {
+          "type": "agentMessage",
+          "id": "msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
+          "text": "当前目录包含 `AGENTS.md`、`CLAUDE.md`、`README.md` 和 `SPEC.md`。  \nREADME 表明这是一个名为 Sample Repo 的示例仓库。  \n它用于 WebDCC trace 演示或测试。",
+          "phase": "final_answer",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null,
+          "startedAtMs": 1794439682104,
+          "completedAtMs": 1794439682106
+        }
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 21,
+        "turnId": "trace:codex:S02:turn:2",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-79",
+        "data": {
+          "nativeType": "thread/tokenUsage/updated"
+        },
+        "at": "1970-01-01T00:00:21.000Z",
+        "native": {
+          "threadId": "01a1ccf0-7982-7981-9c43-9e17dda6dc6b",
+          "turnId": "01a1ccf0-799b-7990-bb9d-66f3f5eb3ab4",
+          "tokenUsage": {
+            "total": {
+              "totalTokens": 30459,
+              "inputTokens": 30292,
+              "cachedInputTokens": 26624,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 167,
+              "reasoningOutputTokens": 45
+            },
+            "last": {
+              "totalTokens": 15357,
+              "inputTokens": 15273,
+              "cachedInputTokens": 13312,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 84,
+              "reasoningOutputTokens": 23
+            },
+            "modelContextWindow": 258400
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "item-msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
+        "text": "当前目录包含 `AGENTS.md`、`CLAUDE.md`、`README.md` 和 `SPEC.md`。  \nREADME 表明这是一个名为 Sample Repo 的示例仓库。  \n它用于 WebDCC trace 演示或测试。"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 1,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

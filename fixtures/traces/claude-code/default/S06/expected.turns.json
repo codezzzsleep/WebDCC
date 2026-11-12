@@ -1,0 +1,241 @@
+[
+  {
+    "turnId": "trace:claude-code:S06:turn:1",
+    "state": "completed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:02.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:claude-code:S06",
+        "seq": 32,
+        "turnId": "trace:claude-code:S06:turn:1",
+        "kind": "reasoning",
+        "itemKey": "msg-sdk-37",
+        "data": {
+          "text": "I'm setting the tool call to run in the background.\n\n"
+        },
+        "at": "1970-01-01T00:00:32.000Z",
+        "native": {
+          "type": "assistant",
+          "message": {
+            "id": "msg_01e6WHytArttyrTQZrCwMJgj",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-5-5",
+            "content": [
+              {
+                "thinking": "I'm setting the tool call to run in the background.\n\n",
+                "signature": "CAQSvwUKEAgTGAI4AUIIdGhpbmtpbmcSDASDIyFwPv552QOYkRoMx3sUMNHNa3GL4s8CIjB2PtOy+Mdu1u98jmULW+rSsEZgKm6BOlJGJ5umRP6eROTeS/aLGK2vVF+NXmNb/3Mq3AQKyCjJEU3J6++6OWEmx2ghlZWDFMC1WFwokmN/zLS8oVtNqUFO20VlVw1OXYvbEP4lTUDBrDTMkAMsjWzvmhohJSI4YA5OLvHFbayIPn40hWKhjYUvQ50hEk68RXjoJMngr2hsZTwl6bNfviY5ETe34r+qc3XDEYeMlRsdNMCFTksGKjo71JlArRcGaiIY0bsyz8CjBINYeKwGI/lRVxmBcrmvvGgw4MhaR3cSaaahRFtd6soQpYR9d17KNs9FPQIJHjqhsNRRI5YuIZGhidyX8931FeyLI4j1uu6D6LyIRXMfB3it4OeG3Upn03WjzO6/AvvtBKeJl01NtqKwTZyeDAmfz/4hBQFHHUEYA5EbUIm7IWN9FG6qVLC0AaykAdVHfr/kzejXbohzCGTR8vdhd3d4EtOgtRZCaURpBy8O8L86PVJqrtcnr0Qy5KxKqLACI73mvf/dWDGsSqfWdFJ7itQneEUZ43nUf/1SJwFsKQ9uCjhbVE2VRaMaTQ6Uxza/QTU8/U0yK90LdZIMMWO3ErhDWUdck8DAJklj33my+sJo9UnTVVknkeYneKM0dljnZu5lxVqkmZZN/v38ZAtnZy+jAbLaGZbGMpcwnPaaSUB4dMoN0jwBD4ee63wFZV0EtP70UDT039eOaKSz7zdQI91hC8agtAQLu+s9bhVz+0qBO70S5mORmhuJaonfHmObgEEbTlLpmTphj5HTciBhbuk3HZYXTrDT28aa1xE/RgmtXzrYXpXBp3ZbB+wteloLXcW4D2KewFalJB2JxrI9LNjWlrQPtTKzYbJIGAE=",
+                "type": "thinking"
+              }
+            ],
+            "stop_reason": null,
+            "stop_sequence": null,
+            "stop_details": null,
+            "usage": {
+              "input_tokens": 2,
+              "cache_creation_input_tokens": 218,
+              "cache_read_input_tokens": 18000,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 218,
+                "ephemeral_1h_input_tokens": 0
+              },
+              "output_tokens": 0,
+              "service_tier": "standard"
+            },
+            "context_management": null
+          },
+          "parent_tool_use_id": null,
+          "session_id": "301baaca-39fb-4f36-b15b-d6ce69cb40ed",
+          "uuid": "24342726-dc56-4aea-9cde-a4a1b1c20acb",
+          "timestamp": "2026-11-11T23:34:43.958Z",
+          "thinking_duration_ms": 1,
+          "thinking_display": "updates"
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S06",
+        "seq": 59,
+        "turnId": "trace:claude-code:S06:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-sdk-78",
+        "data": {
+          "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。"
+        },
+        "at": "1970-01-01T00:00:59.000Z",
+        "native": {
+          "type": "assistant",
+          "message": {
+            "id": "msg_017aUuD0GdXjXrZOi0j8vh0F",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-5-5",
+            "content": [
+              {
+                "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。",
+                "type": "text"
+              }
+            ],
+            "stop_reason": null,
+            "stop_sequence": null,
+            "stop_details": null,
+            "usage": {
+              "input_tokens": 2,
+              "cache_creation_input_tokens": 236,
+              "cache_read_input_tokens": 18218,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 236,
+                "ephemeral_1h_input_tokens": 0
+              },
+              "output_tokens": 0,
+              "service_tier": "standard"
+            },
+            "context_management": null
+          },
+          "parent_tool_use_id": null,
+          "session_id": "301baaca-39fb-4f36-b15b-d6ce69cb40ed",
+          "uuid": "b8fe633b-45fc-4a1b-aabb-1b651d56efff",
+          "timestamp": "2026-11-11T23:34:46.567Z"
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S06",
+        "seq": 63,
+        "turnId": "trace:claude-code:S06:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "result-sdk-82",
+        "data": {
+          "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。",
+          "nativePhase": "final_answer"
+        },
+        "at": "1970-01-01T00:01:03.000Z",
+        "native": {
+          "duration_api_ms": 10826,
+          "stop_reason": "end_turn",
+          "session_id": "301baaca-39fb-4f36-b15b-d6ce69cb40ed",
+          "total_cost_usd": 0.0534637,
+          "usage": {
+            "input_tokens": 8,
+            "cache_creation_input_tokens": 18454,
+            "cache_read_input_tokens": 36218,
+            "output_tokens": 266,
+            "output_tokens_details": {
+              "thinking_tokens": 0
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 18454
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "modelUsage": {
+            "claude-sonnet-5-5": {
+              "inputTokens": 12,
+              "outputTokens": 320,
+              "cacheReadInputTokens": 37472,
+              "cacheCreationInputTokens": 18597,
+              "webSearchRequests": 0,
+              "costUSD": 0.0534637,
+              "contextWindow": 1000000,
+              "maxOutputTokens": 128000,
+              "thinkingTokens": 0,
+              "cacheCreationEphemeral5mInputTokens": 18597,
+              "cacheCreationEphemeral1hInputTokens": 0,
+              "canonicalModel": "claude-sonnet-5-5",
+              "provider": "firstParty",
+              "costBasis": "list"
+            }
+          },
+          "permission_denials": [],
+          "terminal_reason": "completed",
+          "fast_mode_state": "off",
+          "fast_mode_disabled_reason": "sdk_opt_in_required",
+          "subagent_stats": {
+            "spawned": 0,
+            "requested": {
+              "background": 0,
+              "foreground": 0,
+              "unset": 0
+            },
+            "started_in_background": 0,
+            "max_depth": 0,
+            "spawned_by_subagents": 0,
+            "completed": 0,
+            "failed": 0,
+            "killed": {
+              "parent": 0,
+              "user": 0,
+              "system": 0
+            },
+            "refused": {
+              "depth_limit": 0,
+              "concurrency_limit": 0,
+              "budget": 0
+            },
+            "by_type": {}
+          },
+          "safety_stops": 0,
+          "is_error": false,
+          "num_turns": 3,
+          "subtype": "success",
+          "api_error_status": null,
+          "result": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。",
+          "ttft_ms": 3150,
+          "type": "result",
+          "duration_ms": 8854,
+          "uuid": "2cd1b077-4583-4346-afe0-2273ed5f750f",
+          "ttft_stream_ms": 3147,
+          "time_to_request_ms": 88,
+          "first_content_frame_ms": 3148,
+          "queued_turn_count": 0,
+          "result_index": 0,
+          "model_usage_since_last_result": {
+            "claude-sonnet-5-5": {
+              "inputTokens": 12,
+              "outputTokens": 320,
+              "cacheReadInputTokens": 37472,
+              "cacheCreationInputTokens": 18597,
+              "webSearchRequests": 0,
+              "costUSD": 0.0534637,
+              "contextWindow": 1000000,
+              "maxOutputTokens": 128000,
+              "thinkingTokens": 0,
+              "cacheCreationEphemeral5mInputTokens": 18597,
+              "cacheCreationEphemeral1hInputTokens": 0,
+              "canonicalModel": "claude-sonnet-5-5",
+              "provider": "firstParty",
+              "costBasis": "list"
+            }
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "result-sdk-82",
+        "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 0,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

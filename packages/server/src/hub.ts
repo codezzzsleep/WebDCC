@@ -22,6 +22,9 @@ interface ClientState {
   socket: WebSocket;
   subs: Map<string, { afterSeq: number }>;
   pendingDeltas: Map<string, { sessionId: string; itemKey: string; field: 'text' | 'output'; chunks: string[] }>;
+  /** WebSocket message handlers are concurrent; serialize commands per client so a
+   * model/access change is applied before the following send command. */
+  commandQueue: Promise<void>;
   lastPong: number;
   authorized: boolean;
 }
@@ -52,6 +55,7 @@ export class LiveHub {
         socket,
         subs: new Map(),
         pendingDeltas: new Map(),
+        commandQueue: Promise.resolve(),
         lastPong: Date.now(),
         authorized,
       };
@@ -118,12 +122,17 @@ export class LiveHub {
       }
       case 'command': {
         const command = message.command as Command;
-        const result = await this.dispatcher.dispatch(command);
-        this.send(client, {
-          op: 'ack',
-          clientCommandId: command.clientCommandId,
-          result: toAckResult(result),
-        });
+        const run = async (): Promise<void> => {
+          const result = await this.dispatcher.dispatch(command);
+          this.send(client, {
+            op: 'ack',
+            clientCommandId: command.clientCommandId,
+            result: toAckResult(result),
+          });
+        };
+        const queued = client.commandQueue.then(run, run);
+        client.commandQueue = queued.catch(() => undefined);
+        await queued;
         break;
       }
       default:

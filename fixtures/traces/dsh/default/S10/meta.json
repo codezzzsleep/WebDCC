@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "agent": "dsh",
+  "scenario": "S10",
+  "model": null,
+  "prompt": "读取 README.md 的第一行。",
+  "recordedAt": "2026-11-12T00:16:23.443Z",
+  "notTriggered": [
+    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S10 --out /tmp/wdcc-trace-mwcss3c4-1125698/S10"
+  ]
+}

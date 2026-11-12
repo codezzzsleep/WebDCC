@@ -10,6 +10,8 @@ export interface AgentMeta extends ProbeResult {
 
 export interface MetaResponse {
   version: string;
+  commit: string;
+  builtAt: string;
   agents: Record<string, AgentMeta>;
   /** 服务进程是否以 root 运行：root 下 Claude 不能用 bypassPermissions（MODE-claude-01） */
   runningAsRoot?: boolean;

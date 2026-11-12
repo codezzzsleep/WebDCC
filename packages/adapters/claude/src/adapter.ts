@@ -10,6 +10,7 @@ import type {
   ModelOption,
   ProbeResult,
   UserInput,
+  TraceSink,
 } from '@webdcc/protocol';
 import {
   query,
@@ -20,7 +21,7 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, isValidEventData } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame } from '@webdcc/protocol';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -28,6 +29,7 @@ export const PINNED_CLI_VERSION = '2.1.322';
 export interface ClaudeAdapterOptions {
   env?: Record<string, string>;
   model?: string;
+  traceSink?: TraceSink;
 }
 
 const ACCESS_MODES = [
@@ -99,6 +101,10 @@ interface PendingInteraction {
 
 interface SessionRuntime {
   nativeId: string;
+  /** 当前 query 使用的模型；setModel 会立即更新 SDK query 和此缓存。 */
+  model?: string;
+  /** 创建/恢复 query 时使用的完整启动参数；换模型时用于无损重连。 */
+  launchOpts: CreateOpts;
   input: InputQueue;
   q: Query;
   pump: Promise<void>;
@@ -113,7 +119,9 @@ interface SessionRuntime {
   slashCommands: string[];
   /** 这一块是否已经发过 item.start（SDK 不一定给 block-start，按首个 delta 兜底） */
   liveStarted: boolean;
+  liveItems: Map<number, { itemKey: string; kind: 'reasoning' | 'assistant.message'; text: string }>;
   ready: Promise<void>;
+  frameSeq: number;
 }
 
 /** 工具名 → 我方 kind（SPEC 6.3） */
@@ -249,6 +257,8 @@ export class ClaudeAdapter implements AgentAdapter {
     const q = query({ prompt: input.iterable, options: this.buildOptions(opts, canUseTool, resume) });
     const runtime: SessionRuntime = {
       nativeId: resume ?? '',
+      ...(opts.model === undefined ? {} : { model: opts.model }),
+      launchOpts: opts,
       input,
       q,
       pump: Promise.resolve(),
@@ -260,11 +270,15 @@ export class ClaudeAdapter implements AgentAdapter {
       taskOrder: [],
       slashCommands: [],
       liveStarted: false,
+      liveItems: new Map(),
       ready,
+      frameSeq: 0,
     };
     this.sessions.set(sessionId, runtime);
     runtime.pump = (async () => {
       for await (const message of q as AsyncIterable<SDKMessage>) {
+        runtime.frameSeq += 1;
+        traceFrame(this.options.traceSink, { i: runtime.frameSeq, t: Date.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message });
         if (message.type === 'system' && message.subtype === 'init') {
           runtime.nativeId = message.session_id;
           this.emit(sessionId, { type: 'native-id', nativeId: message.session_id });
@@ -275,7 +289,7 @@ export class ClaudeAdapter implements AgentAdapter {
     })().catch((error: unknown) => {
       this.emit(sessionId, {
         type: 'item.complete',
-        itemKey: `error-${Date.now().toString(36)}`,
+        itemKey: `error-${runtime.frameSeq}`,
         kind: 'error',
         data: { message: error instanceof Error ? error.message : String(error) },
       });
@@ -296,6 +310,7 @@ export class ClaudeAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
     runtime.turnStartedAt = Date.now();
+    traceFrame(this.options.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'input', frame: input });
     const images = (input.images ?? []).flatMap((image) => {
       try {
         const mediaType = (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime) ? image.mime : 'image/png') as
@@ -316,6 +331,27 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     await runtime.q.setPermissionMode(mode as never);
     return { accessMode: mode };
+  }
+
+  /** Claude Agent SDK 支持在同一个 query 上切换模型。必须调用控制面，
+   * 只更新 WebDCC 会话元数据会让下一轮仍然使用旧模型。 */
+  async setModel(sessionId: string, model: string): Promise<void> {
+    const runtime = this.require(sessionId);
+    runtime.model = model;
+    // The pinned SDK exposes setModel, but the bundled CLI keeps honoring the
+    // launch-time ANTHROPIC_MODEL in settings for subsequent prompts. Restart
+    // the query against the same native session so the model is applied to the
+    // next request while preserving conversation history.
+    const previous = runtime;
+    previous.launchOpts = { ...previous.launchOpts, model };
+    this.sessions.delete(sessionId);
+    // `close()` is synchronous in the SDK and can block while the child
+    // process drains stdin. Schedule it after the replacement query has been
+    // created so the command acknowledgement never waits on process teardown.
+    const close = previous.q.close;
+    if (typeof close === 'function') setImmediate(() => { try { close.call(previous.q); } catch { /* old query is being replaced */ } });
+    const replacement = this.startQuery(sessionId, previous.launchOpts, previous.nativeId);
+    await Promise.race([replacement.ready, new Promise((resolve) => setTimeout(resolve, 3_000))]);
   }
 
   async interrupt(sessionId: string): Promise<void> {
@@ -389,7 +425,7 @@ export class ClaudeAdapter implements AgentAdapter {
     if (items.length === 0) return;
     this.emit(sessionId, {
       type: 'item.complete',
-      itemKey: `plan-tasks-${Date.now().toString(36)}`,
+      itemKey: `plan-tasks-${runtime.frameSeq}`,
       kind: 'plan',
       data: { items },
     });
@@ -404,7 +440,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
-      const questionId = `${options.toolUseID ?? `q-${Date.now()}`}`;
+      const questionId = `${options.toolUseID ?? `q-${runtime.frameSeq + 1}`}`;
       const questionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
         runtime.pending.set(questionId, { kind: 'question', toolName, input, resolve });
       });
@@ -426,15 +462,13 @@ export class ClaudeAdapter implements AgentAdapter {
           ...(options.toolUseID === undefined ? {} : { toolCallId: options.toolUseID }),
         },
       });
-      this.emit(sessionId, { type: 'status', status: 'waiting' });
       const decision = await questionPromise;
-      this.emit(sessionId, { type: 'status', status: 'running' });
       const answers = decision.answers ?? {};
       return { behavior: 'allow', updatedInput: { ...input, answers } } as PermissionResult;
     }
 
     const isPlanMode = toolName === 'ExitPlanMode';
-    const approvalId = `${sessionId}:${options.toolUseID ?? Date.now().toString(36)}`;
+    const approvalId = `${sessionId}:${options.toolUseID ?? `tool-${runtime.frameSeq + 1}`}`;
     const decisionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
       runtime.pending.set(approvalId, { kind: 'approval', toolName, input, resolve });
     });
@@ -460,9 +494,7 @@ export class ClaudeAdapter implements AgentAdapter {
         ],
       },
     });
-    this.emit(sessionId, { type: 'status', status: 'waiting' });
     const decision = await decisionPromise;
-    this.emit(sessionId, { type: 'status', status: 'running' });
     if (decision.approved) return { behavior: 'allow', updatedInput: input } as PermissionResult;
     return { behavior: 'deny', message: '用户拒绝', interrupt: true } as PermissionResult;
   }
@@ -498,51 +530,57 @@ export class ClaudeAdapter implements AgentAdapter {
         };
         if (event.type === 'content_block_start') {
           runtime.messageSeq += 1;
-          runtime.liveStarted = false;
+          runtime.liveStarted = true;
+          const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
           const blockType = event.content_block?.type ?? event.block?.type ?? 'text';
+          const itemKey = `msg-${runtime.messageSeq}-${index}`;
+          const kind = blockType === 'thinking' ? 'reasoning' : 'assistant.message';
+          runtime.liveItems.set(index, { itemKey, kind, text: '' });
           this.emit(sessionId, {
             type: 'item.start',
-            itemKey: `msg-${runtime.messageSeq}`,
-            kind: blockType === 'thinking' ? 'reasoning' : 'assistant.message',
+            itemKey,
+            kind,
             data: { text: '' },
           });
           return;
         }
         if (event.type === 'content_block_delta') {
           const delta = event.delta ?? {};
-          const liveKey = `msg-${runtime.messageSeq}`;
+          const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
+          let live = runtime.liveItems.get(index);
+          if (live === undefined) {
+            const kind = delta.type === 'thinking_delta' ? 'reasoning' : 'assistant.message';
+            live = { itemKey: `msg-${runtime.messageSeq}-${index}`, kind, text: '' };
+            runtime.liveItems.set(index, live);
+            this.emit(sessionId, { type: 'item.start', itemKey: live.itemKey, kind, data: { text: '' } });
+          }
           if (delta.type === 'text_delta' && delta.text !== undefined) {
-            if (!runtime.liveStarted) {
-              runtime.liveStarted = true;
-              this.emit(sessionId, { type: 'item.start', itemKey: liveKey, kind: 'assistant.message', data: { text: '' } });
-            }
-            this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.text });
+            live.text += delta.text;
+            this.emit(sessionId, { type: 'item.delta', itemKey: live.itemKey, field: 'text', append: delta.text });
           }
           if (delta.type === 'thinking_delta' && delta.thinking !== undefined) {
-            if (!runtime.liveStarted) {
-              runtime.liveStarted = true;
-              this.emit(sessionId, { type: 'item.start', itemKey: liveKey, kind: 'reasoning', data: { text: '' } });
-            }
-            this.emit(sessionId, { type: 'item.delta', itemKey: liveKey, field: 'text', append: delta.thinking });
+            live.text += delta.thinking;
+            this.emit(sessionId, { type: 'item.delta', itemKey: live.itemKey, field: 'text', append: delta.thinking });
           }
         }
         return;
       }
       case 'assistant': {
         const content = (message.message?.content ?? []) as unknown as Record<string, unknown>[];
-        const itemKey = `msg-${runtime.messageSeq}`;
         const textParts = content.filter((block) => block['type'] === 'text').map((block) => String(block['text'] ?? ''));
         const thinking = content.filter((block) => block['type'] === 'thinking').map((block) => String(block['thinking'] ?? '')).join('');
-        if (thinking !== '') {
-          this.emit(sessionId, { type: 'item.complete', itemKey: `${itemKey}-thinking`, kind: 'reasoning', data: { text: thinking } });
+        const hadLive = runtime.liveItems.size > 0;
+        for (const [index, live] of [...runtime.liveItems]) {
+          const text = live.kind === 'reasoning' ? thinking : textParts.join('\n');
+          this.emit(sessionId, { type: 'item.complete', itemKey: live.itemKey, kind: live.kind, data: { text }, native: message });
+          runtime.liveItems.delete(index);
         }
-        if (textParts.length > 0) {
-          this.emit(sessionId, {
-            type: 'item.complete',
-            itemKey,
-            kind: 'assistant.message',
-            data: { text: textParts.join('\n') },
-          });
+        if (!hadLive && thinking !== '' && textParts.length === 0) {
+          this.emit(sessionId, { type: 'item.complete', itemKey: `msg-${runtime.messageSeq}-thinking`, kind: 'reasoning', data: { text: thinking }, native: message });
+        }
+        if (!hadLive && textParts.length > 0 && content.length > 0) {
+          const key = `msg-${runtime.messageSeq}-complete`;
+          this.emit(sessionId, { type: 'item.complete', itemKey: key, kind: 'assistant.message', data: { text: textParts.join('\n') }, native: message });
         }
         for (const block of content) {
           if (block['type'] !== 'tool_use') continue;
@@ -635,19 +673,18 @@ export class ClaudeAdapter implements AgentAdapter {
       }
       case 'result': {
         const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; usage?: { input_tokens?: number; output_tokens?: number } };
+        const resultText = (message as unknown as { result?: unknown }).result;
+        if (typeof resultText === 'string' && resultText !== '') {
+          this.emit(sessionId, { type: 'item.complete', itemKey: `result-${runtime.frameSeq}`, kind: 'assistant.message', data: { text: resultText, nativePhase: 'final_result' }, native: message });
+        }
         this.emit(sessionId, {
-          type: 'item.complete',
-          itemKey: `turn-${Date.now().toString(36)}`,
-          kind: 'turn.completed',
-          data: {
-            status: result.is_error === true ? (result.subtype === 'error_during_execution' ? 'interrupted' : 'failed') : 'completed',
-            durationMs: result.duration_ms ?? Date.now() - runtime.turnStartedAt,
-            ...(result.usage === undefined
-              ? {}
-              : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens } }),
-          },
+          type: 'turn.end',
+          status: result.is_error === true ? (result.subtype === 'error_during_execution' ? 'interrupted' : 'failed') : 'completed',
+          ...(result.usage === undefined
+            ? {}
+            : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens } }),
+          native: result,
         });
-        this.emit(sessionId, { type: 'status', status: 'idle' });
         return;
       }
       default:

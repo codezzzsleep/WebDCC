@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { EventData, StoredEvent } from '@webdcc/protocol';
+import type { EventData, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
-import { store, type HotItem, type TurnModel } from '../lib/store.js';
+import { store } from '../lib/store.js';
 import { duration, shortNumber } from '../lib/format.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Icon, Spinner, type IconName } from './Icon.js';
 import { Markdown } from './Markdown.js';
 
-function useTurns(sessionId: string): TurnModel[] {
+function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
   return useMemo(() => store.getTurns(sessionId), [sessionId, store.getVersion()]);
 }
@@ -90,7 +90,6 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   );
 }
 
-const HIDDEN_KINDS = new Set(['user.message', 'turn.completed', 'turn.started', 'internal', 'usage', 'approval.resolved']);
 const INTERACTIVE_KINDS = new Set(['approval.request', 'question']);
 
 function TurnView({
@@ -103,7 +102,7 @@ function TurnView({
   onOpenDiff,
   onHandoff,
 }: {
-  turn: TurnModel;
+  turn: ProtocolTurnView;
   expanded: boolean;
   isLast: boolean;
   compact: boolean;
@@ -113,49 +112,30 @@ function TurnView({
   onHandoff: (text: string) => void;
 }): React.ReactElement {
   const user = turn.user;
-  const completed = turn.completed;
-  // 只有出现过 turn.started 且还没有 turn.completed 的组才算"运行中"（F4）
-  const running = turn.started !== undefined && completed === undefined && turn.pending === undefined;
-  const completedData = completed?.data as EventData['turn.completed'] | undefined;
-  const steps = turn.events.filter((event) => !HIDDEN_KINDS.has(event.kind));
-  const finalMessage = [...turn.events]
-    .reverse()
-    .find((event) => event.kind === 'assistant.message' && (event.data as EventData['assistant.message']).phase !== 'interim');
-  const anyAssistantMessage = [...turn.events].reverse().find((event) => event.kind === 'assistant.message');
-  const displayedFinalMessage = finalMessage ?? anyAssistantMessage;
-  const changes = collectChanges(steps);
-  const usage = [...turn.events].reverse().find((event) => event.kind === 'usage');
+  const running = turn.state === 'starting' || turn.state === 'running' || turn.state === 'waiting';
+  const steps = turn.steps;
+  const answerKeys = new Set(turn.answer.map((answer) => answer.itemKey));
+  const changes = turn.changes.map((change) => ({ ...change, ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }) }));
   // 运行中、或用户展开时显示全部步骤；完成后默认只显示摘要和最终回答（DSH 的做法）
   const showAll = running || expanded;
-  // 运行中但卡在审批或提问上：标题写清楚是在等你，而不是 Agent 还在干活
-  const waitingOnUser =
-    running &&
-    turn.events.some((event) => {
-      if (event.kind === 'question') {
-        const status = (event.data as EventData['question']).status;
-        return status !== 'answered' && status !== 'skipped';
-      }
-      if (event.kind !== 'approval.request') return false;
-      const approvalId = (event.data as EventData['approval.request']).approvalId;
-      return !turn.events.some((item) => item.kind === 'approval.resolved' && (item.data as EventData['approval.resolved']).approvalId === approvalId);
-    });
-  const finalText = displayedFinalMessage === undefined ? '' : (displayedFinalMessage.data as EventData['assistant.message']).text;
+  const waitingOnUser = turn.activity?.kind === 'waiting';
+  const finalText = turn.answer.map((answer) => answer.text).join('\n');
 
   const headLabel =
-    completedData === undefined
+    !['completed', 'interrupted', 'failed'].includes(turn.state)
       ? ''
-      : `${completedData.status === 'interrupted' ? '已中断' : completedData.status === 'failed' ? '出错' : '已完成'}${completedData.durationMs === undefined ? '' : `，用时 ${duration(completedData.durationMs)}`}`;
+      : `${turn.state === 'interrupted' ? '已中断' : turn.state === 'failed' ? '出错' : '已完成'}${turn.durationMs === undefined ? '' : `，用时 ${duration(turn.durationMs)}`}`;
 
   return (
-    <section className={`turn ${running ? 'turn-running' : ''}`} id={user === undefined ? undefined : `e-${user.seq}`}>
-      {user !== undefined || turn.pending !== undefined ? (
+    <section className={`turn ${running ? 'turn-running' : ''}`} id={turn.userSeq === undefined ? undefined : `e-${turn.userSeq}`}>
+      {turn.pending !== undefined || user.text !== '' ? (
         <div className="user-message" data-testid="user-message">
           <div className="user-bubble">
-            <Markdown text={user !== undefined ? (user.data as EventData['user.message']).text : (turn.pending?.text ?? '')} />
+            <Markdown text={user.text} />
           </div>
           <div className="user-meta">
             {turn.pending !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending.status)}</span> : null}
-            <span>{new Date(user?.at ?? turn.pending?.at ?? Date.now()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>{new Date(user.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
         </div>
       ) : null}
@@ -174,21 +154,21 @@ function TurnView({
                 <span className="shimmer">运行中…</span>
               </span>
             )
-          ) : completedData !== undefined ? (
+          ) : !running ? (
             <button type="button" className="turn-title" onClick={onToggle} aria-expanded={expanded}>
               {headLabel}
               <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={14} strokeWidth={2} />
             </button>
           ) : null}
-          {running || completedData !== undefined ? <div className="turn-divider" /> : null}
+          <div className="turn-divider" />
         </div>
       )}
 
       <div className="turn-body">
-        {!showAll && completedData !== undefined && steps.some((event) => event !== displayedFinalMessage && !INTERACTIVE_KINDS.has(event.kind)) ? (
+        {!showAll && !running && steps.some((event) => !answerKeys.has(event.itemKey) && !INTERACTIVE_KINDS.has(event.kind)) ? (
           <button type="button" className="turn-summary" onClick={onToggle}>
             <Icon name="listChecks" size={15} />
-            {summarize(steps)}
+            {summaryLabel(turn)}
           </button>
         ) : null}
 
@@ -199,20 +179,18 @@ function TurnView({
               </ErrorBoundary>
             ))
           : steps
-              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || event === displayedFinalMessage)
+              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey))
               .map((event) => (
                 <ErrorBoundary key={`always-${event.itemKey}-${event.seq}`} label="timeline-item">
                   <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
                 </ErrorBoundary>
               ))}
 
-        {turn.hot.filter((item, index, items) => item.kind !== 'reasoning' || index === items.map((candidate) => candidate.kind).lastIndexOf('reasoning')).map((item) => (
-          <HotRow key={item.itemKey} item={item} />
-        ))}
+        {turn.live.map((item) => <HotRow key={item.itemKey} item={item} />)}
 
-        {completedData !== undefined && changes.length > 0 ? <ChangesCard changes={changes} onOpenDiff={onOpenDiff} /> : null}
+        {!running && changes.length > 0 ? <ChangesCard changes={changes} onOpenDiff={onOpenDiff} /> : null}
 
-        {completedData !== undefined ? (
+        {!running ? (
           <div className="turn-footer">
             {!compact && finalText !== '' ? (
               <>
@@ -225,12 +203,12 @@ function TurnView({
                 </button>
               </>
             ) : null}
-            {completedData.status !== 'completed' ? (
-              <span className={`turn-status ${completedData.status}`}>{completedData.status === 'interrupted' ? '已中断' : '出错'}</span>
+            {turn.state !== 'completed' ? (
+              <span className={`turn-status ${turn.state}`}>{turn.state === 'interrupted' ? '已中断' : '出错'}</span>
             ) : null}
-            {usage !== undefined ? <span className="meta">{formatUsage(usage)}</span> : null}
-            {isLast && completed !== undefined ? (
-              <span className="meta">{new Date(completed.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+            {turn.usage !== undefined ? <span className="meta">{formatUsageData(turn.usage)}</span> : null}
+            {isLast && turn.endedAt !== undefined ? (
+              <span className="meta">{new Date(turn.endedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
             ) : null}
           </div>
         ) : null}
@@ -239,27 +217,14 @@ function TurnView({
   );
 }
 
-function summarize(steps: StoredEvent[]): string {
-  let commands = 0;
-  let reads = 0;
-  let tools = 0;
-  let plan = false;
-  let goal = false;
-  const edited = new Set<string>();
-  for (const event of steps) {
-    if (event.kind === 'command') commands += 1;
-    else if (event.kind === 'file.read') reads += 1;
-    else if (event.kind === 'tool.call') tools += 1;
-    else if (event.kind === 'plan') plan = true;
-    else if (event.kind === 'goal') goal = true;
-    else if (event.kind === 'file.change') for (const change of (event.data as EventData['file.change']).changes ?? []) edited.add(change.path);
-  }
+function summaryLabel(turn: ProtocolTurnView): string {
+  const { commands, reads, edits, tools } = turn.summary;
   const parts: string[] = [];
-  if (plan) parts.push('更新了计划');
-  if (goal) parts.push('更新了目标');
+  if (turn.plan !== undefined) parts.push('更新了计划');
+  if (turn.goal !== undefined) parts.push('更新了目标');
   if (commands > 0) parts.push(`执行了 ${commands} 条命令`);
   if (reads > 0) parts.push(`读取了 ${reads} 个文件`);
-  if (edited.size > 0) parts.push(`编辑了 ${edited.size} 个文件`);
+  if (edits > 0) parts.push(`编辑了 ${edits} 个文件`);
   if (tools > 0) parts.push(`调用了 ${tools} 次工具`);
   return parts.length === 0 ? '查看过程' : parts.join('，');
 }
@@ -270,8 +235,7 @@ function outboxLabel(status: 'pending' | 'sent' | 'failed'): string {
   return '发送失败';
 }
 
-function formatUsage(event: StoredEvent): string {
-  const data = event.data as EventData['usage'];
+function formatUsageData(data: UsageData): string {
   const parts: string[] = [];
   if (data.inputTokens !== undefined || data.outputTokens !== undefined) {
     parts.push(`用量 ${shortNumber((data.inputTokens ?? 0) + (data.outputTokens ?? 0))} tok`);
@@ -287,26 +251,6 @@ interface ChangeSummary {
   removed: number;
   fileId?: string;
   note?: string;
-}
-
-function collectChanges(steps: StoredEvent[]): ChangeSummary[] {
-  const map = new Map<string, ChangeSummary>();
-  for (const event of steps) {
-    if (event.kind !== 'file.change') continue;
-    const data = event.data as EventData['file.change'];
-    // 累计快照（Codex 的 turn/diff/updated）：以快照为基准，后面的覆盖同名文件
-    if (data.snapshot === true) map.clear();
-    for (const change of data.changes ?? []) {
-      map.set(change.path, {
-        path: change.path,
-        added: change.added,
-        removed: change.removed,
-        ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }),
-        ...(change.note === undefined ? {} : { note: change.note }),
-      });
-    }
-  }
-  return [...map.values()];
 }
 
 function ChangesCard({ changes, onOpenDiff }: { changes: ChangeSummary[]; onOpenDiff: (fileId: string, path: string) => void }): React.ReactElement {
@@ -350,7 +294,7 @@ function ChangesCard({ changes, onOpenDiff }: { changes: ChangeSummary[]; onOpen
   );
 }
 
-function HotRow({ item }: { item: HotItem }): React.ReactElement {
+function HotRow({ item }: { item: LiveItem }): React.ReactElement {
   const data = item.data as { text?: string; command?: string; outputTail?: string };
   if (item.kind === 'assistant.message') {
     return <div className="hot-text">{data.text ?? ''}</div>;

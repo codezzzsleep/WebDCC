@@ -1,0 +1,74 @@
+[
+  {
+    "turnId": "trace:claude-code:S07:turn:1",
+    "state": "failed",
+    "user": {
+      "text": "",
+      "at": "1970-01-01T00:00:02.000Z"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:claude-code:S07",
+        "seq": 6,
+        "turnId": "trace:claude-code:S07:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-sdk-25",
+        "data": {
+          "text": "**计划:**\n1. 在工作目录新建 `a.txt`,内容为 `1`\n2. 在工作目录新建 `b.txt`,内容为 `2`\n3. 读取两个文件,把 1 + 2 的结果 `3` 写入 `sum.txt`\n\n开始执行。"
+        },
+        "at": "1970-01-01T00:00:06.000Z",
+        "native": {
+          "type": "assistant",
+          "message": {
+            "id": "msg_01847GUF0urCXn0TwkeOUdpM",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-5-5",
+            "content": [
+              {
+                "text": "**计划:**\n1. 在工作目录新建 `a.txt`,内容为 `1`\n2. 在工作目录新建 `b.txt`,内容为 `2`\n3. 读取两个文件,把 1 + 2 的结果 `3` 写入 `sum.txt`\n\n开始执行。",
+                "type": "text"
+              }
+            ],
+            "stop_reason": null,
+            "stop_sequence": null,
+            "stop_details": null,
+            "usage": {
+              "input_tokens": 4,
+              "cache_creation_input_tokens": 18053,
+              "cache_read_input_tokens": 0,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 18053,
+                "ephemeral_1h_input_tokens": 0
+              },
+              "output_tokens": 0,
+              "service_tier": "standard"
+            },
+            "context_management": null
+          },
+          "parent_tool_use_id": null,
+          "session_id": "3a5d7a85-112a-46a1-b90e-63c6f3a65c34",
+          "uuid": "001c17b1-d3c9-449f-a01d-1a3a78999460",
+          "timestamp": "2026-11-11T23:35:06.804Z"
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "msg-sdk-25",
+        "text": "**计划:**\n1. 在工作目录新建 `a.txt`,内容为 `1`\n2. 在工作目录新建 `b.txt`,内容为 `2`\n3. 读取两个文件,把 1 + 2 的结果 `3` 写入 `sum.txt`\n\n开始执行。"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 0,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

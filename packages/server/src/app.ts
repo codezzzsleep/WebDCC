@@ -22,6 +22,8 @@ export interface BuildAppOptions {
   providers: ProviderRegistry;
   dsh: DshConnectionStore;
   webDist?: string;
+  commit?: string;
+  builtAt?: string;
 }
 
 export interface BuiltApp {
@@ -92,7 +94,18 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     });
   }
 
-  registerRoutes(app, { store, files, manager, hub, dispatcher, version: config.version, providers: options.providers, dsh: options.dsh });
+  registerRoutes(app, {
+    store,
+    files,
+    manager,
+    hub,
+    dispatcher,
+    version: config.version,
+    ...(options.commit === undefined ? {} : { commit: options.commit }),
+    ...(options.builtAt === undefined ? {} : { builtAt: options.builtAt }),
+    providers: options.providers,
+    dsh: options.dsh,
+  });
   hub.attach(app);
 
   app.setErrorHandler((error, _request, reply) => sendJsonError(reply, error));

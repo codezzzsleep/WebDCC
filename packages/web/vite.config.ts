@@ -30,7 +30,7 @@ export default defineConfig({
     }),
   ],
   build: {
-    outDir: 'dist',
+    outDir: process.env['WDCC_BUILD_DIR'] ?? 'dist',
     sourcemap: false,
     chunkSizeWarningLimit: 1200,
   },

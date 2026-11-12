@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "codex",
+  "scenario": "S06",
+  "model": "gpt-6.1-sol",
+  "prompt": "运行 sleep 60，然后告诉我完成了。",
+  "recordedAt": "2026-11-11T23:29:22.056Z",
+  "notTriggered": []
+}

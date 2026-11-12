@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "agent": "dsh",
+  "scenario": "S02",
+  "model": null,
+  "prompt": "先列出当前目录的文件，再读 README.md，然后用三句话告诉我这个仓库是做什么的。",
+  "recordedAt": "2026-11-12T00:16:19.886Z",
+  "notTriggered": [
+    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S02 --out /tmp/wdcc-trace-mwcss3c4-1125698/S02"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "agent": "dsh",
+  "scenario": "S06",
+  "model": null,
+  "prompt": "运行 sleep 60，然后告诉我完成了。",
+  "recordedAt": "2026-11-12T00:16:21.670Z",
+  "notTriggered": [
+    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S06 --out /tmp/wdcc-trace-mwcss3c4-1125698/S06"
+  ]
+}

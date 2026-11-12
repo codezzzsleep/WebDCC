@@ -90,7 +90,9 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     manager,
     providers,
     dsh: dshStore,
-    webDist: options.webDist ?? join(process.cwd(), 'packages/web/dist'),
+    webDist: options.webDist ?? process.env['WDCC_WEB_DIST'] ?? join(process.cwd(), 'packages/web/dist'),
+    commit: process.env['WDCC_COMMIT'] ?? 'dev',
+    builtAt: process.env['WDCC_BUILT_AT'] ?? new Date().toISOString(),
   });
 
   manager.setHooks({

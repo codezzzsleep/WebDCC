@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "agent": "claude-code",
+  "scenario": "S10",
+  "model": "claude-sonnet-5-5",
+  "prompt": "读取 README.md 的第一行。",
+  "recordedAt": "2026-11-11T23:35:43.796Z",
+  "notTriggered": []
+}
