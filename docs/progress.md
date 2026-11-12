@@ -154,5 +154,7 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 - L1：22 条轨迹、1345 帧、不变量 1345/1345；`trace:scan` 命中 0。
 - 快速 UI 回放：18/18 通过。M8 棘轮在增大 Node 堆上限后实际跑到第 40 项，报告为 32 项通过、7 项既有回归，其余因长套件中止；回归证据包括 AG-codex-08/11/12、AG-claude-12、DOCK-01/03、MOB-01/02。
 - 尚未发布线上：`pnpm release` 已实现但本轮没有执行 systemd 重启，避免在未确认发布 commit 时改动线上服务。
+- 2026-11-12 后续提交已推送到 `main`：`a077133`（M9 基础设施与验收证据）、`c620743`（迟到轮次收敛与 Codex continuation 回放游标）、`89eb52e`（Responses 历史用户消息计数）。当前 `main` 工作区干净，`pnpm typecheck`、`pnpm lint`、82 个单测通过。
+- 已针对性通过：Claude 换模型、DOCK-01、DOCK-03、MOB-01、MOB-02；Codex 刷新/回收场景仍被真实 app-server 的 goal continuation 回放卡住，AG-codex-08/11 尚未宣称通过，证据保留在 `docs/acceptance/M8/shots/`。
 
 实时统计：`docs/acceptance/M8/report.json`（每次 `pnpm accept:m8 --ratchet` 覆盖）。
