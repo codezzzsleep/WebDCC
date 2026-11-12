@@ -329,10 +329,11 @@ export class DshAdapter implements AgentAdapter {
     const client = await this.ensureSidecar().catch(() => null);
     if (client === null) return [];
     try {
-      const result = await this.call<{ commands?: { name?: string; description?: string }[] }>(client, 'commands/list', {
+      const result = await this.call<{ commands?: { name?: string; description?: string }[] } | { name?: string; description?: string }[]>(client, 'commands/list', {
         agentId: runtime?.nativeId ?? '',
       });
-      return (result.commands ?? [])
+      const commands = Array.isArray(result) ? result : result.commands ?? [];
+      return commands
         .filter((command) => typeof command.name === 'string')
         .map((command) => ({ name: `/${String(command.name)}`, ...(command.description === undefined ? {} : { description: command.description }) }));
     } catch {
