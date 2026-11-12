@@ -35,7 +35,9 @@ export async function updateDshHomePatch(update: DshHomePatchUpdate): Promise<vo
     const insertAt = llmBlock.indexOf('\n', providersLine + 1) + 1;
     if (insertAt <= 0) throw new Error('DSH home patch 的 providers 格式无效');
     const apiKeyEnv = update.apiKeyEnv ?? 'OPENAI_API_KEY';
+    const reasoningEfforts = update.reasoning === undefined || update.reasoning === '' ? '' : `        reasoningEfforts:\n          ${update.reasoning}: ${update.reasoning}\n`;
     providerBlock = `      ${update.providerKey}:\n        displayName: ${update.providerKey}\n        apiKeyEnv: ${apiKeyEnv}\n        api: openai-completions\n        baseURL: ${update.baseURL}\n        reasoning: ${update.reasoning ?? 'low'}\n        models:\n          - id: ${update.model}\n            name: ${update.model}\n`;
+    providerBlock = providerBlock.replace('        models:\n', `${reasoningEfforts}        models:\n`);
     providerStart = insertAt;
     providerBlockEnd = insertAt;
   } else {
@@ -52,6 +54,14 @@ export async function updateDshHomePatch(update: DshHomePatchUpdate): Promise<vo
   providerBlock = providerBlock.replace(/^ {8}baseURL:.*$/m, `        baseURL: ${update.baseURL}`);
   if (update.reasoning !== undefined && update.reasoning !== '') {
     providerBlock = providerBlock.replace(/^ {8}reasoning:.*$/m, `        reasoning: ${update.reasoning}`);
+    const effortPattern = new RegExp(`^ {10}${update.reasoning.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`, 'm');
+    if (!effortPattern.test(providerBlock)) {
+      if (/^ {8}reasoningEfforts:/m.test(providerBlock)) {
+        providerBlock = providerBlock.replace(/^( {8}reasoningEfforts:\n)/m, `$1          ${update.reasoning}: ${update.reasoning}\n`);
+      } else {
+        providerBlock = providerBlock.replace(/^( {8}models:)/m, `        reasoningEfforts:\n          ${update.reasoning}: ${update.reasoning}\n$1`);
+      }
+    }
   }
   if (!/^ {10}- id:/m.test(providerBlock)) throw new Error('DSH Provider patch 缺少 models');
   providerBlock = providerBlock.replace(/^ {10}- id:.*$/m, `          - id: ${update.model}`);
