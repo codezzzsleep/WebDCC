@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS drafts (
 );
 CREATE INDEX IF NOT EXISTS events_session_seq ON events(session_id, seq);
 CREATE INDEX IF NOT EXISTS feed_session ON feed(session_id, feed_seq);
+CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS watchdog_jobs (
+  session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE, data TEXT NOT NULL
+);
 `;
 
 export function openDb(file: string): Db {

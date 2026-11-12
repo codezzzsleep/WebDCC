@@ -344,7 +344,7 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
-    const runtime = this.require(sessionId);
+    this.require(sessionId);
     const client = await this.ensureSidecar();
     await this.call(client, 'subagents/prompt', {
       requestId: ulid(),

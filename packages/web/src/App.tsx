@@ -18,6 +18,8 @@ import { HandoffDialog } from './components/HandoffDialog.js';
 import { Icon } from './components/Icon.js';
 import { ProvidersPage } from './pages/Providers.js';
 import { NewSession } from './pages/NewSession.js';
+import { WatchdogPage } from './pages/Watchdog.js';
+import { WatchdogBar } from './components/WatchdogBar.js';
 
 function initialCollapsed(): boolean {
   // SPEC 9.12：768–1023px 默认收起成窄栏；手机上是抽屉
@@ -48,7 +50,7 @@ function RootLayout(): React.ReactElement {
         onToggle={() => setCollapsed((value) => !value)}
         onAddWorkspace={() => setAddOpen(true)}
         onNavigate={() => store.setDrawer(false)}
-        settingsActive={pathname.startsWith('/settings')}
+        settingsActive={pathname === '/settings/providers'}
       />
       {store.drawerOpen ? <div className="drawer-backdrop" data-testid="drawer-backdrop" onClick={() => store.setDrawer(false)} /> : null}
       <Outlet />
@@ -285,6 +287,7 @@ function SessionPage(): React.ReactElement {
             onOpenFiles={() => void navigate({ to: '/s/$sid', params: { sid: mainId }, search: { dock: 'files' } })}
           />
           <RelayBar sessionId={mainId} onOpen={(id) => openSession(id)} onCompare={(id) => openSession(mainId, id)} />
+          {session?.agent === 'codex' ? <WatchdogBar sessionId={mainId} /> : null}
           {tab === 'chat' ? (
             <>
               <Timeline sessionId={mainId} onOpenDiff={openDiff} onHandoff={setHandoffText} />
@@ -364,6 +367,7 @@ const providersRoute = createRoute({
   path: '/settings/providers',
   component: ProvidersPage,
 });
+const watchdogRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/watchdog', component: WatchdogPage });
 
 const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -375,7 +379,7 @@ const sessionRoute = createRoute({
   component: SessionPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, newRoute, providersRoute, sessionRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, newRoute, providersRoute, watchdogRoute, sessionRoute]);
 // 会话停靠区用 `main+side` 表示两个会话。`+` 是合法的路径分隔语义，
 // 不能被默认的 encodeURIComponent 编成 `%2B`，否则旧链接和验收地址都会改变。
 export const router = createRouter({ routeTree, pathParamsAllowedCharacters: ['+'] });

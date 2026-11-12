@@ -10,6 +10,8 @@ import type {
   MetaResponse,
   SessionDetailResponse,
   WorkspaceDto,
+  WatchdogSettings,
+  WatchdogView,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -36,6 +38,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  watchdog: () => request<WatchdogView>('/api/watchdog'),
+  updateWatchdog: (settings: Partial<WatchdogSettings>) => request<WatchdogView>('/api/watchdog', { method: 'PATCH', body: JSON.stringify(settings) }),
+  cancelWatchdog: (id: string) => request<WatchdogView>(`/api/watchdog/sessions/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' }),
   meta: () => request<MetaResponse>('/api/meta'),
   systemMetrics: () => request<SystemMetrics>('/api/system/metrics'),
   workspaces: () => request<WorkspaceDto[]>('/api/workspaces'),

@@ -151,6 +151,8 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
         '$events/result',
         'commands/execute',
         'commands/list',
+        'subagents/prompt',
+        'subagents/interruptByUser',
         'session/cancel',
         'session/create',
         'session/follow',

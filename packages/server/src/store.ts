@@ -8,6 +8,8 @@ import type {
   SessionDto,
   StoredEvent,
   WorkspaceDto,
+  WatchdogJob,
+  WatchdogSettings,
 } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
@@ -184,6 +186,32 @@ function toEvent(row: EventRow): StoredEvent {
 
 export class Store {
   constructor(private readonly db: Db) {}
+
+  watchdogSettings(): WatchdogSettings | undefined {
+    const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;
+    return row === undefined ? undefined : JSON.parse(row.value) as WatchdogSettings;
+  }
+
+  saveWatchdogSettings(settings: WatchdogSettings): void {
+    this.db.prepare("INSERT INTO app_settings (key, value) VALUES ('codex-watchdog', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(settings));
+  }
+
+  watchdogJobs(): WatchdogJob[] {
+    return (this.db.prepare('SELECT data FROM watchdog_jobs').all() as { data: string }[]).map((row) => JSON.parse(row.data) as WatchdogJob);
+  }
+
+  watchdogJob(sessionId: string): WatchdogJob | undefined {
+    const row = this.db.prepare('SELECT data FROM watchdog_jobs WHERE session_id = ?').get(sessionId) as { data: string } | undefined;
+    return row === undefined ? undefined : JSON.parse(row.data) as WatchdogJob;
+  }
+
+  saveWatchdogJob(job: WatchdogJob): void {
+    this.db.prepare('INSERT INTO watchdog_jobs (session_id, data) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET data = excluded.data').run(job.sessionId, JSON.stringify(job));
+  }
+
+  clearWatchdogJob(sessionId: string): void {
+    this.db.prepare('DELETE FROM watchdog_jobs WHERE session_id = ?').run(sessionId);
+  }
 
   // ---------- workspaces ----------
   listWorkspaces(): WorkspaceDto[] {
