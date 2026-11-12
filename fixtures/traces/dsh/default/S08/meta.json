@@ -2,10 +2,13 @@
   "version": 1,
   "agent": "dsh",
   "scenario": "S08",
-  "model": null,
+  "model": "deepseek-v4-1-flash-261017",
   "prompt": "在动手之前，先用提问工具问我想用哪种语言写 hello world（给出 Python 和 JavaScript 两个选项），等我回答后再写。",
-  "recordedAt": "2026-11-12T00:16:22.556Z",
-  "notTriggered": [
-    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S08 --out /tmp/wdcc-trace-mwcss3c4-1125698/S08"
-  ]
+  "recordedAt": "2026-11-12T11:21:23.914Z",
+  "notTriggered": [],
+  "traceMode": "attach",
+  "modelLayer": {
+    "recorded": false,
+    "reason": "attach 模式无法透明代理 DSH 内部模型端点"
+  }
 }

@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-11-12T00:16:00.899Z",
-  "commit": "fc800e1295b34ae935971f779045bd5171e295eb",
-  "traces": 22,
+  "generatedAt": "2026-11-12T12:05:56.529Z",
+  "commit": "4080e264c74e272709faddb2aede1356355f9cb4",
+  "traces": 33,
   "invariants": {
-    "passed": 1345,
-    "total": 1345
+    "passed": 3681,
+    "total": 3681
   },
   "replayUi": {
-    "passed": 18,
-    "total": 18
+    "passed": 33,
+    "total": 33
   },
   "m8Ratchet": {
     "passed": 15,
     "total": 125
   },
-  "buildRoot": "/tmp/wdcc-accept-mwcsltee-1117783/build"
+  "buildRoot": "/tmp/wdcc-accept-mwdhsv4e-825949/build"
 }

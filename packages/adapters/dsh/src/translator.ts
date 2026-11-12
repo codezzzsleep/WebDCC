@@ -6,9 +6,11 @@ function record(value: unknown): Record<string, unknown> { return typeof value =
 function key(prefix: string, frame: TraceFrame, id?: unknown): string { return `${prefix}-${typeof id === 'string' || typeof id === 'number' ? id : `${frame.ch}-${frame.i}`}`; }
 
 export class DshTranslator {
+  private readonly tools = new Map<string, { kind: EventKind; name: string; input: Record<string, unknown> }>();
+
   feed(frame: TraceFrame): AdapterEvent[] {
     const raw = record(frame.frame);
-    if (frame.dir === 'out') return [{ type: 'item.complete', itemKey: key('rpc-out', frame, raw['endpoint']), kind: 'internal', data: { nativeType: `rpc/out:${String(raw['endpoint'] ?? '')}` }, native: raw }];
+    if (frame.dir === 'out') return [{ type: 'item.complete', itemKey: key('rpc-out', frame), kind: 'internal', data: { nativeType: `rpc/out:${String(raw['endpoint'] ?? '')}` }, native: raw }];
     const value = record(raw['value']);
     const event = record(value['event']);
     const type = String(event['type'] ?? value['type'] ?? '');
@@ -33,20 +35,36 @@ export class DshTranslator {
           : kind === 'file.change'
             ? { changes: buildFileChanges(name, input), status: 'running' }
             : { name, input, status: 'running' };
+      this.tools.set(String(id), { kind, name, input });
       return [{ type: 'item.start', itemKey: key('tool', frame, id), kind, data: eventData, nativeTurnId, native: raw }];
     }
     if (type === 'assistant/message') {
       const message = record(data['message']);
       const content = Array.isArray(message['content']) ? message['content'] as unknown[] : [];
       const text = content.map((item) => record(item)).filter((item) => item['type'] === 'text').map((item) => String(item['text'] ?? '')).join('\n');
-      return [{ type: 'item.complete', itemKey: key('message', frame, nativeSeq), kind: 'assistant.message', data: { text }, nativeSeq, nativeTurnId, native: raw }];
+      const messageId = typeof message['id'] === 'string' ? message['id'] : undefined;
+      return [{ type: 'item.complete', itemKey: key('message', frame, messageId), kind: 'assistant.message', data: { text }, nativeSeq, nativeTurnId, native: raw }];
     }
-    if (type === 'tool/result') return [{ type: 'item.complete', itemKey: key('tool', frame, data['toolCallId'] ?? nativeSeq), kind: 'tool.call', data: { name: 'tool', input: {}, status: 'completed', output: data['message'] }, nativeSeq, nativeTurnId, native: raw }];
-    if (type === 'todo/write') return [{ type: 'item.complete', itemKey: key('plan', frame, nativeSeq), kind: 'plan', data: { items: [] }, nativeSeq, nativeTurnId, native: raw }];
+    if (type === 'tool/result') {
+      const resultMessage = record(data['message']);
+      const callId = String(data['toolCallId'] ?? resultMessage['toolCallId'] ?? resultMessage['callId'] ?? '');
+      const tool = this.tools.get(callId);
+      this.tools.delete(callId);
+      const message = resultMessage;
+      const output = Array.isArray(message['content'])
+        ? (message['content'] as unknown[]).map((part) => record(part)['text']).filter((text): text is string => typeof text === 'string').join('')
+        : String(message['text'] ?? '');
+      const failed = message['isError'] === true;
+      if (tool?.kind === 'command') return [{ type: 'item.complete', itemKey: key('tool', frame, callId), kind: 'command', data: { command: String(tool.input['command'] ?? ''), status: failed ? 'failed' : 'completed', outputTail: output }, nativeSeq, nativeTurnId, native: raw }];
+      if (tool?.kind === 'file.read') return [{ type: 'item.complete', itemKey: key('tool', frame, callId), kind: 'file.read', data: { path: String(tool.input['file_path'] ?? tool.input['pattern'] ?? '') }, nativeSeq, nativeTurnId, native: raw }];
+      if (tool?.kind === 'file.change') return [{ type: 'item.complete', itemKey: key('tool', frame, callId), kind: 'file.change', data: { changes: buildFileChanges(tool.name, tool.input), status: failed ? 'failed' : 'completed' }, nativeSeq, nativeTurnId, native: raw }];
+      return [{ type: 'item.complete', itemKey: key('tool', frame, callId), kind: 'tool.call', data: { name: tool?.name ?? 'tool', input: tool?.input ?? {}, status: failed ? 'failed' : 'completed', output }, nativeSeq, nativeTurnId, native: raw }];
+    }
+    if (type === 'todo/write') return [{ type: 'item.complete', itemKey: key('plan', frame), kind: 'plan', data: { items: [] }, nativeSeq, nativeTurnId, native: raw }];
     const kind = type === '' ? 'unknown' : 'internal';
     const dataOut = { nativeType: type || 'unknown' };
     if (!isValidEventData(kind, dataOut)) return [{ type: 'item.complete', itemKey: key('unknown', frame, nativeSeq), kind: 'unknown', data: dataOut, nativeSeq, nativeTurnId, native: raw }];
-    return [{ type: 'item.complete', itemKey: key(kind, frame, nativeSeq), kind, data: dataOut, nativeSeq, nativeTurnId, native: raw }];
+    return [{ type: 'item.complete', itemKey: key(kind, frame), kind, data: dataOut, nativeSeq, nativeTurnId, native: raw }];
   }
 }
 

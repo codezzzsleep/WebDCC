@@ -3,23 +3,25 @@
     "turnId": "trace:claude-code:S06:turn:1",
     "state": "completed",
     "user": {
-      "text": "",
-      "at": "1970-01-01T00:00:02.000Z"
+      "text": "运行 sleep 60，然后告诉我完成了。",
+      "at": "<timestamp>"
     },
     "startedAt": "<timestamp>",
     "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:claude-code:S06",
-        "seq": 32,
+        "seq": 33,
         "turnId": "trace:claude-code:S06:turn:1",
         "kind": "reasoning",
         "itemKey": "msg-sdk-37",
         "data": {
           "text": "I'm setting the tool call to run in the background.\n\n"
         },
-        "at": "1970-01-01T00:00:32.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "assistant",
           "message": {
@@ -60,14 +62,14 @@
       },
       {
         "sessionId": "trace:claude-code:S06",
-        "seq": 59,
+        "seq": 60,
         "turnId": "trace:claude-code:S06:turn:1",
         "kind": "assistant.message",
         "itemKey": "msg-sdk-78",
         "data": {
           "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。"
         },
-        "at": "1970-01-01T00:00:59.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "assistant",
           "message": {
@@ -105,7 +107,7 @@
       },
       {
         "sessionId": "trace:claude-code:S06",
-        "seq": 63,
+        "seq": 64,
         "turnId": "trace:claude-code:S06:turn:1",
         "kind": "assistant.message",
         "itemKey": "result-sdk-82",
@@ -113,7 +115,7 @@
           "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:01:03.000Z",
+        "at": "<timestamp>",
         "native": {
           "duration_api_ms": 10826,
           "stop_reason": "end_turn",

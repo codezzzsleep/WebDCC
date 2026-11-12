@@ -1,0 +1,14 @@
+**当前目录文件**
+
+- [AGENTS.md](AGENTS.md)（21 字节）
+- [CLAUDE.md](CLAUDE.md)（21 字节）
+- [README.md](README.md)（36 字节）
+- [SPEC.md](SPEC.md)（32 字节）
+
+**README.md 内容**：`# Sample Repo` 加一行 `WebDCC trace sample.`，共 3 行。
+
+**这个仓库做什么**（三句话）：
+
+1. 这是一个名为 "Sample Repo" 的示例仓库，定位是 WebDCC 的 trace（追踪）样例。
+2. [SPEC.md](SPEC.md) 同样只写了 "Trace sample workspace."，说明它更像用于演示或测试追踪流程的最小工作区，而非真实产品代码。
+3. 仓库里只有四个纯文本文档、没有任何源码或构建配置，因此它本身不实现具体功能。

@@ -1,22 +1,63 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AdapterEvent, EventData, EventKind, OpenItem, StoredEvent, TurnView, TraceFrame } from '../packages/protocol/src/index.js';
+import type { AdapterEvent, EventData, EventKind, OpenItem, StoredEvent, TraceFrame, TurnView } from '../packages/protocol/src/index.js';
 import { checkTurnInvariants, reduceTurn, resolveAnswer } from '../packages/protocol/src/index.js';
 import { CodexTranslator, DELTA_FRAMES as CODEX_DELTAS } from '../packages/adapters/codex/src/translator.js';
 import { ClaudeTranslator, DELTA_FRAMES as CLAUDE_DELTAS } from '../packages/adapters/claude/src/translator.js';
 import { DshTranslator, DELTA_FRAMES as DSH_DELTAS } from '../packages/adapters/dsh/src/translator.js';
 
-interface Result { fixture: string; frames: number; invariants: { passed: number; total: number; failures: { id: string; frame: number; message: string }[] }; view?: TurnView; error?: string; }
+interface Failure { id: string; frame: number; message: string; }
+interface Result {
+  fixture: string;
+  frames: number;
+  invariants: { passed: number; total: number; failures: Failure[] };
+  views?: TurnView[];
+  error?: string;
+}
 
-function parseFrames(text: string): TraceFrame[] { return text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as TraceFrame); }
+function parseFrames(text: string): TraceFrame[] {
+  return text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as TraceFrame);
+}
+
 function event(sessionId: string, seq: number, turnId: string | null, kind: EventKind, itemKey: string, data: unknown, native?: unknown): StoredEvent {
   return { sessionId, seq, turnId, kind, itemKey, data: data as never, at: new Date(seq * 1000).toISOString(), ...(native === undefined ? {} : { native }) };
 }
-function viewFor(events: StoredEvent[], open: Map<string, OpenItem>, turnId: string): TurnView { return reduceTurn(events.filter((item) => item.turnId === turnId), [...open.values()]); }
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function promptOf(frame: TraceFrame): string | undefined {
+  if (frame.dir !== 'out') return undefined;
+  const raw = record(frame.frame);
+  if (typeof raw['text'] === 'string') return raw['text'];
+  const params = record(raw['params']);
+  const input = Array.isArray(params['input']) ? params['input'] as unknown[] : [];
+  return input.map((part) => record(part)['text']).find((value): value is string => typeof value === 'string');
+}
+
 function adapterFor(agent: string): { feed: (frame: TraceFrame) => AdapterEvent[]; deltas: Set<string> } {
   if (agent === 'codex') { const translator = new CodexTranslator(); return { feed: (frame) => translator.feed(frame), deltas: CODEX_DELTAS }; }
   if (agent === 'claude-code') { const translator = new ClaudeTranslator(); return { feed: (frame) => translator.feed(frame), deltas: CLAUDE_DELTAS }; }
-  const translator = new DshTranslator(); return { feed: (frame) => translator.feed(frame), deltas: DSH_DELTAS };
+  const translator = new DshTranslator();
+  return { feed: (frame) => translator.feed(frame), deltas: DSH_DELTAS };
+}
+
+/** Expected files deliberately ignore transport timestamps while retaining
+ * item ids, native evidence, and the complete step sequence. */
+function normalise(value: unknown, key?: string): unknown {
+  if (key === 'at' || key === 'startedAt' || key === 'endedAt') return '<timestamp>';
+  if (Array.isArray(value)) return value.map((item) => normalise(item));
+  if (typeof value === 'object' && value !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [childKey, child] of Object.entries(value)) out[childKey] = normalise(child, childKey);
+    return out;
+  }
+  return value;
+}
+
+function viewFor(events: StoredEvent[], open: Map<string, OpenItem>, turnId: string): TurnView {
+  return reduceTurn(events.filter((item) => item.turnId === turnId), [...open.values()].filter((item) => item.turnId === turnId));
 }
 
 async function runFixture(fixture: string, writeExpected: boolean): Promise<Result> {
@@ -24,35 +65,42 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
   const frames = parseFrames(await readFile(join(fixture, 'native.jsonl'), 'utf8'));
   const { feed, deltas } = adapterFor(meta.agent);
   const sessionId = `trace:${meta.agent}:${meta.scenario}`;
-  let turnId = '';
   let seq = 0;
-  let currentTurn = 0;
-  let finalTurnId = '';
+  let turnNumber = 0;
+  let activeTurn: string | null = null;
   const events: StoredEvent[] = [];
   const open = new Map<string, OpenItem>();
-  const failures: { id: string; frame: number; message: string }[] = [];
-  const userText = meta.prompt ?? '';
-  if (userText !== '') events.push(event(sessionId, ++seq, null, 'user.message', `user-${meta.scenario}`, { text: userText }));
+  const failures: Failure[] = [];
+  const checkedTerminal = new Set<string>();
+
+  const startTurn = (prompt: string): string => {
+    const turnId = `${sessionId}:turn:${++turnNumber}`;
+    activeTurn = turnId;
+    events.push(event(sessionId, ++seq, turnId, 'user.message', `user-${turnId}`, { text: prompt }));
+    events.push(event(sessionId, ++seq, turnId, 'turn.started', `turn-start-${turnId}`, {}));
+    return turnId;
+  };
+  // The server writes these two events before it invokes adapter.send().
+  startTurn(meta.prompt ?? '');
 
   for (const [frameIndex, frame] of frames.entries()) {
     const translated = feed(frame);
     const method = typeof frame.frame === 'object' && frame.frame !== null ? String((frame.frame as Record<string, unknown>)['method'] ?? '') : '';
     if (translated.length === 0 && !deltas.has(method)) failures.push({ id: 'I8', frame: frameIndex + 1, message: `帧 ${method || frame.ch} 没有产生事件且未登记 delta` });
-    if (turnId === '' && translated.length > 0 && !(translated.length === 1 && translated[0]?.type === 'item.complete' && translated[0].kind === 'internal' && frame.dir === 'out')) {
-      currentTurn += 1;
-      turnId = `${sessionId}:turn:${currentTurn}`;
-      finalTurnId = turnId;
-      events.push(event(sessionId, ++seq, turnId, 'turn.started', `turn-start-${currentTurn}`, {}));
+
+    // S10 contains two sends in one native recording. The outgoing input is
+    // the boundary at which the server would have allocated the next ULID.
+    if (activeTurn === null) {
+      const prompt = promptOf(frame);
+      if (prompt !== undefined) startTurn(prompt);
     }
     for (const adapterEvent of translated) {
       if (adapterEvent.type === 'turn.start') {
-        currentTurn += 1;
-        turnId = `${sessionId}:turn:${currentTurn}`;
-        finalTurnId = turnId;
-        events.push(event(sessionId, ++seq, turnId, 'turn.started', `turn-start-${currentTurn}`, {}));
+        if (activeTurn === null) startTurn(promptOf(frame) ?? '');
         continue;
       }
-      if (turnId === '') continue;
+      const turnId = activeTurn;
+      if (turnId === null) continue; // late frames after a completed turn are orphans
       if (adapterEvent.type === 'item.start') {
         open.set(adapterEvent.itemKey, { itemKey: adapterEvent.itemKey, kind: adapterEvent.kind, data: adapterEvent.data as EventData[EventKind], turnId });
       } else if (adapterEvent.type === 'item.delta') {
@@ -72,34 +120,54 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
         events.push(event(sessionId, ++seq, turnId, adapterEvent.kind, adapterEvent.itemKey, adapterEvent.data, adapterEvent.native));
       } else if (adapterEvent.type === 'turn.end') {
         const answerKeys = resolveAnswer(events.filter((item) => item.turnId === turnId)).map((answer) => answer.itemKey);
-        events.push(event(sessionId, ++seq, turnId, 'turn.completed', `turn-end-${currentTurn}`, { status: adapterEvent.status, durationMs: 0, answerItemKeys: answerKeys }, adapterEvent.native));
+        events.push(event(sessionId, ++seq, turnId, 'turn.completed', `turn-end-${turnId}`, { status: adapterEvent.status, durationMs: 0, answerItemKeys: answerKeys }, adapterEvent.native));
         open.clear();
-        turnId = '';
+        activeTurn = null;
       }
     }
-    if (turnId !== '') {
+
+    const turnIds = [...new Set(events.map((item) => item.turnId).filter((id): id is string => id !== null))];
+    for (const turnId of turnIds) {
       const view = viewFor(events, open, turnId);
-      const checked = checkTurnInvariants(events.filter((item) => item.turnId === turnId), view, { frame: frameIndex + 1, inputProducedEvent: translated.length > 0, deltaFrame: translated.length === 0 });
-      failures.push(...checked);
+      if (turnId === activeTurn || (['completed', 'interrupted', 'failed'].includes(view.state) && !checkedTerminal.has(turnId))) {
+        failures.push(...checkTurnInvariants(events.filter((item) => item.turnId === turnId), view, turnId === activeTurn
+          ? { frame: frameIndex + 1, inputProducedEvent: translated.length > 0, deltaFrame: translated.length === 0 }
+          : { frame: frameIndex + 1 }));
+        if (['completed', 'interrupted', 'failed'].includes(view.state)) checkedTerminal.add(turnId);
+      }
     }
   }
-  if (finalTurnId === '') return { fixture, frames: frames.length, invariants: { passed: 0, total: frames.length, failures }, error: '轨迹没有 turn.start' };
-  const finalView = viewFor(events, open, finalTurnId);
+
+  const turnIds = [...new Set(events.map((item) => item.turnId).filter((id): id is string => id !== null))];
+  const views = turnIds.map((turnId) => viewFor(events, open, turnId));
+  for (const [index, view] of views.entries()) {
+    if (!['completed', 'interrupted', 'failed'].includes(view.state)) failures.push({ id: 'I1', frame: frames.length, message: `轮次 ${index + 1} 没有终止事件` });
+  }
+  const finalView = views.at(-1);
   const finalPath = join(fixture, 'reference', 'final.txt');
   const reference = await readFile(finalPath, 'utf8').catch(() => undefined);
-  if (reference !== undefined) {
+  if (reference !== undefined && finalView !== undefined) {
     const actual = finalView.answer.map((item) => item.text).join('\n');
-    const normalized = (value: string): string => value.replace(/\r\n/g, '\n').trim();
-    if (normalized(actual) !== normalized(reference)) failures.push({ id: 'I5', frame: frames.length, message: `最终回答与 reference/final.txt 不一致 (${actual.length}/${reference.length})` });
+    if (actual !== reference.replace(/\r\n/g, '\n')) failures.push({ id: 'I5', frame: frames.length, message: `最终回答与 reference/final.txt 不一致 (${actual.length}/${reference.length})` });
   }
+
+  const expectedPath = join(fixture, 'expected.turns.json');
+  const actualNormalised = normalise(views);
   if (writeExpected) {
-    const clean = JSON.parse(JSON.stringify(finalView)) as TurnView;
-    clean.startedAt = '<timestamp>';
-    delete clean.endedAt;
-    await writeFile(join(fixture, 'expected.turns.json'), JSON.stringify([clean], null, 2) + '\n');
+    await writeFile(expectedPath, JSON.stringify(actualNormalised, null, 2) + '\n');
+  } else {
+    const expectedText = await readFile(expectedPath, 'utf8').catch(() => undefined);
+    if (expectedText === undefined) failures.push({ id: 'GOLDEN', frame: frames.length, message: '缺少 expected.turns.json；先运行 pnpm l1:update' });
+    else {
+      try {
+        if (JSON.stringify(normalise(JSON.parse(expectedText))) !== JSON.stringify(actualNormalised)) failures.push({ id: 'GOLDEN', frame: frames.length, message: 'TurnView 与 expected.turns.json 不一致' });
+      } catch (error) {
+        failures.push({ id: 'GOLDEN', frame: frames.length, message: `expected.turns.json 不是有效 JSON：${String(error)}` });
+      }
+    }
   }
   const total = frames.length;
-  return { fixture, frames: frames.length, invariants: { passed: total - failures.length, total, failures }, view: finalView };
+  return { fixture, frames: total, invariants: { passed: Math.max(0, total - failures.length), total, failures }, views };
 }
 
 const root = process.argv[2] ?? 'fixtures/traces';

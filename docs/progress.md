@@ -157,4 +157,13 @@ M1–M7 全部完成并合并（PR #1–#7）。四个未决项在 M0 阶段提�
 - 2026-11-12 后续提交已推送到 `main`：`a077133`（M9 基础设施与验收证据）、`c620743`（迟到轮次收敛与 Codex continuation 回放游标）、`89eb52e`（Responses 历史用户消息计数）。当前 `main` 工作区干净，`pnpm typecheck`、`pnpm lint`、82 个单测通过。
 - 已针对性通过：Claude 换模型、DOCK-01、DOCK-03、MOB-01、MOB-02；Codex 刷新/回收场景仍被真实 app-server 的 goal continuation 回放卡住，AG-codex-08/11 尚未宣称通过，证据保留在 `docs/acceptance/M8/shots/`。
 
+### M9 复核补充后的进展（2026-11-12）
+
+- L2 已接入真实服务端和真实 Web UI：`ReplayAdapter` 按首条用户输入选择录像，并支持 S10 的第二轮继续从同一录像游标回放；`playwright.m9.config.ts` 与 `e2e-m9/replay.spec.ts` 覆盖 Codex/Claude 的 22 条已触发轨迹，检查活动指示唯一、最终回答、刷新、第二浏览器上下文，并生成 `docs/acceptance/M9/shots/` 的收起/展开截图。
+- 黄金文件已改为默认只读深度比对，时间戳统一忽略；只有 `pnpm l1:update` 允许重写。修正服务端轮次预写模型后，22 条轨迹、1345 帧的不变量和黄金文件均通过。
+- `pnpm accept:m9` 已实际跑通 typecheck、lint、trace scan（0 命中）、82 个单测、18 个快速 e2e、22 个 L2 回放；最近一次报告为 `traces 22 · invariants 1345/1345 · replay-ui 22/22`。M8 棘轮按要求实际启动过一遍（148 项，45.7 分钟），真实项 65 项通过；Codex continuation、部分弱网/Provider/模式用例和占位项仍失败，未把这次失败产物混入提交。现有 M8 基线报告仍为 `15/125`，M9 汇总保留该棘轮数并由 `accept:m8 --ratchet` 负责回归判断。
+- DSH 真实 Provider 轨迹已完成：3080 attach 只操作本次新建的临时工作区/会话，S01–S11 全部有原生帧、`reference/final.txt`、`reference/page.json` 和黄金视图；S06 真实记录了 `session/cancel` 后的 `turn/end` aborted。预检覆盖 `session/modelCatalog`、`workspace/create`、`session/create`、`session/selectModel`、正确形状的 `session/follow`、`$events`、`session/prompt`、`commands/execute`、`session/page`、`session/cancel`、`session/list`，全部通过。真实默认模型为 `openai-next / deepseek-v4-1-flash-261017`。attach 模式无法透明代理 DSH 内部模型端点，11 条 `meta.json` 明确记录模型层跳过原因；原生帧层已纳入 L1/L2。
+- DSH 翻译器按真实轨迹修正了 `tool/result` 嵌套 call id、命令/读取/编辑完成态和稳定条目键；全量现在是 33 条轨迹、3681 帧、不变量 3681/3681，L2 回放 33/33。发布目录切换和线上冒烟仍待执行。
+- 轨迹事实：DSH S04/S05 在当前真实权限策略下没有产生 `approval/request`，写文件直接完成；这按真实行为保留在轨迹和黄金文件中，不能用假审批补齐。S08 的 `user-questions/request` 与 `$events/result` 已真实出现并完成。
+
 实时统计：`docs/acceptance/M8/report.json`（每次 `pnpm accept:m8 --ratchet` 覆盖）。

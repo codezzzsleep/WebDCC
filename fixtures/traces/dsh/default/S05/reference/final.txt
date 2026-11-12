@@ -1,0 +1,4 @@
+File created: `/tmp/wdcc-trace-probe-2.txt` (absolute, outside the workspace) now contains `ok`.
+
+- No sandbox denial occurred, and no approval prompt was needed, so no escalated retry was required.
+- Note: approval prompts are enabled in this session, so a future write outside the workspace may prompt you.

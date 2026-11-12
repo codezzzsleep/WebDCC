@@ -27,6 +27,7 @@
     "start": "node packages/server/dist/main.js",
     "accept:m8": "tsx scripts/accept-m8.ts",
     "accept:m9": "tsx scripts/accept-m9.ts",
+    "l1:update": "tsx scripts/l1-replay.ts fixtures/traces --write-expected",
     "trace:record": "tsx scripts/trace-record.ts",
     "trace:redact": "tsx scripts/trace-redact.ts",
     "trace:scan": "tsx scripts/trace-scan.ts",

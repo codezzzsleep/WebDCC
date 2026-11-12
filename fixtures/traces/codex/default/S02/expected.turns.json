@@ -1,25 +1,80 @@
 [
   {
-    "turnId": "trace:codex:S02:turn:2",
+    "turnId": "trace:codex:S02:turn:1",
     "state": "completed",
     "user": {
-      "text": "",
-      "at": "1970-01-01T00:00:13.000Z"
+      "text": "先列出当前目录的文件，再读 README.md，然后用三句话告诉我这个仓库是做什么的。",
+      "at": "<timestamp>"
     },
     "startedAt": "<timestamp>",
     "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:codex:S02",
+        "seq": 4,
+        "turnId": "trace:codex:S02:turn:1",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-2",
+        "data": {
+          "nativeType": ""
+        },
+        "at": "<timestamp>",
+        "native": {}
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 7,
+        "turnId": "trace:codex:S02:turn:1",
+        "kind": "notice",
+        "itemKey": "notice-rpc-5",
+        "data": {
+          "level": "info",
+          "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
+          "nativeType": "configWarning"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "summary": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
+          "details": null
+        }
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 9,
+        "turnId": "trace:codex:S02:turn:1",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-7",
+        "data": {
+          "nativeType": ""
+        },
+        "at": "<timestamp>",
+        "native": {}
+      },
+      {
+        "sessionId": "trace:codex:S02",
+        "seq": 12,
+        "turnId": "trace:codex:S02:turn:1",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-10",
+        "data": {
+          "nativeType": ""
+        },
+        "at": "<timestamp>",
+        "native": {}
+      },
+      {
+        "sessionId": "trace:codex:S02",
         "seq": 15,
-        "turnId": "trace:codex:S02:turn:2",
+        "turnId": "trace:codex:S02:turn:1",
         "kind": "reasoning",
         "itemKey": "item-rs_00b1842b79f86828016af4f9fce08487d093f7498f06690d8a",
         "data": {
           "text": ""
         },
-        "at": "1970-01-01T00:00:15.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "reasoning",
           "id": "rs_00b1842b79f86828016af4f9fce08487d093f7498f06690d8a",
@@ -32,7 +87,7 @@
       {
         "sessionId": "trace:codex:S02",
         "seq": 16,
-        "turnId": "trace:codex:S02:turn:2",
+        "turnId": "trace:codex:S02:turn:1",
         "kind": "command",
         "itemKey": "item-exec-cfeb47d8-d0ce-490f-9446-a37aff6c89ba",
         "data": {
@@ -42,7 +97,7 @@
           "outputTail": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 07:27 .\ndrwx------ 5 root root 4096 Nov 12 07:27 ..\n-rw-r--r-- 1 root root   21 Nov 12 07:27 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 07:27 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 07:27 README.md\n-rw-r--r-- 1 root root   32 Nov 12 07:27 SPEC.md\n# Sample Repo\n\nWebDCC trace sample.\n",
           "status": "completed"
         },
-        "at": "1970-01-01T00:00:16.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "commandExecution",
           "id": "exec-cfeb47d8-d0ce-490f-9446-a37aff6c89ba",
@@ -76,13 +131,13 @@
       {
         "sessionId": "trace:codex:S02",
         "seq": 17,
-        "turnId": "trace:codex:S02:turn:2",
+        "turnId": "trace:codex:S02:turn:1",
         "kind": "unknown",
         "itemKey": "unknown-rpc-19",
         "data": {
           "nativeType": "thread/tokenUsage/updated"
         },
-        "at": "1970-01-01T00:00:17.000Z",
+        "at": "<timestamp>",
         "native": {
           "threadId": "01a1ccf0-7982-7981-9c43-9e17dda6dc6b",
           "turnId": "01a1ccf0-799b-7990-bb9d-66f3f5eb3ab4",
@@ -110,13 +165,13 @@
       {
         "sessionId": "trace:codex:S02",
         "seq": 19,
-        "turnId": "trace:codex:S02:turn:2",
+        "turnId": "trace:codex:S02:turn:1",
         "kind": "reasoning",
         "itemKey": "item-rs_00b1842b79f86828016af4fa0045f487d0bb6019b05b955158",
         "data": {
           "text": ""
         },
-        "at": "1970-01-01T00:00:19.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "reasoning",
           "id": "rs_00b1842b79f86828016af4fa0045f487d0bb6019b05b955158",
@@ -129,7 +184,7 @@
       {
         "sessionId": "trace:codex:S02",
         "seq": 20,
-        "turnId": "trace:codex:S02:turn:2",
+        "turnId": "trace:codex:S02:turn:1",
         "kind": "assistant.message",
         "itemKey": "item-msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
         "data": {
@@ -137,7 +192,7 @@
           "phase": "final",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:00:20.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "agentMessage",
           "id": "msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
@@ -153,13 +208,13 @@
       {
         "sessionId": "trace:codex:S02",
         "seq": 21,
-        "turnId": "trace:codex:S02:turn:2",
+        "turnId": "trace:codex:S02:turn:1",
         "kind": "unknown",
         "itemKey": "unknown-rpc-79",
         "data": {
           "nativeType": "thread/tokenUsage/updated"
         },
-        "at": "1970-01-01T00:00:21.000Z",
+        "at": "<timestamp>",
         "native": {
           "threadId": "01a1ccf0-7982-7981-9c43-9e17dda6dc6b",
           "turnId": "01a1ccf0-799b-7990-bb9d-66f3f5eb3ab4",

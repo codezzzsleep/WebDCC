@@ -2,10 +2,13 @@
   "version": 1,
   "agent": "dsh",
   "scenario": "S11",
-  "model": null,
+  "model": "deepseek-v4-1-flash-261017",
   "prompt": "运行 seq 1 3000，然后只告诉我最后一个数字。",
-  "recordedAt": "2026-11-12T00:16:23.889Z",
-  "notTriggered": [
-    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S11 --out /tmp/wdcc-trace-mwcss3c4-1125698/S11"
-  ]
+  "recordedAt": "2026-11-12T11:21:41.473Z",
+  "notTriggered": [],
+  "traceMode": "attach",
+  "modelLayer": {
+    "recorded": false,
+    "reason": "attach 模式无法透明代理 DSH 内部模型端点"
+  }
 }

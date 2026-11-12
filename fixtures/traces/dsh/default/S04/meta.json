@@ -2,10 +2,13 @@
   "version": 1,
   "agent": "dsh",
   "scenario": "S04",
-  "model": null,
+  "model": "deepseek-v4-1-flash-261017",
   "prompt": "在 /tmp 下创建文件 wdcc-trace-probe.txt，内容为 ok。",
-  "recordedAt": "2026-11-12T00:16:20.781Z",
-  "notTriggered": [
-    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S04 --out /tmp/wdcc-trace-mwcss3c4-1125698/S04"
-  ]
+  "recordedAt": "2026-11-12T11:19:44.038Z",
+  "notTriggered": [],
+  "traceMode": "attach",
+  "modelLayer": {
+    "recorded": false,
+    "reason": "attach 模式无法透明代理 DSH 内部模型端点"
+  }
 }

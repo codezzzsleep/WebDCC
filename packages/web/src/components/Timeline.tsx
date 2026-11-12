@@ -373,7 +373,7 @@ function StepRow({
     case 'assistant.message': {
       const data = event.data as EventData['assistant.message'];
       return (
-        <div className={`${className} assistant`} id={`e-${event.seq}`}>
+        <div className={`${className} assistant`} id={`e-${event.seq}`} data-testid="assistant-message" data-raw-text={data.text}>
           <Markdown text={data.text} />
         </div>
       );

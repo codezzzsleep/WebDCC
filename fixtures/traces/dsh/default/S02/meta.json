@@ -2,10 +2,13 @@
   "version": 1,
   "agent": "dsh",
   "scenario": "S02",
-  "model": null,
+  "model": "deepseek-v4-1-flash-261017",
   "prompt": "先列出当前目录的文件，再读 README.md，然后用三句话告诉我这个仓库是做什么的。",
-  "recordedAt": "2026-11-12T00:16:19.886Z",
-  "notTriggered": [
-    "Command failed: pnpm tsx packages/server/src/trace-real.ts --agent dsh --scenario S02 --out /tmp/wdcc-trace-mwcss3c4-1125698/S02"
-  ]
+  "recordedAt": "2026-11-12T11:19:25.783Z",
+  "notTriggered": [],
+  "traceMode": "attach",
+  "modelLayer": {
+    "recorded": false,
+    "reason": "attach 模式无法透明代理 DSH 内部模型端点"
+  }
 }

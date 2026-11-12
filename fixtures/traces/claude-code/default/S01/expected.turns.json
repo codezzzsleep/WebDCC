@@ -3,23 +3,25 @@
     "turnId": "trace:claude-code:S01:turn:1",
     "state": "completed",
     "user": {
-      "text": "",
-      "at": "1970-01-01T00:00:02.000Z"
+      "text": "用一句话解释什么是幂等。不要使用任何工具。",
+      "at": "<timestamp>"
     },
     "startedAt": "<timestamp>",
     "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:claude-code:S01",
-        "seq": 6,
+        "seq": 7,
         "turnId": "trace:claude-code:S01:turn:1",
         "kind": "assistant.message",
         "itemKey": "msg-sdk-18",
         "data": {
           "text": "幂等是指同一个操作执行一次和执行多次所产生的结果完全相同,不会因重复执行而产生额外的副作用。"
         },
-        "at": "1970-01-01T00:00:06.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "assistant",
           "message": {
@@ -57,7 +59,7 @@
       },
       {
         "sessionId": "trace:claude-code:S01",
-        "seq": 10,
+        "seq": 11,
         "turnId": "trace:claude-code:S01:turn:1",
         "kind": "assistant.message",
         "itemKey": "result-sdk-22",
@@ -65,7 +67,7 @@
           "text": "幂等是指同一个操作执行一次和执行多次所产生的结果完全相同,不会因重复执行而产生额外的副作用。",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:00:10.000Z",
+        "at": "<timestamp>",
         "native": {
           "duration_api_ms": 5458,
           "stop_reason": "end_turn",

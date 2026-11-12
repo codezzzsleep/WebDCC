@@ -43,7 +43,7 @@
 3. **翻译层不许丢、不许判断。** adapter 的翻译器对每一帧要么产生事件，要么属于第 3.5 节登记的纯增量帧；不许 `return` 丢弃。翻译器不判断轮次归属、会话状态和最终回答，这些只在第 4 节的 `TurnTracker` 和 `reduceTurn` 里做。
 4. **假模型只能照着真实录像来。** 第 3.7 节完成后，`packages/testing/mock-models/plans/` 里与真实录像不符的手写计划要删除或改为由录像生成。不许再凭想象新增假模型行为。
 5. **以轨迹为准。** 本文里标了【轨迹核实】的地方是我没有真实数据佐证的判断。采集后如果与本文不符：以轨迹为准，把帧原文贴进 `docs/protocol-notes.md`，再改本文对应条目，在 PR 的"修改的规则"一节列出。不许反过来为了符合本文去改轨迹或黄金文件。
-6. **不碰用户正在运行的服务和真实配置。** 不停止、不重启、不连接 3080 上的 DSH；采集和测试只用临时目录和动态端口；不读写 `~/.dsh`、`~/.codex`、`~/.claude`、`~/.webdcc`，例外只有两处只读访问：第 2 节 H1 导出测试样本、第 3.3 节读取 Key。不按进程名结束进程。第 6 节的发布是唯一允许重启 `webdcc.service` 的地方。
+6. **不停止、不重启用户正在运行的服务。** DSH 真实轨迹允许在用户明确授权后 attach 到 3080；只操作脚本自己新建的临时工作区和会话，不处理其他会话的审批。采集和测试仍优先使用临时目录和动态端口；不读写 `~/.dsh`、`~/.codex`、`~/.claude`、`~/.webdcc`，除非用户明确授权本次 DSH attach，且只读取连接所需的 token。不得按进程名结束进程。第 6 节的发布是唯一允许重启 `webdcc.service` 的地方。
 7. **不提交任何真实的 Key、token、Cookie、服务器地址。** 轨迹入库前必须过第 3.4 节的脱敏和扫描。
 8. `SPEC-M8.md` 第 1.2 节（测试里不许做的事）、1.3 节（先红后绿）、1.5 节（停止条件）继续有效。
 9. **不要"说一句做一句"。** 本文已经给出确定的答案，不需要中途向用户确认。确实缺信息时，把问题和你的默认做法写进 `docs/progress.md` 的"待决"一节，按默认做法继续。
@@ -120,10 +120,10 @@ fixtures/traces/<agent>/<model-slug>/<scenario>/
 
 `pnpm trace:record --agent <codex|claude-code|dsh> --scenario <id|all> [--model <slug>]`
 
-- **环境完全隔离**：`HOME`、`CODEX_HOME`、`CLAUDE_CONFIG_DIR`、`DSH_HOME` 都在 `$TMPDIR/wdcc-trace-<runId>/` 下；工作区是示例仓库的全新副本（复用 `e2e-real/globalSetup.ts` 里建 `sample-repo` 的逻辑，其中 `AGENTS.md`、`CLAUDE.md` 标记里的 runId 固定写成 `trace`，保证每次采集的工作区内容相同）；DSH 用临时 `DSH_HOME` 另起一个实例，**不连接 3080**。
+- **环境完全隔离**：`HOME`、`CODEX_HOME`、`CLAUDE_CONFIG_DIR`、`DSH_HOME` 都在 `$TMPDIR/wdcc-trace-<runId>/` 下；工作区是示例仓库的全新副本（复用 `e2e-real/globalSetup.ts` 里建 `sample-repo` 的逻辑，其中 `AGENTS.md`、`CLAUDE.md` 标记里的 runId 固定写成 `trace`，保证每次采集的工作区内容相同）。DSH 优先用临时 `DSH_HOME`；用户明确授权时允许 attach 到 3080，但仍只使用脚本自己新建的临时工作区和会话。
 - **读取 Key**：真实的端点和 Key 通过服务端现有的 Provider 解析逻辑（`packages/server/src/providers.ts` 的 `runtimeConfig(id)`，以只读方式打开线上数据目录）取得，只存在于脚本内存和子进程环境变量里，不落盘、不打印、不进轨迹。DSH 的 Key 如果只存在 DSH 自己的凭据里，走服务端现有的读取 DSH Provider 的代码路径只读取得；取不到就按下面的"DSH 的降级"处理。脚本开始和结束各记一次真实配置文件的哈希，必须一致。
 - **只由人显式运行**：不进 `accept:*`，不进 CI。每个场景默认只采一次；采集失败（网络错误、Agent 崩溃）最多重采一次。模型没有按预期触发某个行为（例如没用提问工具）不算失败，在 `meta.json` 里记 `notTriggered` 和原因，不重采。
-- **DSH 的降级**：现有的环境变量方式接的是假模型，换成真实端点时协议是否对得上需要【实现时核实】。如果临时 DSH 实例无法接上真实端点，DSH 只采原生帧层，方式是以 attach 模式连接用户的 DSH、只操作脚本自己新建的会话和临时工作区、绝不处理别的会话的审批。这种情况要在 `docs/progress.md` 写明，DSH 的模型层重放（3.7）相应跳过。
+- **DSH 的降级**：现有的环境变量方式接的是假模型，换成真实端点时协议是否对得上需要【实现时核实】。如果临时 DSH 实例无法接上真实端点，在用户明确授权后以 attach 模式连接用户的 DSH，只操作脚本自己新建的会话和临时工作区；脚本自己会话的审批可以自动处理，其他会话不处理。这种情况要在 `docs/progress.md` 写明。attach 模式只采原生帧层，DSH 的模型层重放（3.7）跳过并在 `meta.json` 记录原因。
 - **采哪些组合**：线上"Agent 与 Provider"页里当前配置的每个 Harness × Provider × 模型组合。主组合（每个 Harness 用户默认使用的那个模型）采全部场景；其余组合只采 S01–S03。Codex 的主组合另外用高一档的思考强度多采一次 S02。
 
 ### 3.4 脱敏与扫描
@@ -417,3 +417,19 @@ M3–M5 那样互不依赖的并行在这里不成立：PR-2 到 PR-5 有先后�
 - "在另一个 Agent 中继续"入口的可发现性。
 
 M9 期间这些地方出了问题，只做不改变设计的最小修复，并记进 `docs/progress.md`。
+
+---
+
+## 11. 复核补充（2026-11-12 15:40，审查方）
+
+审查方复核了 `a077133`、`c620743`、`89eb52e`、`4080e26`，并独立重跑了 L1（22 条轨迹、1345 帧、不变量 1345/1345 通过）。以下几个缺口必须在继续之前补上。
+
+1. **L2 没有落地，报告不能算数。** `ReplayAdapter`（`packages/testing/fake-adapter/src/replay.ts`）写完但没有任何地方使用；`scripts/e2e-server.ts` 仍然全部用脚本化的 `FakeAdapter`，所以 5.3 的"轨迹驱动回放 + 最终回答与 `reference/final.txt` 逐字节一致 + 刷新一致 + 截图"一条都没验证。`scripts/accept-m9.ts` 里 `replayUiPassed = 18` 是硬编码的，报告里的 `replay-ui 18/18` 不是从测试结果解析出来的，属于虚标。要求：
+   - 新增 L2 用例（Playwright）：用 `ReplayAdapter` 把每条主组合的轨迹喂给真实界面，按 5.3 的四条断言检查，截图存 `docs/acceptance/M9/shots/`；
+   - `accept:m9` 用 Playwright 的 JSON reporter 解析实际结果，禁止任何硬编码数字；跑不到用例就报告 0/0 并失败。
+2. **黄金文件形同虚设。** `l1-replay.ts` 的 `--write-expected` 只写不比对，而 `accept-m9.ts` 每次运行都带这个参数，所以 `expected.turns.json` 从来没起过防回归作用。要求：默认模式（不带参数）在 `expected.turns.json` 存在时与之深度比对（忽略时间戳），不一致即失败；只有显式 `pnpm l1:update` 才允许重写，重写必须单独提交并在 PR 里解释。`accept:m9` 不许带写回参数。
+3. **DSH 轨迹重采。** 11 个 DSH 场景当时因没有真实 Provider 全部是 `notTriggered`。2026-11-12 13:52 起 3080 的 DSH 已配置 `openai-next` + `deepseek-v4-1-flash-261017`，前提已具备。按 3.3 重采 S01–S11：优先临时 `DSH_HOME` 实例 + 该 Provider 的端点和 Key（只读取得）；临时实例接不上时按 3.3 的降级（attach 到 3080，只操作自己新建的会话和临时工作区），并在 `docs/progress.md` 写明。DSH 的 `reference/`（`page.json` 加原版界面收起/展开截图）一并补齐。重采后 L1 帧数会明显增加，全量重跑。
+4. **发布次序。** 当前线上（80 端口）是 08:47 构建的前端配 07:43 启动的服务端，落后 `c620743`（迟到轮次收敛）和 `89eb52e` 两个提交；`pnpm release` 也已实现但未执行过。在上面 1、2 完成、L2 全绿之后，按第 6 节执行第一次发布（切换 `/opt/webdcc/current`，只重启 WebDCC），并完成 9.4 的线上冒烟。发布前后在 `docs/progress.md` 记录 commit 与时间。
+5. **M8 棘轮。** 7 项回归（AG-codex-08/11/12、AG-claude-12、DOCK-01/03、MOB-01/02）中已针对性通过的要让它们在完整棘轮里重新验证；goal continuation 的阻塞处理完以后，按 `accept:m8` 完整跑两遍并把报告提交。M8 的通过数只许增不许减。
+
+以上 1–5 完成后，按第 9 节出最终报告。

@@ -1,0 +1,13 @@
+按照你的选择，我用 Python 写好了，并运行验证通过。
+
+文件：[hello.py](hello.py)
+
+```python
+print("Hello, World!")
+```
+
+运行输出：
+
+```
+Hello, World!
+```

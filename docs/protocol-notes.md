@@ -552,4 +552,4 @@ Claude Code 的**第一个 `POST /v1/messages` 是预热/配额请求**（`tools
 - 原生轮次编号只作为 `nativeTurnId` 绑定属性，服务端生成的 ULID 是唯一的 `turnId`。迟到的 `turn/diff/updated` 和条目收尾由 `TurnTracker` 在 10 秒窗口内归属上一轮。
 - Codex `turn/diff/updated` 表示累计 diff，翻译为 `turn.diff`；`reduceTurn` 取最后一个累计快照。其它来源使用逐条 `file.change` 后到覆盖。
 - 三个翻译器均使用原生 id 或通道加帧号生成 itemKey；不读取时钟、不使用随机数。delta 通知登记在各自导出的 `DELTA_FRAMES` 中。
-- DSH 真实采集：本机 Provider 注册表只有 Codex Responses 和 Claude Messages，没有 DSH Provider/Key。临时 DSH 实例无法在不读取用户 DSH 配置的前提下连接真实模型，因此按 SPEC-M9 3.3 的降级规则只记录 `notTriggered`，未连接 3080。
+- DSH 真实采集：用户明确授权后 attach 到 3080，预检确认 `session/modelCatalog` 返回 `openai-next / deepseek-v4-1-flash-261017`，并逐项验证 `workspace/create`、`session/create`、`session/selectModel`、`session/follow`、`$events`、`session/prompt`、`commands/execute`、`session/page`、`session/cancel`、`session/list`。S01–S11 均采到原生帧；S06 的 `session/cancel` 后 `turn/end.reason.kind=aborted`。真实 DSH 的 `tool/result` 将 `toolCallId` 放在 `data.message` 内，翻译器按该字段与前置 `tool/call` 合并命令、读取、编辑完成态；attach 模式无法透明代理内部模型端点，11 条 `meta.json` 记录模型层跳过原因。

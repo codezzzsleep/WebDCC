@@ -1,0 +1,143 @@
+[
+  {
+    "turnId": "trace:dsh:S06:turn:1",
+    "state": "interrupted",
+    "user": {
+      "text": "运行 sleep 60，然后告诉我完成了。",
+      "at": "<timestamp>"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:dsh:S06",
+        "seq": 54,
+        "turnId": "trace:dsh:S06:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "message-db86eabd-ab30-46c7-a8ef-95c1d4cf692d",
+        "data": {
+          "text": ""
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "item",
+          "streamId": "s2",
+          "value": {
+            "type": "event",
+            "event": {
+              "type": "assistant/message",
+              "seq": 17,
+              "time": 1794482625414,
+              "data": {
+                "turn": 1,
+                "step": 1,
+                "message": {
+                  "role": "assistant",
+                  "content": [
+                    {
+                      "type": "reasoning",
+                      "text": "The user says: run sleep 60, then tell me it's done. Wait — the AGENTS.md says \"Trace run.\" Not blocking.\n\nI should just run sleep 60 in background? The user asked to run sleep 60 and then tell them it's done. I should actually run sleep 60 and wait. Using background job, I can run and wait. But that would block? Let's run with"
+                    }
+                  ],
+                  "source": {
+                    "kind": "model",
+                    "provider": "openai-next",
+                    "model": "deepseek-v4-1-flash-261017"
+                  },
+                  "id": "db86eabd-ab30-46c7-a8ef-95c1d4cf692d"
+                },
+                "interrupted": true,
+                "stream": [
+                  {
+                    "type": "chunk",
+                    "time": 1794482624869,
+                    "chunk": {
+                      "type": "block-start",
+                      "index": 0,
+                      "blockType": "reasoning"
+                    }
+                  },
+                  {
+                    "type": "reasoning-chunks",
+                    "time0": 1794482624869,
+                    "index": 0,
+                    "dt": [
+                      39,
+                      1,
+                      83,
+                      0,
+                      0,
+                      1,
+                      66,
+                      0,
+                      1,
+                      0,
+                      80,
+                      0,
+                      1,
+                      0,
+                      80,
+                      0,
+                      1,
+                      0,
+                      46,
+                      0,
+                      0,
+                      1,
+                      98,
+                      1,
+                      0,
+                      0
+                    ],
+                    "texts": [
+                      "The",
+                      " user says: run",
+                      " sleep",
+                      " 60, then tell me",
+                      " it's done. Wait",
+                      " —",
+                      " the AG",
+                      "ENTS.md says",
+                      " \"Trace run.\"",
+                      " Not blocking",
+                      ".\n\nI should just run sleep",
+                      " 60 in background?",
+                      " The user",
+                      " asked to run sleep",
+                      " 60 and then",
+                      " tell them it",
+                      "'s done. I",
+                      " should actually",
+                      " run sleep",
+                      " 60 and",
+                      " wait",
+                      ". Using background",
+                      " job, I",
+                      " can run",
+                      " and wait. But that",
+                      " would block?",
+                      " Let's run with"
+                    ]
+                  }
+                ]
+              },
+              "surfaceOp": "append"
+            }
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [],
+    "changes": [],
+    "summary": {
+      "commands": 0,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

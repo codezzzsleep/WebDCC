@@ -3,23 +3,25 @@
     "turnId": "trace:claude-code:S11:turn:1",
     "state": "completed",
     "user": {
-      "text": "",
-      "at": "1970-01-01T00:00:02.000Z"
+      "text": "运行 seq 1 3000，然后只告诉我最后一个数字。",
+      "at": "<timestamp>"
     },
     "startedAt": "<timestamp>",
     "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:claude-code:S11",
-        "seq": 26,
+        "seq": 27,
         "turnId": "trace:claude-code:S11:turn:1",
         "kind": "assistant.message",
         "itemKey": "msg-sdk-29",
         "data": {
           "text": "3000"
         },
-        "at": "1970-01-01T00:00:26.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "assistant",
           "message": {
@@ -57,7 +59,7 @@
       },
       {
         "sessionId": "trace:claude-code:S11",
-        "seq": 30,
+        "seq": 31,
         "turnId": "trace:claude-code:S11:turn:1",
         "kind": "assistant.message",
         "itemKey": "result-sdk-33",
@@ -65,7 +67,7 @@
           "text": "3000",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:00:30.000Z",
+        "at": "<timestamp>",
         "native": {
           "duration_api_ms": 8950,
           "stop_reason": "end_turn",

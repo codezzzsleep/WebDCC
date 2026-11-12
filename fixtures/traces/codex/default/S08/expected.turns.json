@@ -1,25 +1,80 @@
 [
   {
-    "turnId": "trace:codex:S08:turn:2",
+    "turnId": "trace:codex:S08:turn:1",
     "state": "completed",
     "user": {
-      "text": "",
-      "at": "1970-01-01T00:00:13.000Z"
+      "text": "在动手之前，先用提问工具问我想用哪种语言写 hello world（给出 Python 和 JavaScript 两个选项），等我回答后再写。",
+      "at": "<timestamp>"
     },
     "startedAt": "<timestamp>",
     "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:codex:S08",
+        "seq": 4,
+        "turnId": "trace:codex:S08:turn:1",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-2",
+        "data": {
+          "nativeType": ""
+        },
+        "at": "<timestamp>",
+        "native": {}
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 7,
+        "turnId": "trace:codex:S08:turn:1",
+        "kind": "notice",
+        "itemKey": "notice-rpc-5",
+        "data": {
+          "level": "info",
+          "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
+          "nativeType": "configWarning"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "summary": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
+          "details": null
+        }
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 9,
+        "turnId": "trace:codex:S08:turn:1",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-7",
+        "data": {
+          "nativeType": ""
+        },
+        "at": "<timestamp>",
+        "native": {}
+      },
+      {
+        "sessionId": "trace:codex:S08",
+        "seq": 12,
+        "turnId": "trace:codex:S08:turn:1",
+        "kind": "unknown",
+        "itemKey": "unknown-rpc-10",
+        "data": {
+          "nativeType": ""
+        },
+        "at": "<timestamp>",
+        "native": {}
+      },
+      {
+        "sessionId": "trace:codex:S08",
         "seq": 15,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "reasoning",
         "itemKey": "item-rs_051737ff2d0768ed016af4fa6f010087d0a61c014ad9b7b2da",
         "data": {
           "text": ""
         },
-        "at": "1970-01-01T00:00:15.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "reasoning",
           "id": "rs_051737ff2d0768ed016af4fa6f010087d0a61c014ad9b7b2da",
@@ -32,13 +87,13 @@
       {
         "sessionId": "trace:codex:S08",
         "seq": 16,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "unknown",
         "itemKey": "unknown-rpc-17",
         "data": {
           "nativeType": "thread/tokenUsage/updated"
         },
-        "at": "1970-01-01T00:00:16.000Z",
+        "at": "<timestamp>",
         "native": {
           "threadId": "01a1ccf2-34b4-7232-ba1a-afb01c5653a4",
           "turnId": "01a1ccf2-34d0-7543-9096-35e0cf87b73c",
@@ -66,13 +121,13 @@
       {
         "sessionId": "trace:codex:S08",
         "seq": 18,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "reasoning",
         "itemKey": "item-rs_051737ff2d0768ed016af4fa71c95087d085de9db0d3c9d363",
         "data": {
           "text": ""
         },
-        "at": "1970-01-01T00:00:18.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "reasoning",
           "id": "rs_051737ff2d0768ed016af4fa71c95087d085de9db0d3c9d363",
@@ -85,7 +140,7 @@
       {
         "sessionId": "trace:codex:S08",
         "seq": 19,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "assistant.message",
         "itemKey": "item-call_0ecb3d6227fd4f2aba0402830ae4cb62",
         "data": {
@@ -93,7 +148,7 @@
           "phase": "final",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:00:19.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "agentMessage",
           "id": "call_0ecb3d6227fd4f2aba0402830ae4cb62",
@@ -117,13 +172,13 @@
       {
         "sessionId": "trace:codex:S08",
         "seq": 20,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "unknown",
         "itemKey": "unknown-rpc-23",
         "data": {
           "nativeType": "thread/tokenUsage/updated"
         },
-        "at": "1970-01-01T00:00:20.000Z",
+        "at": "<timestamp>",
         "native": {
           "threadId": "01a1ccf2-34b4-7232-ba1a-afb01c5653a4",
           "turnId": "01a1ccf2-34d0-7543-9096-35e0cf87b73c",
@@ -151,13 +206,13 @@
       {
         "sessionId": "trace:codex:S08",
         "seq": 22,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "reasoning",
         "itemKey": "item-rs_051737ff2d0768ed016af4fa74136487d0af8198fe330393f8",
         "data": {
           "text": ""
         },
-        "at": "1970-01-01T00:00:22.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "reasoning",
           "id": "rs_051737ff2d0768ed016af4fa74136487d0af8198fe330393f8",
@@ -170,7 +225,7 @@
       {
         "sessionId": "trace:codex:S08",
         "seq": 23,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "assistant.message",
         "itemKey": "item-msg_051737ff2d0768ed016af4fa74398887d080e98356850fad65",
         "data": {
@@ -178,7 +233,7 @@
           "phase": "final",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:00:23.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "agentMessage",
           "id": "msg_051737ff2d0768ed016af4fa74398887d080e98356850fad65",
@@ -194,13 +249,13 @@
       {
         "sessionId": "trace:codex:S08",
         "seq": 24,
-        "turnId": "trace:codex:S08:turn:2",
+        "turnId": "trace:codex:S08:turn:1",
         "kind": "unknown",
         "itemKey": "unknown-rpc-35",
         "data": {
           "nativeType": "thread/tokenUsage/updated"
         },
-        "at": "1970-01-01T00:00:24.000Z",
+        "at": "<timestamp>",
         "native": {
           "threadId": "01a1ccf2-34b4-7232-ba1a-afb01c5653a4",
           "turnId": "01a1ccf2-34d0-7543-9096-35e0cf87b73c",

@@ -1,0 +1,3 @@
+已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。
+
+说明：写文件操作在 workspace-write 沙箱下直接成功，未触发审批提示；实际落盘路径是 `/tmp/wdcc-trace-probe.txt`，放在会话工作区 `/tmp/wdcc-real-trace-AuVFAW/sample-repo` 之外，这属于平台临时区域的可写例外情况。读取校验时 bash 返回 `landlock-run: partial enforcement` 警告，但文件内容已确认为 `ok`。

@@ -103,7 +103,8 @@ M9 轨迹与统一轮次验收：
 pnpm trace:record --agent codex --scenario S01
 pnpm trace:redact <trace-dir>
 pnpm trace:scan
-pnpm accept:m9 --skip-e2e
+pnpm l1:update                 # 只有确认轨迹变化时才重写黄金文件
+pnpm accept:m9                 # 含快速 e2e、L1 黄金比对和 L2 Playwright 回放
 ```
 
 轨迹录制只由人显式运行；`TurnView`、`TraceSink` 和翻译器回放说明见 [docs/specs/SPEC-M9.md](docs/specs/SPEC-M9.md)。验收构建输出到临时目录，不覆盖仓库的 `dist`。

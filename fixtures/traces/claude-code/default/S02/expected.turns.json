@@ -3,23 +3,25 @@
     "turnId": "trace:claude-code:S02:turn:1",
     "state": "completed",
     "user": {
-      "text": "",
-      "at": "1970-01-01T00:00:02.000Z"
+      "text": "先列出当前目录的文件，再读 README.md，然后用三句话告诉我这个仓库是做什么的。",
+      "at": "<timestamp>"
     },
     "startedAt": "<timestamp>",
     "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:claude-code:S02",
-        "seq": 29,
+        "seq": 30,
         "turnId": "trace:claude-code:S02:turn:1",
         "kind": "assistant.message",
         "itemKey": "msg-sdk-88",
         "data": {
           "text": "**当前目录的文件：** `AGENTS.md`、`CLAUDE.md`、`README.md`、`SPEC.md`。\n\n**README.md 内容：** 标题是“Sample Repo”，正文只有一句“WebDCC trace sample.”。\n\n**这个仓库是做什么的：**\n1. 这是一个示例仓库，README 称它是“WebDCC trace sample”，也就是 WebDCC 的追踪（trace）样例。\n2. 仓库里只有几个很短的文档文件（AGENTS.md、CLAUDE.md、README.md、SPEC.md），没有源代码。\n3. 它大概是用来演示或测试 AI 代理（如 Claude）运行轨迹的。这只是我根据文件名和内容做的推测，因为 README 没有更多说明。"
         },
-        "at": "1970-01-01T00:00:29.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "assistant",
           "message": {
@@ -57,7 +59,7 @@
       },
       {
         "sessionId": "trace:claude-code:S02",
-        "seq": 33,
+        "seq": 34,
         "turnId": "trace:claude-code:S02:turn:1",
         "kind": "assistant.message",
         "itemKey": "result-sdk-92",
@@ -65,7 +67,7 @@
           "text": "**当前目录的文件：** `AGENTS.md`、`CLAUDE.md`、`README.md`、`SPEC.md`。\n\n**README.md 内容：** 标题是“Sample Repo”，正文只有一句“WebDCC trace sample.”。\n\n**这个仓库是做什么的：**\n1. 这是一个示例仓库，README 称它是“WebDCC trace sample”，也就是 WebDCC 的追踪（trace）样例。\n2. 仓库里只有几个很短的文档文件（AGENTS.md、CLAUDE.md、README.md、SPEC.md），没有源代码。\n3. 它大概是用来演示或测试 AI 代理（如 Claude）运行轨迹的。这只是我根据文件名和内容做的推测，因为 README 没有更多说明。",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:00:33.000Z",
+        "at": "<timestamp>",
         "native": {
           "duration_api_ms": 9459,
           "stop_reason": "end_turn",

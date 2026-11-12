@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { AdapterEvent, TraceFrame, TraceSink } from '@webdcc/protocol';
 import { CodexAdapter } from '@webdcc/adapter-codex';
 import { ClaudeAdapter } from '@webdcc/adapter-claude';
-import { DshAdapter } from '@webdcc/adapter-dsh';
+import { DshAdapter, attachToDsh } from '@webdcc/adapter-dsh';
 import { Store } from './store.js';
 import { ProviderRegistry } from './providers.js';
 import { ModelProxy } from '../../testing/model-proxy/src/index.js';
@@ -24,7 +24,7 @@ const scenarioPrompts: Record<string, string> = {
   S11: '运行 seq 1 3000，然后只告诉我最后一个数字。',
 };
 
-interface Args { agent: 'codex' | 'claude-code' | 'dsh'; scenario: string; model?: string; out: string; }
+interface Args { agent: 'codex' | 'claude-code' | 'dsh'; scenario: string; model?: string; out: string; dshUrl?: string; dshToken?: string; }
 
 function parseArgs(): Args {
   const values = new Map<string, string>();
@@ -40,7 +40,14 @@ function parseArgs(): Args {
     throw new Error('trace-real 用法：--agent codex|claude-code|dsh --scenario S01 --out <dir> [--model <slug>]');
   }
   if (scenarioPrompts[scenario] === undefined) throw new Error(`未知场景：${scenario}`);
-  return { agent, scenario, out, ...(values.get('model') === undefined ? {} : { model: values.get('model') }) };
+  return {
+    agent,
+    scenario,
+    out,
+    ...(values.get('model') === undefined ? {} : { model: values.get('model') }),
+    ...(values.get('dsh-url') === undefined ? {} : { dshUrl: values.get('dsh-url') }),
+    ...(values.get('dsh-token') === undefined ? {} : { dshToken: values.get('dsh-token') }),
+  };
 }
 
 class JsonlSink implements TraceSink {
@@ -116,18 +123,21 @@ async function main(): Promise<void> {
   await mkdir(isolatedAgentHome, { recursive: true });
   let proxy: ModelProxy | undefined;
   let adapter: CodexAdapter | ClaudeAdapter | DshAdapter | undefined;
+  let proxiedProvider: NonNullable<ReturnType<ProviderRegistry['runtimeConfig']>> | undefined;
   const sessionId = `trace-${args.agent}-${args.scenario}`;
   const events: AdapterEvent[] = [];
   try {
-    const provider = await providerConfig(args.agent);
-    const endpoint = args.agent === 'codex' ? provider.config.endpoints?.['openai-responses'] ?? provider.config.baseUrl : provider.config.endpoints?.['anthropic-messages'] ?? provider.config.baseUrl;
-    proxy = new ModelProxy({ target: endpoint, port: 0, recordFile: modelFile });
-    const address = await proxy.listen();
-    const proxiedProvider = {
-      ...provider.config,
-      baseUrl: address.url,
-      endpoints: args.agent === 'codex' ? { 'openai-responses': address.url } as Record<string, string> : { 'anthropic-messages': address.url } as Record<string, string>,
-    };
+    const provider = args.agent === 'dsh' ? undefined : await providerConfig(args.agent);
+    if (provider !== undefined) {
+      const endpoint = args.agent === 'codex' ? provider.config.endpoints?.['openai-responses'] ?? provider.config.baseUrl : provider.config.endpoints?.['anthropic-messages'] ?? provider.config.baseUrl;
+      proxy = new ModelProxy({ target: endpoint, port: 0, recordFile: modelFile });
+      const address = await proxy.listen();
+      proxiedProvider = {
+        ...provider.config,
+        baseUrl: address.url,
+        endpoints: args.agent === 'codex' ? { 'openai-responses': address.url } as Record<string, string> : { 'anthropic-messages': address.url } as Record<string, string>,
+      };
+    }
     const env = {
       ...process.env,
       HOME: isolatedHome,
@@ -135,9 +145,18 @@ async function main(): Promise<void> {
       ...(args.agent === 'claude-code' ? { CLAUDE_CONFIG_DIR: isolatedAgentHome } : {}),
       NO_COLOR: '1',
     };
-    if (args.agent === 'codex') adapter = new CodexAdapter({ env, traceSink: native });
-    else if (args.agent === 'claude-code') adapter = new ClaudeAdapter({ env, traceSink: native, ...(args.model === undefined ? {} : { model: args.model }) });
-    else adapter = new DshAdapter({ mode: 'spawn', env, traceSink: native });
+    if (args.agent === 'codex') {
+      if (provider === undefined || proxy === undefined || proxiedProvider === undefined) throw new Error('Codex Provider 初始化失败');
+      adapter = new CodexAdapter({ env, traceSink: native });
+    } else if (args.agent === 'claude-code') {
+      adapter = new ClaudeAdapter({ env, traceSink: native, ...(args.model === undefined ? {} : { model: args.model }) });
+    } else {
+      const dshUrl = args.dshUrl ?? process.env['WDCC_DSH_ATTACH_URL'];
+      const dshToken = args.dshToken ?? process.env['WDCC_DSH_ATTACH_TOKEN'];
+      if (dshUrl === undefined || dshToken === undefined || dshToken === '') throw new Error('DSH 采集需要 --dsh-url/--dsh-token 或 WDCC_DSH_ATTACH_URL/WDCC_DSH_ATTACH_TOKEN');
+      const cookie = await attachToDsh(dshUrl, dshToken);
+      adapter = new DshAdapter({ mode: 'attach', attachUrl: dshUrl, attachCookie: cookie, env, traceSink: native });
+    }
     let interrupted = false;
     const activeAdapter = adapter;
     if (activeAdapter === undefined) throw new Error('adapter 未创建');
@@ -146,22 +165,40 @@ async function main(): Promise<void> {
       events.push(event);
       if (event.type === 'item.complete' && event.kind === 'approval.request') {
         const data = event.data as { approvalId?: string };
-        if (data.approvalId !== undefined) void activeAdapter.respond(sessionId, { approvalId: data.approvalId, optionId: args.scenario === 'S05' ? 'decline' : 'accept' });
+        if (data.approvalId !== undefined) {
+          const optionId = args.agent === 'dsh'
+            ? (args.scenario === 'S05' ? 'rejected' : 'allowed-once')
+            : (args.scenario === 'S05' ? 'decline' : 'accept');
+          void activeAdapter.respond(sessionId, { approvalId: data.approvalId, optionId });
+        }
       }
       if (event.type === 'item.complete' && event.kind === 'question') {
         const data = event.data as { questionId?: string };
         if (data.questionId !== undefined && 'answer' in activeAdapter && typeof activeAdapter.answer === 'function') void activeAdapter.answer(sessionId, data.questionId, { selected: ['Python'], value: 'Python' });
       }
-      if (args.scenario === 'S06' && event.type === 'turn.start' && !interrupted) {
-        interrupted = true;
-        setTimeout(() => void activeAdapter.interrupt(sessionId), 3000);
-      }
     });
-    const model = args.model ?? (args.agent === 'codex' ? provider.models[0] : args.agent === 'claude-code' ? provider.models[0] : undefined);
-    const accessMode = args.agent === 'codex' ? (args.scenario === 'S04' || args.scenario === 'S05' ? 'workspace' : 'danger-full-access') : 'default';
-    const created = await adapter.create({ sessionId, cwd: repo, providerId: provider.id, provider: proxiedProvider, ...(model === undefined ? {} : { model }), accessMode });
+    let model = args.model ?? (args.agent === 'codex' ? provider?.models[0] : args.agent === 'claude-code' ? provider?.models[0] : undefined);
+    if (model === undefined && args.agent === 'dsh') {
+      const models = await (adapter as DshAdapter).listModels();
+      model = models[0]?.id;
+    }
+    const accessMode = args.agent === 'codex'
+      ? (args.scenario === 'S04' || args.scenario === 'S05' ? 'workspace' : 'danger-full-access')
+      : args.agent === 'dsh' && (args.scenario === 'S04' || args.scenario === 'S05') ? 'workspace-write' : undefined;
+    const created = await adapter.create({
+      sessionId,
+      cwd: repo,
+      providerId: provider?.id ?? null,
+      ...(proxiedProvider === undefined ? {} : { provider: proxiedProvider }),
+      ...(model === undefined ? {} : { model }),
+      ...(accessMode === undefined ? {} : { accessMode }),
+    });
     if (created.nativeId !== '') await writeFile(join(args.out, 'native-id.txt'), created.nativeId);
     await adapter.send(sessionId, { text: scenarioPrompts[args.scenario] as string });
+    if (args.scenario === 'S06' && !interrupted) {
+      interrupted = true;
+      setTimeout(() => void activeAdapter.interrupt(sessionId), 3000);
+    }
     const deadline = Date.now() + 180_000;
     while (Date.now() < deadline && !events.some((event) => event.type === 'turn.end' || (event.type === 'item.complete' && event.kind === 'turn.completed'))) await new Promise((resolve) => setTimeout(resolve, 100));
     if (!events.some((event) => event.type === 'turn.end' || (event.type === 'item.complete' && event.kind === 'turn.completed'))) throw new Error('真实轮次 180 秒内没有结束');
@@ -173,10 +210,21 @@ async function main(): Promise<void> {
     }
     const final = events.filter((event): event is Extract<AdapterEvent, { type: 'item.complete' }> => event.type === 'item.complete' && event.kind === 'assistant.message').map((event) => String((event.data as { text?: string }).text ?? '')).filter(Boolean).at(-1) ?? '';
     await writeFile(join(args.out, 'reference', 'final.txt'), final);
-    await writeFile(join(args.out, 'meta.json'), JSON.stringify({ version: 1, agent: args.agent, scenario: args.scenario, model: model ?? null, prompt: scenarioPrompts[args.scenario], recordedAt: new Date().toISOString(), notTriggered: [] }, null, 2) + '\n');
+    await writeFile(join(args.out, 'meta.json'), JSON.stringify({
+      version: 1,
+      agent: args.agent,
+      scenario: args.scenario,
+      model: model ?? null,
+      prompt: scenarioPrompts[args.scenario],
+      recordedAt: new Date().toISOString(),
+      traceMode: args.agent === 'dsh' ? 'attach' : 'spawn',
+      modelLayer: args.agent === 'dsh' ? { recorded: false, reason: 'attach 模式无法透明代理 DSH 内部模型端点' } : { recorded: true },
+      notTriggered: [],
+    }, null, 2) + '\n');
   } finally {
     await native.flush();
     await adapter?.dispose(sessionId).catch(() => undefined);
+    if (adapter instanceof DshAdapter) await adapter.shutdown().catch(() => undefined);
     await proxy?.close().catch(() => undefined);
     await rm(root, { recursive: true, force: true });
   }

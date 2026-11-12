@@ -1,0 +1,10 @@
+已完成两项修改，并验证无误：
+
+1. **新建 [notes.txt](notes.txt)**，内容两行：
+   ```
+   alpha
+   beta
+   ```
+2. **修改 [README.md](README.md#L1)**：标题由 `# Sample Repo` 改为 `# Sample Repo (edited)`，正文 `WebDCC trace sample.` 未动。
+
+其他文件（AGENTS.md、CLAUDE.md、SPEC.md）未改动。

@@ -1,0 +1,8 @@
+命令已执行，没有重试。命令输出原样如下：
+
+```
+bash: line 1: false-command-wdcc: command not found
+[exit code: 127]
+```
+
+`false-command-wdcc` 不存在，因此 shell 报告 `command not found`，退出码为 127。

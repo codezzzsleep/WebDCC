@@ -1,0 +1,514 @@
+[
+  {
+    "turnId": "trace:dsh:S09:turn:1",
+    "state": "completed",
+    "user": {
+      "text": "运行命令 false-command-wdcc（它不存在），把报错原样告诉我，不要重试。",
+      "at": "<timestamp>"
+    },
+    "startedAt": "<timestamp>",
+    "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
+    "activity": null,
+    "steps": [
+      {
+        "sessionId": "trace:dsh:S09",
+        "seq": 74,
+        "turnId": "trace:dsh:S09:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "message-e5009365-9920-4aac-8088-658f138ca6df",
+        "data": {
+          "text": ""
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "item",
+          "streamId": "s2",
+          "value": {
+            "type": "event",
+            "event": {
+              "type": "assistant/message",
+              "seq": 17,
+              "time": 1794482487069,
+              "data": {
+                "turn": 1,
+                "step": 1,
+                "message": {
+                  "role": "assistant",
+                  "content": [
+                    {
+                      "type": "reasoning",
+                      "text": "The user asks to run a nonexistent command and report the error verbatim, no retry. Simple bash call."
+                    },
+                    {
+                      "type": "tool-call",
+                      "id": "call_00_7vzgifidm6s4evfofuzm6him",
+                      "name": "bash",
+                      "arguments": "{\"command\":\"false-command-wdcc\",\"description\":\"Run nonexistent command false-command-wdcc\"}"
+                    }
+                  ],
+                  "source": {
+                    "kind": "model",
+                    "provider": "openai-next",
+                    "model": "deepseek-v4-1-flash-261017",
+                    "replayState": {
+                      "response": {
+                        "kind": "pi-ai",
+                        "version": 2,
+                        "api": "openai-completions",
+                        "provider": "openai-next",
+                        "model": "deepseek-v4-1-flash-261017",
+                        "responseId": "021794482485258b3d24476cb0847a2446e1bf5e527b37bba52bd",
+                        "stopReason": "toolUse"
+                      },
+                      "blocks": [
+                        {
+                          "type": "reasoning",
+                          "thinkingSignature": "reasoning_content"
+                        },
+                        {
+                          "type": "tool-call"
+                        }
+                      ]
+                    }
+                  },
+                  "id": "e5009365-9920-4aac-8088-658f138ca6df"
+                },
+                "usage": {
+                  "inputTokens": 707,
+                  "outputTokens": 91,
+                  "totalTokens": 8990,
+                  "cacheReadTokens": 8192
+                },
+                "stream": [
+                  {
+                    "type": "chunk",
+                    "time": 1794482486867,
+                    "chunk": {
+                      "type": "block-start",
+                      "index": 0,
+                      "blockType": "reasoning"
+                    }
+                  },
+                  {
+                    "type": "reasoning-chunks",
+                    "time0": 1794482486867,
+                    "index": 0,
+                    "dt": [
+                      1,
+                      0,
+                      59,
+                      0,
+                      2,
+                      0,
+                      81,
+                      5
+                    ],
+                    "texts": [
+                      "The",
+                      " user asks to",
+                      " run a nonex",
+                      "istent command and",
+                      " report the error verbatim,",
+                      " no retry. Simple",
+                      " bash",
+                      " call",
+                      "."
+                    ]
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482487015,
+                    "chunk": {
+                      "type": "block-start",
+                      "index": 1,
+                      "blockType": "tool-call"
+                    }
+                  },
+                  {
+                    "type": "tool-call-chunks",
+                    "time0": 1794482487016,
+                    "index": 1,
+                    "dt": [
+                      0,
+                      1,
+                      0,
+                      0,
+                      0,
+                      1,
+                      0,
+                      0,
+                      0,
+                      0,
+                      1,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      1,
+                      0,
+                      0,
+                      0,
+                      1,
+                      45,
+                      0,
+                      0,
+                      0,
+                      1,
+                      0,
+                      0,
+                      0,
+                      0,
+                      1
+                    ],
+                    "id": "call_00_7vzgifidm6s4evfofuzm6him",
+                    "name": "bash",
+                    "args": [
+                      "",
+                      "{",
+                      "\"",
+                      "command",
+                      "\"",
+                      ": ",
+                      "\"",
+                      "false",
+                      "-",
+                      "command",
+                      "-w",
+                      "d",
+                      "cc",
+                      "\"",
+                      ", ",
+                      "\"",
+                      "description",
+                      "\"",
+                      ": ",
+                      "\"",
+                      "Run",
+                      " nonex",
+                      "istent",
+                      " command",
+                      " false",
+                      "-",
+                      "command",
+                      "-w",
+                      "d",
+                      "cc",
+                      "\"",
+                      "}"
+                    ]
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482487068,
+                    "chunk": {
+                      "type": "block-end",
+                      "index": 0,
+                      "block": {
+                        "type": "reasoning",
+                        "text": "The user asks to run a nonexistent command and report the error verbatim, no retry. Simple bash call."
+                      }
+                    }
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482487068,
+                    "chunk": {
+                      "type": "block-end",
+                      "index": 1,
+                      "block": {
+                        "type": "tool-call",
+                        "id": "call_00_7vzgifidm6s4evfofuzm6him",
+                        "name": "bash",
+                        "arguments": "{\"command\":\"false-command-wdcc\",\"description\":\"Run nonexistent command false-command-wdcc\"}"
+                      }
+                    }
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482487068,
+                    "chunk": {
+                      "type": "usage",
+                      "usage": {
+                        "inputTokens": 707,
+                        "outputTokens": 91,
+                        "totalTokens": 8990,
+                        "cacheReadTokens": 8192
+                      }
+                    }
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482487068,
+                    "chunk": {
+                      "type": "finish",
+                      "reason": {
+                        "kind": "tool-calls"
+                      },
+                      "replayState": {
+                        "response": {
+                          "kind": "pi-ai",
+                          "version": 2,
+                          "api": "openai-completions",
+                          "provider": "openai-next",
+                          "model": "deepseek-v4-1-flash-261017",
+                          "responseId": "021794482485258b3d24476cb0847a2446e1bf5e527b37bba52bd",
+                          "stopReason": "toolUse"
+                        },
+                        "blocks": [
+                          {
+                            "type": "reasoning",
+                            "thinkingSignature": "reasoning_content"
+                          },
+                          {
+                            "type": "tool-call"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "surfaceOp": "append"
+            }
+          }
+        }
+      },
+      {
+        "sessionId": "trace:dsh:S09",
+        "seq": 79,
+        "turnId": "trace:dsh:S09:turn:1",
+        "kind": "command",
+        "itemKey": "tool-call_00_7vzgifidm6s4evfofuzm6him",
+        "data": {
+          "command": "false-command-wdcc",
+          "status": "completed",
+          "outputTail": "[stderr]\nbash: line 1: false-command-wdcc: command not found\n[exit code: 127]"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "item",
+          "streamId": "s2",
+          "value": {
+            "type": "event",
+            "event": {
+              "type": "tool/result",
+              "seq": 22,
+              "time": 1794482487167,
+              "data": {
+                "turn": 1,
+                "step": 1,
+                "message": {
+                  "role": "tool",
+                  "source": {
+                    "kind": "tool",
+                    "callId": "call_00_7vzgifidm6s4evfofuzm6him"
+                  },
+                  "toolCallId": "call_00_7vzgifidm6s4evfofuzm6him",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "[stderr]\nbash: line 1: false-command-wdcc: command not found\n[exit code: 127]"
+                    }
+                  ],
+                  "isError": false,
+                  "id": "1a72f020-bb92-4eb9-8115-23d4eaeb176e"
+                },
+                "meta": {
+                  "cwd": "/tmp/wdcc-real-trace-CGYxac/sample-repo"
+                }
+              },
+              "sourceEventSeqs": [
+                18
+              ],
+              "surfaceOp": "append"
+            }
+          }
+        }
+      },
+      {
+        "sessionId": "trace:dsh:S09",
+        "seq": 104,
+        "turnId": "trace:dsh:S09:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "message-60f834ed-d943-4beb-9dae-486f7db7fe8e",
+        "data": {
+          "text": "命令已执行，没有重试。命令输出原样如下：\n\n```\nbash: line 1: false-command-wdcc: command not found\n[exit code: 127]\n```\n\n`false-command-wdcc` 不存在，因此 shell 报告 `command not found`，退出码为 127。"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "item",
+          "streamId": "s2",
+          "value": {
+            "type": "event",
+            "event": {
+              "type": "assistant/message",
+              "seq": 25,
+              "time": 1794482489086,
+              "data": {
+                "turn": 1,
+                "step": 2,
+                "message": {
+                  "role": "assistant",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "命令已执行，没有重试。命令输出原样如下：\n\n```\nbash: line 1: false-command-wdcc: command not found\n[exit code: 127]\n```\n\n`false-command-wdcc` 不存在，因此 shell 报告 `command not found`，退出码为 127。"
+                    }
+                  ],
+                  "source": {
+                    "kind": "model",
+                    "provider": "openai-next",
+                    "model": "deepseek-v4-1-flash-261017",
+                    "replayState": {
+                      "response": {
+                        "kind": "pi-ai",
+                        "version": 2,
+                        "api": "openai-completions",
+                        "provider": "openai-next",
+                        "model": "deepseek-v4-1-flash-261017",
+                        "responseId": "021794482487714b3d24476cb0847a2446e1bf5e527b37b6ae9e3",
+                        "stopReason": "stop"
+                      },
+                      "blocks": [
+                        {
+                          "type": "text"
+                        }
+                      ]
+                    }
+                  },
+                  "id": "60f834ed-d943-4beb-9dae-486f7db7fe8e"
+                },
+                "usage": {
+                  "inputTokens": 197,
+                  "outputTokens": 68,
+                  "totalTokens": 9097,
+                  "cacheReadTokens": 8832
+                },
+                "stream": [
+                  {
+                    "type": "chunk",
+                    "time": 1794482488748,
+                    "chunk": {
+                      "type": "block-start",
+                      "index": 0,
+                      "blockType": "text"
+                    }
+                  },
+                  {
+                    "type": "text-chunks",
+                    "time0": 1794482488748,
+                    "index": 0,
+                    "dt": [
+                      1,
+                      0,
+                      116,
+                      0,
+                      0,
+                      1,
+                      73,
+                      1,
+                      0,
+                      0,
+                      72,
+                      1,
+                      0,
+                      0,
+                      71
+                    ],
+                    "texts": [
+                      "命令已执行",
+                      "，没有重试。",
+                      "命令输出",
+                      "原",
+                      "样如下：\n\n```\nbash",
+                      ": line 1: false",
+                      "-command-wdcc:",
+                      " command not found\n[",
+                      "exit code: 127",
+                      "]\n```\n\n`false",
+                      "-command-wdcc`",
+                      " 不存在，因此",
+                      " shell 报告",
+                      " `command not found`",
+                      "，",
+                      "退出码为 127。"
+                    ]
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482489085,
+                    "chunk": {
+                      "type": "block-end",
+                      "index": 0,
+                      "block": {
+                        "type": "text",
+                        "text": "命令已执行，没有重试。命令输出原样如下：\n\n```\nbash: line 1: false-command-wdcc: command not found\n[exit code: 127]\n```\n\n`false-command-wdcc` 不存在，因此 shell 报告 `command not found`，退出码为 127。"
+                      }
+                    }
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482489085,
+                    "chunk": {
+                      "type": "usage",
+                      "usage": {
+                        "inputTokens": 197,
+                        "outputTokens": 68,
+                        "totalTokens": 9097,
+                        "cacheReadTokens": 8832
+                      }
+                    }
+                  },
+                  {
+                    "type": "chunk",
+                    "time": 1794482489085,
+                    "chunk": {
+                      "type": "finish",
+                      "reason": {
+                        "kind": "stop"
+                      },
+                      "replayState": {
+                        "response": {
+                          "kind": "pi-ai",
+                          "version": 2,
+                          "api": "openai-completions",
+                          "provider": "openai-next",
+                          "model": "deepseek-v4-1-flash-261017",
+                          "responseId": "021794482487714b3d24476cb0847a2446e1bf5e527b37b6ae9e3",
+                          "stopReason": "stop"
+                        },
+                        "blocks": [
+                          {
+                            "type": "text"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "surfaceOp": "append"
+            }
+          }
+        }
+      }
+    ],
+    "live": [],
+    "answer": [
+      {
+        "itemKey": "message-60f834ed-d943-4beb-9dae-486f7db7fe8e",
+        "text": "命令已执行，没有重试。命令输出原样如下：\n\n```\nbash: line 1: false-command-wdcc: command not found\n[exit code: 127]\n```\n\n`false-command-wdcc` 不存在，因此 shell 报告 `command not found`，退出码为 127。"
+      }
+    ],
+    "changes": [],
+    "summary": {
+      "commands": 1,
+      "reads": 0,
+      "edits": 0,
+      "tools": 0
+    }
+  }
+]

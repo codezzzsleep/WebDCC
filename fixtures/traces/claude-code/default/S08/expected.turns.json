@@ -3,23 +3,25 @@
     "turnId": "trace:claude-code:S08:turn:1",
     "state": "completed",
     "user": {
-      "text": "",
-      "at": "1970-01-01T00:00:02.000Z"
+      "text": "在动手之前，先用提问工具问我想用哪种语言写 hello world（给出 Python 和 JavaScript 两个选项），等我回答后再写。",
+      "at": "<timestamp>"
     },
     "startedAt": "<timestamp>",
     "durationMs": 0,
+    "endedAt": "<timestamp>",
+    "userSeq": 1,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:claude-code:S08",
-        "seq": 45,
+        "seq": 46,
         "turnId": "trace:claude-code:S08:turn:1",
         "kind": "assistant.message",
         "itemKey": "msg-sdk-57",
         "data": {
           "text": "你还没有回答，所以我先不写。你想用 Python 还是 JavaScript 写 hello world？告诉我之后我就动手。"
         },
-        "at": "1970-01-01T00:00:45.000Z",
+        "at": "<timestamp>",
         "native": {
           "type": "assistant",
           "message": {
@@ -57,7 +59,7 @@
       },
       {
         "sessionId": "trace:claude-code:S08",
-        "seq": 49,
+        "seq": 50,
         "turnId": "trace:claude-code:S08:turn:1",
         "kind": "assistant.message",
         "itemKey": "result-sdk-61",
@@ -65,7 +67,7 @@
           "text": "你还没有回答，所以我先不写。你想用 Python 还是 JavaScript 写 hello world？告诉我之后我就动手。",
           "nativePhase": "final_answer"
         },
-        "at": "1970-01-01T00:00:49.000Z",
+        "at": "<timestamp>",
         "native": {
           "duration_api_ms": 9012,
           "stop_reason": "end_turn",
