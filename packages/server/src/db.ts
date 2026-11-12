@@ -70,7 +70,35 @@ export function openDb(file: string): Db {
   if (!sessionColumns.some((column) => column.name === 'title_source')) db.exec('ALTER TABLE sessions ADD COLUMN title_source TEXT');
   // 接续会话：记录上一棒（"在另一个 Agent 中继续"）
   if (!sessionColumns.some((column) => column.name === 'parent_id')) db.exec('ALTER TABLE sessions ADD COLUMN parent_id TEXT');
+  // M9：旧版本没有保存 Codex 思考强度；从已持久化的 thread/start 结果回填，
+  // 让旧会话的页面显示与原生会话实际配置一致。
+  backfillCodexReasoningEffort(db);
   const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
   if (!eventColumns.some((column) => column.name === 'late')) db.exec('ALTER TABLE events ADD COLUMN late INTEGER NOT NULL DEFAULT 0');
   return db;
+}
+
+function backfillCodexReasoningEffort(db: Db): void {
+  const sessions = db
+    .prepare("SELECT id FROM sessions WHERE agent = 'codex' AND reasoning_effort IS NULL")
+    .all() as { id: string }[];
+  const events = db.prepare("SELECT native FROM events WHERE session_id = ? AND kind = 'internal' AND native IS NOT NULL ORDER BY seq");
+  const update = db.prepare('UPDATE sessions SET reasoning_effort = ? WHERE id = ? AND reasoning_effort IS NULL');
+  const tx = db.transaction(() => {
+    for (const session of sessions) {
+      for (const row of events.all(session.id) as { native: string }[]) {
+        try {
+          const native = JSON.parse(row.native) as { thread?: { reasoningEffort?: unknown } };
+          const effort = native.thread?.reasoningEffort;
+          if (typeof effort === 'string' && effort !== '') {
+            update.run(effort, session.id);
+            break;
+          }
+        } catch {
+          // Ignore unrelated internal frames and continue looking for thread/start.
+        }
+      }
+    }
+  });
+  tx();
 }
