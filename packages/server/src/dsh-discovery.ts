@@ -7,7 +7,7 @@
  * bypassing its authentication. The token is never logged by WebDCC.
  */
 import { execFile as execFileCallback } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCallback);
@@ -59,12 +59,13 @@ function processCandidates(): ProcessCandidate[] {
     if (!webProfile) continue;
     const port = argValue(argv, '--port');
     if (port === undefined || !/^\d+$/.test(port)) continue;
-    const host = argValue(argv, '--host') ?? new URL(argValue(argv, '--public-url') ?? 'http://127.0.0.1').hostname;
+    const publicUrl = argValue(argv, '--public-url');
+    const publicOrigin = publicUrl === undefined ? undefined : new URL(publicUrl).origin;
+    const host = publicOrigin === undefined ? argValue(argv, '--host') ?? '127.0.0.1' : new URL(publicOrigin).hostname;
     if (host === '0.0.0.0' || host === '::') continue;
-    const protocol = (argValue(argv, '--public-url') ?? '').startsWith('https:') ? 'https' : 'http';
     candidates.push({
       pid,
-      origin: `${protocol}://${host}:${port}`,
+      origin: publicOrigin ?? `http://${host}:${port}`,
       ...(serviceName(pid) === undefined ? {} : { service: serviceName(pid) }),
     });
   }
@@ -77,20 +78,43 @@ function tokenFromJournal(text: string): string | undefined {
   return found;
 }
 
+/**
+ * A manually launched DSH is often in a user scope instead of a systemd
+ * service. Its startup URL is still available through the stdout/stderr file
+ * inherited by the process, so use that as the local discovery fallback.
+ */
+function tokenFromProcessOutput(pid: number): string | undefined {
+  for (const fd of ['1', '2']) {
+    try {
+      const target = readlinkSync(`/proc/${pid}/fd/${fd}`);
+      if (!target.startsWith('/') || target === '/dev/null' || !statSync(target).isFile()) continue;
+      const text = readFileSync(target, 'utf8').slice(-512 * 1024);
+      const token = tokenFromJournal(text);
+      if (token !== undefined) return token;
+    } catch {
+      // The process may close or redirect its output while discovery runs.
+    }
+  }
+  return undefined;
+}
+
 export async function discoverRunningDsh(options: { service?: string } = {}): Promise<RunningDsh | null> {
   for (const candidate of processCandidates()) {
     const service = options.service ?? candidate.service;
-    if (service === undefined) continue;
-    try {
-      const result = await execFile('journalctl', ['-u', service, '-n', '120', '-o', 'cat'], {
-        timeout: 3000,
-        maxBuffer: 512 * 1024,
-      });
-      const token = tokenFromJournal(result.stdout);
-      if (token !== undefined) return { ...candidate, token, service };
-    } catch {
-      // journalctl is optional; manual attach remains available when absent.
+    let token: string | undefined;
+    if (service !== undefined) {
+      try {
+        const result = await execFile('journalctl', ['-u', service, '-n', '120', '-o', 'cat'], {
+          timeout: 3000,
+          maxBuffer: 512 * 1024,
+        });
+        token = tokenFromJournal(result.stdout);
+      } catch {
+        // Fall through to the process output fallback below.
+      }
     }
+    token ??= tokenFromProcessOutput(candidate.pid);
+    if (token !== undefined) return { ...candidate, token, ...(service === undefined ? {} : { service }) };
   }
   return null;
 }

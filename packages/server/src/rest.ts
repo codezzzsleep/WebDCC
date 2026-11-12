@@ -381,16 +381,29 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/dsh', async () => {
     const connection = deps.dsh.connection;
     let version: string | undefined;
+    let connected = connection !== null;
     for (const adapter of manager.adaptersList()) {
       if (adapter.id === 'dsh') {
         const probe = await adapter.probe().catch(() => undefined);
         version = probe?.version;
       }
     }
+    // A saved attach Cookie can expire while the DSH process keeps running.
+    // Validate the connection before advertising it as usable; otherwise the
+    // settings page says "已连接" while the first real RPC fails with 401.
+    if (connection !== null) {
+      try {
+        const client = dshClient(deps);
+        dshEndpoint('session/modelCatalog');
+        await client.rpc('session/modelCatalog', {});
+      } catch {
+        connected = false;
+      }
+    }
     return {
       mode: connection !== null || process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn',
       url: connection?.url ?? process.env['WDCC_DSH_URL'] ?? null,
-      connected: connection !== null,
+      connected,
       ...(connection?.connectedAt === undefined ? {} : { connectedAt: connection.connectedAt }),
       ...(version === undefined ? {} : { version }),
     };
