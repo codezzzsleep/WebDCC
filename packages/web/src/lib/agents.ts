@@ -101,8 +101,9 @@ export function defaultChoice(agent: string, meta: AgentMeta | undefined, provid
   const compatible = providers.filter((provider) => isCompatible(agent, provider));
   const preferred =
     compatible.find((provider) => provider.source === sameSource && provider.models.length > 0) ?? compatible.find((provider) => provider.models.length > 0);
-  if (preferred !== undefined) return { providerId: preferred.id, model: preferred.models[0] ?? '', ...(agent === 'codex' ? { reasoningEffort: 'medium' } : {}) };
-  return { providerId: null, model: agent === 'dsh' ? (meta?.models?.[0]?.id ?? '') : '', ...(agent === 'codex' ? { reasoningEffort: 'medium' } : {}) };
+  const withDefaultReasoning = agent === 'codex' || agent === 'claude-code' ? { reasoningEffort: 'medium' } : {};
+  if (preferred !== undefined) return { providerId: preferred.id, model: preferred.models[0] ?? '', ...withDefaultReasoning };
+  return { providerId: null, model: agent === 'dsh' ? (meta?.models?.[0]?.id ?? '') : '', ...withDefaultReasoning };
 }
 
 export function agentStatusLine(agent: string, meta: MetaResponse | null, providers: ProviderDto[], dsh?: { connected: boolean; mode: string; url: string | null } | null): string {

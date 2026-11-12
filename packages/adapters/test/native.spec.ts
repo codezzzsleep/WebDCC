@@ -109,6 +109,17 @@ describe('原装原则：Claude Code（SPEC 3.3）', () => {
       expect((spec.sdkOptions as Record<string, unknown>)['permissionMode']).toBe(mode);
     }
   });
+
+  it('思考强度透传到 Claude Agent SDK 的 effort', () => {
+    for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+      const spec = adapter.buildLaunchSpec({ ...opts, reasoningEffort: effort });
+      expect((spec.sdkOptions as Record<string, unknown>)['effort']).toBe(effort);
+    }
+  });
+
+  it('拒绝 Claude 不支持的 Codex 思考档位', () => {
+    expect(() => adapter.buildLaunchSpec({ ...opts, reasoningEffort: 'minimal' })).toThrow('不支持的思考强度');
+  });
 });
 
 

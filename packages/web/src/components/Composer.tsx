@@ -39,7 +39,8 @@ interface MentionState {
 }
 
 type MenuName = 'harness' | 'mode' | 'model' | 'reasoning' | 'attach' | null;
-const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+const CODEX_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 export function Composer({ mode, workspaceId }: ComposerProps): React.ReactElement {
   useStoreVersion();
@@ -76,7 +77,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   }, [sessionId]);
 
   useEffect(() => {
-    if (session?.agent === 'codex') setSessionReasoning(session.reasoningEffort ?? 'medium');
+    if (session?.agent === 'codex' || session?.agent === 'claude-code') setSessionReasoning(session.reasoningEffort ?? 'medium');
   }, [sessionId, session?.agent, session?.reasoningEffort]);
 
   useEffect(() => {
@@ -133,6 +134,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
   const currentModel = mode.kind === 'session' ? (session?.model ?? '') : mode.choice.model;
   const currentReasoning = mode.kind === 'session' ? sessionReasoning : (mode.choice.reasoningEffort ?? 'medium');
+  const reasoningEfforts = agent === 'claude-code' ? CLAUDE_REASONING_EFFORTS : CODEX_REASONING_EFFORTS;
   const currentProvider = providerOf(currentProviderId);
   const providerLabel = currentProvider?.name ?? agentText(agent).nativeLabel;
 
@@ -665,15 +667,15 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             ) : null}
           </span>
 
-          {agent === 'codex' ? (
+          {agent === 'codex' || agent === 'claude-code' ? (
             <span className="menu-anchor">
               <button type="button" className="pill" aria-haspopup="menu" aria-expanded={menu === 'reasoning'} onClick={() => setMenu(menu === 'reasoning' ? null : 'reasoning')} data-testid="reasoning-menu">
                 <span className="pill-text">思考 {currentReasoning}</span><Icon name="chevronDown" size={12} strokeWidth={2} className="caret" />
               </button>
               {menu === 'reasoning' ? (
                 <div className="menu up right" role="menu" style={{ width: 220 }}>
-                  <div className="menu-group-title">Codex 思考强度</div>
-                  {REASONING_EFFORTS.map((effort) => <button key={effort} type="button" role="menuitemradio" aria-checked={effort === currentReasoning} className="menu-item" onClick={() => pickReasoning(effort)}>{effort}{effort === currentReasoning ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}</button>)}
+                  <div className="menu-group-title">{agentText(agent).name} 思考强度</div>
+                  {reasoningEfforts.map((effort) => <button key={effort} type="button" role="menuitemradio" aria-checked={effort === currentReasoning} className="menu-item" onClick={() => pickReasoning(effort)}>{effort}{effort === currentReasoning ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}</button>)}
                 </div>
               ) : null}
             </span>

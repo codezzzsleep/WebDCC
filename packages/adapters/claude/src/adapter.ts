@@ -15,6 +15,7 @@ import type {
 import {
   query,
   type CanUseTool,
+  type EffortLevel,
   type Options,
   type PermissionResult,
   type Query,
@@ -40,6 +41,14 @@ const ACCESS_MODES = [
   { id: 'auto', label: '自动' },
   { id: 'bypassPermissions', label: '跳过权限' },
 ];
+
+/** Claude Code 的 effort 是 SDK 的原生参数；它没有 Codex 的 minimal/off 档位。 */
+const CLAUDE_EFFORTS = new Set<EffortLevel>(['low', 'medium', 'high', 'xhigh', 'max']);
+
+function toClaudeEffort(value: string): EffortLevel {
+  if (CLAUDE_EFFORTS.has(value as EffortLevel)) return value as EffortLevel;
+  throw Object.assign(new Error(`claude-code: 不支持的思考强度 ${value}`), { statusCode: 400 });
+}
 
 interface InputQueue {
   push: (text: string, images?: { media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }[]) => void;
@@ -227,6 +236,7 @@ export class ClaudeAdapter implements AgentAdapter {
         // settings.json 的 env 会覆盖 options.env；用 flag 级 settings 注入 Provider 才能生效（F16 实测）
         ...(Object.keys(providerEnv).length === 0 ? {} : { settings: { env: providerEnv } }),
         ...(opts.model === undefined ? {} : { model: opts.model }),
+        ...(opts.reasoningEffort === undefined ? {} : { effort: toClaudeEffort(opts.reasoningEffort) }),
         ...(opts.accessMode === undefined ? {} : { permissionMode: opts.accessMode }),
         ...(this.options.model === undefined ? {} : { model: this.options.model }),
       },
@@ -352,6 +362,14 @@ export class ClaudeAdapter implements AgentAdapter {
     if (typeof close === 'function') setImmediate(() => { try { close.call(previous.q); } catch { /* old query is being replaced */ } });
     const replacement = this.startQuery(sessionId, previous.launchOpts, previous.nativeId);
     await Promise.race([replacement.ready, new Promise((resolve) => setTimeout(resolve, 3_000))]);
+  }
+
+  /** Claude Code 的 effort 可通过 SDK 控制面在下一轮生效，并在重连时由 launchOpts 恢复。 */
+  async setReasoningEffort(sessionId: string, effort: string): Promise<void> {
+    const runtime = this.require(sessionId);
+    const value = toClaudeEffort(effort);
+    await runtime.q.applyFlagSettings({ effortLevel: value });
+    runtime.launchOpts = { ...runtime.launchOpts, reasoningEffort: value };
   }
 
   async interrupt(sessionId: string): Promise<void> {

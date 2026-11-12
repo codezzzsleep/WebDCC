@@ -374,12 +374,12 @@ function ProviderEditor({
         <label className="field"><span>名称</span><input className="text-input" value={draft.providerName} disabled={!editable || isDsh} onChange={(event) => setDraft({ ...draft, providerName: event.target.value })} /></label>
         <label className="field"><span>Base URL</span><input className="text-input" value={draft.baseUrl} disabled={!editable} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} /></label>
         <label className="field"><span>模型（多个用逗号分隔）</span><input className="text-input" value={draft.models} disabled={!editable} onChange={(event) => setDraft({ ...draft, models: event.target.value })} /></label>
-        <label className="field"><span>思考强度</span>{isDsh ? <select className="text-input" value={draft.reasoning} disabled={!editable} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })}>{['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => <option key={value} value={value}>{value}</option>)}</select> : <input className="text-input" value="由 Harness 控制" disabled />}</label>
+        <label className="field"><span>思考强度</span>{isDsh ? <select className="text-input" value={draft.reasoning} disabled={!editable} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })}>{['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => <option key={value} value={value}>{value}</option>)}</select> : <input className="text-input" value={agent === 'claude-code' ? '会话中可选：low · medium · high · xhigh · max' : '会话中可选：minimal · low · medium · high · xhigh · max'} disabled />}</label>
         <label className="field"><span>API Key（留空不修改）</span><input className="text-input" type="password" value={draft.apiKey} disabled={!editable} placeholder={hasKey ? '已配置' : '未配置'} onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} /></label>
       </div>
       <div className="row-actions">
         <button type="button" className="btn primary" disabled={!editable || saving || draft.baseUrl.trim() === '' || draft.models.trim() === ''} onClick={save}>{saving ? '保存中…' : '保存 Provider'}</button>
-        <span className="muted" style={{ fontSize: 12 }}>{isDsh ? '写入 DSH 当前 Provider 配置；模型的思考强度跟随 Provider' : '一个 Provider 可维护多个模型，模型选择在新建对话中完成'}</span>
+        <span className="muted" style={{ fontSize: 12 }}>{isDsh ? '写入 DSH 当前 Provider 配置；模型的思考强度跟随 Provider' : '一个 Provider 可维护多个模型；模型和思考强度在会话输入栏选择'}</span>
       </div>
       {error !== null ? <div className="error-card" role="alert">{error}</div> : null}
     </article>
