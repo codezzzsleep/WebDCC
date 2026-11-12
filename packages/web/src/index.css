@@ -1897,6 +1897,11 @@ button.step-line:hover {
 .provider-empty { padding: 42px 20px; }
 .dsh-harness-stack { display: flex; flex-direction: column; gap: 12px; }
 .dsh-connection-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dsh-capabilities { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 0 23px; }
+.dsh-capabilities > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; padding: 10px 11px; border: 1px solid var(--border-l1); border-radius: 8px; background: var(--bg-subtle); }
+.dsh-capabilities b { color: var(--text-tertiary); font-size: 11px; font-weight: 500; }
+.dsh-capabilities span { overflow-wrap: anywhere; color: var(--text); font-family: var(--font-code); font-size: 12px; }
+.dsh-capability-editor { margin: 10px 0 0 23px; padding: 11px; border: 1px dashed var(--border-l3); border-radius: 9px; background: var(--bg-subtle); }
 
 /* ============ 弹窗 / 提示 ============ */
 .modal-backdrop {
@@ -2136,7 +2141,10 @@ button.step-line:hover {
   .provider-facts { padding-left: 0; }
   .provider-facts-actions { width: 100%; margin-left: 0; }
   .provider-edit-form,
-  .model-tree { margin-left: 0; }
+  .model-tree,
+  .dsh-capabilities,
+  .dsh-capability-editor { margin-left: 0; }
+  .dsh-capabilities { grid-template-columns: minmax(0, 1fr); }
   .model-row-actions .btn { padding: 0 6px; }
   .user-bubble {
     max-width: 92%;

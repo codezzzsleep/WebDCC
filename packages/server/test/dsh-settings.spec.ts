@@ -43,7 +43,7 @@ describe('DSH home patch provider fallback', () => {
     const previousHome = process.env['DSH_HOME'];
     process.env['DSH_HOME'] = home;
     try {
-      await updateDshHomePatch({ providerKey: 'target', baseURL: 'https://new.example/v1', model: 'new-target', reasoning: 'high' });
+      await updateDshHomePatch({ providerKey: 'target', baseURL: 'https://new.example/v1', model: 'new-target', previousModel: 'old-target', reasoning: 'high', reasoningEfforts: ['low', 'high'], contextWindow: 1_000_000, maxTokens: 128_000 });
     } finally {
       if (previousHome === undefined) delete process.env['DSH_HOME'];
       else process.env['DSH_HOME'] = previousHome;
@@ -53,6 +53,13 @@ describe('DSH home patch provider fallback', () => {
     expect(next).toContain('- id: new-target');
     expect(next).toContain('name: new-target');
     expect(next).toContain('reasoning: high');
+    expect(next).toContain('defaultContextWindow: 1000000');
+    expect(next).toContain('defaultMaxTokens: 128000');
+    expect(next).toContain('reasoningEfforts:');
+    expect(next).toContain('          low: low');
+    expect(next).toContain('          high: high');
+    expect(next).toContain('contextWindow: 1000000');
+    expect(next).toContain('maxTokens: 128000');
     expect(next).toContain('provider: target');
     expect(next).toContain('model: new-target');
     expect(next).toContain('old-provider:');

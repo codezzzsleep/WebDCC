@@ -18,6 +18,11 @@ type DshProviderView = {
   providerKey: string;
   provider: Record<string, unknown>;
   defaultModel: { provider: string; model: string; reasoningEffort?: string };
+  official: boolean;
+  reasoningEfforts: string[];
+  defaultReasoning?: string;
+  contextWindow?: number;
+  maxTokens?: number;
 };
 
 function modelDetails(provider: ProviderDto): ModelDetail[] {
@@ -138,11 +143,68 @@ function ModelForm({ draft, saving, onChange, onCancel, onSave }: { draft: Model
 }
 
 function ProviderModelRows({ provider }: { provider: DshProviderView }): React.ReactElement {
-  const models = Array.isArray(provider.provider['models']) ? (provider.provider['models'] as Record<string, unknown>[]).filter((model) => typeof model['id'] === 'string').map((model) => ({ id: String(model['id']), name: String(model['name'] ?? model['id']) })) : provider.defaultModel.model === '' ? [] : [{ id: provider.defaultModel.model, name: provider.defaultModel.model }];
+  const models = Array.isArray(provider.provider['models'])
+    ? (provider.provider['models'] as Record<string, unknown>[]).filter((model) => typeof model['id'] === 'string').map((model) => ({
+      id: String(model['id']),
+      name: String(model['name'] ?? model['id']),
+      reasoningEfforts: model['reasoningEfforts'] !== null && typeof model['reasoningEfforts'] === 'object' ? Object.keys(model['reasoningEfforts'] as Record<string, unknown>) : undefined,
+    }))
+    : provider.defaultModel.model === '' ? [] : [{ id: provider.defaultModel.model, name: provider.defaultModel.model }];
   return <div className="model-list">{models.length === 0 ? <div className="model-empty">DSH 未返回模型。</div> : models.map((model) => <ModelRow key={model.id} model={model} onEdit={() => undefined} onDelete={() => undefined} readOnly />)}</div>;
+}
+
+function formatCapacity(value: number): string {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    return `${millions >= 10 ? millions.toFixed(0) : millions.toFixed(2).replace(/\.00$/, '')}M`;
+  }
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+  return String(value);
 }
 
 function DshHarness({ dsh, dshLink, setDshLink, dshError, setDshError, provider, onReload }: { dsh: { connected: boolean; mode: string; url: string | null; version?: string } | null; dshLink: string; setDshLink: (value: string) => void; dshError: string | null; setDshError: (value: string | null) => void; provider: DshProviderView | null; onReload: () => void }): React.ReactElement {
   const [open, setOpen] = useState(true);
-  return <div className="dsh-harness-stack" data-testid="harness-provider-dsh"><section className="panel panel-pad"><div className="dsh-connection-head"><div><h2>DeepSeek Harness</h2><p className="muted">DSH 的 Provider 由 DSH 原生设置管理，WebDCC 只显示当前配置。</p></div><span className={'badge ' + (dsh?.connected === true ? '' : 'warn')}>{dsh?.connected === true ? '已连接' : '未连接'}</span></div>{dsh?.connected !== true ? <><details><summary className="link-button">自动发现失败？手动连接</summary><div className="row-actions" style={{ marginTop: 10 }}><input className="text-input" style={{ flex: '1 1 320px', width: 'auto' }} placeholder="粘贴 DSH 启动时打印的访问链接" value={dshLink} onChange={(event) => setDshLink(event.target.value)} /><button type="button" className="btn primary" disabled={dshLink.trim() === ''} onClick={() => { setDshError(null); void api.dshConnect(dshLink.trim()).then(() => { setDshLink(''); onReload(); }).catch((cause: unknown) => setDshError(cause instanceof Error ? cause.message : String(cause))); }}>连接 DSH</button></div></details>{dshError !== null ? <div className="error-card" role="alert">{dshError}</div> : null}</> : null}{dsh?.url !== null && dsh?.url !== undefined ? <a className="btn" href={dsh.url} target="_blank" rel="noreferrer">打开 DSH 原版界面</a> : null}</section>{provider !== null ? <section className={'panel provider-tree ' + (open ? 'open' : '')}><button type="button" className="provider-tree-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} /><span className="provider-tree-title"><strong>{String(provider.provider['displayName'] ?? provider.providerKey)}</strong><small>{String(provider.provider['baseURL'] ?? 'DSH 原生配置')}</small></span><span className="badge off">只读</span></button>{open ? <div className="provider-tree-body"><div className="provider-facts"><span>DSH 当前 Provider · {provider.providerKey}</span><span className="provider-note">模型和思考强度请在 DSH 原版界面修改</span></div><div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>DSH 返回的当前模型目录</small></div></div><ProviderModelRows provider={provider} /></div></div> : null}</section> : null}</div>;
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ model: '', reasoning: '', efforts: '', contextWindow: '', maxTokens: '' });
+  useEffect(() => {
+    if (provider === null) return;
+    setDraft({
+      model: provider.defaultModel.model,
+      reasoning: provider.defaultModel.reasoningEffort ?? provider.defaultReasoning ?? '',
+      efforts: provider.reasoningEfforts.join(', '),
+      contextWindow: provider.contextWindow === undefined ? '' : String(provider.contextWindow),
+      maxTokens: provider.maxTokens === undefined ? '' : String(provider.maxTokens),
+    });
+  }, [provider]);
+  const save = (): void => {
+    if (provider === null || draft.model.trim() === '') return;
+    setSaving(true); setError(null);
+    const efforts = draft.efforts.split(',').map((value) => value.trim()).filter(Boolean);
+    void api.updateDshProvider({
+      providerKey: provider.providerKey,
+      baseURL: String(provider.provider['baseURL'] ?? ''),
+      model: draft.model.trim(),
+      ...(draft.reasoning === '' ? {} : { reasoning: draft.reasoning }),
+      reasoningEfforts: efforts,
+      ...(draft.contextWindow === '' ? {} : { contextWindow: Number(draft.contextWindow) }),
+      ...(draft.maxTokens === '' ? {} : { maxTokens: Number(draft.maxTokens) }),
+    }).then(() => { setEditing(false); onReload(); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
+  };
+  return <div className="dsh-harness-stack" data-testid="harness-provider-dsh">
+    <section className="panel panel-pad">
+      <div className="dsh-connection-head"><div><h2>DeepSeek Harness</h2><p className="muted">官方 Provider 使用 Harness 原生能力；第三方 Provider 使用自己的模型声明。</p></div><span className={'badge ' + (dsh?.connected === true ? '' : 'warn')}>{dsh?.connected === true ? '已连接' : '未连接'}</span></div>
+      {dsh?.connected !== true ? <><details><summary className="link-button">自动发现失败？手动连接</summary><div className="row-actions" style={{ marginTop: 10 }}><input className="text-input" style={{ flex: '1 1 320px', width: 'auto' }} placeholder="粘贴 DSH 启动时打印的访问链接" value={dshLink} onChange={(event) => setDshLink(event.target.value)} /><button type="button" className="btn primary" disabled={dshLink.trim() === ''} onClick={() => { setDshError(null); void api.dshConnect(dshLink.trim()).then(() => { setDshLink(''); onReload(); }).catch((cause: unknown) => setDshError(cause instanceof Error ? cause.message : String(cause))); }}>连接 DSH</button></div></details>{dshError !== null ? <div className="error-card" role="alert">{dshError}</div> : null}</> : null}
+      {dsh?.url !== null && dsh?.url !== undefined ? <a className="btn" href={dsh.url} target="_blank" rel="noreferrer">打开 DSH 原版界面</a> : null}
+    </section>
+    {provider !== null ? <section className={'panel provider-tree ' + (open ? 'open' : '')}>
+      <button type="button" className="provider-tree-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} /><span className="provider-tree-title"><strong>{String(provider.provider['displayName'] ?? provider.providerKey)}</strong><small>{String(provider.provider['baseURL'] ?? 'DSH 原生配置')}</small></span><span className={'badge ' + (provider.official ? '' : 'warn')}>{provider.official ? '官方 Provider' : '第三方 Provider'}</span></button>
+      {open ? <div className="provider-tree-body"><div className="provider-facts"><span>DSH 当前 Provider · {provider.providerKey}</span><span className="provider-note">{provider.official ? '思考等级、上下文和输出上限来自 DeepSeek 官方适配器' : '思考等级、上下文和输出上限来自此 Provider 的模型声明'}</span>{!provider.official && provider.writable ? <button type="button" className="btn small ghost" onClick={() => setEditing((value) => !value)}>{editing ? '收起编辑' : '调整第三方能力'}</button> : null}</div>
+        <div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>当前模型能力</small></div><span className="badge off">{provider.defaultModel.model || '未选择模型'}</span></div><ProviderModelRows provider={provider} /></div>
+        <div className="dsh-capabilities"><div><b>思考等级</b><span>{provider.reasoningEfforts.length === 0 ? '未声明' : provider.reasoningEfforts.join(' · ')}</span></div><div><b>上下文</b><span>{provider.contextWindow === undefined ? '未声明' : formatCapacity(provider.contextWindow)}</span></div><div><b>输出上限</b><span>{provider.maxTokens === undefined ? '未声明' : formatCapacity(provider.maxTokens)}</span></div></div>
+        {editing && !provider.official ? <div className="dsh-capability-editor"><div className="form-grid"><label className="field"><span>模型 ID</span><input className="text-input" value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label><label className="field"><span>默认思考等级</span><input className="text-input" value={draft.reasoning} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })} placeholder="留空表示不指定" /></label><label className="field"><span>可用思考等级（逗号分隔）</span><input className="text-input" value={draft.efforts} onChange={(event) => setDraft({ ...draft, efforts: event.target.value })} placeholder="low, high, max" /></label><label className="field"><span>上下文长度</span><input className="text-input" inputMode="numeric" value={draft.contextWindow} onChange={(event) => setDraft({ ...draft, contextWindow: event.target.value })} placeholder="1000000" /></label><label className="field"><span>输出上限</span><input className="text-input" inputMode="numeric" value={draft.maxTokens} onChange={(event) => setDraft({ ...draft, maxTokens: event.target.value })} placeholder="128000" /></label></div><div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存第三方能力'}</button></div>{error !== null ? <div className="error-card" role="alert">{error}</div> : null}</div> : null}
+      </div> : null}
+    </section> : null}
+  </div>;
 }

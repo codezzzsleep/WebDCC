@@ -93,10 +93,15 @@ export const api = {
     providerKey: string;
     provider: Record<string, unknown>;
     defaultModel: { provider: string; model: string; reasoningEffort?: string };
+    official: boolean;
+    reasoningEfforts: string[];
+    defaultReasoning?: string;
+    contextWindow?: number;
+    maxTokens?: number;
     providerRevision: number;
     defaultModelRevision: number;
   }>('/api/dsh/provider'),
-  updateDshProvider: (input: { providerKey: string; baseURL: string; model: string; reasoning?: string; apiKey?: string }) =>
+  updateDshProvider: (input: { providerKey: string; baseURL: string; model: string; reasoning?: string; reasoningEfforts?: string[]; contextWindow?: number; maxTokens?: number; apiKey?: string }) =>
     request('/api/dsh/provider', { method: 'PATCH', body: JSON.stringify(input) }),
   command: (command: Command) =>
     request<{ ok: boolean; value?: unknown; error?: string; code?: string }>('/api/commands', {
