@@ -79,6 +79,10 @@ describe('原装原则：Codex（SPEC 3.3）', () => {
       approvalsReviewer: 'auto_review',
     });
   });
+
+  it('Codex 指令目录至少提供 WebDCC 映射的 /model', async () => {
+    expect(await new CodexAdapter().slashCommands()).toContainEqual({ name: '/model', description: '打开 Provider 和模型选择' });
+  });
 });
 
 
@@ -146,6 +150,7 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
         '$events',
         '$events/result',
         'commands/execute',
+        'commands/list',
         'session/cancel',
         'session/create',
         'session/follow',

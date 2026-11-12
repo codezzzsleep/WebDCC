@@ -261,7 +261,13 @@ export class ClaudeAdapter implements AgentAdapter {
 
   /** 斜杠命令目录：Claude 的 init 消息里就有（F8 / SL-01） */
   async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
-    return (this.sessions.get(sessionId)?.slashCommands ?? []).map((name) => ({ name: name.startsWith('/') ? name : `/${name}` }));
+    const runtime = this.sessions.get(sessionId);
+    if (runtime === undefined) return [];
+    // The query is created before system/init arrives. Wait briefly so the
+    // first slash-menu open observes the native command catalog instead of a
+    // transient empty array.
+    await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 3000))]);
+    return runtime.slashCommands.map((name) => ({ name: name.startsWith('/') ? name : `/${name}` }));
   }
 
   async listModels(): Promise<ModelOption[]> {

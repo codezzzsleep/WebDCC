@@ -35,7 +35,7 @@ export interface TurnView {
   plan?: EventData['plan']['items'];
   goal?: EventData['goal'];
   usage?: UsageData;
-  pending?: { clientCommandId: string; text: string; at: string; status: 'pending' | 'sent' | 'failed' };
+  pending?: { clientCommandId: string; text: string; at: string; status: 'pending' | 'queued' | 'sent' | 'failed' };
 }
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'interrupted', 'failed']);

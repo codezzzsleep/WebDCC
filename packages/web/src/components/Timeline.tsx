@@ -229,8 +229,9 @@ function summaryLabel(turn: ProtocolTurnView): string {
   return parts.length === 0 ? '查看过程' : parts.join('，');
 }
 
-function outboxLabel(status: 'pending' | 'sent' | 'failed'): string {
+function outboxLabel(status: 'pending' | 'queued' | 'sent' | 'failed'): string {
   if (status === 'pending') return '待发送';
+  if (status === 'queued') return '队列中';
   if (status === 'sent') return '已送达';
   return '发送失败';
 }

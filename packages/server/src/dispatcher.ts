@@ -39,12 +39,12 @@ export class CommandDispatcher {
             if (file === undefined || path === undefined) return [];
             return [{ fileId, path, mime: file.mime }];
           });
-          const { turnId } = await this.manager.send(
+          const { turnId, queued } = await this.manager.send(
             command.sessionId,
             { text: command.text, ...(images.length === 0 ? {} : { images }) },
             command.clientCommandId,
           );
-          return { ok: true, value: { turnId } };
+          return { ok: true, value: { turnId, queued } };
         }
         case 'approve': {
           if (this.store.hasApprovalResolved(command.sessionId, command.approvalId)) {

@@ -22,6 +22,25 @@ export class DshTranslator {
       const reason = record(data['reason']);
       return [{ type: 'turn.end', nativeTurnId, status: ['interrupted', 'cancelled', 'aborted'].includes(String(reason['kind'])) ? 'interrupted' : ['failed', 'error'].includes(String(reason['kind'])) ? 'failed' : 'completed', native: raw }];
     }
+    if (type === 'subagent/catalog' || type === 'subagent/start' || type === 'subagent/updated' || type === 'subagent/end') {
+      const childId = String(data['childId'] ?? data['child_id'] ?? data['agentId'] ?? '');
+      const label = String(data['label'] ?? data['name'] ?? data['mode'] ?? 'DSH 子 Agent');
+      const terminal = type === 'subagent/end' || data['status'] === 'completed' || data['status'] === 'failed';
+      return [{
+        type: 'item.complete',
+        itemKey: `subagent-${childId || nativeSeq}`,
+        kind: 'tool.call',
+        data: {
+          name: 'subagent',
+          label,
+          input: { childId, ...(data['name'] === undefined ? {} : { name: String(data['name']) }), ...(data['mode'] === undefined ? {} : { mode: String(data['mode']) }), ...(data['status'] === undefined ? {} : { status: String(data['status']) }) },
+          status: terminal ? 'completed' : 'running',
+        },
+        nativeSeq,
+        nativeTurnId,
+        native: raw,
+      }];
+    }
     if (type === 'tool/call') {
       const id = data['callId'] ?? nativeSeq;
       const name = String(data['name'] ?? '');

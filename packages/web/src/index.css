@@ -1893,6 +1893,9 @@ button.step-line:hover {
 .model-row-main small { color: var(--text-secondary); font-size: 11px; }
 .model-row-actions { display: flex; flex: 0 0 auto; gap: 3px; }
 .model-form { margin: 9px; padding: 11px; border: 1px dashed var(--border-l3); border-radius: 8px; background: var(--bg-subtle); }
+.reasoning-picker { grid-column: 1 / -1; margin: 0; padding: 10px; border: 1px solid var(--border-l2); border-radius: 8px; }
+.reasoning-picker legend { padding: 0 4px; color: var(--text-secondary); font-size: 12px; }
+.reasoning-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 9px; }
 .model-empty { padding: 16px 11px; color: var(--text-tertiary); font-size: 12px; }
 .provider-empty { padding: 42px 20px; }
 .dsh-harness-stack { display: flex; flex-direction: column; gap: 12px; }

@@ -38,6 +38,7 @@ export interface Runtime {
   /** Codex 等 adapter 可能在 turn/end 后补发 item/diff；在终止前给它们一个收敛窗口。 */
   finishTimer: NodeJS.Timeout | null;
   finishAction: (() => void) | null;
+  queued: { turnId: string; input: UserInput; clientCommandId?: string }[];
 }
 
 export interface ManagerHooks {
@@ -220,6 +221,7 @@ export class SessionManager {
       idleTimer: null,
       finishTimer: null,
       finishAction: null,
+      queued: [],
     };
     this.runtimes.set(session.id, runtime);
     return runtime;
@@ -254,12 +256,24 @@ export class SessionManager {
 
   // ---------- 发送 / 介入 ----------
 
-  async send(sessionId: string, input: UserInput, clientCommandId?: string): Promise<{ turnId: string }> {
+  async send(sessionId: string, input: UserInput, clientCommandId?: string): Promise<{ turnId: string; queued: boolean }> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
 
     const turnId = ulid();
+    if (runtime.turnId !== null) {
+      runtime.queued.push({ turnId, input, ...(clientCommandId === undefined ? {} : { clientCommandId }) });
+      return { turnId, queued: true };
+    }
+    await this.startTurn(runtime, turnId, input, clientCommandId);
+    return { turnId, queued: false };
+  }
+
+  private async startTurn(runtime: Runtime, turnId: string, input: UserInput, clientCommandId?: string): Promise<void> {
+    const sessionId = runtime.sessionId;
+    const session = this.store.getSession(sessionId);
+    if (session === undefined) throw new Error('会话不存在');
     runtime.turnId = turnId;
     runtime.turnStartedAt = Date.now();
 
@@ -305,7 +319,6 @@ export class SessionManager {
     }
     this.setStatus(runtime, 'running');
     this.touchIdle(runtime);
-    return { turnId };
   }
 
   async approve(sessionId: string, decision: ApprovalDecision): Promise<void> {
@@ -472,6 +485,14 @@ export class SessionManager {
           }
         }
       }
+    }
+    // Codex app-server reports the resolved effort on thread/started and on
+    // some resumed-thread payloads. Keep the database/page value aligned with
+    // the native response instead of only trusting the requested value.
+    if (typeof native['reasoningEffort'] === 'string') return native['reasoningEffort'];
+    const thread = native['thread'];
+    if (typeof thread === 'object' && thread !== null && typeof (thread as Record<string, unknown>)['reasoningEffort'] === 'string') {
+      return (thread as Record<string, unknown>)['reasoningEffort'] as string;
     }
     return undefined;
   }
@@ -655,6 +676,14 @@ export class SessionManager {
     runtime.turnId = null;
     runtime.turnStartedAt = null;
     this.setStatus(runtime, 'idle');
+    const next = runtime.queued.shift();
+    if (next !== undefined) {
+      void this.startTurn(runtime, next.turnId, next.input, next.clientCommandId).catch((error: unknown) => {
+        // startTurn persists the failed turn; keep the manager available for
+        // later queued messages even when one queued input fails immediately.
+        if (process.env['WDCC_DEBUG_QUEUE'] === '1') console.error('[queue] failed', error);
+      });
+    }
   }
 
   private armFinishTimer(runtime: Runtime): void {

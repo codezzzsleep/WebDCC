@@ -167,7 +167,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const updateText = (value: string): void => {
     setText(value);
     persist(value);
-    // "/" 开头：列出该 Agent 自己的命令（F8）；Codex 的斜杠命令属于它的终端界面，不提供菜单（SL-03）
+    // "/" 开头：列出该 Agent 自己的命令（F8）。
     setSlashOpen(value.startsWith('/') && !value.includes('\n') && !value.includes(' '));
     const cursor = textareaRef.current?.selectionStart ?? value.length;
     const before = value.slice(0, cursor);
@@ -199,7 +199,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     }
     setError(null);
     if (mode.kind === 'session') {
-      if (running || sessionId === null) return;
+      if (sessionId === null) return;
       store.sendMessage(sessionId, value, images);
       setText('');
       setImages([]);
@@ -688,9 +688,22 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {agent === 'dsh' && mode.kind === 'session' ? <span className="pill" title="DSH 的实际思考等级来自原生 request/header 回报"><span className="pill-text">思考 {currentReasoning}</span></span> : null}
 
           {running ? (
-            <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label="停止" title="停止" data-testid="stop-button">
-              <Icon name="stop" size={16} />
-            </button>
+            <>
+              <button
+                type="button"
+                className="send-btn"
+                onClick={() => void submit()}
+                disabled={sendDisabled}
+                aria-label="排队发送"
+                title="加入队列（Enter）"
+                data-testid={isSession ? 'queue-send-button' : 'new-session-send'}
+              >
+                <Icon name="arrowUp" size={17} strokeWidth={2.2} />
+              </button>
+              <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label="强制打断" title="强制打断" data-testid="stop-button">
+                <Icon name="stop" size={16} />
+              </button>
+            </>
           ) : (
             <button
               type="button"
@@ -716,7 +729,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               ) : null}
               {slashCommands.length === 0 && !(agent === 'codex' && text === '/model') ? <div className="menu-note">这个 Agent 现在没有可用的斜杠命令</div> : null}
               {slashCommands
-                .filter((command) => command.name.startsWith(text))
+                .filter((command) => command.name.startsWith(text) && !(agent === 'codex' && command.name === '/model' && text === '/model'))
                 .slice(0, 12)
                 .map((command) => (
                   <button

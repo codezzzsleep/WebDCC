@@ -452,6 +452,13 @@ export class CodexAdapter implements AgentAdapter {
     return [{ id: 'gpt-5', label: 'GPT-5' }];
   }
 
+  /** Codex app-server does not expose a command catalog; /model is the
+   * WebDCC mapping backed by the native model picker. Keep it explicit so the
+   * slash menu does not claim that Codex has no commands. */
+  async slashCommands(): Promise<{ name: string; description?: string }[]> {
+    return [{ name: '/model', description: '打开 Provider 和模型选择' }];
+  }
+
   /** 换模型（AG-*-12）：下一次 turn/start 带上新模型 */
   /** 访问模式来自 app-server 的 permissionProfile/list（MODE-codex-01） */
   async listAccessModes(): Promise<{ id: string; label: string }[]> {

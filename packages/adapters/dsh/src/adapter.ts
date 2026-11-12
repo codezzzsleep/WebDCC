@@ -70,6 +70,7 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'settings/update',
   'credentials/set',
   'commands/execute',
+  'commands/list',
   '$events',
   '$events/result',
   'userQuestions/answer',
@@ -326,9 +327,9 @@ export class DshAdapter implements AgentAdapter {
   async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
     const runtime = this.sessions.get(sessionId);
     const client = await this.ensureSidecar().catch(() => null);
-    if (client === null) return [];
+    if (client === null || runtime === undefined) return [];
     try {
-      const result = await client.rpc<{ commands?: { name?: string; description?: string }[] }>('commands/list', {
+      const result = await this.call<{ commands?: { name?: string; description?: string }[] }>(client, 'commands/list', {
         agentId: runtime?.nativeId ?? '',
       });
       return (result.commands ?? [])
@@ -642,6 +643,21 @@ export class DshAdapter implements AgentAdapter {
     };
 
     switch (type) {
+      case 'subagent/catalog':
+      case 'subagent/start':
+      case 'subagent/updated':
+      case 'subagent/end': {
+        const childId = String(data['childId'] ?? data['child_id'] ?? data['agentId'] ?? '');
+        const label = String(data['label'] ?? data['name'] ?? data['mode'] ?? 'DSH 子 Agent');
+        const terminal = type === 'subagent/end' || data['status'] === 'completed' || data['status'] === 'failed';
+        complete(`subagent-${childId || nativeSeq}`, 'tool.call', {
+          name: 'subagent',
+          label,
+          input: { childId, ...(data['name'] === undefined ? {} : { name: String(data['name']) }), ...(data['mode'] === undefined ? {} : { mode: String(data['mode']) }), ...(data['status'] === undefined ? {} : { status: String(data['status']) }) },
+          status: terminal ? 'completed' : 'running',
+        });
+        return;
+      }
       case 'turn/start': {
         runtime.assistantKey = '';
         runtime.assistantText = '';
