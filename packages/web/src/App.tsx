@@ -16,6 +16,7 @@ import { Dock, type DockState } from './components/Dock.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { HandoffDialog } from './components/HandoffDialog.js';
 import { Icon } from './components/Icon.js';
+import { ServerMetricsBar } from './components/ServerMetricsBar.js';
 import { ProvidersPage } from './pages/Providers.js';
 import { NewSession } from './pages/NewSession.js';
 
@@ -54,6 +55,7 @@ function RootLayout(): React.ReactElement {
       <Outlet />
       {addOpen ? <AddWorkspaceDialog onClose={() => setAddOpen(false)} /> : null}
       <ConnectionBar />
+      <ServerMetricsBar />
     </div>
   );
 }

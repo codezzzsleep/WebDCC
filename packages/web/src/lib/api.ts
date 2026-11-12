@@ -12,6 +12,14 @@ import type {
   WorkspaceDto,
 } from '@webdcc/protocol';
 
+export interface SystemMetrics {
+  at: string;
+  cpu: { usagePercent: number; load1: number; processPercent: number };
+  memory: { totalBytes: number; usedBytes: number; availableBytes: number; usedPercent: number; processRssBytes: number };
+  network: { rxBytes: number; txBytes: number; rxBytesPerSec: number; txBytesPerSec: number };
+  disk: { totalBytes: number; usedBytes: number; availableBytes: number; usedPercent: number };
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     credentials: 'same-origin',
@@ -29,6 +37,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   meta: () => request<MetaResponse>('/api/meta'),
+  systemMetrics: () => request<SystemMetrics>('/api/system/metrics'),
   workspaces: () => request<WorkspaceDto[]>('/api/workspaces'),
   createWorkspace: (input: { name: string; path: string }) =>
     request<WorkspaceDto>('/api/workspaces', { method: 'POST', body: JSON.stringify(input) }),

@@ -103,6 +103,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     version: config.version,
     ...(options.commit === undefined ? {} : { commit: options.commit }),
     ...(options.builtAt === undefined ? {} : { builtAt: options.builtAt }),
+    dataDir: config.dataDir,
     providers: options.providers,
     dsh: options.dsh,
   });

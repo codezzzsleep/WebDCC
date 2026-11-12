@@ -697,7 +697,7 @@ export class CodexAdapter implements AgentAdapter {
           type: 'turn.end',
           nativeTurnId: turn.id ?? this.nativeTurnId(params),
           status: turn.status === 'interrupted' ? 'interrupted' : turn.status === 'failed' ? 'failed' : 'completed',
-          ...(usage === undefined ? {} : { usage }),
+          ...(usage === undefined ? {} : { usage: { ...usage, scope: 'turn' as const } }),
           native: params,
         });
         runtime.turnId = null;
@@ -799,7 +799,7 @@ export class CodexAdapter implements AgentAdapter {
           type: 'item.complete',
           itemKey: `usage-${frameKey}`,
           kind: 'usage',
-          data: { inputTokens, outputTokens },
+          data: { inputTokens, outputTokens, scope: 'turn' },
         });
         return;
       }

@@ -26,6 +26,7 @@ import type { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
 import { updateDshHomePatch } from './dsh-settings.js';
+import { SystemMetricsReader } from './system-metrics.js';
 
 export interface RouteDeps {
   store: Store;
@@ -38,6 +39,7 @@ export interface RouteDeps {
   version: string;
   commit?: string;
   builtAt?: string;
+  dataDir: string;
 }
 
 const MAX_TEXT_READ = 1024 * 1024;
@@ -93,6 +95,7 @@ async function resolveNewInsideWorkspace(workspacePath: string, requested: strin
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { store, files, manager, dispatcher } = deps;
+  const metrics = new SystemMetricsReader(deps.dataDir);
 
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_request, body, done) => {
     done(null, body);
@@ -122,6 +125,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
     };
   });
+
+  app.get('/api/system/metrics', async () => metrics.read());
 
   // ---------- workspaces ----------
   app.get('/api/workspaces', async (): Promise<WorkspaceDto[]> => store.listWorkspaces());

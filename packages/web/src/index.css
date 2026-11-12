@@ -74,6 +74,33 @@ a {
 .muted {
   color: var(--text-secondary);
 }
+
+.server-metrics-bar {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 28px);
+  padding: 7px 10px;
+  overflow-x: auto;
+  border: 1px solid var(--border-l2);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-sidebar) 94%, transparent);
+  box-shadow: var(--shadow-pop);
+  white-space: nowrap;
+  font-size: 11px;
+}
+.server-metric { color: var(--text-secondary); }
+.server-metric b { color: var(--text); margin-right: 3px; }
+.server-metric small { color: var(--text-tertiary); margin-left: 3px; }
+.server-metric.warning b, .server-metric.warning { color: var(--warning); }
+.server-metric.danger b, .server-metric.danger { color: var(--danger); }
+@media (max-width: 700px) {
+  .server-metrics-bar { left: 10px; right: 10px; bottom: 8px; justify-content: flex-start; }
+}
 .mono {
   font-family: var(--font-code);
 }

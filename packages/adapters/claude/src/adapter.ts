@@ -682,7 +682,7 @@ export class ClaudeAdapter implements AgentAdapter {
           status: result.is_error === true ? (result.subtype === 'error_during_execution' ? 'interrupted' : 'failed') : 'completed',
           ...(result.usage === undefined
             ? {}
-            : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens } }),
+            : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens, scope: 'turn' } }),
           native: result,
         });
         return;

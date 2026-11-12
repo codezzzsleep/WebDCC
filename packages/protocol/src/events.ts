@@ -28,6 +28,10 @@ export interface UsageData {
   cacheHitRatio?: number;
   contextRatio?: number;
   tokensPerSecond?: number;
+  /** Duration of the model generation that produced this usage sample. */
+  generationMs?: number;
+  /** DSH emits one sample per model attempt; other adapters emit turn totals. */
+  scope?: 'attempt' | 'turn';
 }
 
 export interface FileChangeEntry {

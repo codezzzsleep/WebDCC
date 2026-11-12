@@ -154,6 +154,7 @@ interface SessionRuntime {
   reasoningText: string;
   streamedAssistant: boolean;
   streamedReasoning: boolean;
+  generationStartedAt: number | null;
   frameSeq: number;
 }
 
@@ -385,6 +386,7 @@ export class DshAdapter implements AgentAdapter {
       reasoningText: '',
       streamedAssistant: false,
       streamedReasoning: false,
+      generationStartedAt: null,
       frameSeq: 0,
     };
     await this.permission(client, created.sessionId, opts.accessMode);
@@ -416,6 +418,7 @@ export class DshAdapter implements AgentAdapter {
       reasoningText: '',
       streamedAssistant: false,
       streamedReasoning: false,
+      generationStartedAt: null,
       frameSeq: 0,
     };
     this.sessions.set(opts.sessionId, runtime);
@@ -646,6 +649,7 @@ export class DshAdapter implements AgentAdapter {
         runtime.reasoningText = '';
         runtime.streamedAssistant = false;
         runtime.streamedReasoning = false;
+        runtime.generationStartedAt = null;
         this.emit(sessionId, {
           type: 'turn.start',
           nativeTurnId: this.nativeTurnId(data),
@@ -805,6 +809,7 @@ export class DshAdapter implements AgentAdapter {
     if (frame['type'] !== 'chunk') return;
     const chunk = (frame['chunk'] ?? {}) as Record<string, unknown>;
     const kind = String(chunk['type'] ?? '');
+    if (runtime.generationStartedAt === null) runtime.generationStartedAt = Date.now();
     if (kind === 'block-start') {
       const blockType = String(chunk['blockType'] ?? '');
       if (blockType === 'reasoning') {
@@ -850,11 +855,13 @@ export class DshAdapter implements AgentAdapter {
     }
     if (kind === 'usage') {
       const usage = (chunk['usage'] ?? {}) as { inputTokens?: number; outputTokens?: number };
+      const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, Date.now() - runtime.generationStartedAt);
+      runtime.generationStartedAt = null;
       this.emit(sessionId, {
         type: 'item.complete',
         itemKey: `usage-${++runtime.frameSeq}`,
         kind: 'usage',
-        data: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens },
+        data: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, scope: 'attempt', ...(generationMs === undefined ? {} : { generationMs }) },
       });
     }
   }

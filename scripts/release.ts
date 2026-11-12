@@ -2,6 +2,11 @@ import { execFileSync } from 'node:child_process';
 import { cp, mkdir, readdir, readFile, readlink, rm, symlink, lstat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
+
+interface ReadonlyDb { prepare: (sql: string) => { get: () => unknown }; close: () => void }
+type DatabaseConstructor = new (file: string, options: { readonly: boolean; fileMustExist: boolean }) => ReadonlyDb;
+const Database = createRequire(import.meta.url)('better-sqlite3') as DatabaseConstructor;
 
 const releaseRoot = process.env['WDCC_RELEASE_ROOT'] ?? '/opt/webdcc';
 const dataDir = process.env['WDCC_DATA_DIR'] ?? '/home/webdcc/.webdcc';
@@ -13,6 +18,21 @@ if (remoteHead !== commit) throw new Error(`HEAD 尚未推送：本地 ${commit}
 
 const staging = join(tmpdir(), `wdcc-release-${commit}-${process.pid}`);
 const checkout = join(staging, 'src');
+let restartAttempted = false;
+
+function activeTurnCount(): number {
+  try {
+    const db = new Database(join(dataDir, 'webdcc.db'), { readonly: true, fileMustExist: true });
+    try {
+      const row = db.prepare("SELECT COUNT(*) AS count FROM sessions WHERE status IN ('running', 'waiting')").get() as { count?: number };
+      return Number(row.count ?? 0);
+    } finally {
+      db.close();
+    }
+  } catch {
+    return 0;
+  }
+}
 await mkdir(staging, { recursive: true });
 try {
   execFileSync('git', ['clone', '--quiet', '--no-local', '--branch', 'main', '.', checkout], { stdio: 'inherit' });
@@ -37,13 +57,20 @@ try {
   await cp(join(checkout, 'package.json'), join(target, 'package.json'));
   await cp(join(checkout, 'pnpm-lock.yaml'), join(target, 'pnpm-lock.yaml'));
   await writeFile(join(target, 'release.env'), `WDCC_COMMIT=${commit}\nWDCC_BUILT_AT=${builtAt}\n`);
+  const activeBeforeSwitch = activeTurnCount();
+  if (activeBeforeSwitch > 0) throw new Error(`当前有 ${activeBeforeSwitch} 个活动会话，发布已取消以避免中断执行`);
   await mkdir(join(releaseRoot, 'backups'), { recursive: true });
   await cp(dataDir, join(releaseRoot, 'backups', `${commit}-${Date.now().toString(36)}`), { recursive: true });
   const current = join(releaseRoot, 'current');
   const previous = await readlinkSafe(current);
+  const activeBeforeRestart = activeTurnCount();
+  if (activeBeforeRestart > 0) throw new Error(`当前有 ${activeBeforeRestart} 个活动会话，发布已取消以避免中断执行`);
   await rm(current, { force: true });
   await symlink(target, current, 'dir');
   try {
+    const activeAtRestart = activeTurnCount();
+    if (activeAtRestart > 0) throw new Error(`当前有 ${activeAtRestart} 个活动会话，发布已取消以避免中断执行`);
+    restartAttempted = true;
     execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
     const base = process.env['WDCC_RELEASE_URL'] ?? 'http://127.0.0.1:80';
     let unauthStatus = '';
@@ -71,7 +98,7 @@ try {
   } catch (error) {
     await rm(current, { force: true });
     if (previous !== undefined) await symlink(previous, current, 'dir');
-    execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
+    if (restartAttempted) execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
     throw error;
   }
   const entries = (await readdir(join(releaseRoot, 'releases'))).sort().reverse();

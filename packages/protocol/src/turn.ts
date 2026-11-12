@@ -144,6 +144,24 @@ function activityFor(live: readonly LiveItem[], waiting = false): TurnView['acti
   return null;
 }
 
+/** Aggregate provider attempt samples without using the whole turn wall time.
+ * Tool calls and approval waits are not model generation and must not be the
+ * denominator for tok/s. */
+function usageFor(events: readonly StoredEvent[], completedData: EventData['turn.completed'] | undefined): UsageData | undefined {
+  const samples = events.filter((event) => event.kind === 'usage').map((event) => event.data as UsageData);
+  const attempts = samples.filter((sample) => sample.scope === 'attempt');
+  if (attempts.length > 0) {
+    const inputTokens = attempts.reduce((sum, sample) => sum + (sample.inputTokens ?? 0), 0);
+    const outputTokens = attempts.reduce((sum, sample) => sum + (sample.outputTokens ?? 0), 0);
+    const generationMs = attempts.reduce((sum, sample) => sum + (sample.generationMs ?? 0), 0);
+    return { inputTokens, outputTokens, scope: 'turn', ...(generationMs > 0 ? { generationMs, tokensPerSecond: outputTokens / (generationMs / 1000) } : {}) };
+  }
+  const latest = samples.at(-1) ?? completedData?.usage;
+  if (latest === undefined) return undefined;
+  if (latest.tokensPerSecond !== undefined || latest.generationMs === undefined || latest.generationMs <= 0 || latest.outputTokens === undefined) return latest;
+  return { ...latest, tokensPerSecond: latest.outputTokens / (latest.generationMs / 1000) };
+}
+
 /** Reduce one turn's persisted events and currently open items into the one
  * shape accepted by the web client. */
 export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnView {
@@ -170,7 +188,6 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnVi
       : [];
   const latestPlan = [...events].reverse().find((event) => event.kind === 'plan');
   const latestGoal = [...events].reverse().find((event) => event.kind === 'goal');
-  const latestUsage = [...events].reverse().find((event) => event.kind === 'usage');
   const summary = {
     commands: events.filter((event) => event.kind === 'command').length,
     reads: events.filter((event) => event.kind === 'file.read').length,
@@ -198,15 +215,10 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnVi
     summary,
     ...(latestPlan === undefined ? {} : { plan: (latestPlan.data as EventData['plan']).items }),
     ...(latestGoal === undefined ? {} : { goal: latestGoal.data as EventData['goal'] }),
-    ...(latestUsage === undefined
+    ...(usageFor(events, completedData) === undefined
       ? {}
       : {
-          usage: {
-            ...(latestUsage.data as UsageData),
-            ...((completedData?.durationMs ?? 0) > 0 && (latestUsage.data as UsageData).tokensPerSecond === undefined && (latestUsage.data as UsageData).outputTokens !== undefined
-              ? { tokensPerSecond: (latestUsage.data as UsageData).outputTokens! / ((completedData?.durationMs ?? 0) / 1000) }
-              : {}),
-          },
+          usage: usageFor(events, completedData),
         }),
   };
 }
