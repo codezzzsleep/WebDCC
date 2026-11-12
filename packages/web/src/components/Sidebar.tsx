@@ -9,6 +9,7 @@ import { useAppData } from '../lib/appData.js';
 import { applyTheme, readTheme, type Theme } from '../lib/theme.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon, Spinner } from './Icon.js';
+import { ServerMetricsStatus } from './ServerMetricsBar.js';
 
 interface SidebarProps {
   currentSessionId: string | null;
@@ -115,6 +116,7 @@ export function Sidebar({
         <button type="button" className="icon-btn" onClick={toggleTheme} aria-label="切换亮暗色" title={theme === 'dark' ? '切换到亮色' : '切换到暗色'}>
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
         </button>
+        <ServerMetricsStatus collapsed onExpand={onToggle} />
       </aside>
     );
   }
@@ -133,6 +135,7 @@ export function Sidebar({
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
         </button>
       </div>
+      <ServerMetricsStatus />
 
       <Link to="/new" search={{}} className="new-session-button" onClick={() => onNavigate?.()} data-testid="nav-new">
         <Icon name="plusCircle" />

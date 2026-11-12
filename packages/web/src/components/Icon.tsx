@@ -47,6 +47,7 @@ const PATHS = {
   archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
   sun: 'M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4M16.5 12a4.5 4.5 0 1 1-9 0a4.5 4.5 0 0 1 9 0',
   moon: 'M20 15.5A8.5 8.5 0 0 1 8.5 4A8.5 8.5 0 1 0 20 15.5z',
+  activity: 'M3 12h4l2-8 6 16 2-8h4',
 } as const;
 
 export type IconName = keyof typeof PATHS;
