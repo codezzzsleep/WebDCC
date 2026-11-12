@@ -106,6 +106,8 @@ export interface ProviderDto {
   endpoints?: ProviderEndpointMap;
   protocols: string[];
   models: string[];
+  /** 模型的展示信息；models 保留为 ID 列表以兼容旧客户端。 */
+  modelDetails?: { id: string; name: string; reasoningEfforts?: string[] }[];
   codexCatalogPath?: string;
   hasKey: boolean;
   /** Key 后 4 位（永不返回原文） */

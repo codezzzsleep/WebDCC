@@ -562,13 +562,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   });
 
   app.post('/api/providers', async (request) => {
-    const body = request.body as { name?: string; baseUrl?: string; protocols?: string[]; models?: string[]; apiKey?: string; codexCatalogPath?: string };
+    const body = request.body as { name?: string; baseUrl?: string; protocols?: string[]; models?: string[]; modelDetails?: { id?: string; name?: string; reasoningEfforts?: string[] }[]; apiKey?: string; codexCatalogPath?: string };
     if (typeof body?.name !== 'string' || typeof body?.baseUrl !== 'string') throw badRequest('需要 name 与 baseUrl');
     return deps.providers.create({
       name: body.name,
       baseUrl: body.baseUrl,
       protocols: Array.isArray(body.protocols) ? body.protocols : [],
       models: Array.isArray(body.models) ? body.models : [],
+      ...(Array.isArray(body.modelDetails) ? { modelDetails: body.modelDetails.filter((model): model is { id: string; name: string; reasoningEfforts?: string[] } => typeof model.id === 'string' && typeof model.name === 'string') } : {}),
       ...(body.apiKey === undefined ? {} : { apiKey: body.apiKey }),
       ...(body.codexCatalogPath === undefined ? {} : { codexCatalogPath: body.codexCatalogPath }),
     });
@@ -583,6 +584,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       ...(typeof body['endpoints'] === 'object' && body['endpoints'] !== null ? { endpoints: body['endpoints'] as Record<string, string> } : {}),
       ...(Array.isArray(body['protocols']) ? { protocols: body['protocols'] as string[] } : {}),
       ...(Array.isArray(body['models']) ? { models: body['models'] as string[] } : {}),
+      ...(Array.isArray(body['modelDetails']) ? { modelDetails: body['modelDetails'] as { id: string; name: string; reasoningEfforts?: string[] }[] } : {}),
       ...(typeof body['apiKey'] === 'string' ? { apiKey: body['apiKey'] } : {}),
       ...(typeof body['codexCatalogPath'] === 'string' ? { codexCatalogPath: body['codexCatalogPath'] } : {}),
     });

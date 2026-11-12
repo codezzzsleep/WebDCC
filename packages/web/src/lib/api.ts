@@ -76,6 +76,7 @@ export const api = {
     baseUrl: string;
     protocols: string[];
     models: string[];
+    modelDetails?: ProviderDto['modelDetails'];
     apiKey?: string;
     codexCatalogPath?: string;
   }) => request<ProviderDto>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),

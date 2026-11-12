@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
 );
 CREATE TABLE IF NOT EXISTS providers (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL,
-  protocols TEXT NOT NULL, secret_ref TEXT NOT NULL, models TEXT NOT NULL,
+  protocols TEXT NOT NULL, secret_ref TEXT NOT NULL, models TEXT NOT NULL, model_details TEXT,
   codex_catalog_path TEXT, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
@@ -64,6 +64,7 @@ export function openDb(file: string): Db {
   if (!has('source_key')) db.exec('ALTER TABLE providers ADD COLUMN source_key TEXT');
   if (!has('endpoints')) db.exec('ALTER TABLE providers ADD COLUMN endpoints TEXT');
   if (!has('note')) db.exec('ALTER TABLE providers ADD COLUMN note TEXT');
+  if (!has('model_details')) db.exec('ALTER TABLE providers ADD COLUMN model_details TEXT');
   // M8 C1：用户改过名字的会话不被原生标题覆盖
   const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
   if (!sessionColumns.some((column) => column.name === 'reasoning_effort')) db.exec('ALTER TABLE sessions ADD COLUMN reasoning_effort TEXT');

@@ -10,6 +10,7 @@ export interface ProviderInput {
   baseUrl: string;
   protocols: string[];
   models: string[];
+  modelDetails?: { id: string; name: string; reasoningEfforts?: string[] }[];
   apiKey?: string;
   codexCatalogPath?: string;
   endpoints?: Record<string, string>;
@@ -135,6 +136,7 @@ export class ProviderRegistry {
       ...(row.endpoints === null ? {} : { endpoints: JSON.parse(row.endpoints) as Record<string, string> }),
       protocols: row.protocols,
       models: row.models,
+      modelDetails: row.modelDetails,
       source: row.source,
       ...(row.endpoints === null ? {} : { endpoints: JSON.parse(row.endpoints) as Record<string, string> }),
       ...(row.sourceKey === null ? {} : { sourceKey: row.sourceKey }),
@@ -157,6 +159,7 @@ export class ProviderRegistry {
       baseUrl: input.baseUrl,
       protocols: input.protocols,
       models: input.models,
+      modelDetails: input.modelDetails,
       secretRef,
       codexCatalogPath: input.codexCatalogPath ?? null,
       source: input.source ?? 'manual',
@@ -181,6 +184,7 @@ export class ProviderRegistry {
       ...(patch.endpoints === undefined ? {} : { endpoints: JSON.stringify(patch.endpoints) }),
       ...(patch.protocols === undefined ? {} : { protocols: patch.protocols }),
       ...(patch.models === undefined ? {} : { models: patch.models }),
+      ...(patch.modelDetails === undefined ? {} : { modelDetails: patch.modelDetails }),
       ...(patch.codexCatalogPath === undefined ? {} : { codexCatalogPath: patch.codexCatalogPath }),
     });
     return this.get(id);

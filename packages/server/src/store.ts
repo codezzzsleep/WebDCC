@@ -4,6 +4,7 @@ import type {
   EventKind,
   FeedPatch,
   FileDto,
+  ProviderDto,
   SessionDto,
   StoredEvent,
   WorkspaceDto,
@@ -54,6 +55,7 @@ export interface ProviderRecord {
   note: string | null;
   protocols: string[];
   models: string[];
+  modelDetails: NonNullable<ProviderDto['modelDetails']>;
   codexCatalogPath: string | null;
   secretRef: string;
   createdAt: string;
@@ -65,6 +67,7 @@ interface ProviderDbRow {
   base_url: string;
   protocols: string;
   models: string;
+  model_details: string | null;
   codex_catalog_path: string | null;
   secret_ref: string;
   created_at: string;
@@ -75,12 +78,23 @@ interface ProviderDbRow {
 }
 
 function toProviderRecord(row: ProviderDbRow): ProviderRecord {
+  const rawModels = JSON.parse(row.models) as unknown;
+  const modelIds = Array.isArray(rawModels) ? rawModels.filter((model): model is string => typeof model === 'string' && model !== '') : [];
+  const rawDetails = row.model_details === null ? [] : JSON.parse(row.model_details) as unknown;
+  const details = Array.isArray(rawDetails)
+    ? rawDetails.filter((model): model is NonNullable<ProviderDto['modelDetails']>[number] => {
+      if (typeof model !== 'object' || model === null) return false;
+      const value = model as Record<string, unknown>;
+      return typeof value['id'] === 'string' && typeof value['name'] === 'string';
+    })
+    : [];
   return {
     id: row.id,
     name: row.name,
     baseUrl: row.base_url,
     protocols: JSON.parse(row.protocols) as string[],
-    models: JSON.parse(row.models) as string[],
+    models: modelIds,
+    modelDetails: modelIds.map((id) => details.find((model) => model.id === id) ?? { id, name: id }),
     codexCatalogPath: row.codex_catalog_path,
     secretRef: row.secret_ref,
     createdAt: row.created_at,
@@ -293,6 +307,7 @@ export class Store {
     baseUrl: string;
     protocols: string[];
     models: string[];
+    modelDetails?: NonNullable<ProviderDto['modelDetails']>;
     secretRef: string;
     codexCatalogPath: string | null;
     source?: string;
@@ -303,7 +318,7 @@ export class Store {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, codex_catalog_path, created_at, source, source_key, endpoints, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO providers (id, name, base_url, protocols, secret_ref, models, model_details, codex_catalog_path, created_at, source, source_key, endpoints, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         input.id,
@@ -312,6 +327,7 @@ export class Store {
         JSON.stringify(input.protocols),
         input.secretRef,
         JSON.stringify(input.models),
+        JSON.stringify(input.modelDetails ?? input.models.map((id) => ({ id, name: id }))),
         input.codexCatalogPath,
         at,
         input.source ?? 'manual',
@@ -325,6 +341,7 @@ export class Store {
       baseUrl: input.baseUrl,
       protocols: input.protocols,
       models: input.models,
+      modelDetails: input.modelDetails ?? input.models.map((id) => ({ id, name: id })),
       codexCatalogPath: input.codexCatalogPath,
       secretRef: input.secretRef,
       createdAt: at,
@@ -337,7 +354,7 @@ export class Store {
 
   updateProvider(
     id: string,
-    patch: { name?: string; baseUrl?: string; endpoints?: string | null; protocols?: string[]; models?: string[]; codexCatalogPath?: string | null },
+    patch: { name?: string; baseUrl?: string; endpoints?: string | null; protocols?: string[]; models?: string[]; modelDetails?: NonNullable<ProviderDto['modelDetails']>; codexCatalogPath?: string | null },
   ): ProviderRecord | undefined {
     const sets: string[] = [];
     const values: unknown[] = [];
@@ -346,6 +363,7 @@ export class Store {
     if (patch.endpoints !== undefined) { sets.push('endpoints = ?'); values.push(patch.endpoints); }
     if (patch.protocols !== undefined) { sets.push('protocols = ?'); values.push(JSON.stringify(patch.protocols)); }
     if (patch.models !== undefined) { sets.push('models = ?'); values.push(JSON.stringify(patch.models)); }
+    if (patch.modelDetails !== undefined) { sets.push('model_details = ?'); values.push(JSON.stringify(patch.modelDetails)); }
     if (patch.codexCatalogPath !== undefined) { sets.push('codex_catalog_path = ?'); values.push(patch.codexCatalogPath); }
     if (sets.length > 0) {
       values.push(id);
