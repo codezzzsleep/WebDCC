@@ -50,6 +50,8 @@ interface SessionRuntime {
   turnId: string | null;
   frameSeq: number;
   turnStartedAt: number;
+  /** 模型输出开始时间；用于把 tok/s 的分母限制在生成阶段。 */
+  generationStartedAt: number | null;
   approvals: Map<string, PendingApproval>;
   lastAssistantText: string;
   /** 已经发过 item.start 的条目（Codex 的 agentMessage 不一定有 item/started） */
@@ -549,6 +551,7 @@ export class CodexAdapter implements AgentAdapter {
       turnId: null,
       frameSeq: 0,
       turnStartedAt: 0,
+      generationStartedAt: null,
       approvals: new Map(),
       lastAssistantText: '',
       started: new Set(),
@@ -600,6 +603,7 @@ export class CodexAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
     runtime.started.clear();
+    runtime.generationStartedAt = null;
     const startedAt = Date.now();
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
@@ -693,11 +697,13 @@ export class CodexAdapter implements AgentAdapter {
       case 'turn/completed': {
         const turn = (params['turn'] ?? {}) as { id?: string; status?: string };
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
+        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, Date.now() - runtime.generationStartedAt);
+        runtime.generationStartedAt = null;
         this.emit(sessionId, {
           type: 'turn.end',
           nativeTurnId: turn.id ?? this.nativeTurnId(params),
           status: turn.status === 'interrupted' ? 'interrupted' : turn.status === 'failed' ? 'failed' : 'completed',
-          ...(usage === undefined ? {} : { usage: { ...usage, scope: 'turn' as const } }),
+          ...(usage === undefined ? {} : { usage: { ...usage, scope: 'turn' as const, ...(generationMs === undefined ? {} : { generationMs }) } }),
           native: params,
         });
         runtime.turnId = null;
@@ -708,6 +714,7 @@ export class CodexAdapter implements AgentAdapter {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
+        if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') runtime.generationStartedAt ??= Date.now();
         const kind = mapItemKind(type);
         if (kind === 'internal') return;
         this.emit(sessionId, {
@@ -757,6 +764,7 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'agentMessage/delta': {
+        runtime.generationStartedAt ??= Date.now();
         const itemId = String(params['itemId'] ?? '');
         if (!runtime.started.has(itemId)) {
           runtime.started.add(itemId);
@@ -766,6 +774,7 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'reasoning/summaryTextDelta': {
+        runtime.generationStartedAt ??= Date.now();
         const itemId = String(params['itemId'] ?? '');
         if (!runtime.started.has(itemId)) {
           runtime.started.add(itemId);
@@ -795,11 +804,13 @@ export class CodexAdapter implements AgentAdapter {
         const inputTokens = Number(currentTurn['inputTokens'] ?? 0);
         const outputTokens = Number(currentTurn['outputTokens'] ?? 0);
         if (inputTokens === 0 && outputTokens === 0) return;
+        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, Date.now() - runtime.generationStartedAt);
+        runtime.generationStartedAt = null;
         this.emit(sessionId, {
           type: 'item.complete',
           itemKey: `usage-${frameKey}`,
           kind: 'usage',
-          data: { inputTokens, outputTokens, scope: 'turn' },
+          data: { inputTokens, outputTokens, ...(generationMs === undefined ? { scope: 'turn' as const } : { scope: 'attempt' as const, generationMs }) },
         });
         return;
       }

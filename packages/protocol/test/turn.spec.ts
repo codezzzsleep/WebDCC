@@ -48,4 +48,15 @@ describe('M9 unified turn model', () => {
     ];
     expect(resolveAnswer(events)).toEqual([{ itemKey: 'result', text: 'result text' }]);
   });
+
+  it('从旧版 turn usage 的相邻采样恢复最新响应速度，不使用整轮时长', () => {
+    const events = [
+      event(1, 'user.message', { text: 'long task' }),
+      event(2, 'turn.started', {}),
+      { ...event(3, 'usage', { inputTokens: 100, outputTokens: 20, scope: 'turn' }), at: '2026-01-01T00:00:10.000Z' },
+      { ...event(4, 'usage', { inputTokens: 120, outputTokens: 100, scope: 'turn' }), at: '2026-01-01T00:00:12.000Z' },
+      event(5, 'turn.completed', { status: 'completed', durationMs: 600000 }),
+    ];
+    expect(reduceTurn(events).usage?.tokensPerSecond).toBe(50);
+  });
 });

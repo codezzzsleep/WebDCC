@@ -148,18 +148,31 @@ function activityFor(live: readonly LiveItem[], waiting = false): TurnView['acti
  * Tool calls and approval waits are not model generation and must not be the
  * denominator for tok/s. */
 function usageFor(events: readonly StoredEvent[], completedData: EventData['turn.completed'] | undefined): UsageData | undefined {
-  const samples = events.filter((event) => event.kind === 'usage').map((event) => event.data as UsageData);
-  const attempts = samples.filter((sample) => sample.scope === 'attempt');
+  const samples = events.filter((event) => event.kind === 'usage').map((event) => ({ at: event.at, data: event.data as UsageData }));
+  const attempts = samples.map((sample) => sample.data).filter((sample) => sample.scope === 'attempt');
   if (attempts.length > 0) {
     const inputTokens = attempts.reduce((sum, sample) => sum + (sample.inputTokens ?? 0), 0);
     const outputTokens = attempts.reduce((sum, sample) => sum + (sample.outputTokens ?? 0), 0);
     const generationMs = attempts.reduce((sum, sample) => sum + (sample.generationMs ?? 0), 0);
     return { inputTokens, outputTokens, scope: 'turn', ...(generationMs > 0 ? { generationMs, tokensPerSecond: outputTokens / (generationMs / 1000) } : {}) };
   }
-  const latest = samples.at(-1) ?? completedData?.usage;
+  const latestSample = samples.at(-1);
+  const latest = latestSample?.data ?? completedData?.usage;
   if (latest === undefined) return undefined;
-  if (latest.tokensPerSecond !== undefined || latest.generationMs === undefined || latest.generationMs <= 0 || latest.outputTokens === undefined) return latest;
-  return { ...latest, tokensPerSecond: latest.outputTokens / (latest.generationMs / 1000) };
+  if (latest.tokensPerSecond !== undefined) return latest;
+  if (latest.generationMs !== undefined && latest.generationMs > 0 && latest.outputTokens !== undefined) {
+    return { ...latest, tokensPerSecond: latest.outputTokens / (latest.generationMs / 1000) };
+  }
+  // Older Codex/Claude rows only persisted turn-scoped usage. When there are
+  // several native usage updates, the interval since the previous update is
+  // the only recoverable timing signal; use it for the latest response rather
+  // than dividing by the entire turn (which includes tools and approvals).
+  const previous = samples.at(-2);
+  if (latest.scope === 'turn' && latest.outputTokens !== undefined && latestSample !== undefined && previous !== undefined) {
+    const elapsedMs = Date.parse(latestSample.at) - Date.parse(previous.at);
+    if (elapsedMs > 0) return { ...latest, tokensPerSecond: latest.outputTokens / (elapsedMs / 1000) };
+  }
+  return latest;
 }
 
 /** Reduce one turn's persisted events and currently open items into the one

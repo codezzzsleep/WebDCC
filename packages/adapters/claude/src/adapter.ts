@@ -118,6 +118,9 @@ interface SessionRuntime {
   q: Query;
   pump: Promise<void>;
   turnStartedAt: number;
+  /** 累计 Claude 模型生成片段，排除工具执行和审批等待。 */
+  generationStartedAt: number | null;
+  generationMs: number;
   pending: Map<string, PendingInteraction>;
   toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
   messageSeq: number;
@@ -273,6 +276,8 @@ export class ClaudeAdapter implements AgentAdapter {
       q,
       pump: Promise.resolve(),
       turnStartedAt: Date.now(),
+      generationStartedAt: null,
+      generationMs: 0,
       pending: new Map(),
       toolItems: new Map(),
       messageSeq: 0,
@@ -320,6 +325,8 @@ export class ClaudeAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
     runtime.turnStartedAt = Date.now();
+    runtime.generationStartedAt = null;
+    runtime.generationMs = 0;
     traceFrame(this.options.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'input', frame: input });
     const images = (input.images ?? []).flatMap((image) => {
       try {
@@ -430,6 +437,12 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) throw new Error('claude: 会话未创建');
     return runtime;
+  }
+
+  private finishGeneration(runtime: SessionRuntime): void {
+    if (runtime.generationStartedAt === null) return;
+    runtime.generationMs += Math.max(1, Date.now() - runtime.generationStartedAt);
+    runtime.generationStartedAt = null;
   }
 
   // ---------- canUseTool：审批与提问都从这里来 ----------
@@ -547,6 +560,7 @@ export class ClaudeAdapter implements AgentAdapter {
           delta?: { type?: string; text?: string; thinking?: string };
         };
         if (event.type === 'content_block_start') {
+          runtime.generationStartedAt ??= Date.now();
           runtime.messageSeq += 1;
           runtime.liveStarted = true;
           const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
@@ -563,6 +577,7 @@ export class ClaudeAdapter implements AgentAdapter {
           return;
         }
         if (event.type === 'content_block_delta') {
+          runtime.generationStartedAt ??= Date.now();
           const delta = event.delta ?? {};
           const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
           let live = runtime.liveItems.get(index);
@@ -584,6 +599,7 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'assistant': {
+        this.finishGeneration(runtime);
         const content = (message.message?.content ?? []) as unknown as Record<string, unknown>[];
         const textParts = content.filter((block) => block['type'] === 'text').map((block) => String(block['text'] ?? ''));
         const thinking = content.filter((block) => block['type'] === 'thinking').map((block) => String(block['thinking'] ?? '')).join('');
@@ -691,6 +707,9 @@ export class ClaudeAdapter implements AgentAdapter {
       }
       case 'result': {
         const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; usage?: { input_tokens?: number; output_tokens?: number } };
+        this.finishGeneration(runtime);
+        const generationMs = runtime.generationMs > 0 ? runtime.generationMs : undefined;
+        runtime.generationMs = 0;
         const resultText = (message as unknown as { result?: unknown }).result;
         if (typeof resultText === 'string' && resultText !== '') {
           this.emit(sessionId, { type: 'item.complete', itemKey: `result-${runtime.frameSeq}`, kind: 'assistant.message', data: { text: resultText, nativePhase: 'final_result' }, native: message });
@@ -700,7 +719,7 @@ export class ClaudeAdapter implements AgentAdapter {
           status: result.is_error === true ? (result.subtype === 'error_during_execution' ? 'interrupted' : 'failed') : 'completed',
           ...(result.usage === undefined
             ? {}
-            : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens, scope: 'turn' } }),
+            : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens, scope: 'turn', ...(generationMs === undefined ? {} : { generationMs }) } }),
           native: result,
         });
         return;
