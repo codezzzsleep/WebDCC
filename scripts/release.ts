@@ -35,7 +35,8 @@ function activeTurnCount(): number {
 }
 await mkdir(staging, { recursive: true });
 try {
-  execFileSync('git', ['clone', '--quiet', '--no-local', '--branch', 'main', '.', checkout], { stdio: 'inherit' });
+  execFileSync('git', ['clone', '--quiet', '--no-local', '.', checkout], { stdio: 'inherit' });
+  execFileSync('git', ['checkout', '--quiet', commit], { cwd: checkout, stdio: 'inherit' });
   execFileSync('pnpm', ['install', '--frozen-lockfile'], { cwd: checkout, stdio: 'inherit' });
   execFileSync('pnpm', ['build'], { cwd: checkout, stdio: 'inherit', env: { ...process.env, WDCC_COMMIT: commit, WDCC_BUILT_AT: new Date().toISOString() } });
   const builtAt = new Date().toISOString();
