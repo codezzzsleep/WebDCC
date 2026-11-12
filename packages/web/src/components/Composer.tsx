@@ -721,7 +721,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {slashOpen ? (
             <div className="menu up left mention-menu" role="menu" data-testid="slash-menu">
               <div className="menu-group-title">{agentText(agent).name} 的指令</div>
-              {agent === 'codex' && text === '/model' ? (
+              {agent === 'codex' && (text === '/' || text === '/model') ? (
                 <button type="button" className="menu-item" onClick={() => { setSlashOpen(false); setMenu('model'); }}>
                   <span className="mono" style={{ fontSize: 13 }}>/model</span>
                   <span className="menu-item-sub">打开 Provider 和模型选择</span>
