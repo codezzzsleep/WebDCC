@@ -46,6 +46,8 @@ export interface CreateOpts {
 
 export interface UserInput {
   text: string;
+  /** Identity minted and persisted by the server before native admission. */
+  nativeRequestId?: string;
   images?: { fileId: string; path: string; mime: string }[];
 }
 
@@ -63,6 +65,7 @@ export interface LaunchSpec {
 }
 
 export type AdapterEvent =
+  | { type: 'history'; nativeId: string; records: NativeHistoryRecord[] }
   | { type: 'item.start'; itemKey: string; kind: EventKind; data: unknown; nativeTurnId?: string; /** @deprecated use nativeTurnId */ turnId?: string; native?: unknown }
   | { type: 'item.delta'; itemKey: string; field: 'text' | 'output'; append: string }
   | { type: 'item.update'; itemKey: string; data: unknown }
@@ -74,6 +77,15 @@ export type AdapterEvent =
   | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error' }
   /** 原生 id 迟到（Claude Code 要等首条消息才有 session_id）：manager 收到后落库 */
   | { type: 'native-id'; nativeId: string };
+
+export interface NativeHistoryRecord {
+  nativeSeq: number;
+  nativeTurnId?: string;
+  at: string;
+  native: unknown;
+  admittedInputs?: { nativeRequestId: string; text: string }[];
+  events: Exclude<AdapterEvent, { type: 'history' }>[];
+}
 
 export interface AgentProcessInfo {
   sessionId: string;
@@ -102,7 +114,7 @@ export interface AgentAdapter {
   respond(sessionId: string, d: ApprovalDecision): Promise<void>;
   /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
   cancelPending?(sessionId: string): Promise<void>;
-  answer?(sessionId: string, questionId: string, answer: unknown): Promise<void>;
+  answer?(sessionId: string, questionId: string, answer: unknown): Promise<void | { submitted: boolean }>;
   setModel?(sessionId: string, model: string): Promise<void>;
   setReasoningEffort?(sessionId: string, effort: string): Promise<void>;
   /** 切换访问模式（F6）；Codex 在下一次 turn/start 生效，返回值是实际生效的模式 */

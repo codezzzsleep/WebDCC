@@ -116,7 +116,10 @@
           "packages/server/src/rest.ts",
           "tsconfig.base.json",
           "packages/adapters/codex/test/contracts.spec.ts",
-          "packages/adapters/codex/test/rpc.spec.ts"
+          "packages/adapters/codex/test/rpc.spec.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts"
         ],
         "actualFiles": [
           "packages/adapters/codex/src/controls.ts",
@@ -127,7 +130,10 @@
           "packages/server/src/rest.ts",
           "tsconfig.base.json",
           "packages/adapters/codex/test/contracts.spec.ts",
-          "packages/adapters/codex/test/rpc.spec.ts"
+          "packages/adapters/codex/test/rpc.spec.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -137,7 +143,7 @@
           "生产与回放调用同一reducer，不允许回放独有的语义补帧。",
           "清理监听器、进程、流和诊断缓冲；失败启动后资源计数回到基线。"
         ],
-        "remainingWork": "DSH typed catalog contracts, complete Claude control types, pure reducers and all lifecycle/resource contracts remain incomplete."
+        "remainingWork": "DSH 已用端点按冻结 catalog 校验请求与可导出的响应；完整 Claude 控制类型、纯 reducer 分域及所有资源合同仍待完成。"
       },
       "dependencyIds": [
         "NP-01"
@@ -262,12 +268,16 @@
         "plannedFiles": [
           "packages/server/src/manager.ts",
           "packages/adapters/codex/src/adapter.ts",
-          "packages/adapters/claude/src/adapter.ts"
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/server/test/turn-tracker.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/manager.ts",
           "packages/adapters/codex/src/adapter.ts",
-          "packages/adapters/claude/src/adapter.ts"
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/server/test/turn-tracker.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -277,7 +287,7 @@
           "活动native turn的interrupt总指向当前ID，取消完成由native结果确认。",
           "服务端重启时区分原生仍运行/已退出/未知，不把所有情况都标用户打断。"
         ],
-        "remainingWork": "Durable ownership/fencing and full generation identity/reconciliation remain incomplete."
+        "remainingWork": "原生轮次 ID 按会话隔离；resume 回调在返回前也可持久化，恢复期间停止可延迟执行。持久 owner/fencing、完整运行代际与未知执行对账仍待完成。"
       },
       "dependencyIds": [
         "NP-02",
@@ -324,12 +334,24 @@
         "plannedFiles": [
           "packages/web/src/lib/store.ts",
           "packages/web/src/lib/db.ts",
-          "packages/web/src/lib/store-sync.spec.ts"
+          "packages/web/src/lib/store-sync.spec.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts",
+          "scripts/l1-replay.ts"
         ],
         "actualFiles": [
           "packages/web/src/lib/store.ts",
           "packages/web/src/lib/db.ts",
-          "packages/web/src/lib/store-sync.spec.ts"
+          "packages/web/src/lib/store-sync.spec.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts",
+          "scripts/l1-replay.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -339,7 +361,7 @@
           "同native事件重放10次只有一个语义投影，空snapshot清除旧hot。",
           "任意seq，包括turnId=null、unknown、内部帧，都能定位查看；live与replay结果一致。"
         ],
-        "remainingWork": "Full cached interval/gap persistence, raw native ledger and versioned projection remain incomplete; known history/snapshot defects fixed."
+        "remainingWork": "DSH 恢复历史使用持久原生轮次映射与事务去重；全运行时 raw ledger、版本化可重建投影、历史范围持久化、实时和回放完整统一仍待完成。"
       },
       "dependencyIds": [
         "NP-02",
@@ -389,7 +411,10 @@
           "packages/adapters/dsh/src/adapter.ts",
           "packages/server/test/question-contract.spec.ts",
           "packages/protocol/test/question-answer.spec.ts",
-          "packages/adapters/codex/src/handler.spec.ts"
+          "packages/adapters/codex/src/handler.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/server/src/manager.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -398,7 +423,10 @@
           "packages/adapters/dsh/src/adapter.ts",
           "packages/server/test/question-contract.spec.ts",
           "packages/protocol/test/question-answer.spec.ts",
-          "packages/adapters/codex/src/handler.spec.ts"
+          "packages/adapters/codex/src/handler.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/server/src/manager.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -408,7 +436,7 @@
           "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
           "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
         ],
-        "remainingWork": "Authoritative interactions/MCP forms/timeout/cancellation/secret storage and UI submission state remain incomplete; free text and scoped Codex IDs fixed."
+        "remainingWork": "DSH 多题在原生批量 ACK 前不显示完成，失败保留可重试；完整跨浏览器权威状态机、MCP 表单、secret、取消/超时对账仍待完成。"
       },
       "dependencyIds": [
         "NP-03",
@@ -627,16 +655,45 @@
         "F10"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
-        "evidence": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/history.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/adapters/dsh/test/host.spec.ts",
+          "packages/adapters/dsh/test/history.spec.ts",
+          "packages/server/test/dsh-connection.spec.ts",
+          "packages/server/test/native-history.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/history.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/adapters/dsh/test/host.spec.ts",
+          "packages/adapters/dsh/test/history.spec.ts",
+          "packages/server/test/dsh-connection.spec.ts",
+          "packages/server/test/native-history.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json"
+        ],
         "remainingAcceptance": [
           "只切断native WS保持HTTP后恢复，旧会话继续收流并补全期间事件。",
           "原版UI发消息、WebDCC离线后回归，双方历史一致；不会重复本地预写user.message。",
           "带路径前缀链接、断开重启、Host重启、cookie过期和已关闭socket全部有终态。"
-        ]
+        ],
+        "remainingWork": "HTTP deadline、原生 WS 重连/订阅恢复/401 停止、开场 cut 绑定分页、失败水位保留、旧回调隔离、持久 null 与外部 user 消息导入已具备局部实现/测试。真实 DSH 双界面断线/Host 重启验收、activeAttempt 开场流重建、workspace baseline 与全部历史恢复仍待完成。"
       },
       "dependencyIds": [
         "NP-04",
@@ -679,10 +736,18 @@
         "implementation": "in-progress",
         "verification": "partial-local",
         "plannedFiles": [
-          "packages/adapters/dsh/src/adapter.ts"
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/web/src/components/Timeline.tsx"
         ],
         "actualFiles": [
-          "packages/adapters/dsh/src/adapter.ts"
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/web/src/components/Timeline.tsx"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -692,7 +757,7 @@
           "首次答案网络失败后可安全重试，不丢问题。",
           "fixture的{id,outcome}决定生成resolved；原版UI解决或取消后Web只有一个最终状态。"
         ],
-        "remainingWork": "DSH subagent method/address and complete interactions remain incomplete; answer normalization/send failure retention partially fixed."
+        "remainingWork": "已修复父会话包装/continuable 方法、one-shot 控制限制、durable id/callId/waterfall 映射、{id,outcome} 和原生 cancel、答案失败保留。计时问题 attachWait/继续回答、跨连接交互对账、真实原生操作验收与完整表单闭环仍待完成。"
       },
       "dependencyIds": [
         "NP-06",
@@ -937,7 +1002,10 @@
           "packages/server/src/trace-real.ts",
           "e2e-real/reporter.ts",
           "scripts/lib/gate-report.spec.ts",
-          "packages/protocol/test/native-evidence.spec.ts"
+          "packages/protocol/test/native-evidence.spec.ts",
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts"
         ],
         "actualFiles": [
           "scripts/lib/gate-report.ts",
@@ -948,17 +1016,21 @@
           "packages/server/src/trace-real.ts",
           "e2e-real/reporter.ts",
           "scripts/lib/gate-report.spec.ts",
-          "packages/protocol/test/native-evidence.spec.ts"
+          "packages/protocol/test/native-evidence.spec.ts",
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/dsh-recovery-l1.json"
         ],
         "remainingAcceptance": [
           "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",
           "S04/S05/S08必须实际发生请求并从浏览器允许/拒绝/回答，验证原生结果。",
           "失败套件也生成报告；M8 ratchet真正执行并比较相同ID，不以文件存在代替。"
         ],
-        "remainingWork": "Independent native oracle, complete live scenes/stubs, zero-output replay semantics and current two-pass acceptance remain incomplete; old/missing evidence now rejects."
+        "remainingWork": "回放身份映射与生产共用按命令 ID 的消息去重；真实 DSH S01 经 manager 不重复本地输入。L1 仍拒绝 16 个未触发谓词和 11 个过时 golden；没有重写 golden。完整当前原生验收与独立参考/历史路径仍待完成。"
       },
       "dependencyIds": [
         "NP-01",
@@ -2511,16 +2583,27 @@
       "route": "结构化",
       "source_findings": [],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
-        "evidence": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/server/src/db.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/test/native-history.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/db.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/test/native-history.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json"
+        ],
         "remainingAcceptance": [
           "从审核基线数据库升级保留sessionId/URL/events/files及已有命令结果。",
           "迁移中断可恢复，失败不启动不兼容应用；恢复演练包含附件hash和native session关联。",
           "备份/导出不带意外secret；缺外部native备份明确显示无法完整恢复范围。"
-        ]
+        ],
+        "remainingWork": "新增 schema v3 原生轮次与恢复记录随功能交付，在临时 SQLite 关闭/重开后去重和身份关联保留；完整旧库迁移故障窗口、备份/恢复及外部 native/secret 边界验收仍待完成。"
       },
       "dependencyIds": [
         "NP-03",

@@ -3,6 +3,7 @@ import type { AdapterEvent } from '@webdcc/protocol';
 export type TurnState = 'starting' | 'running' | 'waiting' | 'completed' | 'interrupted' | 'failed';
 
 interface TurnRecord {
+  sessionId: string;
   turnId: string;
   state: TurnState;
   startedAt: number;
@@ -30,7 +31,7 @@ export class TurnTracker {
   constructor(private readonly lateWindowMs = 10_000) {}
 
   start(sessionId: string, turnId: string, at = Date.now()): void {
-    const record: TurnRecord = { turnId, state: 'starting', startedAt: at, open: new Set() };
+    const record: TurnRecord = { sessionId, turnId, state: 'starting', startedAt: at, open: new Set() };
     this.turns.set(turnId, record);
     this.active.set(sessionId, turnId);
   }
@@ -40,13 +41,13 @@ export class TurnTracker {
     const record = this.turns.get(turnId);
     if (record === undefined) return;
     record.nativeTurnId = nativeTurnId;
-    this.nativeToTurn.set(nativeTurnId, turnId);
+    this.nativeToTurn.set(JSON.stringify([record.sessionId, nativeTurnId]), turnId);
   }
 
   assignment(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
     const nativeTurnId = 'nativeTurnId' in event ? event.nativeTurnId : 'turnId' in event ? event.turnId : undefined;
     if (nativeTurnId !== undefined) {
-      const known = this.nativeToTurn.get(nativeTurnId);
+      const known = this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));
       if (known !== undefined) return { turnId: known, late: this.isLate(sessionId, known, at) };
       const current = this.active.get(sessionId);
       if (current !== undefined) {

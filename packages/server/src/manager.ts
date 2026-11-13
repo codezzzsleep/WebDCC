@@ -13,7 +13,7 @@ import type {
 } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
-import { resolveAnswer } from '@webdcc/protocol';
+import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -61,6 +61,7 @@ export class SessionManager {
   private readonly turns = new TurnTracker();
   private readonly sends = new Map<string, Promise<unknown>>();
   private readonly activations = new Map<string, Promise<Runtime>>();
+  private readonly activationStops = new Set<string>();
   private readonly uncertainSessions = new Set<string>();
   private hooks: ManagerHooks = {
     onFeed: () => undefined,
@@ -211,6 +212,7 @@ export class SessionManager {
     });
 
     const provider = this.options.resolveProvider?.(input.providerId ?? null) ?? null;
+    this.ensureRuntime(session, adapter, workspace.path, '');
     let created: { nativeId: string };
     try {
       created = await adapter.create(await this.prepareLaunch(session, {
@@ -223,6 +225,7 @@ export class SessionManager {
         ...(accessMode === undefined ? {} : { accessMode }),
       }));
     } catch (error) {
+      await this.dispose(session.id);
       await this.options.modelRecording?.close(session.id);
       // 建会话失败就回滚，不留 native_id 为空的孤儿记录（SPEC-M8 F1）
       this.store.deleteSession(session.id);
@@ -257,7 +260,7 @@ export class SessionManager {
 
   private ensureRuntime(session: SessionDto, adapter: AgentAdapter, workspacePath: string, nativeId: string): Runtime {
     const existing = this.runtimes.get(session.id);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) { if (nativeId !== '') existing.nativeId = nativeId; return existing; }
     const journal = this.store.journal;
     const runtime: Runtime = {
       sessionId: session.id,
@@ -284,7 +287,7 @@ export class SessionManager {
     if (existing !== undefined) return existing;
     const pending = this.activate(session, workspacePath);
     this.activations.set(session.id, pending);
-    try { return await pending; } finally { this.activations.delete(session.id); }
+    try { return await pending; } finally { this.activations.delete(session.id); this.activationStops.delete(session.id); }
   }
 
   private async activate(session: SessionDto, workspacePath: string): Promise<Runtime> {
@@ -295,7 +298,8 @@ export class SessionManager {
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) return existing;
     if (session.nativeId === undefined) throw Object.assign(new Error('会话缺少原生 id，无法恢复'), { statusCode: 500 });
-    await adapter.resume(await this.prepareLaunch(session, {
+    const runtime = this.ensureRuntime(session, adapter, workspacePath, session.nativeId);
+    try { await adapter.resume(await this.prepareLaunch(session, {
       sessionId: session.id,
       cwd: workspacePath,
       providerId: session.providerId ?? null,
@@ -304,12 +308,15 @@ export class SessionManager {
       ...(session.reasoningEffort === undefined ? {} : { reasoningEffort: session.reasoningEffort }),
       ...(accessMode === undefined ? {} : { accessMode }),
       nativeId: session.nativeId,
-    }));
+    })); } catch (error) { await this.dispose(session.id); throw error; }
+    if (this.activationStops.delete(session.id)) {
+      await runtime.adapter.interrupt(session.id);
+      await runtime.adapter.cancelPending?.(session.id);
+    }
     const effectiveSession = session.accessMode === undefined && accessMode !== undefined
       ? this.store.updateSessionAndFeed(session.id, { accessMode }, { accessMode }).session ?? session
       : session;
-    const runtime = this.ensureRuntime(effectiveSession, adapter, workspacePath, session.nativeId);
-    runtime.status = session.status;
+    this.ensureRuntime(effectiveSession, adapter, workspacePath, session.nativeId);
     return runtime;
   }
 
@@ -388,7 +395,7 @@ export class SessionManager {
     }
 
     try {
-      await runtime.adapter.send(sessionId, input);
+      await runtime.adapter.send(sessionId, { ...input, nativeRequestId: clientCommandId ?? turnId });
       if (this.store.journal.queue(sessionId).some(row => row.turnId === turnId)) this.store.journal.inputState(turnId, 'native-accepted');
       this.queueChanged(sessionId);
     } catch (error) {
@@ -426,7 +433,8 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.answer === undefined) throw Object.assign(new Error('该 Agent 不支持回答问题'), { statusCode: 400 });
-    await runtime.adapter.answer(sessionId, questionId, answer);
+    const result = await runtime.adapter.answer(sessionId, questionId, answer);
+    if (result?.submitted === false) return;
     this.turns.resume(sessionId);
     const question = this.store.allEvents(sessionId).find((event) => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId);
     if (question !== undefined) {
@@ -447,6 +455,7 @@ export class SessionManager {
   async interrupt(sessionId: string): Promise<void> {
     const session = this.requireSession(sessionId);
     this.watchdog.cancel(sessionId, '用户停止了会话，取消自动恢复');
+    if (this.activations.has(sessionId)) { this.activationStops.add(sessionId); return; }
     if (!this.runtimes.has(sessionId)) return;
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
@@ -611,6 +620,33 @@ export class SessionManager {
     if (event.type === 'native-id') this.options.recorder?.nativeId(sessionId, event.nativeId);
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
+    if (event.type === 'history') {
+      const imported = this.store.nativeHistory.import(sessionId, event.nativeId, event.records);
+      for (const stored of imported) this.hooks.onEvent(stored);
+      const terminal = imported.find(stored => stored.kind === 'turn.completed' && stored.turnId === runtime.turnId);
+      if (terminal !== undefined) this.finishTurn(runtime, (terminal.data as EventData['turn.completed']).status, undefined, terminal);
+      return;
+    }
+    if (event.type === 'item.complete' && event.kind === 'user.message') {
+      const data = event.data as EventData['user.message'];
+      const local = findUserEcho(this.store.allEvents(sessionId), data);
+      if (local !== undefined) {
+        return;
+      }
+    }
+    if (event.type === 'turn.start' && event.nativeTurnId !== undefined) {
+      if (runtime.turnId === null) {
+        const publicTurn = this.store.nativeHistory.turn(sessionId, event.nativeTurnId) ?? ulid();
+        runtime.turnId = publicTurn;
+        runtime.turnStartedAt = Date.now();
+        this.turns.start(sessionId, publicTurn);
+        if (!this.store.allEvents(sessionId).some(stored => stored.kind === 'turn.started' && stored.turnId === publicTurn)) {
+          const started = this.store.appendEvent({ sessionId, turnId: publicTurn, itemKey: `turn-start-${publicTurn}`, kind: 'turn.started', data: {}, native: event.native });
+          this.hooks.onEvent(started);
+        }
+      }
+      this.store.nativeHistory.bind(sessionId, event.nativeTurnId, runtime.turnId);
+    }
     const nativeEffort = this.nativeReasoningEffort(event);
     if (nativeEffort !== undefined && this.store.getSession(sessionId)?.reasoningEffort !== nativeEffort) {
       this.updateSessionAndFeed(sessionId, { reasoningEffort: nativeEffort }, { reasoningEffort: nativeEffort });

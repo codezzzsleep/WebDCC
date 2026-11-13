@@ -14,6 +14,7 @@ import type {
 import { ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { CommandJournal } from './command-journal.js';
+import { NativeHistoryStore } from './native-history.js';
 
 interface SessionRow {
   id: string;
@@ -137,6 +138,7 @@ export interface AppendEventInput {
   native?: unknown;
   nativeSeq?: number;
   late?: boolean;
+  at?: string;
 }
 
 export interface CreateSessionInput {
@@ -195,7 +197,8 @@ function toWatchdogJob(data: string): WatchdogJob {
 
 export class Store {
   readonly journal: CommandJournal;
-  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); }
+  readonly nativeHistory: NativeHistoryStore;
+  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); }
 
   watchdogSettings(): WatchdogSettings | undefined {
     const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;
@@ -437,7 +440,7 @@ export class Store {
 
   /** seq 分配与事件写入在同一事务（SPEC 11.2） */
   appendEvent(input: AppendEventInput): StoredEvent {
-    const at = new Date().toISOString();
+    const at = input.at ?? new Date().toISOString();
     const tx = this.db.transaction((event: AppendEventInput): StoredEvent => {
       const current = this.db.prepare('SELECT last_seq FROM sessions WHERE id = ?').get(event.sessionId) as
         | { last_seq: number }

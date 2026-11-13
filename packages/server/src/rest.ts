@@ -555,18 +555,21 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (typeof body?.link !== 'string') throw badRequest('需要 link（DSH 的访问链接）');
     const { url, token } = parseDshLink(body.link);
     const cookie = await attachToDsh(url, token);
-    await deps.dsh.save({ url, cookie, connectedAt: new Date().toISOString() });
+    const persist = (): Promise<void> => deps.dsh.save({ url, cookie, connectedAt: new Date().toISOString() });
+    let attached = false;
     for (const adapter of manager.adaptersList()) {
       if (adapter.id === 'dsh') {
-        const dshAdapter = adapter as unknown as { setAttach?: (u: string, c: string) => Promise<void> };
-        await dshAdapter.setAttach?.(url, cookie);
+        const dshAdapter = adapter as unknown as { setAttach?: (u: string, c: string, persist: () => Promise<void>) => Promise<void> };
+        if (dshAdapter.setAttach !== undefined) { await dshAdapter.setAttach(url, cookie, persist); attached = true; }
       }
     }
+    if (!attached) await persist();
     return { ok: true, url };
   });
 
   app.delete('/api/dsh', async () => {
     await deps.dsh.clear();
+    for (const adapter of manager.adaptersList()) if (adapter.id === 'dsh') await (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect?.();
     return { ok: true };
   });
 

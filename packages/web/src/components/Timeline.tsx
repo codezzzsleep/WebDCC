@@ -443,11 +443,12 @@ function StepRow({
       const data = event.data as EventData['tool.call'];
       const toolInput = data.input as Record<string, unknown>;
       const childId = data.name === 'subagent' && typeof toolInput?.['childId'] === 'string' ? toolInput['childId'] : undefined;
+      const canControlChild = childId !== undefined && toolInput?.['mode'] === 'continuable';
       const sendSubagent = async (): Promise<void> => {
         if (childId === undefined || subagentText.trim() === '') return;
         setSubagentBusy(true);
         try {
-          await api.sendSubagent(event.sessionId, childId, subagentText.trim());
+          await api.sendSubagent(event.sessionId, childId, subagentText);
           setSubagentText('');
         } finally {
           setSubagentBusy(false);
@@ -478,7 +479,7 @@ function StepRow({
               {data.output === undefined ? '' : `\n\n→ ${typeof data.output === 'string' ? data.output : JSON.stringify(data.output, null, 2)}`}
             </pre>
           ) : null}
-          {childId !== undefined ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
+          {canControlChild ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
         </div>
       );
     }

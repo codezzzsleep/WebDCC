@@ -144,7 +144,7 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
     expect(spec.env).toEqual({});
   });
 
-  it('端点白名单就是 5.4.8 列出的那些', () => {
+  it('端点白名单遵循原生基线；子 Agent 使用 NP-11 的父身份方法', () => {
     expect([...ALLOWED_ENDPOINTS].sort()).toEqual(
       [
         '$events',
@@ -152,7 +152,7 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
         'commands/execute',
         'commands/list',
         'subagents/prompt',
-        'subagents/interruptByUser',
+        'subagents/interruptByParent',
         'session/cancel',
         'session/create',
         'session/follow',

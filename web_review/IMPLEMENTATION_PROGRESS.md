@@ -35,8 +35,18 @@
 - `web_review/evidence/` 和 `.artifacts/` 为本机验收产物，不提交，以避免报告提交后自身 SHA 变化；这里的源码检查点和矩阵提交到独立分支。
 - 本地只有四份主审查文档，原审查 ZIP/补充证据及 AGENTS 指定的私有记忆不存在。按 AGENTS 限制未写私有 MEMORY；本文件保存工程恢复点。
 
+## DSH 恢复与身份阶段（2026-11-13）
+
+- DSH HTTP/WS 保留 basePath；HTTP deadline、WS 指数退避、401 停止等待新 Cookie、订阅注册表、已关闭 socket 幂等关闭和失败 sidecar 清理已实现。真实本地 WebSocket 回归验证存活订阅重开、取消订阅不复活、401 后更新凭据可恢复。
+- 开场 snapshot 固定 cut，缺失区间由 session/page 向前补齐；补读完成前缓冲新事件。失败、乱序、Host/session 变化和旧代际页回调不前移覆盖水位。activeAttempt 流基线重建仍未完成。
+- SQLite schema v3 添加原生轮次映射和恢复记录，以事务保留原生源/时间/身份与投影。恢复历史不进入实时轮次结束启发式；本地预写 user 消息按命令 ID 去重，已接受 inbox 也能绑定同一个原生轮次。原生轮次 ID 在 TurnTracker 中按会话隔离。
+- DSH 子 Agent 使用锁定 catalog 的 request 包装、parentSessionId、continuable 和 interruptByParent；非本父会话及 one-shot 控制拒绝。审批保留 durable id/callId/waterfall eventId 映射，读取真实 {id,outcome}，未知 outcome 不猜允许。原生 cancel 收敛问答卡；多题原生批量 ACK 前不显示全部完成。
+- DSH 连接保存先校验/连接/持久，再替换旧连接；不同 Host 不能继承既有会话。断开同时停止 adapter 订阅并持久化 null。连接文件原子替换/fsync，存储不对外暴露可修改引用。
+- 51 个测试文件 / 218 项（阶段新增测试后以最新源码报告为准）；恢复前回调、事务回滚、SQLite 重开去重、无关旧轮次结束、真实 DSH S01 录制经 manager 不重复输入已通过针对性测试。
+- L1 3,681 帧重新检查后没有 I1–I8 语义不变量失败；仍有 16 个 NOT_TRIGGERED 与 11 个 GOLDEN。golden 因修复后的消息身份/内部保真事件与旧输出不一致；未修改 golden，门禁保持失败。完整 L1 历史投影统一仍待 NP-15 完成。
+
 ## 下一步
 
-重新生成源码检查证据并提交本地源码检查点，然后继续 M0：优先移除 DSH 远程错误时写本机 YAML 的 fallback，修复 base URL 前缀/连接重订阅/开场快照和子 Agent 参数合同；补 Claude block/system/generation 和权限 inherit/requested/effective。随后完善持久 owner/reconciliation、raw ledger、交互状态机及 secret 存储，再按依赖推进全部 M1–M3。
+完成当前源码门禁，提交独立分支源码检查点，然后继续 NP-09 Claude block/system/generation 和 NP-07 inherit/requested/effective；补持久 owner/reconciliation、完整 raw ledger、权威交互状态机及 secret 存储。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据。再按矩阵依赖推进全部 M1–M3。
 
 运行入口：所有命令在 `/root/WebDCC-repair` 执行。`pnpm check:source` 构建只写 `.artifacts/<runId>/`；不要执行 release 或重启服务。真实 Codex 0.167.0 与付费模型对照尚未准备，不能拿 0.168.0 当基线通过证据。

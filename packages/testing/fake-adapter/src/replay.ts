@@ -1,4 +1,5 @@
 import type { AdapterEvent, AgentAdapter, AgentId, ApprovalDecision, CreateOpts, LaunchSpec, ModelOption, ProbeResult, TraceFrame, UserInput } from '@webdcc/protocol';
+import { traceInputIdentity } from '@webdcc/protocol';
 
 export interface ReplayAdapterOptions {
   id: AgentId;
@@ -13,7 +14,7 @@ export interface ReplayAdapterOptions {
 interface ReplayHandler {
   feed: (frame: TraceFrame) => AdapterEvent[];
   respond?: (decision: ApprovalDecision) => Promise<void>;
-  answer?: (questionId: string, answer: unknown) => Promise<void>;
+  answer?: (questionId: string, answer: unknown) => Promise<void | { submitted: boolean }>;
 }
 export interface ReplayScript {
   createHandler?: (sessionId: string) => ReplayHandler;
@@ -23,7 +24,7 @@ export interface ReplayScript {
   translate: (frame: TraceFrame) => AdapterEvent[];
 }
 
-interface ReplaySession { cancelled: boolean; nativeId: string; script?: ReplayScript; handler?: ReplayHandler; cursor: number; lastT: number; }
+interface ReplaySession { cancelled: boolean; nativeId: string; script?: ReplayScript; handler?: ReplayHandler; cursor: number; lastT: number; requestIds?: Map<string, string>; }
 
 /** Adapter used by L2/L3: native frames are processed by the production
  * Handler, then delivered at recorded relative times. */
@@ -69,9 +70,12 @@ export class ReplayAdapter implements AgentAdapter {
       session.lastT = frame.t;
       if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
       if (session.cancelled) return;
+      const recordedRequest = traceInputIdentity(frame);
+      if (recordedRequest !== undefined && input.nativeRequestId !== undefined) { session.requestIds ??= new Map(); session.requestIds.set(recordedRequest, input.nativeRequestId); }
       const events = session.handler?.feed(frame) ?? script.translate(frame);
       for (const event of events) {
-        this.emit(sessionId, event);
+        const mapped = this.remapIdentity(event, sessionId, session);
+        this.emit(sessionId, mapped);
         // A single recorded trace can contain more than one user turn (S10).
         // Leave the following native frames for the next send so the server's
         // ULID turn remains the only public identity.
@@ -82,8 +86,20 @@ export class ReplayAdapter implements AgentAdapter {
       }
     }
   }
+
+  private remapIdentity(event: AdapterEvent, sessionId: string, session: ReplaySession): AdapterEvent {
+    const nativeTurn = (id: string | undefined): string | undefined => id === undefined ? undefined : JSON.stringify([sessionId, id]);
+    if (event.type === 'history') return { ...event, nativeId: session.nativeId, records: event.records.map(record => ({ ...record, nativeTurnId: nativeTurn(record.nativeTurnId), admittedInputs: record.admittedInputs?.map(input => ({ ...input, nativeRequestId: session.requestIds?.get(input.nativeRequestId) ?? input.nativeRequestId })), events: record.events.map(item => this.remapIdentity(item, sessionId, session) as Exclude<AdapterEvent, { type: 'history' }>) })) };
+    if (event.type === 'native-id') return { ...event, nativeId: session.nativeId };
+    if (event.type === 'item.complete' && event.kind === 'user.message') {
+      const data = event.data as { text: string; clientCommandId?: string };
+      const identity = data.clientCommandId === undefined ? undefined : session.requestIds?.get(data.clientCommandId);
+      return { ...event, nativeTurnId: nativeTurn(event.nativeTurnId), data: { ...data, ...(identity === undefined ? {} : { clientCommandId: identity }) } };
+    }
+    return 'nativeTurnId' in event ? { ...event, nativeTurnId: nativeTurn(event.nativeTurnId) } : event;
+  }
   async interrupt(sessionId: string): Promise<void> { const session = this.sessions.get(sessionId); if (session !== undefined) session.cancelled = true; }
   async respond(sessionId: string, decision: ApprovalDecision): Promise<void> { await this.sessions.get(sessionId)?.handler?.respond?.(decision); }
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> { await this.sessions.get(sessionId)?.handler?.answer?.(questionId, answer); }
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void | { submitted: boolean }> { return this.sessions.get(sessionId)?.handler?.answer?.(questionId, answer); }
   async dispose(sessionId: string): Promise<void> { this.sessions.delete(sessionId); }
 }

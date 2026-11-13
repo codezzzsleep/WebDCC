@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { TurnTracker } from '../src/turn-tracker.js';
 
 describe('M9 TurnTracker', () => {
+  it('NP-04 keeps equal native IDs scoped to their owning session', () => {
+    const tracker = new TurnTracker();
+    tracker.start('one', 'public-one');
+    tracker.start('two', 'public-two');
+    tracker.observe('one', { type: 'turn.start', nativeTurnId: 'native' });
+    expect(tracker.observe('two', { type: 'turn.start', nativeTurnId: 'native' }).turnId).toBe('public-two');
+    expect(tracker.assignment('one', { type: 'turn.end', nativeTurnId: 'native', status: 'completed' }).turnId).toBe('public-one');
+  });
   it('binds native ids to the server turn and routes late closing events', () => {
     const tracker = new TurnTracker(10_000);
     tracker.start('s', 'server-turn', 0);

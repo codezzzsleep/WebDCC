@@ -15,9 +15,12 @@ import type {
   UserInput,
   TraceSink,
   TraceFrame,
+  NativeHistoryRecord,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer } from '@webdcc/protocol';
-import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
+import { dshBaseUrl, DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
+import type { DshHistoryRecord, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
+import { DshHistoryBridge, type DshOpening } from './history.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
 
@@ -75,7 +78,7 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'commands/execute',
   'commands/list',
   'subagents/prompt',
-  'subagents/interruptByUser',
+  'subagents/interruptByParent',
   '$events',
   '$events/result',
   'userQuestions/answer',
@@ -144,6 +147,9 @@ interface PendingInteraction {
   eventId: string;
   questionIds?: string[];
   answers?: Map<string, { id: string; selected: string[]; custom?: string }>;
+  callId?: string;
+  durableId?: string;
+  generation?: number;
 }
 
 interface SessionRuntime {
@@ -156,6 +162,12 @@ interface SessionRuntime {
   lastSeq: number;
   turnStartedAt: number;
   pending: Map<string, PendingInteraction>;
+  children: Map<string, string>;
+  approvals: Map<string, { callId?: string; toolName: string; eventId?: string }>;
+  history?: DshHistoryBridge;
+  historyRecord?: NativeHistoryRecord;
+  historyRecords?: NativeHistoryRecord[];
+  nativeTurnId?: string;
   toolCalls: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
   /** callId → 工具入参：审批请求里只有 toolName 和 callId，标题需要从工具调用取命令（F11） */
   toolInputs: Map<string, Record<string, unknown>>;
@@ -218,12 +230,12 @@ export class DshAdapter implements AgentAdapter {
     const adapter = new DshAdapter();
     const runtime: SessionRuntime = {
       nativeId: '', workspaceId: '', followStream: null, lastSeq: 0, turnStartedAt: 0,
-      pending: new Map(), toolCalls: new Map(), toolInputs: new Map(), assistantKey: '', assistantText: '',
+      pending: new Map(), children: new Map(), approvals: new Map(), toolCalls: new Map(), toolInputs: new Map(), assistantKey: '', assistantText: '',
       reasoningKey: '', reasoningText: '', streamedAssistant: false, streamedReasoning: false, generationStartedAt: null, frameSeq: 0,
     };
     adapter.sessions.set(sessionId, runtime);
     const replies: unknown[] = [];
-    adapter.client = { rpc: async (endpoint: string, args: unknown) => { replies.push({ endpoint, args }); return { accepted: true }; } } as unknown as DshHostClient;
+    adapter.client = { connect: async () => undefined, rpc: async (endpoint: string, args: unknown) => { replies.push({ endpoint, args }); return { accepted: true }; } } as unknown as DshHostClient;
     let events: AdapterEvent[] = [];
     adapter.onEvent((_id, event) => events.push(event));
     return { adapter, replies, feed(frame) {
@@ -241,6 +253,9 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private emit(sessionId: string, event: AdapterEvent): void {
+    const runtime = this.sessions.get(sessionId);
+    if (runtime?.historyRecord !== undefined && event.type !== 'history') { runtime.historyRecord.events.push(event); return; }
+    if (runtime?.nativeTurnId !== undefined && ['item.start', 'item.complete', 'turn.start', 'turn.end'].includes(event.type)) event = { ...event, nativeTurnId: runtime.nativeTurnId } as AdapterEvent;
     for (const listener of this.listeners) listener(sessionId, event);
   }
 
@@ -324,7 +339,7 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private async ensureSidecar(): Promise<DshHostClient> {
-    if (this.client !== null) return this.client;
+    if (this.client !== null) { await this.client.connect(); return this.client; }
     // Metadata/model discovery and session creation can arrive concurrently.
     // A process started by this adapter belongs to the pending boot, rather
     // than being an unrelated host using the same native home.
@@ -333,43 +348,55 @@ export class DshAdapter implements AgentAdapter {
       if (this.client !== null) return this.client;
       throw new Error('dsh: 侧车启动失败');
     }
-    if ((this.options.mode ?? 'spawn') === 'attach') {
-      this.booting ??= (async () => {
-        const url = new URL(this.options.attachUrl ?? 'http://127.0.0.1:3080');
-        const cookie = this.options.attachCookie ?? '';
-        if (cookie === '') throw Object.assign(new Error('需要重新连接 DSH：请粘贴 DSH 当前的访问链接'), { code: 'dsh-needs-link' });
-        const client = new DshHostClient(url.origin);
-        client.useCookie(cookie);
+    const epoch = this.hostEpoch;
+    const boot = (async () => {
+      let client: DshHostClient | null = null;
+      let sidecar: Sidecar | null = null;
+      try {
+        if ((this.options.mode ?? 'spawn') === 'attach') {
+          const cookie = this.options.attachCookie ?? '';
+          if (cookie === '') throw Object.assign(new Error('需要重新连接 DSH：请粘贴 DSH 当前的访问链接'), { code: 'dsh-needs-link' });
+          client = this.newHost(this.options.attachUrl ?? 'http://127.0.0.1:3080');
+          client.useCookie(cookie);
+        } else {
+          const dshHome = this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? join(homedir(), '.dsh');
+          if (findDshProcessOn(dshHome) !== undefined) throw Object.assign(new Error(`检测到已有 DSH 在使用 ${dshHome}，请改用 attach 模式`), { code: 'dsh-home-in-use' });
+          const spec = this.buildLaunchSpec();
+          sidecar = await startSidecar({ port: this.options.port ?? Number(process.env['WDCC_DSH_PORT'] ?? 3091), env: { ...process.env, ...spec.env }, command: spec.command, args: spec.args });
+          client = this.newHost(sidecar.port);
+          await client.authenticate(sidecar.tokenUrl);
+        }
         await client.connect();
-        client.openStream('$events', {}, (frame) => this.onEventFrame('', frame));
+        if (epoch !== this.hostEpoch) throw new Error('DSH 连接启动已取消');
         this.client = client;
-      })();
-      await this.booting;
-      if (this.client === null) throw new Error('dsh: 连接 DSH 失败');
-      return this.client;
-    }
-    const dshHome = this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? join(homedir(), '.dsh');
-    const running = findDshProcessOn(dshHome);
-    if (running !== undefined) {
-      throw Object.assign(new Error(`检测到已有 DSH 在使用 ${dshHome}，请改用 attach 模式`), { code: 'dsh-home-in-use' });
-    }
-    this.booting ??= (async () => {
-      const spec = this.buildLaunchSpec();
-      this.sidecar = await startSidecar({
-        port: this.options.port ?? Number(process.env['WDCC_DSH_PORT'] ?? 3091),
-        env: { ...process.env, ...spec.env },
-        ...(spec.command === undefined ? {} : { command: spec.command }),
-        args: spec.args,
-      });
-      const client = new DshHostClient(this.sidecar.port);
-      await client.authenticate(this.sidecar.tokenUrl);
-      await client.connect();
-      client.openStream('$events', {}, (frame) => this.onEventFrame('', frame));
-      this.client = client;
+        this.sidecar = sidecar;
+        client.openStream('$events', {}, frame => { if (this.client === client) this.onEventFrame('', frame); });
+        for (const [id, runtime] of this.sessions) this.openFollow(id, runtime);
+      } catch (error) {
+        await client?.close();
+        await sidecar?.stop();
+        if (this.client === client) this.client = null;
+        throw error;
+      }
     })();
-    await this.booting;
+    this.booting = boot;
+    try { await boot; } finally { if (this.booting === boot) this.booting = null; }
     if (this.client === null) throw new Error('dsh: 侧车启动失败');
     return this.client;
+  }
+
+  private hostEpoch = 0;
+  private muxGeneration = 0;
+  private newHost(endpoint: string | number): DshHostClient {
+    const host = new DshHostClient(endpoint, { onState: state => {
+      if (this.client !== host) return;
+        if (state === 'reconnecting' || state === 'auth-required') { this.clientId = ''; this.muxGeneration++; for (const runtime of this.sessions.values()) runtime.history?.invalidate(); }
+      for (const [id, runtime] of this.sessions) this.emit(id, {
+        type: 'item.complete', itemKey: `dsh-connection-${++runtime.frameSeq}`, kind: 'notice',
+        data: { level: state === 'online' ? 'info' : 'warning', text: state === 'online' ? 'DSH 连接已恢复，正在同步会话' : state === 'auth-required' ? 'DSH 登录已过期，请重新连接' : 'DSH 连接中断，正在重连', nativeType: `dsh.connection.${state}` },
+      });
+    } });
+    return host;
   }
 
   /** 斜杠命令目录（F8 / SL-02）：来自 DSH 的 commands/list */
@@ -391,20 +418,23 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
-    this.require(sessionId);
+    const runtime = this.requireChild(sessionId, childSessionId);
     const client = await this.ensureSidecar();
-    await this.call(client, 'subagents/prompt', {
-      requestId: ulid(),
-      childSessionId,
-      delivery: 'queue',
-      content: [{ type: 'text', text }],
-    });
+    const args: DshSubagentPrompt = { request: { requestId: ulid(), parentSessionId: runtime.nativeId, childSessionId, mode: 'continuable', delivery: 'queue', content: [{ type: 'text', text }] } };
+    await this.call(client, 'subagents/prompt', { ...args }, sessionId);
   }
 
   async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
-    this.require(sessionId);
+    const runtime = this.requireChild(sessionId, childSessionId);
     const client = await this.ensureSidecar();
-    await this.call(client, 'subagents/interruptByUser', { childSessionId });
+    const args: DshSubagentInterrupt = { childSessionId, parentSessionId: runtime.nativeId, mode: 'continuable' };
+    await this.call(client, 'subagents/interruptByParent', { ...args }, sessionId);
+  }
+
+  private requireChild(sessionId: string, childSessionId: string): SessionRuntime {
+    const runtime = this.require(sessionId);
+    if (runtime.children.get(childSessionId) !== 'continuable') throw Object.assign(new Error('子 Agent 不属于此父会话，或不支持继续操作'), { statusCode: 409 });
+    return runtime;
   }
 
   /** 运行中切换访问模式（F6）：/permission <preset> 只影响这一个会话 */
@@ -458,6 +488,8 @@ export class DshAdapter implements AgentAdapter {
       lastSeq: 0,
       turnStartedAt: 0,
       pending: new Map(),
+      children: new Map(),
+      approvals: new Map(),
       toolCalls: new Map(),
       toolInputs: new Map(),
       assistantKey: '',
@@ -493,6 +525,8 @@ export class DshAdapter implements AgentAdapter {
       lastSeq: 0,
       turnStartedAt: 0,
       pending: new Map(),
+      children: new Map(),
+      approvals: new Map(),
       toolCalls: new Map(),
       toolInputs: new Map(),
       assistantKey: '',
@@ -511,11 +545,39 @@ export class DshAdapter implements AgentAdapter {
   private openFollow(sessionId: string, runtime: SessionRuntime): void {
     const client = this.client;
     if (client === null) return;
+    this.setupHistory(sessionId, runtime);
     this.trace(sessionId, 'out', 'openStream:session/follow', { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } });
     runtime.followStream = client.openStream(
       'session/follow',
       { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } },
-      (frame) => this.onEventFrame(sessionId, frame),
+      (frame) => { if (this.client === client && this.sessions.get(sessionId) === runtime) this.onEventFrame(sessionId, frame); },
+    );
+  }
+
+  private setupHistory(sessionId: string, runtime: SessionRuntime): void {
+    runtime.history ??= new DshHistoryBridge(runtime.nativeId,
+      request => { if (this.client === null) throw new Error('DSH 尚未连接'); return this.call(this.client, 'session/page', { request }, sessionId); },
+      (record, historical) => {
+        runtime.lastSeq = record.event.seq;
+        if (record.event.type === 'turn/start') runtime.nativeTurnId = `${runtime.nativeId}:${String((record.event.data as { turn?: unknown }).turn ?? record.event.seq)}`;
+        if (historical) {
+          runtime.historyRecord = { nativeSeq: record.event.seq, nativeTurnId: runtime.nativeTurnId, at: new Date(record.event.time).toISOString(), native: record.event, events: [] };
+          const data = record.event.data as { target?: string; inserted?: { source?: { kind?: string; rpcId?: string }; content?: { type?: string; text?: string }[] }[] };
+          if (record.event.type === 'agent/inbox/spliced' && data.target === 'next-turn') runtime.historyRecord.admittedInputs = (data.inserted ?? []).flatMap(input => input.source?.kind === 'user' && typeof input.source.rpcId === 'string' ? [{ nativeRequestId: input.source.rpcId, text: (input.content ?? []).filter(part => part.type === 'text').map(part => part.text ?? '').join('') }] : []);
+        }
+        this.onDshEvent(sessionId, runtime, record.event.type, (record.event.data ?? {}) as Record<string, unknown>, record.event.seq, record.event);
+        if (runtime.historyRecord !== undefined) { runtime.historyRecords ??= []; runtime.historyRecords.push(runtime.historyRecord); runtime.historyRecord = undefined; }
+      },
+      opening => {
+        const records = runtime.historyRecords ?? [];
+        runtime.historyRecords = [];
+        this.emit(sessionId, { type: 'history', nativeId: runtime.nativeId, records });
+        const values = opening.projections?.values ?? {};
+        if (Array.isArray(values['subagentCatalog'])) for (const entry of values['subagentCatalog'] as Record<string, unknown>[]) {
+          if (typeof entry['id'] === 'string' && typeof entry['mode'] === 'string') runtime.children.set(entry['id'], entry['mode']);
+        }
+      },
+      error => { runtime.historyRecords = []; runtime.historyRecord = undefined; this.emit(sessionId, { type: 'item.complete', itemKey: `dsh-history-error-${++runtime.frameSeq}`, kind: 'error', data: { message: error.message } }); },
     );
   }
 
@@ -546,7 +608,7 @@ export class DshAdapter implements AgentAdapter {
       content.push({ type: 'image', mediaType: image.mime, data: readFileSync(image.path).toString('base64') });
     }
     await this.call(client, 'session/prompt', {
-      request: { requestId: ulid(), sessionId: runtime.nativeId, mode: 'queue', content },
+      request: { requestId: input.nativeRequestId ?? ulid(), sessionId: runtime.nativeId, mode: 'queue', content },
     });
   }
 
@@ -578,6 +640,9 @@ export class DshAdapter implements AgentAdapter {
   async respond(sessionId: string, decision: ApprovalDecision): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
+    const pending = runtime.pending.get(decision.approvalId);
+    if (pending?.kind !== 'approval' || pending.generation !== this.muxGeneration || this.clientId === '') throw Object.assign(new Error('DSH 审批已结束或需要重新同步'), { statusCode: 409 });
+    if (!['allowed-once', 'rejected'].includes(decision.optionId)) throw Object.assign(new Error('DSH 审批选项无效'), { statusCode: 400 });
     await this.call(client, '$events/result', {
       clientId: this.clientId,
       eventId: decision.approvalId,
@@ -592,46 +657,71 @@ export class DshAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     const client = await this.ensureSidecar().catch(() => null);
     for (const [eventId, pending] of runtime.pending) {
-      runtime.pending.delete(eventId);
-      if (client === null) continue;
+      if (client === null || pending.generation !== this.muxGeneration || this.clientId === '') continue;
       if (pending.kind === 'approval') {
         await this.call(client, '$events/result', {
           clientId: this.clientId,
           eventId,
           outcome: { kind: 'result', value: 'cancelled' },
-        }).catch(() => undefined);
+        });
+        runtime.pending.delete(eventId);
       }
     }
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<{ submitted: boolean }> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
     const entry = [...runtime.pending].find(([eventId, pending]) => pending.kind === 'question' && (questionId === eventId || pending.questionIds?.some(id => `${eventId}:${id}` === questionId)));
     if (entry === undefined) throw new Error('DSH 问题已结束或不存在');
     const [eventId, pending] = entry;
+    if (pending.generation !== this.muxGeneration || this.clientId === '') throw Object.assign(new Error('DSH 问题需要重新同步'), { statusCode: 409 });
     const id = questionId === eventId ? pending.questionIds?.[0] ?? questionId : questionId.slice(eventId.length + 1);
     const { selected, custom } = normalizeQuestionAnswer(answer);
     pending.answers ??= new Map();
     pending.answers.set(id, { id, selected, ...(custom === undefined || custom === '' ? {} : { custom }) });
-    if (pending.answers.size < (pending.questionIds?.length ?? 1)) return;
+    if (pending.answers.size < (pending.questionIds?.length ?? 1)) return { submitted: false };
     await this.call(client, '$events/result', { clientId: this.clientId, eventId, outcome: { kind: 'result', value: { answers: [...pending.answers.values()] } } }, sessionId);
     runtime.pending.delete(eventId);
+    return { submitted: true };
   }
 
   /** 运行期切换连接（设置页粘贴 DSH 链接后调用） */
-  async setAttach(url: string, cookie: string): Promise<void> {
+  async setAttach(url: string, cookie: string, persist?: () => Promise<void>): Promise<void> {
+    const currentUrl = this.options.attachUrl ?? (this.sidecar === null ? undefined : dshBaseUrl(this.sidecar.port));
+    if (this.sessions.size > 0 && (currentUrl === undefined || dshBaseUrl(url) !== dshBaseUrl(currentUrl))) throw Object.assign(new Error('存在已关联会话，不能切换到不同 DSH Host'), { statusCode: 409 });
+    const candidate = this.newHost(url);
+    candidate.useCookie(cookie);
+    try { await candidate.connect(); await persist?.(); }
+    catch (error) { await candidate.close(); throw error; }
     await this.shutdown();
-    this.options = { ...this.options, mode: 'attach', attachUrl: url, attachCookie: cookie };
+    this.options = { ...this.options, mode: 'attach', attachUrl: dshBaseUrl(url), attachCookie: cookie };
+    this.client = candidate;
+    candidate.openStream('$events', {}, frame => { if (this.client === candidate) this.onEventFrame('', frame); });
+    for (const [id, runtime] of this.sessions) this.openFollow(id, runtime);
+  }
+
+  async disconnect(): Promise<void> {
+    await this.shutdown();
+    this.options = { ...this.options, mode: 'attach', attachCookie: '' };
   }
 
   /** 关闭侧车（进程级清理，测试与平台退出时调用） */
   async shutdown(): Promise<void> {
-    await this.client?.close().catch(() => undefined);
-    await this.sidecar?.stop().catch(() => undefined);
+    this.hostEpoch++;
+    this.clientId = '';
+    this.muxGeneration++;
+    const boot = this.booting;
+    const client = this.client;
+    const sidecar = this.sidecar;
     this.client = null;
     this.sidecar = null;
     this.booting = null;
+    for (const runtime of this.sessions.values()) runtime.history?.invalidate();
+    await client?.close().catch(() => undefined);
+    await sidecar?.stop().catch(() => undefined);
+    await boot?.catch(() => undefined);
+    for (const runtime of this.sessions.values()) runtime.followStream = null;
   }
 
   debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
@@ -651,6 +741,7 @@ export class DshAdapter implements AgentAdapter {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
     this.sessions.delete(sessionId);
+    runtime.history?.invalidate();
     if (runtime.followStream !== null) this.client?.closeStream(runtime.followStream);
   }
 
@@ -685,7 +776,26 @@ export class DshAdapter implements AgentAdapter {
       this.onAssistantStream(sessionId, value);
       return;
     }
-    if (value['type'] === 'snapshot') return;
+    if (value['type'] === 'cancel') {
+      const eventId = String(value['eventId'] ?? '');
+      for (const [id, runtime] of this.sessions) {
+        const pending = runtime.pending.get(eventId);
+        if (pending === undefined) continue;
+        runtime.pending.delete(eventId);
+        if (pending.kind === 'approval') this.emit(id, { type: 'item.complete', itemKey: `approval-cancelled-${eventId}`, kind: 'approval.resolved', data: { approvalId: eventId, optionId: 'cancelled', by: 'other' }, native: value });
+        else for (const question of pending.questionIds ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-cancelled-${eventId}-${question}`, kind: 'question', data: { questionId: `${eventId}:${question}`, prompt: '', status: 'skipped' }, native: value });
+      }
+      return;
+    }
+    if (value['type'] === 'snapshot') {
+      const runtime = this.sessions.get(sessionId);
+      if (runtime !== undefined) {
+        if (runtime.nativeId === '' && this.replayTime !== undefined) runtime.nativeId = String((value['header'] as { id?: unknown })?.id ?? '');
+        this.setupHistory(sessionId, runtime);
+        runtime.history?.opening(value as unknown as DshOpening);
+      }
+      return;
+    }
     if (value['type'] !== 'event') return;
 
     const event = (value['event'] ?? {}) as Record<string, unknown>;
@@ -694,6 +804,11 @@ export class DshAdapter implements AgentAdapter {
     const data = (event['data'] ?? {}) as Record<string, unknown>;
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
+    if (runtime.history !== undefined) {
+      try { runtime.history.event({ type: 'event', event: event as unknown as DshHistoryRecord['event'] }); }
+      catch (error) { this.emit(sessionId, { type: 'item.complete', itemKey: `dsh-history-error-${++runtime.frameSeq}`, kind: 'error', data: { message: error instanceof Error ? error.message : String(error) } }); }
+      return;
+    }
     if (seq > 0 && seq <= runtime.lastSeq) return; // nativeSeq 去重
     if (seq > 0) runtime.lastSeq = seq;
     this.onDshEvent(sessionId, runtime, type, data, seq, event);
@@ -737,10 +852,11 @@ export class DshAdapter implements AgentAdapter {
         const childId = String(data['childId'] ?? data['child_id'] ?? data['agentId'] ?? '');
         const label = String(data['label'] ?? data['name'] ?? data['mode'] ?? 'DSH 子 Agent');
         const terminal = type === 'subagent/end' || data['status'] === 'completed' || data['status'] === 'failed';
+        if (childId !== '' && typeof data['mode'] === 'string') runtime.children.set(childId, data['mode']);
         complete(`subagent-${childId || nativeSeq}`, 'tool.call', {
           name: 'subagent',
           label,
-          input: { childId, ...(data['name'] === undefined ? {} : { name: String(data['name']) }), ...(data['mode'] === undefined ? {} : { mode: String(data['mode']) }), ...(data['status'] === undefined ? {} : { status: String(data['status']) }) },
+          input: { childId, parentSessionId: runtime.nativeId, ...(data['name'] === undefined ? {} : { name: String(data['name']) }), ...(data['mode'] === undefined ? {} : { mode: String(data['mode']) }), ...(data['status'] === undefined ? {} : { status: String(data['status']) }) },
           status: terminal ? 'completed' : 'running',
         });
         return;
@@ -868,17 +984,25 @@ export class DshAdapter implements AgentAdapter {
         });
         return;
       }
+      case 'approval/asked': {
+        const id = String(data['id'] ?? '');
+        if (id !== '') runtime.approvals.set(id, { toolName: String(data['toolName'] ?? ''), ...(typeof data['callId'] === 'string' ? { callId: data['callId'] } : {}) });
+        complete(`internal-asked-${nativeSeq}`, 'internal', { nativeType: type });
+        return;
+      }
       case 'approval/decided': {
         // F17：审批在别的界面被处理了 → 发 approval.resolved，by='other'
-        const approvalId = String(data['eventId'] ?? data['approvalId'] ?? data['requestId'] ?? '');
+        const durableId = String(data['id'] ?? '');
+        const approvalId = runtime.approvals.get(durableId)?.eventId ?? String(data['eventId'] ?? data['approvalId'] ?? data['requestId'] ?? '');
         const pending = runtime.pending.get(approvalId);
         if (approvalId === '' || pending === undefined) {
           complete(`internal-decided-${nativeSeq}`, 'internal', { nativeType: type });
           return;
         }
         runtime.pending.delete(approvalId);
-        const raw = String(data['decision'] ?? data['optionId'] ?? data['option'] ?? data['result'] ?? 'allowed-once');
-        const optionId = /reject|deny|declin/i.test(raw) ? 'rejected' : /cancel/i.test(raw) ? 'cancelled' : 'allowed-once';
+        runtime.approvals.delete(durableId);
+        const raw = String(data['outcome'] ?? data['decision'] ?? data['optionId'] ?? 'unavailable');
+        const optionId = ['allowed-once', 'rejected', 'cancelled', 'unavailable'].includes(raw) ? raw : 'unavailable';
         complete(`approval-resolved-${nativeSeq}`, 'approval.resolved', { approvalId, optionId, by: 'other' });
         return;
       }
@@ -894,8 +1018,13 @@ export class DshAdapter implements AgentAdapter {
         complete(`internal-title-${nativeSeq}`, 'internal', { nativeType: 'session/title', ...(title === '' ? {} : { title }) } as unknown as EventData[EventKind]);
         return;
       }
-      case 'user/message':
+      case 'user/message': {
+        const source = (data['source'] ?? {}) as { kind?: string; rpcId?: string; callId?: string };
+        if (source.kind !== 'user') { complete(`internal-user-${nativeSeq}`, 'internal', { nativeType: `user/message:${source.kind ?? 'unknown'}` }); return; }
+        const content = Array.isArray(data['content']) ? data['content'] as { type?: string; text?: string }[] : [];
+        complete(`user-native-${String(data['id'] ?? nativeSeq)}`, 'user.message', { text: content.filter(part => part.type === 'text').map(part => part.text ?? '').join(''), ...(typeof source.rpcId === 'string' ? { clientCommandId: source.rpcId } : {}) });
         return;
+      }
       default: {
         if (INTERNAL_EVENTS.has(type)) {
           complete(`internal-${type}-${nativeSeq}`, 'internal', { nativeType: type });
@@ -1012,9 +1141,12 @@ export class DshAdapter implements AgentAdapter {
 
     if (event === 'approval/request') {
       if (process.env['WDCC_DEBUG_DSH'] === '1') console.error('[dsh] approval/request', JSON.stringify(value).slice(0, 1200));
-      runtime.pending.set(eventId, { kind: 'approval', eventId });
       const toolName = String(request['toolName'] ?? '工具');
       const callId = String(request['callId'] ?? '');
+      const matches = [...runtime.approvals].filter(([, approval]) => approval.eventId === undefined && (callId !== '' ? approval.callId === callId : approval.toolName === toolName));
+      const durableId = matches.length === 1 ? matches[0]?.[0] : undefined;
+      if (durableId !== undefined) { const approval = runtime.approvals.get(durableId); if (approval !== undefined) approval.eventId = eventId; }
+      runtime.pending.set(eventId, { kind: 'approval', eventId, callId, durableId, generation: this.muxGeneration });
       const args = {
         ...(runtime.toolInputs.get(callId) ?? {}),
         ...((request['args'] ?? request['input'] ?? request['arguments'] ?? {}) as Record<string, unknown>),
@@ -1048,7 +1180,7 @@ export class DshAdapter implements AgentAdapter {
     if (event === 'user-questions/request') {
       const questions = (request['questions'] as Record<string, unknown>[]) ?? [];
       const ids = questions.map((question, index) => String(question['id'] ?? index));
-      runtime.pending.set(eventId, { kind: 'question', eventId, questionIds: ids });
+      runtime.pending.set(eventId, { kind: 'question', eventId, questionIds: ids, generation: this.muxGeneration });
       for (const [index, first] of questions.entries()) this.emit(target, {
         type: 'item.complete',
         itemKey: `question-${eventId}-${ids[index]}`,

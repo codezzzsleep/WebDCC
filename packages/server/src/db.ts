@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export type Db = Database.Database;
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -71,6 +71,16 @@ export function openDb(file: string): Db {
     db.exec(`CREATE TABLE IF NOT EXISTS capability_snapshots (
       scope TEXT PRIMARY KEY, revision TEXT NOT NULL, data TEXT NOT NULL, at TEXT NOT NULL
     )`);
+    db.exec(`CREATE TABLE IF NOT EXISTS native_turns (
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      native_turn_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+      PRIMARY KEY (session_id, native_turn_id)
+    );
+    CREATE TABLE IF NOT EXISTS native_history_records (
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      native_id TEXT NOT NULL, native_seq INTEGER NOT NULL, at TEXT NOT NULL, native TEXT NOT NULL,
+      PRIMARY KEY (session_id, native_id, native_seq)
+    );`);
     db.exec(`CREATE TABLE IF NOT EXISTS command_journal (
       command_id TEXT PRIMARY KEY, payload_hash TEXT, payload TEXT, op TEXT NOT NULL,
       session_id TEXT, state TEXT NOT NULL, turn_id TEXT, result TEXT, updated_at TEXT NOT NULL

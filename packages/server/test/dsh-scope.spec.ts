@@ -30,7 +30,8 @@ it('NP-12 a rejected remote Host settings write never changes the local DSH home
     const request = JSON.parse(String(init.body)) as { rpcId: string; method: string };
     methods.push(request.method);
     const value = { writable: true, namespaces: [{ ns: 'llm-pi-ai', revision: 1, value: { providers: { target: { baseURL: 'https://old.example/v1', models: [{ id: 'a' }, { id: 'b' }] } } } }, { ns: 'agent-default-model', revision: 1, value: { provider: 'target', model: 'a' } }] };
-    return new Response(JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: request.method === 'settings/update' ? { ok: false, error: { code: 'home-patch-override', message: 'Setting is overridden by a home patch' } } : { ok: true, value } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    const described = { ...value, hasDocument: true, namespaces: value.namespaces.map(namespace => ({ ...namespace, autoGenerate: true, schema: {}, applies: 'live', secrets: [] })) };
+    return new Response(JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: request.method === 'settings/update' ? { ok: false, error: { code: 'home-patch-override', message: 'Setting is overridden by a home patch' } } : { ok: true, value: described } }), { status: 200, headers: { 'content-type': 'application/json' } });
   });
   try {
     const response = await ctx.app.inject({ method: 'PATCH', url: '/api/dsh/provider', headers: { cookie: ctx.cookie }, payload: { providerKey: 'target', baseURL: 'https://new.example/v1', model: 'b' } });

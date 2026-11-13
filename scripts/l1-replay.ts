@@ -1,7 +1,7 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AdapterEvent, EventData, EventKind, OpenItem, StoredEvent, TraceFrame, TurnView } from '../packages/protocol/src/index.js';
-import { checkTurnInvariants, reduceTurn, resolveAnswer, nativePredicates, scenarioNativePredicates } from '../packages/protocol/src/index.js';
+import { checkTurnInvariants, findUserEcho, reduceTurn, resolveAnswer, nativePredicates, scenarioNativePredicates, traceInputIdentity } from '../packages/protocol/src/index.js';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
 import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.js';
 import { DshAdapter } from '../packages/adapters/dsh/src/adapter.js';
@@ -95,6 +95,11 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
       const prompt = promptOf(frame);
       if (prompt !== undefined) startTurn(prompt);
     }
+    const requestId = traceInputIdentity(frame);
+    if (requestId !== undefined) {
+      const user = events.find(event => event.turnId === activeTurn && event.kind === 'user.message');
+      if (user !== undefined) (user.data as EventData['user.message']).clientCommandId = requestId;
+    }
     for (const adapterEvent of translated) {
       if (adapterEvent.type === 'turn.start') {
         if (activeTurn === null) startTurn(promptOf(frame) ?? '');
@@ -117,6 +122,7 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
       } else if (adapterEvent.type === 'item.cancel') {
         open.delete(adapterEvent.itemKey);
       } else if (adapterEvent.type === 'item.complete') {
+        if (adapterEvent.kind === 'user.message' && findUserEcho(events, adapterEvent.data as EventData['user.message']) !== undefined) continue;
         open.delete(adapterEvent.itemKey);
         events.push(event(sessionId, ++seq, turnId, adapterEvent.kind, adapterEvent.itemKey, adapterEvent.data, adapterEvent.native));
       } else if (adapterEvent.type === 'turn.end') {
