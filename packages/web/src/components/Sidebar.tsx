@@ -10,6 +10,7 @@ import { applyTheme, readTheme, type Theme } from '../lib/theme.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon, Spinner } from './Icon.js';
 import { ServerMetricsStatus } from './ServerMetricsBar.js';
+import { sessionRows } from '../lib/sessionRows.js';
 
 interface SidebarProps {
   currentSessionId: string | null;
@@ -21,14 +22,6 @@ interface SidebarProps {
   /** 窄屏抽屉里点了会话之后关掉抽屉（F9） */
   onNavigate?: () => void;
   settingsActive: boolean;
-}
-
-/** 来源链接保留在会话中；侧栏的所有独立会话按平级展示。 */
-function sessionRows(list: SessionMeta[]): SessionMeta[] {
-  return [...list].sort((a, b) => {
-    if ((a.pinned === true) !== (b.pinned === true)) return a.pinned === true ? -1 : 1;
-    return b.updatedAt.localeCompare(a.updatedAt);
-  });
 }
 
 export function Sidebar({
@@ -182,10 +175,11 @@ export function Sidebar({
                   <Icon name="plus" size={15} />
                 </Link>
               </div>
-              {rows.map((session) => (
+              {rows.map(({ session, depth }) => (
                 <SessionRow
                   key={session.id}
                   session={session}
+                  depth={depth}
                   active={session.id === currentSessionId}
                   inDock={session.id === dockSessionId}
                   onNavigate={onNavigate}
@@ -246,11 +240,13 @@ export function Sidebar({
 
 function SessionRow({
   session,
+  depth,
   active,
   inDock,
   onNavigate,
 }: {
   session: SessionMeta;
+  depth: number;
   active: boolean;
   inDock: boolean;
   onNavigate: (() => void) | undefined;
@@ -262,11 +258,14 @@ function SessionRow({
       params={{ sid: session.id }}
       search={{}}
       className={`session-row ${active ? 'active' : ''} ${inDock ? 'in-dock' : ''}`}
+      style={{ paddingLeft: 10 + Math.min(depth, 3) * 14 }}
       data-testid="session-row"
       data-agent={session.agent}
+      data-depth={depth}
       title={`${info.name} · ${session.title ?? '新会话'}`}
       onClick={() => onNavigate?.()}
     >
+      {depth > 0 ? <Icon name="cornerDownRight" size={13} strokeWidth={2} className="chain" label="接续会话" /> : null}
       <AgentMark agent={session.agent} />
       <span className="session-title">{session.title ?? '新会话'}</span>
       {session.pinned === true ? <Icon name="pin" size={13} strokeWidth={2} className="pinned" label="置顶" /> : null}

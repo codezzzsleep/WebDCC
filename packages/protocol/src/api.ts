@@ -36,6 +36,8 @@ export interface SessionDto {
   accessMode?: string;
   /** 接续会话的上一棒（"在另一个 Agent 中继续"） */
   parentId?: string;
+  /** Manual handoffs are children; Watchdog recoveries stay at their source's level. */
+  handoffKind?: 'manual' | 'watchdog';
   status: 'idle' | 'running' | 'waiting' | 'error';
   pinned: boolean;
   archived: boolean;

@@ -1,5 +1,6 @@
 /** 同步协议类型（SPEC 7.2、7.4） */
 import type { EventData, EventKind, StoredEvent } from './events.js';
+import type { SessionDto } from './api.js';
 
 export interface SubscribeItem {
   sessionId: string;
@@ -151,6 +152,7 @@ export interface FeedPatch {
   providerId?: string | null;
   /** 接续会话的上一棒 */
   parentId?: string;
+  handoffKind?: SessionDto['handoffKind'];
 }
 
 export interface FeedMessage {

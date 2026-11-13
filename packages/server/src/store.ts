@@ -30,6 +30,7 @@ interface SessionRow {
   last_seq: number;
   native_meta: string | null;
   parent_id?: string | null;
+  handoff_kind?: SessionDto['handoffKind'] | null;
   created_at: string;
   updated_at: string;
 }
@@ -146,6 +147,7 @@ export interface CreateSessionInput {
   accessMode?: string | null;
   title?: string | null;
   parentId?: string | null;
+  handoffKind?: SessionDto['handoffKind'];
 }
 
 function toSessionDto(row: SessionRow): SessionDto {
@@ -160,6 +162,7 @@ function toSessionDto(row: SessionRow): SessionDto {
     ...(row.reasoning_effort === null ? {} : { reasoningEffort: row.reasoning_effort }),
     ...(row.access_mode === null ? {} : { accessMode: row.access_mode }),
     ...(row.parent_id === null || row.parent_id === undefined ? {} : { parentId: row.parent_id }),
+    ...(row.handoff_kind == null ? {} : { handoffKind: row.handoff_kind }),
     status: row.status as SessionDto['status'],
     pinned: row.pinned === 1,
     archived: row.archived === 1,
@@ -271,10 +274,10 @@ export class Store {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, reasoning_effort, access_mode, status, title, parent_id, last_seq, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, ?, ?)`,
+        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, reasoning_effort, access_mode, status, title, parent_id, handoff_kind, last_seq, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, ?, ?)`,
       )
-      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.reasoningEffort ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, at, at);
+      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.reasoningEffort ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, input.parentId == null ? null : input.handoffKind ?? 'manual', at, at);
     return this.getSession(id) as SessionDto;
   }
 

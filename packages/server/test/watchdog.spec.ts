@@ -135,7 +135,9 @@ describe('Codex Watchdog', () => {
     const targetId = ctx.store.watchdogJob(source.id)?.targetSessionId as string;
     const child = ctx.store.getSession(targetId);
     expect(child?.nativeId).not.toBe(source.nativeId); expect(child?.parentId).toBe(source.id);
-    expect(child).toMatchObject({ workspaceId: source.workspaceId, providerId: 'test-provider', model: 'fake-model', reasoningEffort: 'high', accessMode: 'workspace' });
+    expect(child).toMatchObject({ workspaceId: source.workspaceId, providerId: 'test-provider', model: 'fake-model', reasoningEffort: 'high', accessMode: 'workspace', handoffKind: 'watchdog' });
+    const createdFeed = ctx.store.feedSince(0).find(entry => entry.sessionId === targetId && entry.patch.created);
+    expect(createdFeed?.patch.handoffKind).toBe('watchdog');
     const send = codex.sent.find((item) => item.sessionId === targetId);
     expect(send?.input.images).toBeUndefined(); expect(send?.input.text).not.toContain('暂不上线'); expect(send?.input.text).toContain(source.nativeId);
     expect(send?.input.text.length).toBeLessThan(350);

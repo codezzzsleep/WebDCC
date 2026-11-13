@@ -1,5 +1,5 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventKind, OpenItem, ServerMessage, StoredEvent, TurnView } from '@webdcc/protocol';
+import type { Command, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView } from '@webdcc/protocol';
 import { reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
@@ -22,6 +22,7 @@ export interface SessionMeta {
   lastSeq?: number;
   /** 接续会话的上一棒 */
   parentId?: string;
+  handoffKind?: SessionDto['handoffKind'];
 }
 
 export interface HotItem {
@@ -185,6 +186,7 @@ export class AppStore {
           ...(patch['accessMode'] === undefined ? {} : { accessMode: String(patch['accessMode']) }),
           ...(patch['providerId'] === undefined ? {} : { providerId: patch['providerId'] === null ? null : String(patch['providerId']) }),
           ...(typeof patch['parentId'] === 'string' ? { parentId: patch['parentId'] } : {}),
+          ...(patch['handoffKind'] === 'manual' || patch['handoffKind'] === 'watchdog' ? { handoffKind: patch['handoffKind'] } : {}),
           updatedAt: nowIso(),
         };
         this.sessions.set(message.sessionId, next);
