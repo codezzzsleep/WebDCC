@@ -14,7 +14,9 @@ it('correlates raw/model/Web/disk evidence, redacts secrets and reports incomple
   await recorder.turnContext('s', 'turn');
   recorder.record('s', 'web', 'command', { text: 'private-test-token', authorization: 'test-value' }, 'out');
   recorder.sink('s').record?.({ i: 1, t: 0, dir: 'in', ch: 'sdk', frame: { type: 'assistant' } });
-  recorder.record('s', 'model-http', 'request', { requestId: 'req' });
+  recorder.record('s', 'model-http', 'request', { requestId: 'probe', value: { path: '/api/hello' } });
+  recorder.record('s', 'model-http', 'complete', { requestId: 'probe' });
+  recorder.record('s', 'model-http', 'request', { requestId: 'req', value: { path: '/v1/messages?beta=true' } });
   await writeFile(join(root, 'a.txt'), 'before');
   recorder.observeFiles('s', { type: 'item.start', itemKey: 'file', kind: 'file.change', data: { changes: [{ path: 'a.txt', kind: 'modify', added: 1, removed: 1 }], status: 'running' } });
   await writeFile(join(root, 'a.txt'), 'actual disk contents');

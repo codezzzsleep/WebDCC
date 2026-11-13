@@ -12,6 +12,11 @@ export interface InteractionRecord { version: 1; runId: string; seq: number; at:
 export interface RecordingSummary { records: number; nativeFrames: number; modelRequests: number; fileOperations: number; incomplete: boolean; errors: string[]; }
 const secretField = /^(authorization|proxy.authorization|cookie|set.cookie|api.?key|auth.?token|access.?token|refresh.?token|password|secret)$/i;
 function key(id: string): string { return encodeURIComponent(id); }
+function isInference(value: unknown): boolean {
+  const event = value as { path?: string; url?: string; value?: { path?: string; url?: string } };
+  const path = event.value?.path ?? event.value?.url ?? event.path ?? event.url ?? '';
+  return /\/(responses|messages|chat\/completions|completions)(?:[/?#]|$)/.test(path);
+}
 
 /** Private, correlated side-channel. Recording failures remain visible without
  * changing native Agent inputs, events, or command acknowledgements. */
@@ -73,7 +78,7 @@ export class InteractionRecorder {
     const summary = this.summaryFor(sessionId);
     summary.records += 1;
     if (source === 'native') summary.nativeFrames += 1;
-    if (source === 'model-http' && channel === 'request') summary.modelRequests += 1;
+    if (source === 'model-http' && channel === 'request' && isInference(value)) summary.modelRequests += 1;
     if (source === 'file') summary.fileOperations += 1;
     const owner = context ?? this.context(sessionId);
     const record: InteractionRecord = { version: 1, runId: this.runId, seq: ++this.seq, at: new Date().toISOString(), elapsedMs: performance.now() - this.begun, source, channel, ...(direction === undefined ? {} : { direction }), ...(owner === undefined ? {} : { context: owner }), value: this.sanitize(value) };
@@ -116,7 +121,7 @@ export class InteractionRecorder {
     const rows = (await this.read(sessionId, nativeId, workspaceId)).split('\n').filter(Boolean).map(line => JSON.parse(line) as InteractionRecord);
     summary.records = rows.length;
     summary.nativeFrames = rows.filter(row => row.source === 'native').length;
-    summary.modelRequests = rows.filter(row => row.source === 'model-http' && row.channel === 'request').length;
+    summary.modelRequests = rows.filter(row => row.source === 'model-http' && row.channel === 'request' && isInference(row.value)).length;
     summary.fileOperations = rows.filter(row => row.source === 'file').length;
     const pending = new Set<string>();
     for (const row of rows.filter(row => row.source === 'model-http')) {
