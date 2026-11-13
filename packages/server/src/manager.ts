@@ -103,7 +103,7 @@ export class SessionManager {
         ...(source.model === undefined ? {} : { model: source.model }),
         ...(source.reasoningEffort === undefined ? {} : { reasoningEffort: source.reasoningEffort }),
         ...(source.accessMode === undefined ? {} : { accessMode: source.accessMode }),
-        title: `${source.title ?? 'Codex 任务'} · 自动接续`, parentId: source.id,
+        title: `${source.title ?? 'Codex 任务'} · 自动接续`, parentId: source.id, handoffKind: 'watchdog',
       }),
       send: async (id, text, commandId, allowed) => { await this.send(id, { text }, commandId, allowed); },
       dispose: (id) => this.dispose(id),
@@ -170,6 +170,7 @@ export class SessionManager {
     accessMode?: string;
     title?: string;
     parentId?: string;
+    handoffKind?: SessionDto['handoffKind'];
   }): Promise<SessionDto> {
     const adapter = this.adapters.get(input.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${input.agent} adapter`), { statusCode: 400 });
@@ -187,6 +188,7 @@ export class SessionManager {
       accessMode: accessMode ?? null,
       title: input.title ?? null,
       parentId: input.parentId !== undefined && this.store.getSession(input.parentId) !== undefined ? input.parentId : null,
+      ...(input.handoffKind === undefined ? {} : { handoffKind: input.handoffKind }),
     });
 
     const provider = this.options.resolveProvider?.(input.providerId ?? null) ?? null;
@@ -225,6 +227,7 @@ export class SessionManager {
       ...(updated?.accessMode === undefined ? {} : { accessMode: updated.accessMode }),
       providerId: updated?.providerId ?? null,
       ...(updated?.parentId === undefined ? {} : { parentId: updated.parentId }),
+      ...(updated?.handoffKind === undefined ? {} : { handoffKind: updated.handoffKind }),
     };
     const feedSeq = this.store.appendFeed(session.id, createPatch);
     this.hooks.onFeed(session.id, createPatch, feedSeq);

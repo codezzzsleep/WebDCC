@@ -1,6 +1,6 @@
 /** IndexedDB 缓存（SPEC 7.5） */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { StoredEvent } from '@webdcc/protocol';
+import type { SessionDto, StoredEvent } from '@webdcc/protocol';
 
 export interface CachedSession {
   id: string;
@@ -15,6 +15,8 @@ export interface CachedSession {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  parentId?: string;
+  handoffKind?: SessionDto['handoffKind'];
 }
 
 export interface CachedDraft {

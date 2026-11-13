@@ -75,6 +75,22 @@ export function openDb(file: string): Db {
   if (!sessionColumns.some((column) => column.name === 'title_source')) db.exec('ALTER TABLE sessions ADD COLUMN title_source TEXT');
   // 接续会话：记录上一棒（"在另一个 Agent 中继续"）
   if (!sessionColumns.some((column) => column.name === 'parent_id')) db.exec('ALTER TABLE sessions ADD COLUMN parent_id TEXT');
+  if (!sessionColumns.some((column) => column.name === 'handoff_kind')) {
+    db.transaction(() => {
+      db.exec('ALTER TABLE sessions ADD COLUMN handoff_kind TEXT');
+      // A source's automatic command identifies recovery even if its job was
+      // cleared by later manual input. Same-session retries use the child's ID.
+      db.exec(`UPDATE sessions SET handoff_kind = CASE WHEN
+        EXISTS (SELECT 1 FROM watchdog_jobs WHERE json_extract(data, '$.targetSessionId') = sessions.id)
+        OR EXISTS (SELECT 1 FROM events WHERE session_id = sessions.id AND kind = 'user.message'
+          AND json_extract(data, '$.clientCommandId') LIKE 'watchdog:' || sessions.parent_id || ':%')
+        THEN 'watchdog' ELSE 'manual' END WHERE parent_id IS NOT NULL`);
+      // Cached browsers also need the migrated relation when they resume feed.
+      db.prepare(`INSERT INTO feed (session_id, patch, at)
+        SELECT id, json_object('handoffKind', handoff_kind), ? FROM sessions WHERE handoff_kind IS NOT NULL`)
+        .run(new Date().toISOString());
+    })();
+  }
   // M9：旧版本没有保存所有 Harness 的原生思考强度；从已持久化的
   // 原生初始化/请求头回填，避免页面把“未记录”误显示成 medium。
   backfillNativeReasoningEffort(db);

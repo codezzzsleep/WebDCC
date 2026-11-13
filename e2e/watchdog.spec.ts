@@ -56,7 +56,7 @@ test('资源不匹配自动创建新会话，页面能沿关联打开接续任�
   await expect(page.getByTestId('watchdog-bar').getByRole('link', { name: '打开接续会话' })).toBeVisible({ timeout: 30_000 });
   const jobs = (await (await page.request.get('/api/watchdog')).json()).jobs;
   const targetId = jobs.find((job: { sessionId: string }) => job.sessionId === sessionId).targetSessionId;
-  const child = (await (await page.request.get(`/api/sessions/${targetId}`)).json()); expect(child.parentId).toBe(sessionId);
+  const child = (await (await page.request.get(`/api/sessions/${targetId}`)).json()); expect(child.parentId).toBe(sessionId); expect(child.handoffKind).toBe('watchdog');
   const events = (await (await page.request.get(`/api/sessions/${targetId}/events`)).json()).events;
   const handoff = events.find((event: { kind: string }) => event.kind === 'user.message').data.text;
   expect(handoff).toContain('旧 Codex 会话 ID：');
