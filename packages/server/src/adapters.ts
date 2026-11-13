@@ -1,4 +1,4 @@
-import type { AgentAdapter } from '@webdcc/protocol';
+import type { AgentAdapter, TraceSink } from '@webdcc/protocol';
 
 /**
  * 生产环境的 adapter 组装点。
@@ -6,6 +6,8 @@ import type { AgentAdapter } from '@webdcc/protocol';
  */
 export interface AdapterSettings {
   dsh?: { mode: 'attach' | 'spawn'; url?: string; cookie?: string };
+  traceSink?: (sessionId: string) => TraceSink;
+  nativeRecorder?: { directory: string; module: string };
 }
 
 export async function adapters(settings: AdapterSettings = {}): Promise<AgentAdapter[]> {
@@ -23,6 +25,8 @@ export async function adapters(settings: AdapterSettings = {}): Promise<AgentAda
     const mode = settings.dsh?.mode ?? (process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn');
     list.push(
       new DshAdapter({
+        traceSinkFactory: settings.traceSink,
+        nativeRecorder: settings.nativeRecorder,
         mode,
         ...(settings.dsh?.url === undefined ? {} : { attachUrl: settings.dsh.url }),
         ...(settings.dsh?.cookie === undefined ? {} : { attachCookie: settings.dsh.cookie }),

@@ -161,12 +161,13 @@ export class LiveHub {
     client.subs.set(sessionId, { afterSeq });
     const session = this.store.getSession(sessionId);
     if (session === undefined) return;
+    const historicalThrough = afterSeq === 0 ? session.lastSeq : 0;
     let cursor = Math.max(0, Math.min(afterSeq, session.lastSeq));
     for (;;) {
       const events = this.store.listEvents(sessionId, { after: cursor, limit: BACKFILL_LIMIT });
       if (events.length === 0) break;
       for (const event of events) {
-        const message: EventMessage = { op: 'event', event };
+        const message: EventMessage = { op: 'event', event, ...(event.seq <= historicalThrough ? { history: true } : {}) };
         this.send(client, message);
         cursor = event.seq;
       }

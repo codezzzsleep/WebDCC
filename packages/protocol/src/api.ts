@@ -147,4 +147,12 @@ export interface FsReadResponse {
   path: string;
   content: string;
   truncated: boolean;
+  editable?: boolean;
+  readOnlyReason?: string;
+  version?: string;
+  size?: number;
+  bom?: boolean;
+  newline?: 'lf' | 'crlf' | 'mixed';
 }
+
+export interface WorkspaceFileSaveRequest { path: string; content: string; version: string; }

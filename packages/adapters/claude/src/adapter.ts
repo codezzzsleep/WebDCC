@@ -13,6 +13,7 @@ import type {
   ProbeResult,
   UserInput,
   TraceSink,
+  TraceFrame,
 } from '@webdcc/protocol';
 import {
   query,
@@ -137,7 +138,8 @@ function createInputQueue(): InputQueue {
               ...images.map((image) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: image.media_type, data: image.data } })),
               { type: 'text' as const, text },
             ];
-      queue.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null });
+      const message: SDKUserMessage = { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null };
+      queue.push(message);
       wake?.();
       wake = null;
     },
@@ -157,6 +159,7 @@ interface PendingInteraction {
   kind: 'approval' | 'question';
   toolName: string;
   input: Record<string, unknown>;
+  answers?: Record<string, unknown>;
   resolve: (decision: { approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }) => void;
 }
 
@@ -229,6 +232,33 @@ export class ClaudeAdapter implements AgentAdapter {
     this.options = options;
   }
 
+  /** Replay executes the same SDK and permission handlers without a query. */
+  static replay(sessionId = 'replay'): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: ClaudeAdapter; decisions: PermissionResult[] } {
+    const adapter = new ClaudeAdapter();
+    const decisions: PermissionResult[] = [];
+    const runtime: SessionRuntime = {
+      nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
+      pump: Promise.resolve(), turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
+      pending: new Map(), toolItems: new Map(), messageSeq: 0, tasks: new Map(), taskOrder: [],
+      slashCommands: [], liveStarted: false, liveItems: new Map(), ready: Promise.resolve(), frameSeq: 0,
+    };
+    adapter.sessions.set(sessionId, runtime);
+    let events: AdapterEvent[] = [];
+    adapter.onEvent((_id, event) => events.push(event));
+    return { adapter, decisions, feed(frame) {
+      events = []; adapter.replayTime = frame.t; runtime.frameSeq = frame.i;
+      const raw = frame.frame as Record<string, unknown>;
+      if (frame.dir === 'in' && frame.ch === 'sdk') adapter.onSdkMessage(sessionId, raw as unknown as SDKMessage);
+      else if (frame.dir === 'in' && frame.ch === 'canUseTool') {
+        void adapter.handleCanUseTool(sessionId, String(raw['toolName'] ?? raw['tool'] ?? ''), (raw['input'] ?? {}) as Record<string, unknown>, { signal: new AbortController().signal, toolUseID: raw['toolUseID'] as string | undefined }).then(result => decisions.push(result));
+      }
+      return events.length > 0 ? [...events] : [{ type: 'item.complete', itemKey: `transport-${frame.ch}-${frame.i}`, kind: 'internal', data: { nativeType: frame.ch }, native: frame.frame }];
+    } };
+  }
+
+  private replayTime?: number;
+  private now(): number { return this.replayTime ?? Date.now(); }
+
   onEvent(cb: (sessionId: string, event: AdapterEvent) => void): void {
     this.listeners.push(cb);
   }
@@ -287,6 +317,7 @@ export class ClaudeAdapter implements AgentAdapter {
       providerEnv['ANTHROPIC_API_KEY'] = '';
       if (opts.model !== undefined) providerEnv['ANTHROPIC_MODEL'] = opts.model;
     }
+    if (opts.recordingEndpoint !== undefined) providerEnv['ANTHROPIC_BASE_URL'] = opts.recordingEndpoint.url;
     const nativeCli = resolveNativeCli();
     return {
       env: { ...(this.options.env ?? {}), ...providerEnv },
@@ -325,7 +356,12 @@ export class ClaudeAdapter implements AgentAdapter {
     const ready = new Promise<void>((resolve) => {
       markReady = resolve;
     });
-    const canUseTool: CanUseTool = (toolName, toolInput, options) => this.handleCanUseTool(sessionId, toolName, toolInput, options);
+    const canUseTool: CanUseTool = async (toolName, toolInput, options) => {
+      const result = await this.handleCanUseTool(sessionId, toolName, toolInput, options);
+      const runtime = this.sessions.get(sessionId);
+      traceFrame(this.options.traceSink ?? opts.traceSink, { i: runtime === undefined ? 0 : ++runtime.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, result } });
+      return result;
+    };
 
     const q = query({ prompt: input.iterable, options: this.buildOptions(opts, canUseTool, resume) });
     const runtime: SessionRuntime = {
@@ -335,7 +371,7 @@ export class ClaudeAdapter implements AgentAdapter {
       input,
       q,
       pump: Promise.resolve(),
-      turnStartedAt: Date.now(),
+      turnStartedAt: this.now(),
       generationStartedAt: null,
       generationMs: 0,
       pending: new Map(),
@@ -353,7 +389,7 @@ export class ClaudeAdapter implements AgentAdapter {
     runtime.pump = (async () => {
       for await (const message of q as AsyncIterable<SDKMessage>) {
         runtime.frameSeq += 1;
-        traceFrame(this.options.traceSink, { i: runtime.frameSeq, t: Date.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message });
+        traceFrame(this.options.traceSink ?? opts.traceSink, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message });
         if (message.type === 'system' && message.subtype === 'init') {
           runtime.nativeId = message.session_id;
           this.emit(sessionId, { type: 'native-id', nativeId: message.session_id });
@@ -362,12 +398,15 @@ export class ClaudeAdapter implements AgentAdapter {
         this.onSdkMessage(sessionId, message);
       }
     })().catch((error: unknown) => {
+      if (this.sessions.get(sessionId) !== runtime) return;
+      traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk-error', frame: { message: error instanceof Error ? error.message : String(error) } });
       this.emit(sessionId, {
         type: 'item.complete',
         itemKey: `error-${runtime.frameSeq}`,
         kind: 'error',
         data: { message: error instanceof Error ? error.message : String(error) },
       });
+      this.emit(sessionId, { type: 'turn.end', status: 'failed', native: { reason: 'sdk-stream-error' } });
     });
     return runtime;
   }
@@ -384,22 +423,21 @@ export class ClaudeAdapter implements AgentAdapter {
 
   async send(sessionId: string, input: UserInput): Promise<void> {
     const runtime = this.require(sessionId);
-    runtime.turnStartedAt = Date.now();
+    runtime.turnStartedAt = this.now();
     runtime.generationStartedAt = null;
     runtime.generationMs = 0;
-    traceFrame(this.options.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'input', frame: input });
-    const images = (input.images ?? []).flatMap((image) => {
-      try {
-        const mediaType = (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime) ? image.mime : 'image/png') as
+    const images = (input.images ?? []).map((image) => {
+        if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime)) throw new Error(`Claude 不支持图片格式 ${image.mime}`);
+        const mediaType = image.mime as
           | 'image/png'
           | 'image/jpeg'
           | 'image/gif'
           | 'image/webp';
-        return [{ media_type: mediaType, data: readFileSync(image.path).toString('base64') }];
-      } catch {
-        return [];
-      }
+        return { media_type: mediaType, data: readFileSync(image.path).toString('base64') };
     });
+    const content = images.length === 0 ? input.text : [...images.map(image => ({ type: 'image', source: { type: 'base64', media_type: image.media_type, data: image.data } })), { type: 'text', text: input.text }];
+    traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'input', frame: input });
+    traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'sdk-input', frame: { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null } });
     runtime.input.push(input.text, images.length === 0 ? undefined : images);
   }
 
@@ -467,10 +505,18 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime = this.sessions.get(sessionId);
     const pending = runtime?.pending.get(questionId.split(':')[0] ?? questionId);
     if (runtime === undefined || pending === undefined) return;
+    const answers = (answer as { value?: string | string[]; selected?: string[]; text?: string }) ?? {};
+    const value = answers.value ?? answers.selected ?? answers.text ?? '';
+    const index = Number(questionId.slice(questionId.lastIndexOf(':') + 1));
+    const questions = (pending.input['questions'] ?? []) as Record<string, unknown>[];
+    const question = questions[index];
+    if (question === undefined) throw new Error('问题不存在');
+    pending.answers ??= {};
+    pending.answers[String(question['question'] ?? '请回答')] = Array.isArray(value) ? value.join(', ') : value;
+    traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'control', frame: { questionId, answer } });
+    if (Object.keys(pending.answers).length < questions.length) return;
     runtime.pending.delete(questionId.split(':')[0] ?? questionId);
-    const answers = (answer as { value?: string | string[]; selected?: string[] }) ?? {};
-    const value = answers.value ?? answers.selected ?? '';
-    pending.resolve({ approved: true, optionId: 'answer', answers: { [questionId]: value } });
+    pending.resolve({ approved: true, optionId: 'answer', answers: pending.answers });
   }
 
   debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
@@ -501,8 +547,18 @@ export class ClaudeAdapter implements AgentAdapter {
 
   private finishGeneration(runtime: SessionRuntime): void {
     if (runtime.generationStartedAt === null) return;
-    runtime.generationMs += Math.max(1, Date.now() - runtime.generationStartedAt);
+    runtime.generationMs += Math.max(1, this.now() - runtime.generationStartedAt);
     runtime.generationStartedAt = null;
+  }
+
+  private waitForDecision(runtime: SessionRuntime, id: string, kind: 'approval' | 'question', toolName: string, input: Record<string, unknown>, signal: AbortSignal): Promise<Parameters<PendingInteraction['resolve']>[0]> {
+    let abort = (): void => undefined;
+    return new Promise<Parameters<PendingInteraction['resolve']>[0]>(resolve => {
+      runtime.pending.set(id, { kind, toolName, input, resolve });
+      abort = () => resolve({ approved: false, optionId: 'cancel' });
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    }).finally(() => { signal.removeEventListener('abort', abort); runtime.pending.delete(id); });
   }
 
   // ---------- canUseTool：审批与提问都从这里来 ----------
@@ -529,40 +585,38 @@ export class ClaudeAdapter implements AgentAdapter {
     options: { signal: AbortSignal; toolUseID?: string },
   ): Promise<PermissionResult> {
     const runtime = this.require(sessionId);
+    traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID } });
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
       const questionId = `${options.toolUseID ?? `q-${runtime.frameSeq + 1}`}`;
-      const questionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
-        runtime.pending.set(questionId, { kind: 'question', toolName, input, resolve });
-      });
-      this.emit(sessionId, {
+      const questionPromise = this.waitForDecision(runtime, questionId, 'question', toolName, input, options.signal);
+      for (const [index, question] of questions.entries()) this.emit(sessionId, {
         type: 'item.complete',
-        itemKey: `question-${questionId}`,
+        itemKey: `question-${questionId}-${index}`,
         kind: 'question',
         data: {
-          questionId: `${questionId}:0`,
-          prompt: String(questions[0]?.['question'] ?? '请回答'),
-          ...(questions[0]?.['header'] === undefined ? {} : { header: String(questions[0]?.['header']) }),
-          options: ((questions[0]?.['options'] as Record<string, unknown>[]) ?? []).map((option) => ({
+          questionId: `${questionId}:${index}`,
+          prompt: String(question['question'] ?? '请回答'),
+          ...(question['header'] === undefined ? {} : { header: String(question['header']) }),
+          options: ((question['options'] as Record<string, unknown>[]) ?? []).map((option) => ({
             id: String(option['label'] ?? ''),
             label: String(option['label'] ?? ''),
             ...(option['description'] === undefined ? {} : { description: String(option['description']) }),
           })),
-          multiSelect: questions[0]?.['multiSelect'] === true,
+          multiSelect: question['multiSelect'] === true,
           allowsFreeText: true,
           ...(options.toolUseID === undefined ? {} : { toolCallId: options.toolUseID }),
         },
       });
       const decision = await questionPromise;
+      if (!decision.approved) return { behavior: 'deny', message: '用户取消问题', interrupt: true };
       const answers = decision.answers ?? {};
       return { behavior: 'allow', updatedInput: { ...input, answers } } as PermissionResult;
     }
 
     const isPlanMode = toolName === 'ExitPlanMode';
     const approvalId = `${sessionId}:${options.toolUseID ?? `tool-${runtime.frameSeq + 1}`}`;
-    const decisionPromise = new Promise<{ approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }>((resolve) => {
-      runtime.pending.set(approvalId, { kind: 'approval', toolName, input, resolve });
-    });
+    const decisionPromise = this.waitForDecision(runtime, approvalId, 'approval', toolName, input, options.signal);
     this.emit(sessionId, {
       type: 'item.complete',
       itemKey: `approval-${approvalId}`,
@@ -620,12 +674,13 @@ export class ClaudeAdapter implements AgentAdapter {
           delta?: { type?: string; text?: string; thinking?: string };
         };
         if (event.type === 'content_block_start') {
-          runtime.generationStartedAt ??= Date.now();
+          runtime.generationStartedAt ??= this.now();
           runtime.messageSeq += 1;
           runtime.liveStarted = true;
           const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
           const blockType = event.content_block?.type ?? event.block?.type ?? 'text';
           const itemKey = `msg-${runtime.messageSeq}-${index}`;
+          if (blockType !== 'text' && blockType !== 'thinking') return;
           const kind = blockType === 'thinking' ? 'reasoning' : 'assistant.message';
           runtime.liveItems.set(index, { itemKey, kind, text: '' });
           this.emit(sessionId, {
@@ -637,8 +692,9 @@ export class ClaudeAdapter implements AgentAdapter {
           return;
         }
         if (event.type === 'content_block_delta') {
-          runtime.generationStartedAt ??= Date.now();
+          runtime.generationStartedAt ??= this.now();
           const delta = event.delta ?? {};
+          if (delta.type !== 'text_delta' && delta.type !== 'thinking_delta') return;
           const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
           let live = runtime.liveItems.get(index);
           if (live === undefined) {
@@ -680,7 +736,8 @@ export class ClaudeAdapter implements AgentAdapter {
           if (block['type'] !== 'tool_use') continue;
           const toolId = String(block['id'] ?? '');
           const name = String(block['name'] ?? '');
-          const kind = toolKind(name);
+          const mappedKind = toolKind(name);
+          const kind = mappedKind === 'question' ? 'tool.call' : mappedKind;
           const rawInput = (block['input'] ?? {}) as Record<string, unknown>;
           if (name === 'TodoWrite') {
             const todos = (rawInput['todos'] as { content?: string; status?: string }[] | undefined) ?? [];
@@ -723,6 +780,7 @@ export class ClaudeAdapter implements AgentAdapter {
               ? { command: String(rawInput['command'] ?? ''), status: 'running' }
               : kind === 'file.read'
                 ? { path: String(rawInput['file_path'] ?? rawInput['pattern'] ?? '') }
+                : kind === 'file.change' ? { changes: buildFileChanges(name, rawInput), status: 'running' }
                 : { name, input: rawInput, status: 'running' };
           runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind, data, name, input: rawInput });
           this.emit(sessionId, { type: 'item.start', itemKey: `tool-${toolId}`, kind, data });
@@ -744,15 +802,17 @@ export class ClaudeAdapter implements AgentAdapter {
               itemKey: item.itemKey,
               kind: 'command',
               data: { ...(item.data as EventData['command']), status: block['is_error'] === true ? 'failed' : 'completed', outputTail: output.slice(-4000) },
+              native: message,
             });
           } else if (item.kind === 'file.read') {
-            this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'] });
+            this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'], native: message });
           } else if (item.kind === 'file.change') {
             this.emit(sessionId, {
               type: 'item.complete',
               itemKey: item.itemKey,
               kind: 'file.change',
               data: { changes: buildFileChanges(item.name, item.input), status: block['is_error'] === true ? 'failed' : 'completed' },
+              native: message,
             });
           } else {
             this.emit(sessionId, {
@@ -766,7 +826,7 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'result': {
-        const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; usage?: { input_tokens?: number; output_tokens?: number } };
+        const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; modelUsage?: Record<string, unknown>; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
         this.finishGeneration(runtime);
         const generationMs = runtime.generationMs > 0 ? runtime.generationMs : undefined;
         runtime.generationMs = 0;
@@ -779,7 +839,7 @@ export class ClaudeAdapter implements AgentAdapter {
           status: result.is_error === true ? (result.subtype === 'error_during_execution' ? 'interrupted' : 'failed') : 'completed',
           ...(result.usage === undefined
             ? {}
-            : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens, scope: 'turn', ...(generationMs === undefined ? {} : { generationMs }) } }),
+            : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens, cacheReadInputTokens: result.usage.cache_read_input_tokens, cacheCreationInputTokens: result.usage.cache_creation_input_tokens, totalCostUsd: result.total_cost_usd, modelUsage: result.modelUsage, scope: 'turn', ...(generationMs === undefined ? {} : { generationMs }) } }),
           native: result,
         });
         return;

@@ -13,6 +13,8 @@ import type { ProviderRegistry } from './providers.js';
 import type { DshConnectionStore } from './dsh-connection.js';
 import { registerRoutes, sendJsonError } from './rest.js';
 import type { Store } from './store.js';
+import type { InteractionRecorder } from './interaction-recorder.js';
+import { isImagePath, workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
 
 export interface BuildAppOptions {
   config: Config;
@@ -24,6 +26,7 @@ export interface BuildAppOptions {
   webDist?: string;
   commit?: string;
   builtAt?: string;
+  recorder?: InteractionRecorder;
 }
 
 export interface BuiltApp {
@@ -47,7 +50,7 @@ function reissueIfLegacy(token: string, request: FastifyRequest, reply: FastifyR
 export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const { config, store, files, manager } = options;
   const app = Fastify({ logger: false, bodyLimit: 200 * 1024 * 1024, trustProxy: true });
-  const dispatcher = new CommandDispatcher(store, manager, files);
+  const dispatcher = new CommandDispatcher(store, manager, files, options.recorder);
   const hub = new LiveHub(store, manager, dispatcher, config.token, `${config.host}:${config.port}`);
 
   await app.register(websocket);
@@ -106,6 +109,8 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     dataDir: config.dataDir,
     providers: options.providers,
     dsh: options.dsh,
+    recorder: options.recorder,
+    recordFileOperation: options.recorder === undefined ? undefined : event => options.recorder?.file(event),
   });
   hub.attach(app);
 
@@ -114,6 +119,16 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   app.setNotFoundHandler(async (request, reply) => {
     const path = request.url.split('?')[0] ?? '/';
     if (path.startsWith('/api/') || path.startsWith('/files/')) return reply.status(404).send({ error: 'not found' });
+    if (isImagePath(path)) {
+      if (!isAuthenticated(config.token, request.headers.cookie, authorityOf(request.headers, config.host, config.port))) return reply.status(401).send({ error: 'unauthorized' });
+      let decoded: string;
+      try { decoded = decodeURIComponent(path); } catch { return reply.status(400).send({ error: 'invalid path' }); }
+      for (const workspace of store.listWorkspaces()) {
+        const target = await workspaceAsset(workspace.path, decoded).catch(() => undefined);
+        if (target !== undefined) return sendWorkspaceAsset(reply, target);
+      }
+      return reply.status(404).send({ error: '工作区内没有这张图片' });
+    }
     if (options.webDist !== undefined && existsSync(join(options.webDist, 'index.html'))) {
       if (!isAuthenticated(config.token, request.headers.cookie, authorityOf(request.headers, config.host, config.port))) {
         return reply.status(401).send({ error: 'unauthorized' });

@@ -11,6 +11,7 @@ import type {
   ProbeResult,
   UserInput,
   TraceSink,
+  TraceFrame,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -30,6 +31,8 @@ export interface CodexAdapterOptions {
 interface PendingApproval {
   requestId: number;
   kind: 'commandExecution' | 'fileChange' | 'legacyExec' | 'legacyPatch' | 'userInput';
+  questionIds?: string[];
+  answers?: Record<string, { answers: string[] }>;
 }
 
 interface SessionRuntime {
@@ -414,6 +417,33 @@ export class CodexAdapter implements AgentAdapter {
     this.options = options;
   }
 
+  /** Transport-free replay through the production notification/request handlers. */
+  static replay(sessionId = 'replay'): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: CodexAdapter; replies: unknown[] } {
+    const adapter = new CodexAdapter();
+    const replies: unknown[] = [];
+    const runtime: SessionRuntime = {
+      nativeId: '', pid: 0, processToken: 'replay', ready: Promise.resolve(),
+      rpc: { respond: (id: number, result: unknown) => replies.push({ id, result }) } as unknown as JsonRpcStdio,
+      cwd: '.', accessMode: null, model: null, reasoningEffort: null, turnId: null,
+      frameSeq: 0, turnStartedAt: 0, generationStartedAt: null, approvals: new Map(), lastAssistantText: '', started: new Set(),
+    };
+    adapter.sessions.set(sessionId, runtime);
+    let events: AdapterEvent[] = [];
+    adapter.onEvent((_id, event) => events.push(event));
+    return { adapter, replies, feed(frame) {
+      events = []; adapter.replayTime = frame.t;
+      const raw = frame.frame as Frame;
+      if (frame.dir === 'in' && typeof raw['method'] === 'string') {
+        if (raw['id'] !== undefined) adapter.onServerRequest(sessionId, raw);
+        else adapter.onNotification(sessionId, raw);
+      }
+      return events.length > 0 ? [...events] : [{ type: 'item.complete', itemKey: `transport-${frame.ch}-${frame.i}`, kind: 'internal', data: { nativeType: frame.ch }, native: frame.frame }];
+    } };
+  }
+
+  private replayTime?: number;
+  private now(): number { return this.replayTime ?? Date.now(); }
+
   onEvent(cb: (sessionId: string, event: AdapterEvent) => void): void {
     this.listeners.push(cb);
   }
@@ -522,20 +552,21 @@ export class CodexAdapter implements AgentAdapter {
       if (provider.apiKey !== undefined) env['WDCC_PROVIDER_KEY'] = provider.apiKey;
     }
     if (opts.model !== undefined) args.push('-c', `model="${opts.model}"`);
+    if (opts.recordingEndpoint?.codexProvider !== undefined) args.push('-c', `model_providers.${opts.recordingEndpoint.codexProvider}.base_url=${JSON.stringify(opts.recordingEndpoint.url)}`);
     return { command: this.options.command ?? 'codex', args, env };
   }
 
   private startProcess(sessionId: string, opts: CreateOpts): SessionRuntime {
     const spec = this.buildLaunchSpec(opts);
     let traceIndex = 0;
-    const traceStarted = Date.now();
+    const traceStarted = this.now();
     const runtimeRef: { current?: SessionRuntime } = {};
     const rpc = JsonRpcStdio.start({
       command: spec.command ?? 'codex',
       args: spec.args ?? [],
       cwd: opts.cwd,
       env: { ...(this.options.env ?? process.env), ...spec.env },
-      onFrame: (direction, frame) => traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++traceIndex, t: Date.now() - traceStarted, dir: direction, ch: 'rpc', frame }),
+      onFrame: (direction, frame) => traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++traceIndex, t: this.now() - traceStarted, dir: direction, ch: 'rpc', frame }),
       onExit: () => {
         if (runtimeRef.current?.turnId !== null && runtimeRef.current?.turnId !== undefined) this.emit(sessionId, { type: 'turn.end', nativeTurnId: runtimeRef.current.turnId, status: 'failed', native: { reason: 'process-exited' } });
       },
@@ -547,7 +578,7 @@ export class CodexAdapter implements AgentAdapter {
     const runtime: SessionRuntime = {
       nativeId: '',
       pid: rpc.child.pid ?? 0,
-      processToken: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      processToken: `${this.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       ready,
       rpc,
       cwd: opts.cwd,
@@ -609,7 +640,7 @@ export class CodexAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     runtime.started.clear();
     runtime.generationStartedAt = null;
-    const startedAt = Date.now();
+    const startedAt = this.now();
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
     const response = await runtime.rpc.request<{ turn: { id: string } }>(
@@ -637,6 +668,20 @@ export class CodexAdapter implements AgentAdapter {
       ? (decision.optionId === 'accept' ? 'approved' : decision.optionId === 'acceptForSession' ? 'approved_for_session' : 'denied')
       : decision.optionId;
     runtimeRpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
+  }
+
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
+    const runtime = this.sessions.get(sessionId);
+    const entry = [...(runtime?.approvals ?? [])].find(([, pending]) => pending.kind === 'userInput' && pending.questionIds?.includes(questionId));
+    if (runtime === undefined || entry === undefined) throw new Error('Codex 问题已结束或不存在');
+    const [id, pending] = entry;
+    const data = (answer ?? {}) as { value?: string | string[]; selected?: string[]; text?: string };
+    const value = data.value ?? data.selected ?? data.text ?? '';
+    pending.answers ??= {};
+    pending.answers[questionId] = { answers: Array.isArray(value) ? value : [value] };
+    if (Object.keys(pending.answers).length < (pending.questionIds?.length ?? 0)) return;
+    runtime.approvals.delete(id);
+    runtime.rpc.respond(pending.requestId, { answers: pending.answers });
   }
 
   /** 打断时把挂起的审批回 decline，避免 JSON-RPC 请求悬空 */
@@ -702,7 +747,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'turn/completed': {
         const turn = (params['turn'] ?? {}) as { id?: string; status?: string };
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
-        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, Date.now() - runtime.generationStartedAt);
+        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, this.now() - runtime.generationStartedAt);
         runtime.generationStartedAt = null;
         this.emit(sessionId, {
           type: 'turn.end',
@@ -719,7 +764,7 @@ export class CodexAdapter implements AgentAdapter {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
-        if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') runtime.generationStartedAt ??= Date.now();
+        if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') runtime.generationStartedAt ??= this.now();
         const kind = mapItemKind(type);
         if (kind === 'internal') return;
         this.emit(sessionId, {
@@ -769,7 +814,7 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'agentMessage/delta': {
-        runtime.generationStartedAt ??= Date.now();
+        runtime.generationStartedAt ??= this.now();
         const itemId = String(params['itemId'] ?? '');
         if (!runtime.started.has(itemId)) {
           runtime.started.add(itemId);
@@ -779,7 +824,7 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'reasoning/summaryTextDelta': {
-        runtime.generationStartedAt ??= Date.now();
+        runtime.generationStartedAt ??= this.now();
         const itemId = String(params['itemId'] ?? '');
         if (!runtime.started.has(itemId)) {
           runtime.started.add(itemId);
@@ -809,13 +854,14 @@ export class CodexAdapter implements AgentAdapter {
         const inputTokens = Number(currentTurn['inputTokens'] ?? 0);
         const outputTokens = Number(currentTurn['outputTokens'] ?? 0);
         if (inputTokens === 0 && outputTokens === 0) return;
-        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, Date.now() - runtime.generationStartedAt);
+        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, this.now() - runtime.generationStartedAt);
         runtime.generationStartedAt = null;
         this.emit(sessionId, {
           type: 'item.complete',
           itemKey: `usage-${frameKey}`,
           kind: 'usage',
-          data: { inputTokens, outputTokens, ...(generationMs === undefined ? { scope: 'turn' as const } : { scope: 'attempt' as const, generationMs }) },
+          data: { inputTokens, outputTokens, cacheReadInputTokens: currentTurn['cachedInputTokens'], reasoningOutputTokens: currentTurn['reasoningOutputTokens'], ...(generationMs === undefined ? { scope: 'turn' as const } : { scope: 'attempt' as const, generationMs }) },
+          native: params,
         });
         return;
       }
@@ -984,6 +1030,12 @@ export class CodexAdapter implements AgentAdapter {
 
     const approvalId = `${runtime?.processToken ?? 'p'}:${id}`;
     runtime?.approvals.set(approvalId, { requestId: id, kind });
+    if (kind === 'userInput' && Array.isArray(params['questions'])) {
+      const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[]; isOther?: boolean }[];
+      runtime?.approvals.set(approvalId, { requestId: id, kind, questionIds: questions.map(question => question.id) });
+      for (const question of questions) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.id}`, kind: 'question', data: { questionId: question.id, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }, native: frame });
+      return undefined;
+    }
 
     const detail = JSON.stringify(params['command'] ?? params['commandActions'] ?? params['reason'] ?? params, null, 2);
     this.emit(sessionId, {

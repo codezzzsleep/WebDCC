@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S03",
-        "seq": 4,
-        "turnId": "trace:codex:S03:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S03",
         "seq": 7,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-5",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -43,34 +31,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 9,
-        "turnId": "trace:codex:S03:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S03",
-        "seq": 12,
-        "turnId": "trace:codex:S03:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S03",
-        "seq": 15,
+        "seq": 16,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_07798188246b4480016af4fa0d77a887d08c620c2bb4ff5387",
+        "itemKey": "rs_07798188246b4480016af4fa0d77a887d08c620c2bb4ff5387",
         "data": {
           "text": ""
         },
@@ -86,10 +50,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 16,
+        "seq": 17,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_07798188246b4480016af4fa0d786c87d0bac54abfe6fc0f08",
+        "itemKey": "msg_07798188246b4480016af4fa0d786c87d0bac54abfe6fc0f08",
         "data": {
           "text": "我会创建 `notes.txt` 并更新 `README.md` 的标题，然后检查文件内容确认修改完成。",
           "phase": "interim",
@@ -110,10 +74,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 17,
+        "seq": 18,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "command",
-        "itemKey": "item-exec-9c48fe6d-0ef1-4efa-bf04-83de9dc707f9",
+        "itemKey": "exec-9c48fe6d-0ef1-4efa-bf04-83de9dc707f9",
         "data": {
           "command": "/bin/bash -lc \"pwd && printf 'alpha\\\\nbeta\\\\n' > notes.txt && python - <<'PY'\nfrom pathlib import Path\np = Path('README.md')\ns = p.read_text()\nlines = s.splitlines()\nfor i, line in enumerate(lines):\n    if line.startswith('#'):\n        level = len(line) - len(line.lstrip('#'))\n        lines[i] = '#' * level + ' Sample Repo (edited)'\n        break\nelse:\n    raise SystemExit('No Markdown title found')\np.write_text('\\\\n'.join(lines) + ('\\\\n' if s.endswith('\\\\n') else ''))\nPY\nprintf '%s\\\\n' '--- notes.txt ---' && cat notes.txt && printf '%s\\\\n' '--- README.md ---' && sed -n '1,5p' README.md\"",
           "cwd": "/tmp/wdcc-real-trace-DMFhvU/sample-repo",
@@ -147,12 +111,17 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 18,
+        "seq": 19,
         "turnId": "trace:codex:S03:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-44",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-37",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15027,
+          "outputTokens": 289,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 15,
+          "scope": "attempt",
+          "generationMs": 79
         },
         "at": "<timestamp>",
         "native": {
@@ -181,10 +150,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 20,
+        "seq": 21,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_07798188246b4480016af4fa147f1887d08c3aba8969d1efb9",
+        "itemKey": "rs_07798188246b4480016af4fa147f1887d08c3aba8969d1efb9",
         "data": {
           "text": ""
         },
@@ -200,10 +169,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 21,
+        "seq": 22,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_07798188246b4480016af4fa14ad6487d0a4039a0969f9c682",
+        "itemKey": "msg_07798188246b4480016af4fa14ad6487d0a4039a0969f9c682",
         "data": {
           "text": "`notes.txt` 已创建并核对无误；环境没有 `python` 命令，所以我改用直接文本替换来更新 README 标题。",
           "phase": "interim",
@@ -224,10 +193,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 22,
+        "seq": 23,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "command",
-        "itemKey": "item-exec-3230e8b9-8bc2-438a-98f6-024a09cdcd1a",
+        "itemKey": "exec-3230e8b9-8bc2-438a-98f6-024a09cdcd1a",
         "data": {
           "command": "/bin/bash -lc \"sed -i '1s/\"'^# Sample Repo$/# Sample Repo (edited)/'\"' README.md && printf '%s\\\\n' '--- README.md ---' && sed -n '1,5p' README.md && printf '%s\\\\n' '--- git diff -- ---' && git diff -- README.md notes.txt\"",
           "cwd": "/tmp/wdcc-real-trace-DMFhvU/sample-repo",
@@ -261,12 +230,17 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 23,
+        "seq": 24,
         "turnId": "trace:codex:S03:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-85",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-78",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15388,
+          "outputTokens": 184,
+          "cacheReadInputTokens": 14848,
+          "reasoningOutputTokens": 17,
+          "scope": "attempt",
+          "generationMs": 62
         },
         "at": "<timestamp>",
         "native": {
@@ -295,10 +269,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 25,
+        "seq": 26,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_07798188246b4480016af4fa1a31c087d0a8142211db6a5509",
+        "itemKey": "rs_07798188246b4480016af4fa1a31c087d0a8142211db6a5509",
         "data": {
           "text": ""
         },
@@ -314,10 +288,10 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 26,
+        "seq": 27,
         "turnId": "trace:codex:S03:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_07798188246b4480016af4fa1a46d487d0b8c32a856ac72ad1",
+        "itemKey": "msg_07798188246b4480016af4fa1a46d487d0b8c32a856ac72ad1",
         "data": {
           "text": "已完成修改：\n\n- 新建 `notes.txt`，内容为：\n  ```\n  alpha\n  beta\n  ```\n- 将 `README.md` 标题改为 `Sample Repo (edited)`。",
           "phase": "final",
@@ -338,12 +312,17 @@
       },
       {
         "sessionId": "trace:codex:S03",
-        "seq": 27,
+        "seq": 28,
         "turnId": "trace:codex:S03:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-133",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-126",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15686,
+          "outputTokens": 92,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 44,
+          "scope": "attempt",
+          "generationMs": 9
         },
         "at": "<timestamp>",
         "native": {
@@ -374,7 +353,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_07798188246b4480016af4fa1a46d487d0b8c32a856ac72ad1",
+        "itemKey": "msg_07798188246b4480016af4fa1a46d487d0b8c32a856ac72ad1",
         "text": "已完成修改：\n\n- 新建 `notes.txt`，内容为：\n  ```\n  alpha\n  beta\n  ```\n- 将 `README.md` 标题改为 `Sample Repo (edited)`。"
       }
     ],
@@ -384,6 +363,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 46101,
+      "outputTokens": 565,
+      "cacheReadInputTokens": 41472,
+      "reasoningOutputTokens": 76,
+      "scope": "turn",
+      "generationMs": 150,
+      "tokensPerSecond": 3766.666666666667
     }
   }
 ]

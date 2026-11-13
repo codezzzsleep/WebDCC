@@ -14,14 +14,14 @@ export interface ImportedProvider extends ProviderInput {
   sourceKey: string;
 }
 
-async function codexConfigRead(): Promise<Record<string, unknown> | null> {
+export async function codexConfigRead(cwd = process.cwd()): Promise<Record<string, unknown> | null> {
   const { JsonRpcStdio } = await import('@webdcc/adapter-codex');
   // 读的是用户本机生效的 Codex 配置：CODEX_HOME 没设时就是 Codex 自己的默认位置（~/.codex），不能换成空的临时目录
   const rpc = JsonRpcStdio.start({ command: 'codex', args: ['app-server'], env: { ...process.env } });
   try {
     await rpc.request('initialize', { clientInfo: { name: 'webdcc', title: 'WebDCC import', version: '0.1.0' }, capabilities: null });
     rpc.notify('initialized');
-    const result = (await rpc.request('config/read', { cwd: process.cwd() })) as { config?: Record<string, unknown> } | Record<string, unknown>;
+    const result = (await rpc.request('config/read', { cwd })) as { config?: Record<string, unknown> } | Record<string, unknown>;
     return (result as { config?: Record<string, unknown> }).config ?? (result as Record<string, unknown>);
   } catch {
     return null;

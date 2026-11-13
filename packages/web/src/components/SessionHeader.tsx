@@ -187,7 +187,11 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
                 </button>
                 <a role="menuitem" className="menu-item" href={`/api/sessions/${sessionId}/export`} download onClick={() => setMenu(null)}>
                   <Icon name="fileText" />
-                  导出
+                  导出会话
+                </a>
+                <a role="menuitem" className="menu-item" href={`/api/sessions/${sessionId}/trace?format=jsonl`} download onClick={() => setMenu(null)}>
+                  <Icon name="fileText" />
+                  下载真实交互轨迹
                 </a>
                 <button
                   type="button"

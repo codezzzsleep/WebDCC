@@ -216,10 +216,11 @@ function SessionPage(): React.ReactElement {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    store.setCurrentSession(mainId);
+    store.setCurrentSession(mainId, dockSessionId);
     void store.ensureSession(mainId);
     void ensureNotificationPermission();
     if (dockSessionId !== undefined) void store.ensureSession(dockSessionId);
+    return () => store.setCurrentSession(null);
   }, [mainId, dockSessionId]);
 
   useEffect(() => {

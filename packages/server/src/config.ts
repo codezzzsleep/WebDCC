@@ -10,6 +10,7 @@ export interface Config {
   dshPort: number;
   idleDisposeMin: number;
   version: string;
+  recordInteractions?: boolean;
 }
 
 function envInt(value: string | undefined, fallback: number): number {
@@ -29,6 +30,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dshPort: envInt(env['WDCC_DSH_PORT'], 3091),
     idleDisposeMin: envInt(env['WDCC_IDLE_DISPOSE_MIN'], 30),
     version: env['WDCC_VERSION'] ?? '0.1.0',
+    recordInteractions: env['WDCC_TRACE'] !== '0' && env['WDCC_TEST_HOOKS'] !== '1',
   };
 }
 

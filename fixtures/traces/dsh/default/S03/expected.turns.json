@@ -14,269 +14,53 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 72,
+        "seq": 25,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-1614a801-249a-45c7-b438-312a290f0ff3",
+        "itemKey": "msg-live-1",
         "data": {
           "text": "我会先查看当前目录，并读取 README.md。"
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 62,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-live-2",
+        "data": {
+          "text": ""
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 64,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-3",
+        "data": {
+          "inputTokens": 466,
+          "outputTokens": 82,
+          "cacheReadInputTokens": 8448,
+          "scope": "attempt",
+          "generationMs": 351
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 17,
-              "time": 1794482368671,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "我会先查看当前目录，并读取 README.md。"
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_5ba2ksiiq9pxu3pdyfjxamf8",
-                      "name": "bash",
-                      "arguments": "{\"command\":\"ls -la && echo \\\"---\\\" && cat README.md\",\"description\":\"List files and show README content\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482367104b3d24476cb0847a2446e1bf5e527b37b9cf0e9",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "1614a801-249a-45c7-b438-312a290f0ff3"
-                },
-                "usage": {
-                  "inputTokens": 466,
-                  "outputTokens": 82,
-                  "totalTokens": 8996,
-                  "cacheReadTokens": 8448
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482368323,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482368323,
-                    "index": 0,
-                    "dt": [
-                      34,
-                      0,
-                      166,
-                      0
-                    ],
-                    "texts": [
-                      "我会",
-                      "先查看当前",
-                      "目录",
-                      "，并读取 READ",
-                      "ME.md。"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482368524,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482368524,
-                    "index": 1,
-                    "dt": [
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      28,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      32,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      77,
-                      1,
-                      0
-                    ],
-                    "id": "call_00_5ba2ksiiq9pxu3pdyfjxamf8",
-                    "name": "bash",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "command",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "ls",
-                      " -",
-                      "la",
-                      " &&",
-                      " echo",
-                      " \\\"",
-                      "---",
-                      "\\\"",
-                      " &&",
-                      " cat",
-                      " READ",
-                      "ME",
-                      ".md",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "description",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "List",
-                      " files",
-                      " and",
-                      " show",
-                      " READ",
-                      "ME",
-                      " content",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482368671,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "我会先查看当前目录，并读取 README.md。"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482368671,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_5ba2ksiiq9pxu3pdyfjxamf8",
-                        "name": "bash",
-                        "arguments": "{\"command\":\"ls -la && echo \\\"---\\\" && cat README.md\",\"description\":\"List files and show README content\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482368671,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 466,
-                        "outputTokens": 82,
-                        "totalTokens": 8996,
-                        "cacheReadTokens": 8448
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482368671,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482367104b3d24476cb0847a2446e1bf5e527b37b9cf0e9",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 466,
+            "outputTokens": 82,
+            "totalTokens": 8996,
+            "cacheReadTokens": 8448
           }
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 77,
+        "seq": 71,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "command",
         "itemKey": "tool-call_00_5ba2ksiiq9pxu3pdyfjxamf8",
@@ -287,407 +71,99 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 22,
-              "time": 1794482368773,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_5ba2ksiiq9pxu3pdyfjxamf8"
-                  },
-                  "toolCallId": "call_00_5ba2ksiiq9pxu3pdyfjxamf8",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 19:19 .\ndrwx------ 5 root root 4096 Nov 12 19:19 ..\n-rw-r--r-- 1 root root   21 Nov 12 19:19 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 19:19 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 19:19 README.md\n-rw-r--r-- 1 root root   32 Nov 12 19:19 SPEC.md\n---\n# Sample Repo\n\nWebDCC trace sample.\n"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "2b8cd67e-ba5c-40b2-a233-ab31d5f49eb0"
-                },
-                "meta": {
-                  "cwd": "/tmp/wdcc-real-trace-ktCElr/sample-repo"
-                }
+          "type": "tool/result",
+          "seq": 22,
+          "time": 1794482368773,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_5ba2ksiiq9pxu3pdyfjxamf8"
               },
-              "sourceEventSeqs": [
-                18
+              "toolCallId": "call_00_5ba2ksiiq9pxu3pdyfjxamf8",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 19:19 .\ndrwx------ 5 root root 4096 Nov 12 19:19 ..\n-rw-r--r-- 1 root root   21 Nov 12 19:19 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 19:19 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 19:19 README.md\n-rw-r--r-- 1 root root   32 Nov 12 19:19 SPEC.md\n---\n# Sample Repo\n\nWebDCC trace sample.\n"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "2b8cd67e-ba5c-40b2-a233-ab31d5f49eb0"
+            },
+            "meta": {
+              "cwd": "/tmp/wdcc-real-trace-ktCElr/sample-repo"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            18
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 155,
+        "seq": 75,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-4",
+        "data": {
+          "text": "Read README first (done via cat, but instructions say use read tool). Let me use read properly.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 105,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-4dad4a9e-1575-44f9-bff9-4d8f8988175d",
+        "itemKey": "msg-live-5",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 135,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-live-6",
+        "data": {
+          "text": ""
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 138,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-7",
+        "data": {
+          "inputTokens": 322,
+          "outputTokens": 124,
+          "cacheReadInputTokens": 8832,
+          "scope": "attempt",
+          "generationMs": 2232
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 25,
-              "time": 1794482370903,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "Read README first (done via cat, but instructions say use read tool). Let me use read properly."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_ifwh2womu71lojcj6qim24x2",
-                      "name": "read",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md\"}"
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_01_36a88t8c5tc1y3kqwi1qw8na",
-                      "name": "read",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/SPEC.md\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482369276b3d24476cb0847a2446e1bf5e527b37bdc09e7",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "4dad4a9e-1575-44f9-bff9-4d8f8988175d"
-                },
-                "usage": {
-                  "inputTokens": 322,
-                  "outputTokens": 124,
-                  "totalTokens": 9278,
-                  "cacheReadTokens": 8832
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482370532,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482370533,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      83,
-                      1,
-                      0,
-                      0,
-                      53
-                    ],
-                    "texts": [
-                      "Read",
-                      " README first (",
-                      "done via cat",
-                      ", but instructions",
-                      " say use read tool).",
-                      " Let me use",
-                      " read properly",
-                      "."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482370670,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482370670,
-                    "index": 1,
-                    "dt": [
-                      0,
-                      1,
-                      93,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      78,
-                      0
-                    ],
-                    "id": "call_00_ifwh2womu71lojcj6qim24x2",
-                    "name": "read",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-real",
-                      "-t",
-                      "race",
-                      "-",
-                      "kt",
-                      "CE",
-                      "lr",
-                      "/s",
-                      "ample",
-                      "-re",
-                      "po",
-                      "/",
-                      "README",
-                      ".md",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482370848,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 2,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482370849,
-                    "index": 2,
-                    "dt": [
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      47,
-                      0
-                    ],
-                    "id": "call_01_36a88t8c5tc1y3kqwi1qw8na",
-                    "name": "read",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-real",
-                      "-t",
-                      "race",
-                      "-",
-                      "kt",
-                      "CE",
-                      "lr",
-                      "/s",
-                      "ample",
-                      "-re",
-                      "po",
-                      "/",
-                      "SPEC",
-                      ".md",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482370902,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "Read README first (done via cat, but instructions say use read tool). Let me use read properly."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482370902,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_ifwh2womu71lojcj6qim24x2",
-                        "name": "read",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482370902,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 2,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_01_36a88t8c5tc1y3kqwi1qw8na",
-                        "name": "read",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/SPEC.md\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482370902,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 322,
-                        "outputTokens": 124,
-                        "totalTokens": 9278,
-                        "cacheReadTokens": 8832
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482370902,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482369276b3d24476cb0847a2446e1bf5e527b37bdc09e7",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 322,
+            "outputTokens": 124,
+            "totalTokens": 9278,
+            "cacheReadTokens": 8832
           }
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 157,
+        "seq": 142,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "file.read",
         "itemKey": "tool-call_00_ifwh2womu71lojcj6qim24x2",
@@ -696,65 +172,58 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 28,
-              "time": 1794482370913,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_ifwh2womu71lojcj6qim24x2"
-                  },
-                  "toolCallId": "call_00_ifwh2womu71lojcj6qim24x2",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md</path>\n<type>file</type>\n<content>\n1: # Sample Repo\n2: \n3: WebDCC trace sample.\n\n(End of file - total 3 lines)\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "88114d32-81e5-47ff-9361-a9d7648e473c"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md",
-                  "offset": 1,
-                  "lines": [
-                    {
-                      "number": 1,
-                      "text": "# Sample Repo"
-                    },
-                    {
-                      "number": 2,
-                      "text": ""
-                    },
-                    {
-                      "number": 3,
-                      "text": "WebDCC trace sample."
-                    }
-                  ],
-                  "totalLines": 3,
-                  "lang": "md"
-                }
+          "type": "tool/result",
+          "seq": 28,
+          "time": 1794482370913,
+          "data": {
+            "turn": 1,
+            "step": 2,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_ifwh2womu71lojcj6qim24x2"
               },
-              "sourceEventSeqs": [
-                26
+              "toolCallId": "call_00_ifwh2womu71lojcj6qim24x2",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md</path>\n<type>file</type>\n<content>\n1: # Sample Repo\n2: \n3: WebDCC trace sample.\n\n(End of file - total 3 lines)\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "88114d32-81e5-47ff-9361-a9d7648e473c"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md",
+              "offset": 1,
+              "lines": [
+                {
+                  "number": 1,
+                  "text": "# Sample Repo"
+                },
+                {
+                  "number": 2,
+                  "text": ""
+                },
+                {
+                  "number": 3,
+                  "text": "WebDCC trace sample."
+                }
+              ],
+              "totalLines": 3,
+              "lang": "md"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            26
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 158,
+        "seq": 143,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "file.read",
         "itemKey": "tool-call_01_36a88t8c5tc1y3kqwi1qw8na",
@@ -763,498 +232,116 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 29,
-              "time": 1794482370914,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_01_36a88t8c5tc1y3kqwi1qw8na"
-                  },
-                  "toolCallId": "call_01_36a88t8c5tc1y3kqwi1qw8na",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-ktCElr/sample-repo/SPEC.md</path>\n<type>file</type>\n<content>\n1: # Spec\n2: \n3: Trace sample workspace.\n\n(End of file - total 3 lines)\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "078b5c8f-90ca-4bd1-8f04-3b54b1343a23"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/SPEC.md",
-                  "offset": 1,
-                  "lines": [
-                    {
-                      "number": 1,
-                      "text": "# Spec"
-                    },
-                    {
-                      "number": 2,
-                      "text": ""
-                    },
-                    {
-                      "number": 3,
-                      "text": "Trace sample workspace."
-                    }
-                  ],
-                  "totalLines": 3,
-                  "lang": "md"
-                }
+          "type": "tool/result",
+          "seq": 29,
+          "time": 1794482370914,
+          "data": {
+            "turn": 1,
+            "step": 2,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_01_36a88t8c5tc1y3kqwi1qw8na"
               },
-              "sourceEventSeqs": [
-                27
+              "toolCallId": "call_01_36a88t8c5tc1y3kqwi1qw8na",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-ktCElr/sample-repo/SPEC.md</path>\n<type>file</type>\n<content>\n1: # Spec\n2: \n3: Trace sample workspace.\n\n(End of file - total 3 lines)\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "078b5c8f-90ca-4bd1-8f04-3b54b1343a23"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/SPEC.md",
+              "offset": 1,
+              "lines": [
+                {
+                  "number": 1,
+                  "text": "# Spec"
+                },
+                {
+                  "number": 2,
+                  "text": ""
+                },
+                {
+                  "number": 3,
+                  "text": "Trace sample workspace."
+                }
+              ],
+              "totalLines": 3,
+              "lang": "md"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            27
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 273,
+        "seq": 147,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-8",
+        "data": {
+          "text": "README.md doesn't exist? Yes it does. Now create notes.txt and edit README.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 188,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-11012f14-13d1-4181-a72f-79d52fc9fc0f",
+        "itemKey": "msg-live-9",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 245,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-live-10",
+        "data": {
+          "text": ""
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 248,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-11",
+        "data": {
+          "inputTokens": 332,
+          "outputTokens": 182,
+          "cacheReadInputTokens": 9088,
+          "scope": "attempt",
+          "generationMs": 2058
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 32,
-              "time": 1794482372961,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "README.md doesn't exist? Yes it does. Now create notes.txt and edit README."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_i0fcqh8vruifckpdqozvj0oq",
-                      "name": "write",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/notes.txt\",\"content\":\"alpha\\nbeta\\n\"}"
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_01_gzpvi9zn73rwyueeekxsouia",
-                      "name": "edit",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md\",\"old_string\":\"# Sample Repo\",\"new_string\":\"# Sample Repo (edited)\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482371432b3d24476cb0847a2446e1bf5e527b37b76a0a2",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "11012f14-13d1-4181-a72f-79d52fc9fc0f"
-                },
-                "usage": {
-                  "inputTokens": 332,
-                  "outputTokens": 182,
-                  "totalTokens": 9602,
-                  "cacheReadTokens": 9088
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482372450,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482372450,
-                    "index": 0,
-                    "dt": [
-                      1,
-                      0,
-                      76,
-                      0,
-                      0,
-                      1
-                    ],
-                    "texts": [
-                      "README",
-                      ".md doesn",
-                      "'t exist?",
-                      " Yes",
-                      " it",
-                      " does. Now create notes",
-                      ".txt and edit README."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482372528,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482372528,
-                    "index": 1,
-                    "dt": [
-                      0,
-                      45,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      106,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      71,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0
-                    ],
-                    "id": "call_00_i0fcqh8vruifckpdqozvj0oq",
-                    "name": "write",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-real",
-                      "-t",
-                      "race",
-                      "-",
-                      "kt",
-                      "CE",
-                      "lr",
-                      "/s",
-                      "ample",
-                      "-re",
-                      "po",
-                      "/",
-                      "notes",
-                      ".txt",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "content",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "alpha",
-                      "\\n",
-                      "beta",
-                      "\\n",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482372760,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 2,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482372760,
-                    "index": 2,
-                    "dt": [
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      2,
-                      38,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      106,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0
-                    ],
-                    "id": "call_01_gzpvi9zn73rwyueeekxsouia",
-                    "name": "edit",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-real",
-                      "-t",
-                      "race",
-                      "-",
-                      "kt",
-                      "CE",
-                      "lr",
-                      "/s",
-                      "ample",
-                      "-re",
-                      "po",
-                      "/",
-                      "README",
-                      ".md",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "old",
-                      "_string",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "#",
-                      " Sample",
-                      " Rep",
-                      "o",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "new",
-                      "_string",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "#",
-                      " Sample",
-                      " Rep",
-                      "o",
-                      " (",
-                      "edited",
-                      ")",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482372960,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "README.md doesn't exist? Yes it does. Now create notes.txt and edit README."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482372960,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_i0fcqh8vruifckpdqozvj0oq",
-                        "name": "write",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/notes.txt\",\"content\":\"alpha\\nbeta\\n\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482372960,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 2,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_01_gzpvi9zn73rwyueeekxsouia",
-                        "name": "edit",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md\",\"old_string\":\"# Sample Repo\",\"new_string\":\"# Sample Repo (edited)\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482372960,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 332,
-                        "outputTokens": 182,
-                        "totalTokens": 9602,
-                        "cacheReadTokens": 9088
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482372960,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482371432b3d24476cb0847a2446e1bf5e527b37b76a0a2",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 332,
+            "outputTokens": 182,
+            "totalTokens": 9602,
+            "cacheReadTokens": 9088
           }
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 275,
+        "seq": 252,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "file.change",
         "itemKey": "tool-call_00_i0fcqh8vruifckpdqozvj0oq",
@@ -1273,50 +360,43 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 34,
-              "time": 1794482372976,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_i0fcqh8vruifckpdqozvj0oq"
-                  },
-                  "toolCallId": "call_00_i0fcqh8vruifckpdqozvj0oq",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-ktCElr/sample-repo/notes.txt</path>\n<type>file</type>\n<content>\nCreated file\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "3bdbe47c-df6d-4334-b271-687a650a52f1"
-                },
-                "meta": {
-                  "operation": "create",
-                  "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/notes.txt",
-                  "diffs": []
-                }
+          "type": "tool/result",
+          "seq": 34,
+          "time": 1794482372976,
+          "data": {
+            "turn": 1,
+            "step": 3,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_i0fcqh8vruifckpdqozvj0oq"
               },
-              "sourceEventSeqs": [
-                33
+              "toolCallId": "call_00_i0fcqh8vruifckpdqozvj0oq",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-ktCElr/sample-repo/notes.txt</path>\n<type>file</type>\n<content>\nCreated file\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "3bdbe47c-df6d-4334-b271-687a650a52f1"
+            },
+            "meta": {
+              "operation": "create",
+              "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/notes.txt",
+              "diffs": []
             }
-          }
+          },
+          "sourceEventSeqs": [
+            33
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 276,
+        "seq": 253,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "file.change",
         "itemKey": "tool-call_01_gzpvi9zn73rwyueeekxsouia",
@@ -1334,290 +414,83 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 36,
-              "time": 1794482372995,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_01_gzpvi9zn73rwyueeekxsouia"
-                  },
-                  "toolCallId": "call_01_gzpvi9zn73rwyueeekxsouia",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "The file /tmp/wdcc-real-trace-ktCElr/sample-repo/README.md has been updated successfully."
-                    }
-                  ],
-                  "isError": false,
-                  "id": "db8a74c9-8050-4726-8145-d462fad0da50"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md",
-                  "diffs": [
-                    {
-                      "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md",
-                      "oldText": "# Sample Repo\n\nWebDCC trace sample.",
-                      "newText": "# Sample Repo (edited)\n\nWebDCC trace sample."
-                    }
-                  ]
-                }
+          "type": "tool/result",
+          "seq": 36,
+          "time": 1794482372995,
+          "data": {
+            "turn": 1,
+            "step": 3,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_01_gzpvi9zn73rwyueeekxsouia"
               },
-              "sourceEventSeqs": [
-                35
+              "toolCallId": "call_01_gzpvi9zn73rwyueeekxsouia",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The file /tmp/wdcc-real-trace-ktCElr/sample-repo/README.md has been updated successfully."
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "db8a74c9-8050-4726-8145-d462fad0da50"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md",
+              "diffs": [
+                {
+                  "path": "/tmp/wdcc-real-trace-ktCElr/sample-repo/README.md",
+                  "oldText": "# Sample Repo\n\nWebDCC trace sample.",
+                  "newText": "# Sample Repo (edited)\n\nWebDCC trace sample."
+                }
+              ]
             }
-          }
+          },
+          "sourceEventSeqs": [
+            35
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 331,
+        "seq": 304,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-b088eb97-ec58-436f-83c0-699b25e2f3bf",
+        "itemKey": "msg-live-12",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 305,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-13",
+        "data": {
+          "inputTokens": 340,
+          "outputTokens": 82,
+          "cacheReadInputTokens": 9344,
+          "scope": "attempt",
+          "generationMs": 1810
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 39,
-              "time": 1794482374771,
-              "data": {
-                "turn": 1,
-                "step": 4,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_y74idm6pe3nqjllzttw0f8bv",
-                      "name": "bash",
-                      "arguments": "{\"command\":\"echo \\\"=== notes.txt ===\\\"; cat -A notes.txt; echo \\\"=== README.md ===\\\"; cat README.md\",\"description\":\"Verify both file changes\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482373508b3d24476cb0847a2446e1bf5e527b37bdb37e2",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "b088eb97-ec58-436f-83c0-699b25e2f3bf"
-                },
-                "usage": {
-                  "inputTokens": 340,
-                  "outputTokens": 82,
-                  "totalTokens": 9766,
-                  "cacheReadTokens": 9344
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482374504,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482374504,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      1,
-                      32,
-                      1,
-                      0,
-                      0,
-                      10,
-                      1,
-                      141,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      43,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      28,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0
-                    ],
-                    "id": "call_00_y74idm6pe3nqjllzttw0f8bv",
-                    "name": "bash",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "command",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "echo",
-                      " \\\"",
-                      "===",
-                      " notes",
-                      ".txt",
-                      " ==",
-                      "=\\\"",
-                      ";",
-                      " cat",
-                      " -",
-                      "A",
-                      " notes",
-                      ".txt",
-                      ";",
-                      " echo",
-                      " \\\"",
-                      "===",
-                      " READ",
-                      "ME",
-                      ".md",
-                      " ==",
-                      "=\\\"",
-                      ";",
-                      " cat",
-                      " READ",
-                      "ME",
-                      ".md",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "description",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "Verify",
-                      " both",
-                      " file",
-                      " changes",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482374771,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_y74idm6pe3nqjllzttw0f8bv",
-                        "name": "bash",
-                        "arguments": "{\"command\":\"echo \\\"=== notes.txt ===\\\"; cat -A notes.txt; echo \\\"=== README.md ===\\\"; cat README.md\",\"description\":\"Verify both file changes\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482374771,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 340,
-                        "outputTokens": 82,
-                        "totalTokens": 9766,
-                        "cacheReadTokens": 9344
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482374771,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482373508b3d24476cb0847a2446e1bf5e527b37bdb37e2",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 340,
+            "outputTokens": 82,
+            "totalTokens": 9766,
+            "cacheReadTokens": 9344
           }
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 335,
+        "seq": 311,
         "turnId": "trace:dsh:S03:turn:1",
         "kind": "command",
         "itemKey": "tool-call_00_y74idm6pe3nqjllzttw0f8bv",
@@ -1628,229 +501,89 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 43,
-              "time": 1794482374870,
-              "data": {
-                "turn": 1,
-                "step": 4,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_y74idm6pe3nqjllzttw0f8bv"
-                  },
-                  "toolCallId": "call_00_y74idm6pe3nqjllzttw0f8bv",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "=== notes.txt ===\nalpha$\nbeta$\n=== README.md ===\n# Sample Repo (edited)\n\nWebDCC trace sample.\n"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "2404ea71-d468-4a03-968b-6e6d0c8b9f8f"
-                },
-                "meta": {
-                  "cwd": "/tmp/wdcc-real-trace-ktCElr/sample-repo"
-                }
+          "type": "tool/result",
+          "seq": 43,
+          "time": 1794482374870,
+          "data": {
+            "turn": 1,
+            "step": 4,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_y74idm6pe3nqjllzttw0f8bv"
               },
-              "sourceEventSeqs": [
-                40
+              "toolCallId": "call_00_y74idm6pe3nqjllzttw0f8bv",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "=== notes.txt ===\nalpha$\nbeta$\n=== README.md ===\n# Sample Repo (edited)\n\nWebDCC trace sample.\n"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "2404ea71-d468-4a03-968b-6e6d0c8b9f8f"
+            },
+            "meta": {
+              "cwd": "/tmp/wdcc-real-trace-ktCElr/sample-repo"
             }
+          },
+          "sourceEventSeqs": [
+            40
+          ],
+          "surfaceOp": "append"
+        }
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 315,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-live-14",
+        "data": {
+          "text": "已完成两项修改，并验证无误：\n\n1. **新建 [notes.txt](notes.txt)**，内容两行：\n   ```\n   alpha\n   beta\n   ```\n2. **修改 [README.md](README.md#L1)**：标题由 `# Sample Repo` 改为 `# Sample Repo (edited)`，正文 `WebDCC trace sample.` 未动。\n\n其他文件（AGENTS.md、CLAUDE.md、SPEC.md）未改动。"
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S03",
+        "seq": 316,
+        "turnId": "trace:dsh:S03:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-15",
+        "data": {
+          "inputTokens": 206,
+          "outputTokens": 100,
+          "cacheReadInputTokens": 9600,
+          "scope": "attempt",
+          "generationMs": 1973
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "usage",
+          "usage": {
+            "inputTokens": 206,
+            "outputTokens": 100,
+            "totalTokens": 9906,
+            "cacheReadTokens": 9600
           }
         }
       },
       {
         "sessionId": "trace:dsh:S03",
-        "seq": 369,
+        "seq": 321,
         "turnId": "trace:dsh:S03:turn:1",
-        "kind": "assistant.message",
-        "itemKey": "message-8687a35f-551f-497c-a045-e0f83abfdd43",
+        "kind": "unknown",
+        "itemKey": "unknown-workspace/changes-48",
         "data": {
-          "text": "已完成两项修改，并验证无误：\n\n1. **新建 [notes.txt](notes.txt)**，内容两行：\n   ```\n   alpha\n   beta\n   ```\n2. **修改 [README.md](README.md#L1)**：标题由 `# Sample Repo` 改为 `# Sample Repo (edited)`，正文 `WebDCC trace sample.` 未动。\n\n其他文件（AGENTS.md、CLAUDE.md、SPEC.md）未改动。"
+          "nativeType": "workspace/changes"
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 46,
-              "time": 1794482376746,
-              "data": {
-                "turn": 1,
-                "step": 5,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "已完成两项修改，并验证无误：\n\n1. **新建 [notes.txt](notes.txt)**，内容两行：\n   ```\n   alpha\n   beta\n   ```\n2. **修改 [README.md](README.md#L1)**：标题由 `# Sample Repo` 改为 `# Sample Repo (edited)`，正文 `WebDCC trace sample.` 未动。\n\n其他文件（AGENTS.md、CLAUDE.md、SPEC.md）未改动。"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482375377b3d24476cb0847a2446e1bf5e527b37bddd8c0",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "8687a35f-551f-497c-a045-e0f83abfdd43"
-                },
-                "usage": {
-                  "inputTokens": 206,
-                  "outputTokens": 100,
-                  "totalTokens": 9906,
-                  "cacheReadTokens": 9600
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482376341,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482376342,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      79,
-                      1,
-                      0,
-                      0,
-                      50,
-                      0,
-                      1,
-                      0,
-                      92,
-                      7,
-                      1,
-                      0,
-                      53,
-                      0,
-                      0,
-                      0,
-                      62,
-                      0,
-                      0,
-                      1,
-                      55,
-                      0,
-                      0
-                    ],
-                    "texts": [
-                      "已完成两项",
-                      "修改，并验证无误",
-                      "：\n\n1. **新建",
-                      " [notes.txt](notes",
-                      ".txt)**，内容",
-                      "两",
-                      "行：\n  ",
-                      " ```\n   alpha\n   beta",
-                      "\n   ```\n2. **修改",
-                      " [README.md](README.md",
-                      "#L1",
-                      ")**：标题由",
-                      " `# Sample Repo`",
-                      " 改为 `# Sample Rep",
-                      "o (edited)`，正文",
-                      " `",
-                      "WebDCC",
-                      " trace sample.` 未",
-                      "动",
-                      "。\n\n其他文件（",
-                      "AGENTS.md、CL",
-                      "AUDE.md、SPEC.md",
-                      "）",
-                      "未",
-                      "改动",
-                      "。"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482376745,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "已完成两项修改，并验证无误：\n\n1. **新建 [notes.txt](notes.txt)**，内容两行：\n   ```\n   alpha\n   beta\n   ```\n2. **修改 [README.md](README.md#L1)**：标题由 `# Sample Repo` 改为 `# Sample Repo (edited)`，正文 `WebDCC trace sample.` 未动。\n\n其他文件（AGENTS.md、CLAUDE.md、SPEC.md）未改动。"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482376745,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 206,
-                        "outputTokens": 100,
-                        "totalTokens": 9906,
-                        "cacheReadTokens": 9600
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482376745,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482375377b3d24476cb0847a2446e1bf5e527b37bddd8c0",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "workspace/changes",
+          "seq": 48,
+          "time": 1794482376749,
+          "data": {
+            "turn": 1
           }
         }
       }
@@ -1858,7 +591,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-8687a35f-551f-497c-a045-e0f83abfdd43",
+        "itemKey": "msg-live-14",
         "text": "已完成两项修改，并验证无误：\n\n1. **新建 [notes.txt](notes.txt)**，内容两行：\n   ```\n   alpha\n   beta\n   ```\n2. **修改 [README.md](README.md#L1)**：标题由 `# Sample Repo` 改为 `# Sample Repo (edited)`，正文 `WebDCC trace sample.` 未动。\n\n其他文件（AGENTS.md、CLAUDE.md、SPEC.md）未改动。"
       }
     ],
@@ -1882,6 +615,14 @@
       "reads": 2,
       "edits": 2,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 1666,
+      "outputTokens": 570,
+      "cacheReadInputTokens": 45312,
+      "scope": "turn",
+      "generationMs": 8424,
+      "tokensPerSecond": 67.66381766381767
     }
   }
 ]

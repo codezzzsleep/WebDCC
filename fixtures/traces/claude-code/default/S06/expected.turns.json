@@ -14,10 +14,42 @@
     "steps": [
       {
         "sessionId": "trace:claude-code:S06",
+        "seq": 22,
+        "turnId": "trace:claude-code:S06:turn:1",
+        "kind": "command",
+        "itemKey": "tool-toolu_018DafCogki8DCE3yGoxTQyS",
+        "data": {
+          "command": "sleep 60",
+          "status": "failed",
+          "outputTail": "<tool_use_error>Blocked: standalone sleep 60. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "content": "<tool_use_error>Blocked: standalone sleep 60. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block.</tool_use_error>",
+                "is_error": true,
+                "tool_use_id": "toolu_018DafCogki8DCE3yGoxTQyS"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "301baaca-39fb-4f36-b15b-d6ce69cb40ed",
+          "uuid": "554b7020-546d-403d-bfe4-c42e955177c9",
+          "timestamp": "2026-11-11T23:34:40.881Z",
+          "tool_use_result": "Error: Blocked: standalone sleep 60. To wait for a condition, use Monitor with an until-loop (e.g. `until <check>; do sleep 2; done`). To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block."
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S06",
         "seq": 33,
         "turnId": "trace:claude-code:S06:turn:1",
         "kind": "reasoning",
-        "itemKey": "msg-sdk-37",
+        "itemKey": "msg-2-0",
         "data": {
           "text": "I'm setting the tool call to run in the background.\n\n"
         },
@@ -62,10 +94,59 @@
       },
       {
         "sessionId": "trace:claude-code:S06",
+        "seq": 57,
+        "turnId": "trace:claude-code:S06:turn:1",
+        "kind": "command",
+        "itemKey": "tool-toolu_0123dK7uoKJos8yvVLap13D4",
+        "data": {
+          "command": "sleep 60",
+          "status": "completed",
+          "outputTail": "Command running in background with ID: b1avilice. Output is being written to: /tmp/claude-0/-tmp-wdcc-real-trace-UHInAH-sample-repo/301baaca-39fb-4f36-b15b-d6ce69cb40ed/tasks/b1avilice.output. You will be notified when it completes. To check interim output, use Read on that file path."
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "tool_use_id": "toolu_0123dK7uoKJos8yvVLap13D4",
+                "type": "tool_result",
+                "content": "Command running in background with ID: b1avilice. Output is being written to: /tmp/claude-0/-tmp-wdcc-real-trace-UHInAH-sample-repo/301baaca-39fb-4f36-b15b-d6ce69cb40ed/tasks/b1avilice.output. You will be notified when it completes. To check interim output, use Read on that file path.",
+                "is_error": false
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "301baaca-39fb-4f36-b15b-d6ce69cb40ed",
+          "uuid": "23003e9d-d06b-4402-9eec-ba9b09a347be",
+          "timestamp": "2026-11-11T23:34:44.003Z",
+          "tool_use_result": {
+            "stdout": "",
+            "stderr": "",
+            "interrupted": false,
+            "isImage": false,
+            "noOutputExpected": false,
+            "backgroundTaskId": "b1avilice"
+          },
+          "tool_result_meta": [
+            {
+              "id": "toolu_0123dK7uoKJos8yvVLap13D4",
+              "permission_decision": {
+                "decision": "accept",
+                "source": "config",
+                "reason_type": "subcommandResults"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S06",
         "seq": 60,
         "turnId": "trace:claude-code:S06:turn:1",
         "kind": "assistant.message",
-        "itemKey": "msg-sdk-78",
+        "itemKey": "msg-4-0",
         "data": {
           "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。"
         },
@@ -110,10 +191,10 @@
         "seq": 64,
         "turnId": "trace:claude-code:S06:turn:1",
         "kind": "assistant.message",
-        "itemKey": "result-sdk-82",
+        "itemKey": "result-82",
         "data": {
           "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。",
-          "nativePhase": "final_answer"
+          "nativePhase": "final_result"
         },
         "at": "<timestamp>",
         "native": {
@@ -228,13 +309,13 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "result-sdk-82",
+        "itemKey": "result-82",
         "text": "`sleep 60` 已经在后台启动。它结束时系统会通知我，到时我再告诉你完成了。"
       }
     ],
     "changes": [],
     "summary": {
-      "commands": 0,
+      "commands": 2,
       "reads": 0,
       "edits": 0,
       "tools": 0

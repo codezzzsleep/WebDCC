@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S01",
-        "seq": 4,
-        "turnId": "trace:codex:S01:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S01",
         "seq": 5,
         "turnId": "trace:codex:S01:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-3",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -43,34 +31,10 @@
       },
       {
         "sessionId": "trace:codex:S01",
-        "seq": 9,
-        "turnId": "trace:codex:S01:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S01",
-        "seq": 12,
-        "turnId": "trace:codex:S01:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S01",
-        "seq": 15,
+        "seq": 16,
         "turnId": "trace:codex:S01:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_0ee4018d7cec5d9a016af4f9f5336887d0811c3c3e0ea8a3e7",
+        "itemKey": "msg_0ee4018d7cec5d9a016af4f9f5336887d0811c3c3e0ea8a3e7",
         "data": {
           "text": "幂等是指一个操作执行一次或多次，产生的结果都相同。",
           "phase": "final",
@@ -91,12 +55,17 @@
       },
       {
         "sessionId": "trace:codex:S01",
-        "seq": 16,
+        "seq": 17,
         "turnId": "trace:codex:S01:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-36",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-29",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15005,
+          "outputTokens": 24,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 0,
+          "scope": "attempt",
+          "generationMs": 6
         },
         "at": "<timestamp>",
         "native": {
@@ -127,7 +96,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_0ee4018d7cec5d9a016af4f9f5336887d0811c3c3e0ea8a3e7",
+        "itemKey": "msg_0ee4018d7cec5d9a016af4f9f5336887d0811c3c3e0ea8a3e7",
         "text": "幂等是指一个操作执行一次或多次，产生的结果都相同。"
       }
     ],
@@ -137,6 +106,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 15005,
+      "outputTokens": 24,
+      "cacheReadInputTokens": 13312,
+      "reasoningOutputTokens": 0,
+      "scope": "turn",
+      "generationMs": 6,
+      "tokensPerSecond": 4000
     }
   }
 ]

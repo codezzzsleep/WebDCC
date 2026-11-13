@@ -10,6 +10,7 @@ import type {
   MetaResponse,
   SessionDetailResponse,
   WorkspaceDto,
+  WorkspaceFileSaveRequest,
   WatchdogSettings,
   WatchdogView,
 } from '@webdcc/protocol';
@@ -31,7 +32,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (response.status === 401) throw Object.assign(new Error('unauthorized'), { status: 401 });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`${response.status} ${text.slice(0, 200)}`);
+    let message = text.slice(0, 200);
+    try { message = String((JSON.parse(text) as { error?: string }).error ?? message); } catch { /* retain non-JSON diagnostic */ }
+    throw Object.assign(new Error(`${response.status} ${message}`), { status: response.status });
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -53,6 +56,8 @@ export const api = {
     request<FsListResponse | FsReadResponse>(`/api/workspaces/${workspaceId}/fs?path=${encodeURIComponent(path)}`),
   createWorkspaceEntry: (workspaceId: string, input: { path: string; kind: 'file' | 'dir'; content?: string }) =>
     request<{ path: string; kind: 'file' | 'dir' }>(`/api/workspaces/${workspaceId}/fs`, { method: 'POST', body: JSON.stringify(input) }),
+  saveWorkspaceFile: (workspaceId: string, input: WorkspaceFileSaveRequest) =>
+    request<FsReadResponse>(`/api/workspaces/${workspaceId}/fs`, { method: 'PUT', body: JSON.stringify(input) }),
   rawUrl: (workspaceId: string, path: string) =>
     `/api/workspaces/${workspaceId}/raw?path=${encodeURIComponent(path)}`,
   feed: (after: number) => request<{ entries: { feedSeq: number; sessionId: string; patch: Record<string, unknown> }[] }>(`/api/feed?after=${after}`),

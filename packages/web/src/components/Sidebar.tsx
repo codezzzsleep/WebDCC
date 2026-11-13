@@ -209,6 +209,7 @@ export function Sidebar({
               >
                 <AgentMark agent={session.agent} />
                 <span className="session-title">{session.title ?? '新会话'}</span>
+                {(store.unread.get(session.id) ?? 0) > 0 ? <span className="unread-count" aria-label={`${store.unread.get(session.id)} 条未读提醒`}>{store.unread.get(session.id)}</span> : null}
               </Link>
             ))}
           </div>
@@ -268,6 +269,7 @@ function SessionRow({
       {depth > 0 ? <Icon name="cornerDownRight" size={13} strokeWidth={2} className="chain" label="接续会话" /> : null}
       <AgentMark agent={session.agent} />
       <span className="session-title">{session.title ?? '新会话'}</span>
+      {(store.unread.get(session.id) ?? 0) > 0 ? <span className="unread-count" aria-label={`${store.unread.get(session.id)} 条未读提醒`}>{store.unread.get(session.id)}</span> : null}
       {session.pinned === true ? <Icon name="pin" size={13} strokeWidth={2} className="pinned" label="置顶" /> : null}
       <span className={`session-status status-${session.status}`}>
         {session.status === 'running' ? (

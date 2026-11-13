@@ -14,156 +14,36 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S01",
-        "seq": 40,
+        "seq": 25,
         "turnId": "trace:dsh:S01:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-0453adcb-4ecd-4a72-8c76-cb46c0cbde55",
+        "itemKey": "msg-live-1",
         "data": {
           "text": "幂等是指同一操作执行一次与重复执行多次，对系统状态产生的结果相同。"
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S01",
+        "seq": 27,
+        "turnId": "trace:dsh:S01:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-2",
+        "data": {
+          "inputTokens": 697,
+          "outputTokens": 20,
+          "cacheReadInputTokens": 8192,
+          "scope": "attempt",
+          "generationMs": 105
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 17,
-              "time": 1794482358269,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "幂等是指同一操作执行一次与重复执行多次，对系统状态产生的结果相同。"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482357043b3d24476cb0847a2446e1bf5e527b37bb00f03",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "0453adcb-4ecd-4a72-8c76-cb46c0cbde55"
-                },
-                "usage": {
-                  "inputTokens": 697,
-                  "outputTokens": 20,
-                  "totalTokens": 8909,
-                  "cacheReadTokens": 8192
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482358166,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482358166,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      54,
-                      1,
-                      0,
-                      0,
-                      32,
-                      1,
-                      13
-                    ],
-                    "texts": [
-                      "幂等是指",
-                      "同一操作",
-                      "执行",
-                      "一次",
-                      "与",
-                      "重复",
-                      "执行多次，对",
-                      "系统状态产生的结果",
-                      "相同",
-                      "。"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482358268,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "幂等是指同一操作执行一次与重复执行多次，对系统状态产生的结果相同。"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482358268,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 697,
-                        "outputTokens": 20,
-                        "totalTokens": 8909,
-                        "cacheReadTokens": 8192
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482358268,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482357043b3d24476cb0847a2446e1bf5e527b37bb00f03",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 697,
+            "outputTokens": 20,
+            "totalTokens": 8909,
+            "cacheReadTokens": 8192
           }
         }
       }
@@ -171,7 +51,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-0453adcb-4ecd-4a72-8c76-cb46c0cbde55",
+        "itemKey": "msg-live-1",
         "text": "幂等是指同一操作执行一次与重复执行多次，对系统状态产生的结果相同。"
       }
     ],
@@ -181,6 +61,14 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 697,
+      "outputTokens": 20,
+      "cacheReadInputTokens": 8192,
+      "scope": "turn",
+      "generationMs": 105,
+      "tokensPerSecond": 190.47619047619048
     }
   }
 ]

@@ -33,7 +33,9 @@ export function traceFrame<T>(
 ): void {
   if (sink === undefined) return;
   const frame = { i: input.i ?? 0, t: input.t ?? 0, dir: input.dir, ch: input.ch, frame: input.frame };
-  if (sink.record !== undefined) sink.record(frame);
-  else if (sink.onFrame !== undefined) sink.onFrame(frame);
-  else sink.push?.(frame);
+  try {
+    if (sink.record !== undefined) sink.record(frame);
+    else if (sink.onFrame !== undefined) sink.onFrame(frame);
+    else sink.push?.(frame);
+  } catch { /* An observer must never alter the native transport. */ }
 }

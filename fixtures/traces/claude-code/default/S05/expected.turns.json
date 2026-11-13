@@ -1,7 +1,7 @@
 [
   {
     "turnId": "trace:claude-code:S05:turn:1",
-    "state": "failed",
+    "state": "interrupted",
     "user": {
       "text": "在 /tmp 下创建文件 wdcc-trace-probe-2.txt，内容为 ok。",
       "at": "<timestamp>"
@@ -14,10 +14,50 @@
     "steps": [
       {
         "sessionId": "trace:claude-code:S05",
+        "seq": 21,
+        "turnId": "trace:claude-code:S05:turn:1",
+        "kind": "file.change",
+        "itemKey": "tool-toolu_01TGys3ctMFBA1XNb41Mtu4k",
+        "data": {
+          "changes": [
+            {
+              "path": "/tmp/wdcc-trace-probe-2.txt",
+              "kind": "add",
+              "added": 1,
+              "removed": 0,
+              "note": "整文件写入，未取得原内容",
+              "diff": "--- /dev/null\n+++ b//tmp/wdcc-trace-probe-2.txt\n@@ -0,0 +1,1 @@\n+ok\n"
+            }
+          ],
+          "status": "failed"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "content": "<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>",
+                "is_error": true,
+                "tool_use_id": "toolu_01TGys3ctMFBA1XNb41Mtu4k"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "98f9f7ba-1eb2-444c-9c67-2f881898d5d9",
+          "uuid": "1b68847a-7da8-4c2f-95bb-da90d2f07791",
+          "timestamp": "2026-11-11T23:34:25.409Z",
+          "tool_use_result": "Error: File has not been read yet. Read it first before writing to it."
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S05",
         "seq": 24,
         "turnId": "trace:claude-code:S05:turn:1",
         "kind": "assistant.message",
-        "itemKey": "msg-sdk-28",
+        "itemKey": "msg-2-0",
         "data": {
           "text": "The file may already exist. I'll read it first."
         },
@@ -56,20 +96,64 @@
           "uuid": "3f7e1d9d-d4fa-447b-b59f-1c83bcecb2c6",
           "timestamp": "2026-11-11T23:34:27.927Z"
         }
+      },
+      {
+        "sessionId": "trace:claude-code:S05",
+        "seq": 37,
+        "turnId": "trace:claude-code:S05:turn:1",
+        "kind": "file.read",
+        "itemKey": "tool-toolu_01A1z1odomCCAzsBs7aHhTDv",
+        "data": {
+          "path": "/tmp/wdcc-trace-probe-2.txt"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "content": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+                "is_error": true,
+                "tool_use_id": "toolu_01A1z1odomCCAzsBs7aHhTDv"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "98f9f7ba-1eb2-444c-9c67-2f881898d5d9",
+          "uuid": "695b3468-0a16-4b60-a16f-10e07e454dfa",
+          "timestamp": "2026-11-11T23:34:27.953Z",
+          "tool_use_result": "User rejected tool use",
+          "tool_result_meta": [
+            {
+              "id": "toolu_01A1z1odomCCAzsBs7aHhTDv",
+              "non_execution_kind": "user-rejected"
+            }
+          ]
+        }
       }
     ],
     "live": [],
     "answer": [
       {
-        "itemKey": "msg-sdk-28",
+        "itemKey": "msg-2-0",
         "text": "The file may already exist. I'll read it first."
       }
     ],
-    "changes": [],
+    "changes": [
+      {
+        "path": "/tmp/wdcc-trace-probe-2.txt",
+        "kind": "add",
+        "added": 1,
+        "removed": 0,
+        "note": "整文件写入，未取得原内容"
+      }
+    ],
     "summary": {
       "commands": 0,
-      "reads": 0,
-      "edits": 0,
+      "reads": 1,
+      "edits": 1,
       "tools": 0
     }
   }

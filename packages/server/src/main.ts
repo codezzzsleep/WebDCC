@@ -11,6 +11,10 @@ import { Store } from './store.js';
 import { assertTestIsolation } from './test-isolation.js';
 import { discoverRunningDsh } from './dsh-discovery.js';
 import { attachToDsh } from '@webdcc/adapter-dsh';
+import { InteractionRecorder } from './interaction-recorder.js';
+import { ModelRecording } from './model-recording.js';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface ServerOptions {
   /** 注册到服务端的 adapter；测试注入 fake-adapter，生产由 adapters.ts 组装 */
@@ -25,6 +29,7 @@ export interface RunningServer {
   /** 供开发/e2e 播种数据；生产代码不要依赖 */
   store: Store;
   manager: SessionManager;
+  recorder?: InteractionRecorder;
 }
 
 export async function start(config: Config = loadConfig(), options: ServerOptions = {}): Promise<RunningServer> {
@@ -39,11 +44,17 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   await providers.init();
   const dshStore = new DshConnectionStore(config.dataDir);
   await dshStore.init();
+  const recorder = config.recordInteractions === false || config.dataDir === ':memory:' || process.env['WDCC_TEST_HOOKS'] === '1' ? undefined : new InteractionRecorder(config.dataDir);
+  await recorder?.init();
+  recorder?.addSecret(config.token);
+  const modelRecording = recorder === undefined ? undefined : new ModelRecording(recorder);
   const manager = new SessionManager(store, {
     idleDisposeMin: config.idleDisposeMin,
     watchdogDataDir: config.dataDir,
     resolveProvider: (id) => providers.runtimeConfig(id),
     saveDiff: (name, diff) => files.putBufferSync(Buffer.from(diff, 'utf8'), name, 'text/x-diff').id,
+    recorder,
+    modelRecording,
   });
 
   let adapters = options.adapters;
@@ -76,6 +87,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
       }
     }
     adapters = await build({
+      ...(recorder === undefined ? {} : { traceSink: (sessionId: string) => recorder.sink(sessionId), nativeRecorder: { directory: recorder.directory, module: process.env['WDCC_NATIVE_RECORDER_MODULE'] ?? join(dirname(fileURLToPath(import.meta.url)), 'native-http-recorder.cjs') } }),
       dsh: {
         mode: dshMode,
         ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie }),
@@ -91,6 +103,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     manager,
     providers,
     dsh: dshStore,
+    recorder,
     webDist: options.webDist ?? process.env['WDCC_WEB_DIST'] ?? join(process.cwd(), 'packages/web/dist'),
     commit: process.env['WDCC_COMMIT'] ?? 'dev',
     builtAt: process.env['WDCC_BUILT_AT'] ?? new Date().toISOString(),
@@ -105,6 +118,10 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   });
 
   await app.listen({ host: config.host, port: config.port });
+  if (config.port === 0) {
+    const address = app.server.address();
+    if (address !== null && typeof address !== 'string') config.port = address.port;
+  }
   // F16：启动时只读扫描一次本机配置并导入 Provider
   const scan = await providers.scanLocal().catch(() => ({ imported: 0, skipped: 0 }));
   if (scan.imported > 0) process.stdout.write(`webdcc: 从本机导入了 ${scan.imported} 个 Provider\n`);
@@ -115,9 +132,11 @@ export async function start(config: Config = loadConfig(), options: ServerOption
     config,
     store,
     manager,
+    recorder,
     async close() {
       await manager.disposeAll();
       await app.close();
+      await recorder?.flush();
       db.close();
     },
   };

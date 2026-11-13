@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import { createContext, useContext, useEffect, useState } from 'react';
+import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { workspaceFileUrl, isImageUrl } from '../lib/workspace-url.js';
+import { ImagePreview } from './ImagePreview.js';
+export const MarkdownWorkspace = createContext<string | undefined>(undefined);
 
 type Highlighter = {
   codeToHtml: (code: string, options: { lang: string; theme: string }) => string;
@@ -79,18 +82,29 @@ const markdownComponents: Components = {
     return <code className="inline-code">{content}</code>;
   },
   a({ href, children }) {
+    const workspaceId = useContext(MarkdownWorkspace);
+    const target = workspaceFileUrl(href, workspaceId, window.location.origin);
     return (
-      <a href={href} target="_blank" rel="noreferrer">
+      <>
+      <a href={target} target="_blank" rel="noreferrer">
         {children}
       </a>
+      {href !== undefined && target !== undefined && target.startsWith('/api/workspaces/') && isImageUrl(href) ? <ImagePreview src={target} alt="工作区图片" /> : null}
+      </>
     );
+  },
+  img({ src, alt }) {
+    const workspaceId = useContext(MarkdownWorkspace);
+    const target = workspaceFileUrl(src, workspaceId, window.location.origin);
+    return target === undefined ? null : <ImagePreview src={target} alt={alt ?? '图片'} />;
   },
 };
 
 export function Markdown({ text }: { text: string }): React.ReactElement {
+  const workspaceId = useContext(MarkdownWorkspace);
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents} urlTransform={url => defaultUrlTransform(workspaceFileUrl(url, workspaceId, window.location.origin) ?? '')}>
         {text}
       </ReactMarkdown>
     </div>

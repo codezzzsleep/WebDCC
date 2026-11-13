@@ -165,6 +165,8 @@ export interface FeedMessage {
 export interface EventMessage {
   op: 'event';
   event: StoredEvent;
+  /** Initial history is rendered but must not become a new unread notification. */
+  history?: boolean;
 }
 
 export interface SnapshotItem {

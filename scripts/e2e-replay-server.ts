@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ReplayAdapter, type ReplayScript } from '../packages/testing/fake-adapter/src/replay.js';
 import type { TraceFrame } from '../packages/protocol/src/index.js';
-import { CodexTranslator } from '../packages/adapters/codex/src/translator.js';
-import { ClaudeTranslator } from '../packages/adapters/claude/src/translator.js';
-import { DshTranslator } from '../packages/adapters/dsh/src/translator.js';
+import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
+import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.js';
+import { DshAdapter } from '../packages/adapters/dsh/src/adapter.js';
 import { loadConfig } from '../packages/server/src/config.js';
 import { start } from '../packages/server/src/main.js';
 import { isolatedEnv } from '../packages/server/src/test-isolation.js';
@@ -40,10 +40,11 @@ function scriptsFor(agent: 'codex' | 'claude-code' | 'dsh'): ReplayScript[] {
     const path = join(agentRoot, scenario);
     const meta = JSON.parse(readFileSync(join(path, 'meta.json'), 'utf8')) as { prompt?: string };
     const frames = framesFor(path);
-    // Each session gets its own translator. This matters if a translator later
-    // gains per-stream state while keeping L2 deterministic today.
-    const translator = agent === 'codex' ? new CodexTranslator() : agent === 'claude-code' ? new ClaudeTranslator() : new DshTranslator();
-    scripts.push({ key: scenario, prompt: meta.prompt, frames, translate: (frame) => translator.feed(frame) });
+    scripts.push({ key: scenario, prompt: meta.prompt, frames, translate: () => [], createHandler: sessionId => {
+      if (agent === 'codex') { const replay = CodexAdapter.replay(sessionId); return { feed: replay.feed, respond: decision => replay.adapter.respond(sessionId, decision), answer: (id, answer) => replay.adapter.answer(sessionId, id, answer) }; }
+      if (agent === 'claude-code') { const replay = ClaudeAdapter.replay(sessionId); return { feed: replay.feed, respond: decision => replay.adapter.respond(sessionId, decision), answer: (id, answer) => replay.adapter.answer(sessionId, id, answer) }; }
+      const replay = DshAdapter.replay(sessionId); return { feed: replay.feed, respond: decision => replay.adapter.respond(sessionId, decision), answer: (id, answer) => replay.adapter.answer(sessionId, id, answer) };
+    } });
   }
   return scripts;
 }

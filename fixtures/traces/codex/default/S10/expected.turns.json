@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S10",
-        "seq": 4,
-        "turnId": "trace:codex:S10:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S10",
         "seq": 7,
         "turnId": "trace:codex:S10:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-5",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -43,34 +31,10 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 9,
-        "turnId": "trace:codex:S10:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S10",
-        "seq": 12,
-        "turnId": "trace:codex:S10:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S10",
-        "seq": 15,
+        "seq": 16,
         "turnId": "trace:codex:S10:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_083bb6b7bf77e4b8016af4fa92686087d0bf2432197a2fd9ce",
+        "itemKey": "rs_083bb6b7bf77e4b8016af4fa92686087d0bf2432197a2fd9ce",
         "data": {
           "text": ""
         },
@@ -86,10 +50,10 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 16,
+        "seq": 17,
         "turnId": "trace:codex:S10:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_083bb6b7bf77e4b8016af4fa9294e887d0947f0819c0c43f46",
+        "itemKey": "msg_083bb6b7bf77e4b8016af4fa9294e887d0947f0819c0c43f46",
         "data": {
           "text": "我会读取 `README.md` 的第一行。",
           "phase": "interim",
@@ -110,10 +74,10 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 17,
+        "seq": 18,
         "turnId": "trace:codex:S10:turn:1",
         "kind": "command",
-        "itemKey": "item-exec-132ce603-5bbb-409c-938d-a3d085900cdd",
+        "itemKey": "exec-132ce603-5bbb-409c-938d-a3d085900cdd",
         "data": {
           "command": "/bin/bash -lc 'head -n 1 README.md'",
           "cwd": "/tmp/wdcc-real-trace-7oIzJe/sample-repo",
@@ -149,12 +113,17 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 18,
+        "seq": 19,
         "turnId": "trace:codex:S10:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-32",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-25",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 14997,
+          "outputTokens": 99,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 15,
+          "scope": "attempt",
+          "generationMs": 74
         },
         "at": "<timestamp>",
         "native": {
@@ -183,10 +152,10 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 20,
+        "seq": 21,
         "turnId": "trace:codex:S10:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_083bb6b7bf77e4b8016af4fa95c05887d09ef94c179a9b6d9f",
+        "itemKey": "msg_083bb6b7bf77e4b8016af4fa95c05887d09ef94c179a9b6d9f",
         "data": {
           "text": "`README.md` 的第一行是：\n\n`# Sample Repo`",
           "phase": "final",
@@ -207,12 +176,17 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 21,
+        "seq": 22,
         "turnId": "trace:codex:S10:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-50",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-43",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15123,
+          "outputTokens": 18,
+          "cacheReadInputTokens": 14848,
+          "reasoningOutputTokens": 0,
+          "scope": "attempt",
+          "generationMs": 6
         },
         "at": "<timestamp>",
         "native": {
@@ -243,7 +217,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_083bb6b7bf77e4b8016af4fa95c05887d09ef94c179a9b6d9f",
+        "itemKey": "msg_083bb6b7bf77e4b8016af4fa95c05887d09ef94c179a9b6d9f",
         "text": "`README.md` 的第一行是：\n\n`# Sample Repo`"
       }
     ],
@@ -253,6 +227,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 30120,
+      "outputTokens": 117,
+      "cacheReadInputTokens": 28160,
+      "reasoningOutputTokens": 15,
+      "scope": "turn",
+      "generationMs": 80,
+      "tokensPerSecond": 1462.5
     }
   },
   {
@@ -265,27 +248,15 @@
     "startedAt": "<timestamp>",
     "durationMs": 0,
     "endedAt": "<timestamp>",
-    "userSeq": 25,
+    "userSeq": 26,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:codex:S10",
-        "seq": 28,
-        "turnId": "trace:codex:S10:turn:2",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-55",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S10",
-        "seq": 31,
+        "seq": 33,
         "turnId": "trace:codex:S10:turn:2",
         "kind": "reasoning",
-        "itemKey": "item-rs_083bb6b7bf77e4b8016af4fa97b9b087d08b3cfe5ef92476de",
+        "itemKey": "rs_083bb6b7bf77e4b8016af4fa97b9b087d08b3cfe5ef92476de",
         "data": {
           "text": ""
         },
@@ -301,10 +272,10 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 32,
+        "seq": 34,
         "turnId": "trace:codex:S10:turn:2",
         "kind": "assistant.message",
-        "itemKey": "item-msg_083bb6b7bf77e4b8016af4fa97e7c887d08501c359260e8d00",
+        "itemKey": "msg_083bb6b7bf77e4b8016af4fa97e7c887d08501c359260e8d00",
         "data": {
           "text": "我会读取 `README.md` 的第二行。",
           "phase": "interim",
@@ -325,10 +296,10 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 33,
+        "seq": 35,
         "turnId": "trace:codex:S10:turn:2",
         "kind": "command",
-        "itemKey": "item-exec-da4ba419-e2aa-473d-afaa-d02e047893e2",
+        "itemKey": "exec-da4ba419-e2aa-473d-afaa-d02e047893e2",
         "data": {
           "command": "/bin/bash -lc \"sed -n '2p' README.md\"",
           "cwd": "/tmp/wdcc-real-trace-7oIzJe/sample-repo",
@@ -364,12 +335,17 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 34,
+        "seq": 36,
         "turnId": "trace:codex:S10:turn:2",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-77",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-68",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15155,
+          "outputTokens": 93,
+          "cacheReadInputTokens": 14976,
+          "reasoningOutputTokens": 7,
+          "scope": "attempt",
+          "generationMs": 54
         },
         "at": "<timestamp>",
         "native": {
@@ -398,10 +374,10 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 36,
+        "seq": 38,
         "turnId": "trace:codex:S10:turn:2",
         "kind": "assistant.message",
-        "itemKey": "item-msg_083bb6b7bf77e4b8016af4fa9af2e087d0b4403347e8c8f10d",
+        "itemKey": "msg_083bb6b7bf77e4b8016af4fa9af2e087d0b4403347e8c8f10d",
         "data": {
           "text": "`README.md` 的第二行为空行。",
           "phase": "final",
@@ -422,12 +398,17 @@
       },
       {
         "sessionId": "trace:codex:S10",
-        "seq": 37,
+        "seq": 39,
         "turnId": "trace:codex:S10:turn:2",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-91",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-82",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15271,
+          "outputTokens": 14,
+          "cacheReadInputTokens": 14976,
+          "reasoningOutputTokens": 0,
+          "scope": "attempt",
+          "generationMs": 5
         },
         "at": "<timestamp>",
         "native": {
@@ -458,7 +439,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_083bb6b7bf77e4b8016af4fa9af2e087d0b4403347e8c8f10d",
+        "itemKey": "msg_083bb6b7bf77e4b8016af4fa9af2e087d0b4403347e8c8f10d",
         "text": "`README.md` 的第二行为空行。"
       }
     ],
@@ -468,6 +449,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 30426,
+      "outputTokens": 107,
+      "cacheReadInputTokens": 29952,
+      "reasoningOutputTokens": 7,
+      "scope": "turn",
+      "generationMs": 59,
+      "tokensPerSecond": 1813.5593220338983
     }
   }
 ]

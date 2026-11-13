@@ -14,311 +14,54 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S05",
-        "seq": 93,
+        "seq": 26,
+        "turnId": "trace:dsh:S05:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-1",
+        "data": {
+          "text": "The user wants me to create /tmp/wdcc-trace-probe-2.txt with content \"ok\". The working directory is /tmp/wdcc-real-trace-MKp1jP/sample-repo, and file policy is workspace-write with workspace /tmp/wdcc-real-trace-MKp1jP/sample-repo. Writing to /tmp/wdcc-trace-probe-2.txt is outside the workspace, so the sandbox may deny it. Approval prompts are enabled, so I should attempt and if denied, retry with sandbox_permissions escalated and justification.\n\nLet me just try writing.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S05",
+        "seq": 58,
         "turnId": "trace:dsh:S05:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-a1c4db9b-6d8d-4cc1-b088-ba5f7b058130",
+        "itemKey": "msg-live-2",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S05",
+        "seq": 60,
+        "turnId": "trace:dsh:S05:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-3",
+        "data": {
+          "inputTokens": 762,
+          "outputTokens": 197,
+          "cacheReadInputTokens": 8192,
+          "scope": "attempt",
+          "generationMs": 575
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 25,
-              "time": 1794482387220,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "The user wants me to create /tmp/wdcc-trace-probe-2.txt with content \"ok\". The working directory is /tmp/wdcc-real-trace-MKp1jP/sample-repo, and file policy is workspace-write with workspace /tmp/wdcc-real-trace-MKp1jP/sample-repo. Writing to /tmp/wdcc-trace-probe-2.txt is outside the workspace, so the sandbox may deny it. Approval prompts are enabled, so I should attempt and if denied, retry with sandbox_permissions escalated and justification.\n\nLet me just try writing."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_itym10e6lr71ezsbdv3cqswl",
-                      "name": "write",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-trace-probe-2.txt\",\"content\":\"ok\\n\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482385385b3d24476cb0847a2446e1bf5e527b37b3993b7",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "a1c4db9b-6d8d-4cc1-b088-ba5f7b058130"
-                },
-                "usage": {
-                  "inputTokens": 762,
-                  "outputTokens": 197,
-                  "totalTokens": 9151,
-                  "cacheReadTokens": 8192
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482386646,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482386647,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      55,
-                      0,
-                      1,
-                      0,
-                      66,
-                      1,
-                      10,
-                      0,
-                      76,
-                      0,
-                      0,
-                      0,
-                      46,
-                      1,
-                      0,
-                      0,
-                      64,
-                      0,
-                      0,
-                      0,
-                      74,
-                      0,
-                      0,
-                      1,
-                      65,
-                      0,
-                      0
-                    ],
-                    "texts": [
-                      "The",
-                      " user wants",
-                      " me to create /tmp/w",
-                      "dcc-trace-probe",
-                      "-2.txt with",
-                      " content \"ok\". The working",
-                      " directory is /tmp",
-                      "/wdcc-real",
-                      "-trace-M",
-                      "Kp1jP/s",
-                      "ample-repo, and",
-                      " file policy is workspace",
-                      "-write with workspace /",
-                      "tmp/wdcc-real-t",
-                      "race-MKp1j",
-                      "P/sample-repo.",
-                      " Writing to /tmp/w",
-                      "dcc-trace-probe",
-                      "-2.txt is outside the",
-                      " workspace,",
-                      " so the",
-                      " sandbox may deny",
-                      " it. Approval prompts are",
-                      " enabled, so I should attempt",
-                      " and if denied",
-                      ", retry with",
-                      " sandbox_permissions escalated",
-                      " and",
-                      " justification.\n\nLet me just try",
-                      " writing."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482387108,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482387108,
-                    "index": 1,
-                    "dt": [
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      5,
-                      0,
-                      17,
-                      1,
-                      9,
-                      1,
-                      0,
-                      0,
-                      15,
-                      0,
-                      0,
-                      0,
-                      59,
-                      0
-                    ],
-                    "id": "call_00_itym10e6lr71ezsbdv3cqswl",
-                    "name": "write",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-t",
-                      "race",
-                      "-pro",
-                      "be",
-                      "-",
-                      "2",
-                      ".txt",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "content",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "ok",
-                      "\\n",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482387219,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "The user wants me to create /tmp/wdcc-trace-probe-2.txt with content \"ok\". The working directory is /tmp/wdcc-real-trace-MKp1jP/sample-repo, and file policy is workspace-write with workspace /tmp/wdcc-real-trace-MKp1jP/sample-repo. Writing to /tmp/wdcc-trace-probe-2.txt is outside the workspace, so the sandbox may deny it. Approval prompts are enabled, so I should attempt and if denied, retry with sandbox_permissions escalated and justification.\n\nLet me just try writing."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482387219,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_itym10e6lr71ezsbdv3cqswl",
-                        "name": "write",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-trace-probe-2.txt\",\"content\":\"ok\\n\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482387219,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 762,
-                        "outputTokens": 197,
-                        "totalTokens": 9151,
-                        "cacheReadTokens": 8192
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482387219,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482385385b3d24476cb0847a2446e1bf5e527b37b3993b7",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 762,
+            "outputTokens": 197,
+            "totalTokens": 9151,
+            "cacheReadTokens": 8192
           }
         }
       },
       {
         "sessionId": "trace:dsh:S05",
-        "seq": 95,
+        "seq": 64,
         "turnId": "trace:dsh:S05:turn:1",
         "kind": "file.change",
         "itemKey": "tool-call_00_itym10e6lr71ezsbdv3cqswl",
@@ -337,288 +80,96 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 27,
-              "time": 1794482387232,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_itym10e6lr71ezsbdv3cqswl"
-                  },
-                  "toolCallId": "call_00_itym10e6lr71ezsbdv3cqswl",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-trace-probe-2.txt</path>\n<type>file</type>\n<content>\nUpdated file\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "94d7f7d8-7442-4f68-93a2-183d4b0b783c"
-                },
-                "meta": {
-                  "operation": "update",
-                  "path": "/tmp/wdcc-trace-probe-2.txt",
-                  "diffs": [
-                    {
-                      "path": "/tmp/wdcc-trace-probe-2.txt",
-                      "oldText": "ok",
-                      "newText": "ok"
-                    }
-                  ]
-                }
+          "type": "tool/result",
+          "seq": 27,
+          "time": 1794482387232,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_itym10e6lr71ezsbdv3cqswl"
               },
-              "sourceEventSeqs": [
-                26
+              "toolCallId": "call_00_itym10e6lr71ezsbdv3cqswl",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-trace-probe-2.txt</path>\n<type>file</type>\n<content>\nUpdated file\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "94d7f7d8-7442-4f68-93a2-183d4b0b783c"
+            },
+            "meta": {
+              "operation": "update",
+              "path": "/tmp/wdcc-trace-probe-2.txt",
+              "diffs": [
+                {
+                  "path": "/tmp/wdcc-trace-probe-2.txt",
+                  "oldText": "ok",
+                  "newText": "ok"
+                }
+              ]
             }
-          }
+          },
+          "sourceEventSeqs": [
+            26
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S05",
-        "seq": 131,
+        "seq": 69,
+        "turnId": "trace:dsh:S05:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-4",
+        "data": {
+          "text": "It succeeded. Verify content.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S05",
+        "seq": 92,
         "turnId": "trace:dsh:S05:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-a1c7f878-4b19-4c90-9ab1-3e065a249513",
+        "itemKey": "msg-live-5",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S05",
+        "seq": 94,
+        "turnId": "trace:dsh:S05:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-6",
+        "data": {
+          "inputTokens": 362,
+          "outputTokens": 55,
+          "cacheReadInputTokens": 8832,
+          "scope": "attempt",
+          "generationMs": 1726
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 31,
-              "time": 1794482388946,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "It succeeded. Verify content."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_pqj7dtwe9o4tk3hi2pu5837z",
-                      "name": "read",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-trace-probe-2.txt\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482387742b3d24476cb0847a2446e1bf5e527b37b3ebcdf",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "a1c7f878-4b19-4c90-9ab1-3e065a249513"
-                },
-                "usage": {
-                  "inputTokens": 362,
-                  "outputTokens": 55,
-                  "totalTokens": 9249,
-                  "cacheReadTokens": 8832
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482388843,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482388844,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0
-                    ],
-                    "texts": [
-                      "It",
-                      " succeeded. Verify content",
-                      "."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482388844,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482388845,
-                    "index": 1,
-                    "dt": [
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      13,
-                      1,
-                      0,
-                      0,
-                      19,
-                      0,
-                      1,
-                      0,
-                      63,
-                      1
-                    ],
-                    "id": "call_00_pqj7dtwe9o4tk3hi2pu5837z",
-                    "name": "read",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-t",
-                      "race",
-                      "-pro",
-                      "be",
-                      "-",
-                      "2",
-                      ".txt",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482388945,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "It succeeded. Verify content."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482388946,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_pqj7dtwe9o4tk3hi2pu5837z",
-                        "name": "read",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-trace-probe-2.txt\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482388946,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 362,
-                        "outputTokens": 55,
-                        "totalTokens": 9249,
-                        "cacheReadTokens": 8832
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482388946,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482387742b3d24476cb0847a2446e1bf5e527b37b3ebcdf",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 362,
+            "outputTokens": 55,
+            "totalTokens": 9249,
+            "cacheReadTokens": 8832
           }
         }
       },
       {
         "sessionId": "trace:dsh:S05",
-        "seq": 133,
+        "seq": 98,
         "turnId": "trace:dsh:S05:turn:1",
         "kind": "file.read",
         "itemKey": "tool-call_00_pqj7dtwe9o4tk3hi2pu5837z",
@@ -627,235 +178,78 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 33,
-              "time": 1794482388953,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_pqj7dtwe9o4tk3hi2pu5837z"
-                  },
-                  "toolCallId": "call_00_pqj7dtwe9o4tk3hi2pu5837z",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-trace-probe-2.txt</path>\n<type>file</type>\n<content>\n1: ok\n\n(End of file - total 1 lines)\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "f4afa7ba-496e-4920-8dca-01c3392db235"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-trace-probe-2.txt",
-                  "offset": 1,
-                  "lines": [
-                    {
-                      "number": 1,
-                      "text": "ok"
-                    }
-                  ],
-                  "totalLines": 1
-                }
+          "type": "tool/result",
+          "seq": 33,
+          "time": 1794482388953,
+          "data": {
+            "turn": 1,
+            "step": 2,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_pqj7dtwe9o4tk3hi2pu5837z"
               },
-              "sourceEventSeqs": [
-                32
+              "toolCallId": "call_00_pqj7dtwe9o4tk3hi2pu5837z",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-trace-probe-2.txt</path>\n<type>file</type>\n<content>\n1: ok\n\n(End of file - total 1 lines)\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "f4afa7ba-496e-4920-8dca-01c3392db235"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-trace-probe-2.txt",
+              "offset": 1,
+              "lines": [
+                {
+                  "number": 1,
+                  "text": "ok"
+                }
+              ],
+              "totalLines": 1
             }
-          }
+          },
+          "sourceEventSeqs": [
+            32
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S05",
-        "seq": 167,
+        "seq": 102,
         "turnId": "trace:dsh:S05:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-4c3729f5-04fd-4cc1-a26e-7714801ac75d",
+        "itemKey": "msg-live-7",
         "data": {
           "text": "File created: `/tmp/wdcc-trace-probe-2.txt` (absolute, outside the workspace) now contains `ok`.\n\n- No sandbox denial occurred, and no approval prompt was needed, so no escalated retry was required.\n- Note: approval prompts are enabled in this session, so a future write outside the workspace may prompt you."
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S05",
+        "seq": 104,
+        "turnId": "trace:dsh:S05:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-8",
+        "data": {
+          "inputTokens": 215,
+          "outputTokens": 73,
+          "cacheReadInputTokens": 9088,
+          "scope": "attempt",
+          "generationMs": 2203
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 36,
-              "time": 1794482391148,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "File created: `/tmp/wdcc-trace-probe-2.txt` (absolute, outside the workspace) now contains `ok`.\n\n- No sandbox denial occurred, and no approval prompt was needed, so no escalated retry was required.\n- Note: approval prompts are enabled in this session, so a future write outside the workspace may prompt you."
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482389460b3d24476cb0847a2446e1bf5e527b37b4d69dd",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "4c3729f5-04fd-4cc1-a26e-7714801ac75d"
-                },
-                "usage": {
-                  "inputTokens": 215,
-                  "outputTokens": 73,
-                  "totalTokens": 9376,
-                  "cacheReadTokens": 9088
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482390696,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482390696,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      4,
-                      63,
-                      0,
-                      0,
-                      1,
-                      70,
-                      1,
-                      0,
-                      0,
-                      92,
-                      0,
-                      0,
-                      1,
-                      57,
-                      1,
-                      0,
-                      0,
-                      62,
-                      0,
-                      0,
-                      1,
-                      98,
-                      0
-                    ],
-                    "texts": [
-                      "File",
-                      " created: `/tmp/wd",
-                      "cc-trace-probe-",
-                      "2.txt`",
-                      " (absolute",
-                      ", outside",
-                      " the workspace)",
-                      " now",
-                      " contains `ok",
-                      "`.\n\n- No sand",
-                      "box denial",
-                      " occurred",
-                      ", and no",
-                      " approval prompt was needed,",
-                      " so no escalated",
-                      " retry was required",
-                      ".\n- Note: approval",
-                      " prompts are enabled",
-                      " in",
-                      " this session, so",
-                      " a future write",
-                      " outside the workspace may",
-                      " prompt",
-                      " you",
-                      "."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482391148,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "File created: `/tmp/wdcc-trace-probe-2.txt` (absolute, outside the workspace) now contains `ok`.\n\n- No sandbox denial occurred, and no approval prompt was needed, so no escalated retry was required.\n- Note: approval prompts are enabled in this session, so a future write outside the workspace may prompt you."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482391148,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 215,
-                        "outputTokens": 73,
-                        "totalTokens": 9376,
-                        "cacheReadTokens": 9088
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482391148,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482389460b3d24476cb0847a2446e1bf5e527b37b4d69dd",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 215,
+            "outputTokens": 73,
+            "totalTokens": 9376,
+            "cacheReadTokens": 9088
           }
         }
       }
@@ -863,7 +257,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-4c3729f5-04fd-4cc1-a26e-7714801ac75d",
+        "itemKey": "msg-live-7",
         "text": "File created: `/tmp/wdcc-trace-probe-2.txt` (absolute, outside the workspace) now contains `ok`.\n\n- No sandbox denial occurred, and no approval prompt was needed, so no escalated retry was required.\n- Note: approval prompts are enabled in this session, so a future write outside the workspace may prompt you."
       }
     ],
@@ -881,6 +275,14 @@
       "reads": 1,
       "edits": 1,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 1339,
+      "outputTokens": 325,
+      "cacheReadInputTokens": 26112,
+      "scope": "turn",
+      "generationMs": 4504,
+      "tokensPerSecond": 72.15808170515099
     }
   }
 ]

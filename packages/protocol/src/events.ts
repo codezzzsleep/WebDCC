@@ -25,6 +25,11 @@ export type EventKind =
 export interface UsageData {
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  reasoningOutputTokens?: number;
+  totalCostUsd?: number;
+  modelUsage?: Record<string, unknown>;
   cacheHitRatio?: number;
   contextRatio?: number;
   tokensPerSecond?: number;

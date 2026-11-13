@@ -14,224 +14,42 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S11",
-        "seq": 67,
+        "seq": 63,
         "turnId": "trace:dsh:S11:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-c2297437-98b6-4ca5-85ed-714ea0b201dd",
+        "itemKey": "msg-live-1",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S11",
+        "seq": 64,
+        "turnId": "trace:dsh:S11:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-2",
+        "data": {
+          "inputTokens": 442,
+          "outputTokens": 73,
+          "cacheReadInputTokens": 8448,
+          "scope": "attempt",
+          "generationMs": 263
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 17,
-              "time": 1794482499596,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_b3wevipo8iuxr1oddbb591su",
-                      "name": "bash",
-                      "arguments": "{\"command\":\"seq 1 3000 | tail -n 1\",\"description\":\"Print last number of seq 1 3000\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482498408b3d24476cb0847a2446e1bf5e527b37b8a39ad",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "c2297437-98b6-4ca5-85ed-714ea0b201dd"
-                },
-                "usage": {
-                  "inputTokens": 442,
-                  "outputTokens": 73,
-                  "totalTokens": 8963,
-                  "cacheReadTokens": 8448
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482499336,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482499336,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      1,
-                      19,
-                      0,
-                      0,
-                      1,
-                      17,
-                      155,
-                      0,
-                      0,
-                      1,
-                      0,
-                      8,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      35,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0
-                    ],
-                    "id": "call_00_b3wevipo8iuxr1oddbb591su",
-                    "name": "bash",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "command",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "seq",
-                      " ",
-                      "1",
-                      " ",
-                      "300",
-                      "0",
-                      " |",
-                      " tail",
-                      " -",
-                      "n",
-                      " ",
-                      "1",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "description",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "Print",
-                      " last",
-                      " number",
-                      " of",
-                      " seq",
-                      " ",
-                      "1",
-                      " ",
-                      "300",
-                      "0",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482499596,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_b3wevipo8iuxr1oddbb591su",
-                        "name": "bash",
-                        "arguments": "{\"command\":\"seq 1 3000 | tail -n 1\",\"description\":\"Print last number of seq 1 3000\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482499596,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 442,
-                        "outputTokens": 73,
-                        "totalTokens": 8963,
-                        "cacheReadTokens": 8448
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482499596,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482498408b3d24476cb0847a2446e1bf5e527b37b8a39ad",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 442,
+            "outputTokens": 73,
+            "totalTokens": 8963,
+            "cacheReadTokens": 8448
           }
         }
       },
       {
         "sessionId": "trace:dsh:S11",
-        "seq": 71,
+        "seq": 70,
         "turnId": "trace:dsh:S11:turn:1",
         "kind": "command",
         "itemKey": "tool-call_00_b3wevipo8iuxr1oddbb591su",
@@ -242,181 +60,70 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 21,
-              "time": 1794482499703,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_b3wevipo8iuxr1oddbb591su"
-                  },
-                  "toolCallId": "call_00_b3wevipo8iuxr1oddbb591su",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "3000\n"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "73640597-15c3-42b1-bb4d-ebbcb46a449f"
-                },
-                "meta": {
-                  "cwd": "/tmp/wdcc-real-trace-Wsrod4/sample-repo"
-                }
+          "type": "tool/result",
+          "seq": 21,
+          "time": 1794482499703,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_b3wevipo8iuxr1oddbb591su"
               },
-              "sourceEventSeqs": [
-                18
+              "toolCallId": "call_00_b3wevipo8iuxr1oddbb591su",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "3000\n"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "73640597-15c3-42b1-bb4d-ebbcb46a449f"
+            },
+            "meta": {
+              "cwd": "/tmp/wdcc-real-trace-Wsrod4/sample-repo"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            18
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S11",
-        "seq": 83,
+        "seq": 75,
         "turnId": "trace:dsh:S11:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-c356ebe0-6feb-49fd-b23e-0a394a8cfe78",
+        "itemKey": "msg-live-3",
         "data": {
           "text": "3000"
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S11",
+        "seq": 77,
+        "turnId": "trace:dsh:S11:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-4",
+        "data": {
+          "inputTokens": 146,
+          "outputTokens": 3,
+          "cacheReadInputTokens": 8832,
+          "scope": "attempt",
+          "generationMs": 1787
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 25,
-              "time": 1794482501383,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "3000"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482500214b3d24476cb0847a2446e1bf5e527b37b4859ff",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "c356ebe0-6feb-49fd-b23e-0a394a8cfe78"
-                },
-                "usage": {
-                  "inputTokens": 146,
-                  "outputTokens": 3,
-                  "totalTokens": 8981,
-                  "cacheReadTokens": 8832
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482501382,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482501382,
-                    "index": 0,
-                    "dt": [
-                      0
-                    ],
-                    "texts": [
-                      "300",
-                      "0"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482501383,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "3000"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482501383,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 146,
-                        "outputTokens": 3,
-                        "totalTokens": 8981,
-                        "cacheReadTokens": 8832
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482501383,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482500214b3d24476cb0847a2446e1bf5e527b37b4859ff",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 146,
+            "outputTokens": 3,
+            "totalTokens": 8981,
+            "cacheReadTokens": 8832
           }
         }
       }
@@ -424,7 +131,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-c356ebe0-6feb-49fd-b23e-0a394a8cfe78",
+        "itemKey": "msg-live-3",
         "text": "3000"
       }
     ],
@@ -434,6 +141,14 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 588,
+      "outputTokens": 76,
+      "cacheReadInputTokens": 17280,
+      "scope": "turn",
+      "generationMs": 2050,
+      "tokensPerSecond": 37.07317073170732
     }
   }
 ]

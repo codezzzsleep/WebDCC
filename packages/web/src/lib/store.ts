@@ -71,6 +71,7 @@ export class AppStore {
   /** 非当前查看的会话完成/等待审批时的未读数（A13） */
   unread = new Map<string, number>();
   currentSessionId: string | null = null;
+  private visibleSessionIds = new Set<string>();
   feedSeq = 0;
   /** 窄屏抽屉侧边栏（F9） */
   drawerOpen = false;
@@ -100,6 +101,14 @@ export class AppStore {
     this.feedSeq = (await cache.getMeta<number>('feedSeq').catch(() => 0)) ?? 0;
     this.notify();
     this.connection.start();
+    const readVisible = (): void => {
+      if (document.visibilityState !== 'visible') return;
+      let changed = false;
+      for (const id of this.visibleSessionIds) changed = this.unread.delete(id) || changed;
+      if (changed) this.notify();
+    };
+    document.addEventListener('visibilitychange', readVisible);
+    window.addEventListener('focus', readVisible);
     performance.mark('wdcc:init-end');
   }
 
@@ -196,7 +205,7 @@ export class AppStore {
         break;
       }
       case 'event': {
-        this.applyEvent(message.event);
+        this.applyEvent(message.event, message.history === true);
         break;
       }
       case 'snapshot': {
@@ -264,13 +273,17 @@ export class AppStore {
     }
   }
 
-  setCurrentSession(sessionId: string | null): void {
+  setCurrentSession(sessionId: string | null, dockSessionId?: string): void {
     this.currentSessionId = sessionId;
-    if (sessionId !== null && this.unread.delete(sessionId)) this.notify();
+    this.visibleSessionIds = new Set([sessionId, dockSessionId].filter((id): id is string => typeof id === 'string'));
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    let changed = false;
+    for (const id of this.visibleSessionIds) changed = this.unread.delete(id) || changed;
+    if (changed) this.notify();
   }
 
   private bumpUnread(sessionId: string, title: string): void {
-    if (this.currentSessionId === sessionId) return;
+    if (this.visibleSessionIds.has(sessionId) && (typeof document === 'undefined' || document.visibilityState !== 'hidden')) return;
     this.unread.set(sessionId, (this.unread.get(sessionId) ?? 0) + 1);
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -301,13 +314,14 @@ ${text}`;
     this.setDraft(sessionId, next, current.fileIds);
   }
 
-  applyEvent(event: StoredEvent): void {
+  applyEvent(event: StoredEvent, historical = false): void {
     const map = this.events.get(event.sessionId) ?? new Map<number, StoredEvent>();
+    const seen = map.has(event.seq);
     map.set(event.seq, event);
     this.events.set(event.sessionId, map);
     const hot = this.hot.get(event.sessionId);
     if (hot !== undefined) hot.delete(event.itemKey);
-    if (event.kind === 'turn.completed' || event.kind === 'approval.request') {
+    if (!seen && !historical && (event.kind === 'turn.completed' || event.kind === 'approval.request')) {
       this.bumpUnread(event.sessionId, this.sessions.get(event.sessionId)?.title ?? '会话');
     }
     if (event.kind === 'user.message') {
