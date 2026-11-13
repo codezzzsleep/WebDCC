@@ -14,7 +14,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/files\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/files\//, /\.(?:jpe?g|png|gif|webp|avif|bmp|ico)(?:[?#]|$)/i],
         cleanupOutdatedCaches: true,
         // 只预缓存应用外壳；/api 永不缓存
         runtimeCaching: [],
