@@ -1,10 +1,11 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdapterEvent, CreateOpts, UserInput } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import { FakeAdapter } from '@webdcc/fake-adapter';
 import { SessionManager } from '../src/manager.js';
-import { classifyCodexFailure } from '../src/watchdog.js';
+import { classifyCodexFailure, nativeHistoryPath } from '../src/watchdog.js';
 import { createTestApp, seedWorkspaceAndSession, type TestApp } from './helpers.js';
 
 const RESOURCE_ERROR = 'OpenAI Responses bad request: The requested item was created under a different *** OpenAI resource. Use the same resource that created the item to access it.';
@@ -63,17 +64,21 @@ describe('Codex Watchdog', () => {
     expect(classifyCodexFailure('command exited with code 1')).toBeUndefined();
   });
 
-  it('全局设置默认关闭，并要求认证及有效的有界设置', async () => {
+  it('默认关闭，两项次数默认不限，用户可独立设置任意有效次数', async () => {
     const route = '/api/watchdog';
     expect((await ctx.app.inject({ method: 'GET', url: route })).statusCode).toBe(401);
     expect((await ctx.app.inject({ method: 'PATCH', url: route, payload: { enabled: true } })).statusCode).toBe(401);
     const get = await ctx.app.inject({ method: 'GET', url: route, headers: { cookie: ctx.cookie } });
     expect(get.json().settings.enabled).toBe(false);
-    for (const payload of [{ enabled: 'yes' }, { maxAttempts: 0 }, { maxAttempts: 1 }, { baseDelaySeconds: 4000 }, { unknown: true }, null]) {
+    expect(get.json().settings.maxAttempts).toBeNull();
+    expect(get.json().settings.maxHandoffs).toBeNull();
+    for (const payload of [{ enabled: 'yes' }, { maxAttempts: 0 }, { maxHandoffs: -1 }, { baseDelaySeconds: 4000 }, { unknown: true }, null]) {
       expect((await ctx.app.inject({ method: 'PATCH', url: route, headers: { cookie: ctx.cookie }, payload })).statusCode).toBe(400);
     }
     const result = await ctx.app.inject({ method: 'PATCH', url: route, headers: { cookie: ctx.cookie }, payload: { enabled: true } });
     expect(result.statusCode).toBe(200); expect(ctx.store.watchdogSettings()?.enabled).toBe(true);
+    const custom = await ctx.app.inject({ method: 'PATCH', url: route, headers: { cookie: ctx.cookie }, payload: { maxAttempts: 1, maxHandoffs: 1000 } });
+    expect(custom.statusCode).toBe(200); expect(custom.json().settings).toMatchObject({ maxAttempts: 1, maxHandoffs: 1000 });
   });
 
   it('默认关闭不发送任何自动消息，且不影响其他 Harness', async () => {
@@ -132,10 +137,13 @@ describe('Codex Watchdog', () => {
     expect(child?.nativeId).not.toBe(source.nativeId); expect(child?.parentId).toBe(source.id);
     expect(child).toMatchObject({ workspaceId: source.workspaceId, providerId: 'test-provider', model: 'fake-model', reasoningEffort: 'high', accessMode: 'workspace' });
     const send = codex.sent.find((item) => item.sessionId === targetId);
-    expect(send?.input.images).toBeUndefined(); expect(send?.input.text).toContain('暂不上线'); expect(send?.input.text).toContain(source.nativeId);
+    expect(send?.input.images).toBeUndefined(); expect(send?.input.text).not.toContain('暂不上线'); expect(send?.input.text).toContain(source.nativeId);
+    expect(send?.input.text.length).toBeLessThan(350);
+    expect(send?.input.text).toContain('看一下这个会话的完整上下文，然后继续做');
     expect(send?.input.text).not.toContain('must-not-copy');
-    const contextPath = /完整文字交接记录：([^\n]+)/.exec(send?.input.text ?? '')?.[1] as string;
-    expect(await readFile(contextPath, 'utf8')).toContain('已完成数据库迁移');
+    const contextPath = /会话记录：([^\n]+)/.exec(send?.input.text ?? '')?.[1] as string;
+    const record = await readFile(contextPath, 'utf8');
+    expect(record).toContain('已完成数据库迁移'); expect(record).toContain('暂不上线'); expect(record).not.toContain('must-not-copy');
     expect(codex.resumed).toHaveLength(0);
   });
 
@@ -236,15 +244,17 @@ describe('Codex Watchdog', () => {
     expect(codex.sent).toHaveLength(1); expect(ctx.store.watchdogJob(sessionId)?.status).toBe('cancelled');
   });
 
-  it('交接任务运行中不会在旧会话并发执行，停止来源会话会停止接续轮次', async () => {
+  it('平级会话分别操作，旧会话发送和停止不会控制新会话', async () => {
     enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
     await ctx.manager.send(sessionId, { text: '开发任务' }); codex.finish(sessionId, 'failed', RESOURCE_ERROR);
     await vi.advanceTimersByTimeAsync(5000);
     await vi.waitFor(() => expect(ctx.store.watchdogJob(sessionId)?.status).toBe('handed-off'));
     const child = ctx.store.watchdogJob(sessionId)?.targetSessionId as string;
-    await expect(ctx.manager.send(sessionId, { text: '继续' })).rejects.toThrow('接续会话');
+    await ctx.manager.send(sessionId, { text: '旧会话的新消息' });
+    expect(ctx.manager.getRuntime(child)?.turnId).not.toBeNull();
     await ctx.manager.interrupt(sessionId);
-    expect(ctx.manager.getRuntime(child)?.turnId).toBeNull();
+    expect(ctx.manager.getRuntime(sessionId)?.turnId).toBeNull();
+    expect(ctx.manager.getRuntime(child)?.turnId).not.toBeNull();
     await vi.advanceTimersByTimeAsync(60_000); expect(codex.created).toHaveLength(2);
   });
 
@@ -284,5 +294,94 @@ describe('Codex Watchdog', () => {
     await ctx.manager.dispose(sessionId);
     expect(codex.sent).toHaveLength(1);
     expect(ctx.manager.getRuntime(sessionId)).toBeUndefined();
+  });
+
+  it('无限恢复超过十次后仍会退避继续，且可取消', async () => {
+    enable({ maxAttempts: null, maxHandoffs: 3, maxDelaySeconds: 20 });
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '持续任务' });
+    codex.afterSend = (id) => codex.finish(id, 'failed', '429 token rate limit exceeded');
+    codex.finish(sessionId, 'failed', '429 token rate limit exceeded');
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(ctx.store.watchdogJob(sessionId)?.attempts).toBeGreaterThan(10);
+    expect(ctx.store.watchdogJob(sessionId)?.status).toBe('scheduled');
+    expect(codex.sent.slice(1).every((item) => item.input.text === '继续')).toBe(true);
+    const count = codex.sent.length;
+    ctx.manager.watchdog.cancel(sessionId);
+    await vi.advanceTimersByTimeAsync(300_000); expect(codex.sent).toHaveLength(count);
+  });
+
+  it('改为无限后自动接续此前因十次上限耗尽的会话，保留原计数和身份', async () => {
+    enable({ maxAttempts: 10, maxHandoffs: 3, maxDelaySeconds: 20 });
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    const nativeId = ctx.store.getSession(sessionId)?.nativeId;
+    await ctx.manager.send(sessionId, { text: '持续任务' });
+    codex.afterSend = (id) => codex.finish(id, 'failed', '429 token rate limit exceeded');
+    codex.finish(sessionId, 'failed', '429 token rate limit exceeded');
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(ctx.store.watchdogJob(sessionId)).toMatchObject({ status: 'exhausted', attempts: 10 });
+    ctx.manager.watchdog.configure({ maxAttempts: null });
+    expect(ctx.store.watchdogJob(sessionId)).toMatchObject({ status: 'scheduled', attempts: 10 });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(ctx.store.watchdogJob(sessionId)).toMatchObject({ status: 'scheduled', attempts: 11 });
+    expect(ctx.store.getSession(sessionId)?.nativeId).toBe(nativeId);
+    expect(codex.created).toHaveLength(1);
+  });
+
+  it('无限模式不取消三次转交上限', async () => {
+    enable({ maxAttempts: null, maxHandoffs: 3, maxDelaySeconds: 20 });
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '持续任务' });
+    codex.afterSend = (id) => codex.finish(id, 'failed', RESOURCE_ERROR);
+    codex.finish(sessionId, 'failed', RESOURCE_ERROR);
+    let current = sessionId;
+    for (let index = 0; index < 3; index += 1) {
+      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.waitFor(() => expect(ctx.store.watchdogJob(current)?.status).toBe('handed-off'));
+      current = ctx.store.watchdogJob(current)?.targetSessionId as string;
+    }
+    expect(ctx.store.watchdogJob(current)).toMatchObject({ status: 'exhausted', handoffs: 3, rootSessionId: sessionId });
+    await vi.advanceTimersByTimeAsync(100_000); expect(codex.created).toHaveLength(4);
+  });
+
+  it('无限恢复的高计数不会使等待时间溢出', async () => {
+    enable({ maxAttempts: null, maxDelaySeconds: 20 });
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '持续任务' });
+    codex.finish(sessionId, 'failed', '429 rate limit exceeded');
+    const job = ctx.store.watchdogJob(sessionId); if (job === undefined) throw new Error('missing job');
+    ctx.store.saveWatchdogJob({ ...job, attempts: 10000, retries: 10000 });
+    codex.afterSend = (id) => codex.finish(id, 'failed', '429 rate limit exceeded');
+    await vi.advanceTimersByTimeAsync(5000);
+    const next = ctx.store.watchdogJob(sessionId);
+    expect(next?.attempts).toBe(10001);
+    expect(Date.parse(next?.nextAttemptAt ?? '') - Date.now()).toBe(20_000);
+  });
+
+  it('旧会话 ID 能定位原生完整记录，并对缺失记录回退', async () => {
+    const home = join(ctx.dataDir, 'native-history');
+    const dir = join(home, 'sessions', '2026', '11', '13'); await mkdir(dir, { recursive: true });
+    const id = '00000000-0000-0000-0000-000000000001';
+    const path = join(dir, `rollout-test-${id}.jsonl`); await writeFile(path, '{"type":"user"}\n');
+    expect(await nativeHistoryPath(id, home)).toBe(path);
+    expect(await nativeHistoryPath('00000000-0000-0000-0000-000000000002', home)).toBeUndefined();
+    expect(await nativeHistoryPath('../unsafe', home)).toBeUndefined();
+  });
+
+  it('不限转交可以超过三次，且不消耗用户设置的续跑次数', async () => {
+    enable({ maxAttempts: 1, maxHandoffs: null, maxDelaySeconds: 20 });
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '持续任务' });
+    codex.afterSend = (id) => codex.finish(id, 'failed', RESOURCE_ERROR);
+    codex.finish(sessionId, 'failed', RESOURCE_ERROR);
+    let current = sessionId;
+    for (let index = 0; index < 5; index += 1) {
+      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.waitFor(() => expect(ctx.store.watchdogJob(current)?.status).toBe('handed-off'));
+      current = ctx.store.watchdogJob(current)?.targetSessionId as string;
+    }
+    expect(ctx.store.watchdogJob(current)).toMatchObject({ status: 'scheduled', handoffs: 5, retries: 0 });
+    ctx.manager.watchdog.cancel(current); await vi.advanceTimersByTimeAsync(100_000);
+    expect(codex.created).toHaveLength(6);
   });
 });
