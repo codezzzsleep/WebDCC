@@ -567,7 +567,8 @@ function approvalWhat(data: EventData['approval.request']): string {
 
 function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['approval.request'] }): React.ReactElement {
   useStoreVersion();
-  const [clicked, setClicked] = useState(false);
+  const submission = store.getInteractionSubmission(event.sessionId, 'approve', data.approvalId);
+  const busy = submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
   // 处理过的审批要显示结果、不再显示按钮（F11 / F17）；结果也可能来自其他界面
   const resolution = [...store.getEvents(event.sessionId)]
     .reverse()
@@ -614,6 +615,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
         <summary>详情</summary>
         <pre className="output">{data.detail}</pre>
       </details>
+      <InteractionStatus submission={submission} />
       <div className="approval-actions">
         {data.options.map((option, index) => {
           const deny = /deny|reject|decline|cancel/i.test(option.id);
@@ -622,9 +624,8 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
               key={option.id}
               type="button"
               className={`btn ${index === 0 && !deny ? 'primary' : ''}`}
-              disabled={clicked}
+              disabled={busy}
               onClick={() => {
-                setClicked(true);
                 store.approve(event.sessionId, data.approvalId, option.id);
               }}
             >
@@ -637,15 +638,27 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
   );
 }
 
+function InteractionStatus({ submission }: { submission: ReturnType<typeof store.getInteractionSubmission> }): React.ReactElement | null {
+  if (submission === undefined) return null;
+  const text = submission.status === 'failed' ? submission.error ?? '提交失败，请重试'
+    : submission.status === 'uncertain' ? '提交结果待核对，请等待会话同步'
+    : submission.status === 'collected' ? '此答案已保存，等待其他问题'
+    : submission.status === 'sent' ? '已提交，等待原生结果'
+    : store.connectionState === 'online' ? '正在提交…' : '等待连接后提交…';
+  return <p role={submission.status === 'failed' ? 'alert' : 'status'}>{text}</p>;
+}
+
 function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['question'] }): React.ReactElement {
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState('');
-  const [submitted, setSubmitted] = useState(data.status === 'answered' || data.status === 'skipped');
-  if (submitted) {
+  useStoreVersion();
+  const submission = store.getInteractionSubmission(event.sessionId, 'answer', data.questionId);
+  const busy = submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
+  if (data.status === 'answered' || data.status === 'skipped') {
     return (
       <div className="approval-card resolved" data-testid="question-card" data-state="resolved">
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>已回答</span>
+        <span>{data.status === 'skipped' ? '已取消' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
       </div>
     );
@@ -678,13 +691,13 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
       {data.allowsFreeText !== false ? (
         <input className="text-input" placeholder="其他（可选）" aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
       ) : null}
+      <InteractionStatus submission={submission} />
       <div className="approval-actions">
         <button
           type="button"
           className="btn primary"
-          disabled={selected.length === 0 && text.trim() === ''}
+          disabled={busy || selected.length === 0 && text.trim() === ''}
           onClick={() => {
-            setSubmitted(true);
             store.answer(event.sessionId, data.questionId, { selected, custom: text });
           }}
         >

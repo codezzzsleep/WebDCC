@@ -10,6 +10,7 @@ import type {
   SessionDto,
   StoredEvent,
   UserInput,
+  AnswerSubmission,
 } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
@@ -403,7 +404,7 @@ export class SessionManager {
       this.finishTurn(runtime, 'failed', `native-outcome-uncertain: ${message}`);
       throw error;
     }
-    if (runtime.turnId === turnId) this.setStatus(runtime, 'running');
+    if (runtime.turnId === turnId) this.refreshInteractionStatus(runtime);
     this.touchIdle(runtime);
   }
 
@@ -413,9 +414,6 @@ export class SessionManager {
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.respond(sessionId, decision);
     this.turns.resume(sessionId);
-    if (runtime.turnId !== null) this.setStatus(runtime, 'running');
-    // 轮次已经结束之后才到的审批：处理完不要停在"待批准"
-    if (runtime.turnId === null) this.setStatus(runtime, 'idle');
     const resolvedTurn = runtime.turnId;
     const event = this.store.appendEvent({
       sessionId,
@@ -425,31 +423,47 @@ export class SessionManager {
       data: { approvalId: decision.approvalId, optionId: decision.optionId, by: 'user' },
     });
     this.hooks.onEvent(event);
+    this.refreshInteractionStatus(runtime);
     this.touchIdle(runtime);
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<AnswerSubmission> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.answer === undefined) throw Object.assign(new Error('该 Agent 不支持回答问题'), { statusCode: 400 });
     const result = await runtime.adapter.answer(sessionId, questionId, answer);
-    if (result?.submitted === false) return;
+    if (result?.submitted === false) return result;
     this.turns.resume(sessionId);
-    const question = this.store.allEvents(sessionId).find((event) => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId);
-    if (question !== undefined) {
+    for (const id of result?.questionIds ?? [questionId]) {
+      const question = this.store.allEvents(sessionId).find((event) => event.kind === 'question' && (event.data as EventData['question']).questionId === id);
+      if (question === undefined) continue;
       const data = question.data as EventData['question'];
       const resolved = this.store.appendEvent({
         sessionId,
-        turnId: runtime.turnId,
-        itemKey: `question-resolved-${questionId}`,
+        turnId: question.turnId,
+        itemKey: `question-resolved-${id}`,
         kind: 'question',
         data: { ...data, status: 'answered' },
       });
       this.hooks.onEvent(resolved);
     }
-    if (runtime.turnId !== null) this.setStatus(runtime, 'running');
+    this.refreshInteractionStatus(runtime);
     this.touchIdle(runtime);
+    return result ?? { submitted: true, questionIds: [questionId] };
+  }
+
+  private refreshInteractionStatus(runtime: Runtime): void {
+    const questions = new Map<string, EventData['question']>();
+    const approvals = new Set<string>();
+    for (const event of this.store.allEvents(runtime.sessionId)) {
+      if (runtime.turnId !== null && event.turnId !== runtime.turnId) continue;
+      if (event.kind === 'question') { const question = event.data as EventData['question']; questions.set(question.questionId, question); }
+      if (event.kind === 'approval.request') approvals.add((event.data as EventData['approval.request']).approvalId);
+      if (event.kind === 'approval.resolved') approvals.delete((event.data as EventData['approval.resolved']).approvalId);
+    }
+    const waiting = approvals.size > 0 || [...questions.values()].some(question => question.status !== 'answered' && question.status !== 'skipped');
+    this.setStatus(runtime, waiting ? 'waiting' : runtime.turnId === null ? 'idle' : 'running');
   }
 
   async interrupt(sessionId: string): Promise<void> {

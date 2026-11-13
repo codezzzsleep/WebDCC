@@ -72,8 +72,8 @@ export class CommandDispatcher {
           return { ok: true };
         }
         case 'answer': {
-          await this.manager.answer(command.sessionId, command.questionId, command.answer);
-          return { ok: true };
+          const value = await this.manager.answer(command.sessionId, command.questionId, command.answer);
+          return { ok: true, value };
         }
         case 'interrupt': {
           if (typeof command.createdAt === 'number' && Date.now() - command.createdAt > INTERRUPT_TTL_MS) {

@@ -50,6 +50,12 @@ export interface TurnModel extends TurnView {
   pending?: PendingMessage;
 }
 
+export interface InteractionSubmission {
+  commandId: string;
+  status: 'pending' | 'collected' | 'sent' | 'failed' | 'uncertain';
+  error?: string;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -63,6 +69,7 @@ export class AppStore {
   private queueRevisions = new Map<string, number>();
   private drafts = new Map<string, { text: string; fileIds: string[] }>();
   private outbox = new Map<string, { command: Command; status: PendingMessage['status'] }>();
+  private interactionSubmissions = new Map<string, InteractionSubmission>();
   private listeners = new Set<() => void>();
   private derived = new Map<string, { version: number; turns: TurnModel[] }>();
   /** 每个会话的订阅游标：新浏览器打开大会话时从服务端最新 seq 开始，不整段重拉 */
@@ -262,6 +269,15 @@ export class AppStore {
       }
       case 'ack': {
         const entry = this.outbox.get(message.clientCommandId);
+        if (entry !== undefined && (entry.command.op === 'answer' || entry.command.op === 'approve')) {
+          const command = entry.command;
+          const id = command.op === 'answer' ? command.questionId : command.approvalId;
+          const key = JSON.stringify([command.sessionId, command.op, id]);
+          if (this.interactionSubmissions.get(key)?.commandId === message.clientCommandId) {
+            const collected = message.result.ok && (message.result.value as { submitted?: unknown } | undefined)?.submitted === false;
+            this.interactionSubmissions.set(key, { commandId: message.clientCommandId, status: message.result.ok ? collected ? 'collected' : 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed', ...(message.result.ok ? {} : { error: message.result.error }) });
+          }
+        }
         if (entry !== undefined) {
           entry.status = message.result.ok ? 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed';
           this.outbox.set(message.clientCommandId, entry);
@@ -541,9 +557,17 @@ ${text}`;
 
   private enqueue(command: Command): void {
     this.outbox.set(command.clientCommandId, { command, status: 'pending' });
+    if (command.op === 'approve' || command.op === 'answer') {
+      this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: 'pending' });
+      this.notify();
+    }
     void cache.putOutbox({ clientCommandId: command.clientCommandId, command, status: 'pending', createdAt: Date.now() }).then(() => this.connection.sendCommand(command)).catch(() => {
       const entry = this.outbox.get(command.clientCommandId);
       if (entry !== undefined) entry.status = 'failed';
+      if (command.op === 'approve' || command.op === 'answer') {
+        const key = JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]);
+        if (this.interactionSubmissions.get(key)?.commandId === command.clientCommandId) this.interactionSubmissions.set(key, { commandId: command.clientCommandId, status: 'failed', error: '答案未能保存，请重试' });
+      }
       for (const item of this.pending.get('sessionId' in command ? command.sessionId : '') ?? []) if (item.clientCommandId === command.clientCommandId) item.status = 'failed';
       this.notify();
     });
@@ -561,6 +585,7 @@ ${text}`;
     for (const entry of entries) {
       this.outbox.set(entry.clientCommandId, { command: entry.command as Command, status: entry.status });
       const command = entry.command as Command;
+      if (command.op === 'approve' || command.op === 'answer') this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: entry.status === 'uncertain' ? 'uncertain' : entry.status === 'failed' ? 'failed' : 'pending' });
       if (command.op === 'send') {
         const list = this.pending.get(command.sessionId) ?? [];
         list.push({ clientCommandId: command.clientCommandId, text: command.text, at: new Date(entry.createdAt).toISOString(), status: entry.status });
@@ -587,10 +612,16 @@ ${text}`;
   }
 
   approve(sessionId: string, approvalId: string, optionId: string): void {
+    if (['pending', 'sent', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'approve', approvalId)?.status ?? '')) return;
     this.enqueue({ op: 'approve', clientCommandId: ulid(), sessionId, approvalId, optionId });
   }
 
+  getInteractionSubmission(sessionId: string, op: 'answer' | 'approve', id: string): InteractionSubmission | undefined {
+    return this.interactionSubmissions.get(JSON.stringify([sessionId, op, id]));
+  }
+
   answer(sessionId: string, questionId: string, answer: unknown): void {
+    if (['pending', 'sent', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'answer', questionId)?.status ?? '')) return;
     this.enqueue({ op: 'answer', clientCommandId: ulid(), sessionId, questionId, answer });
   }
 

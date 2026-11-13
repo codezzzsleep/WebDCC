@@ -340,7 +340,9 @@
           "packages/server/src/store.ts",
           "packages/protocol/src/user-echo.ts",
           "packages/server/test/native-history.spec.ts",
-          "scripts/l1-replay.ts"
+          "scripts/l1-replay.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/test/turn.spec.ts"
         ],
         "actualFiles": [
           "packages/web/src/lib/store.ts",
@@ -351,7 +353,9 @@
           "packages/server/src/store.ts",
           "packages/protocol/src/user-echo.ts",
           "packages/server/test/native-history.spec.ts",
-          "scripts/l1-replay.ts"
+          "scripts/l1-replay.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/test/turn.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -361,7 +365,7 @@
           "同native事件重放10次只有一个语义投影，空snapshot清除旧hot。",
           "任意seq，包括turnId=null、unknown、内部帧，都能定位查看；live与replay结果一致。"
         ],
-        "remainingWork": "DSH 恢复历史使用持久原生轮次映射与事务去重；全运行时 raw ledger、版本化可重建投影、历史范围持久化、实时和回放完整统一仍待完成。"
+        "remainingWork": "共享 reducer 按原生条目/问题身份呈现最新投影，更新事件不会重复工具计数或重现旧 pending 卡。完整 raw ledger、持久缺口区间、版本化重建和全部生产/回放同步仍待完成。"
       },
       "dependencyIds": [
         "NP-02",
@@ -414,7 +418,12 @@
           "packages/adapters/codex/src/handler.spec.ts",
           "packages/protocol/src/adapter.ts",
           "packages/server/src/manager.ts",
-          "packages/adapters/dsh/test/interactions.spec.ts"
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "browser-tests/interactions.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -426,7 +435,12 @@
           "packages/adapters/codex/src/handler.spec.ts",
           "packages/protocol/src/adapter.ts",
           "packages/server/src/manager.ts",
-          "packages/adapters/dsh/test/interactions.spec.ts"
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "browser-tests/interactions.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -436,7 +450,7 @@
           "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
           "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
         ],
-        "remainingWork": "DSH 多题在原生批量 ACK 前不显示完成，失败保留可重试；完整跨浏览器权威状态机、MCP 表单、secret、取消/超时对账仍待完成。"
+        "remainingWork": "多题收集/传输提交与卡片完成分开，三 adapter 提交后统一更新整组问题；提交失败保留输入，旧 ACK 不覆盖新重试，uncertain 不自动重发。Chromium 原始 UI→WS→manager→adapter→回复→刷新链路已做隔离回归。持久权威 interaction、跨浏览器并发仲裁、真正 native 解决确认、secret/URL/form、超时和全部取消对账仍待完成。"
       },
       "dependencyIds": [
         "NP-03",
@@ -601,10 +615,16 @@
         "implementation": "in-progress",
         "verification": "partial-local",
         "plannedFiles": [
-          "packages/adapters/claude/src/adapter.ts"
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/adapters/claude/src/content.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/src/content.spec.ts"
         ],
         "actualFiles": [
-          "packages/adapters/claude/src/adapter.ts"
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/adapters/claude/src/content.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/src/content.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -614,7 +634,7 @@
           "compact/task/status生产listener与replay具有相同保留策略。",
           "权限切换后换模型保持effective权限；工具失败不产生成功任务或用户中断假象。"
         ],
-        "remainingWork": "Full block/system/generation/lifecycle contracts remain incomplete."
+        "remainingWork": "已分离块级 reducer，以 actor/message/index/generation 保留身份；多文本块、thinking/text、单块 SDK 完成、子 Agent 交错和主结果不关闭后台子块有回归。压缩、任务和未知系统消息保留；失败按 terminal_reason 区分中断。完整 SDK query 生命周期、全部内容类型/任务实体、换模型故障和真实 native 验收仍待完成。"
       },
       "dependencyIds": [
         "NP-02",
@@ -1005,7 +1025,9 @@
           "packages/protocol/test/native-evidence.spec.ts",
           "packages/testing/fake-adapter/src/replay.ts",
           "packages/protocol/src/user-echo.ts",
-          "packages/server/test/native-history.spec.ts"
+          "packages/server/test/native-history.spec.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/server/test/helpers.ts"
         ],
         "actualFiles": [
           "scripts/lib/gate-report.ts",
@@ -1019,18 +1041,21 @@
           "packages/protocol/test/native-evidence.spec.ts",
           "packages/testing/fake-adapter/src/replay.ts",
           "packages/protocol/src/user-echo.ts",
-          "packages/server/test/native-history.spec.ts"
+          "packages/server/test/native-history.spec.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/server/test/helpers.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/dsh-recovery-l1.json"
+          "web_review/evidence/dsh-recovery-l1.json",
+          "web_review/evidence/claude-block-l1.json"
         ],
         "remainingAcceptance": [
           "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",
           "S04/S05/S08必须实际发生请求并从浏览器允许/拒绝/回答，验证原生结果。",
           "失败套件也生成报告；M8 ratchet真正执行并比较相同ID，不以文件存在代替。"
         ],
-        "remainingWork": "回放身份映射与生产共用按命令 ID 的消息去重；真实 DSH S01 经 manager 不重复本地输入。L1 仍拒绝 16 个未触发谓词和 11 个过时 golden；没有重写 golden。完整当前原生验收与独立参考/历史路径仍待完成。"
+        "remainingWork": "新增真实 Chromium 原始源码 UI 问答失败/重试/刷新回归，临时页面实际由测试服务器提供，未关闭 Chromium 安全检查。L1 当前无 I1–I8 失败但 22 个旧 golden 与 16 个未触发谓词仍使门禁失败；原 golden 未修改，完整原生证据仍待采集。"
       },
       "dependencyIds": [
         "NP-01",

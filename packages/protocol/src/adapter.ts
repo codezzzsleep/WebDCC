@@ -56,6 +56,11 @@ export interface ApprovalDecision {
   optionId: string;
 }
 
+export interface AnswerSubmission {
+  submitted: boolean;
+  questionIds?: string[];
+}
+
 export interface LaunchSpec {
   command?: string;
   args?: string[];
@@ -114,7 +119,7 @@ export interface AgentAdapter {
   respond(sessionId: string, d: ApprovalDecision): Promise<void>;
   /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
   cancelPending?(sessionId: string): Promise<void>;
-  answer?(sessionId: string, questionId: string, answer: unknown): Promise<void | { submitted: boolean }>;
+  answer?(sessionId: string, questionId: string, answer: unknown): Promise<void | AnswerSubmission>;
   setModel?(sessionId: string, model: string): Promise<void>;
   setReasoningEffort?(sessionId: string, effort: string): Promise<void>;
   /** 切换访问模式（F6）；Codex 在下一次 turn/start 生效，返回值是实际生效的模式 */

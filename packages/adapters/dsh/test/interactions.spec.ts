@@ -25,7 +25,7 @@ it('NP-11 keeps questions after failed replies and closes each card on a native 
   client.rpc = async () => { throw new Error('offline'); };
   await expect(replay.adapter.answer('session', 'question:two', { selected: [], custom: 'second text' })).rejects.toThrow('offline');
   client.rpc = rpc;
-  expect(await replay.adapter.answer('session', 'question:two', { selected: [], custom: 'second text' })).toEqual({ submitted: true });
+  expect(await replay.adapter.answer('session', 'question:two', { selected: [], custom: 'second text' })).toEqual({ submitted: true, questionIds: ['question:one', 'question:two'] });
   expect(replay.replies.at(-1)).toMatchObject({ endpoint: '$events/result', args: { eventId: 'question', outcome: { value: { answers: [{ id: 'one', selected: [], custom: 'first text' }, { id: 'two', selected: [], custom: 'second text' }] } } } });
   expect(DshHostClient.prototype.rpc).toBe(original);
   replay.feed(frame({ type: 'waterfall', event: 'user-questions/request', eventId: 'cancel-me', request: { questions: [{ id: 'one', question: 'pending' }] } }));

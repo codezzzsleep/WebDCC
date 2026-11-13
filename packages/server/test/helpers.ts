@@ -38,7 +38,7 @@ for (const key of ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'DSH_HOME'] as con
 process.env['WDCC_TEST_HOOKS'] = '1';
 assertTestIsolation(process.env);
 
-export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN, configPatch: Partial<Config> = {}): Promise<TestApp> {
+export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN, configPatch: Partial<Config> = {}, options: { webDist?: string } = {}): Promise<TestApp> {
   const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-test-'));
   const db: Db = openDb(':memory:');
   const store = new Store(db);
@@ -64,7 +64,7 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
 
   const dsh = new DshConnectionStore(dataDir);
   await dsh.init();
-  const { app, hub } = await buildApp({ config, store, files, manager, providers, dsh });
+  const { app, hub } = await buildApp({ config, store, files, manager, providers, dsh, ...options });
   manager.setHooks({
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),

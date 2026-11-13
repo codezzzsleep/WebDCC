@@ -67,6 +67,15 @@ function assistantText(event: StoredEvent): string {
   return typeof data.text === 'string' ? data.text : '';
 }
 
+function currentItems(events: readonly StoredEvent[]): StoredEvent[] {
+  const items = new Map<string, StoredEvent>();
+  for (const event of events) {
+    const key = event.kind === 'question' ? `question:${(event.data as EventData['question']).questionId}` : `${event.kind}:${event.itemKey}`;
+    items.set(key, event);
+  }
+  return [...items.values()];
+}
+
 function isFinalNativeAssistant(event: StoredEvent): boolean {
   if (event.kind !== 'assistant.message') return false;
   const native = record(event.native);
@@ -81,7 +90,7 @@ function isFinalNativeAssistant(event: StoredEvent): boolean {
 /** Decide the answer once at turn completion.  This function is pure and can
  * be used both for old rows (which have no answerItemKeys) and live turns. */
 export function resolveAnswer(events: readonly StoredEvent[]): { itemKey: string; text: string }[] {
-  const assistants = events.filter((event) => event.kind === 'assistant.message' && assistantText(event) !== '');
+  const assistants = currentItems(events).filter((event) => event.kind === 'assistant.message' && assistantText(event) !== '');
   if (assistants.length === 0) return [];
 
   const completed = [...events].reverse().find((event) => event.kind === 'turn.completed');
@@ -192,7 +201,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnVi
   const pendingQuestions = events.some((event) => event.kind === 'question' && (event.data as EventData['question']).status !== 'answered' && (event.data as EventData['question']).status !== 'skipped' && !events.some((resolved) => resolved.kind === 'question' && resolved !== event && (resolved.data as EventData['question']).questionId === (event.data as EventData['question']).questionId && ((resolved.data as EventData['question']).status === 'answered' || (resolved.data as EventData['question']).status === 'skipped')));
   const waiting = pendingApprovals || pendingQuestions || live.some((item) => item.kind === 'approval.request' || item.kind === 'question');
   const state = completedData?.status ?? (started === undefined ? 'starting' : waiting ? 'waiting' : 'running');
-  const steps = events.filter((event) => !['user.message', 'turn.started', 'turn.completed', 'internal'].includes(event.kind));
+  const steps = currentItems(events).filter((event) => !['user.message', 'turn.started', 'turn.completed', 'internal'].includes(event.kind));
   const answer = completedData?.answerItemKeys
     ? completedData.answerItemKeys.flatMap((key) => {
         const event = events.find((candidate) => candidate.itemKey === key && candidate.kind === 'assistant.message');
@@ -204,10 +213,10 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnVi
   const latestPlan = [...events].reverse().find((event) => event.kind === 'plan');
   const latestGoal = [...events].reverse().find((event) => event.kind === 'goal');
   const summary = {
-    commands: events.filter((event) => event.kind === 'command').length,
-    reads: events.filter((event) => event.kind === 'file.read').length,
-    edits: events.filter((event) => event.kind === 'file.change' || event.kind === 'turn.diff').length,
-    tools: events.filter((event) => event.kind === 'tool.call').length,
+    commands: steps.filter((event) => event.kind === 'command').length,
+    reads: steps.filter((event) => event.kind === 'file.read').length,
+    edits: steps.filter((event) => event.kind === 'file.change' || event.kind === 'turn.diff').length,
+    tools: steps.filter((event) => event.kind === 'tool.call').length,
   };
   const startedAt = started?.at ?? userEvent?.at ?? first?.at ?? new Date(0).toISOString();
   return {

@@ -707,7 +707,7 @@ export class CodexAdapter implements AgentAdapter {
     runtime.approvals.delete(decision.approvalId);
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<{ submitted: boolean; questionIds?: string[] }> {
     const runtime = this.sessions.get(sessionId);
     const candidates = [...(runtime?.approvals ?? [])].filter(([id, pending]) => pending.kind === 'userInput' && pending.questionIds?.some(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId));
     const entry = candidates.length === 1 ? candidates[0] : undefined;
@@ -718,9 +718,10 @@ export class CodexAdapter implements AgentAdapter {
     const value = normalizeQuestionAnswer(answer).values;
     pending.answers ??= Object.create(null) as Record<string, { answers: string[] }>;
     pending.answers[nativeId] = { answers: value };
-    if (Object.keys(pending.answers).length < (pending.questionIds?.length ?? 0)) return;
+    if (Object.keys(pending.answers).length < (pending.questionIds?.length ?? 0)) return { submitted: false };
     runtime.rpc.respond(pending.requestId, { answers: pending.answers });
     runtime.approvals.delete(id);
+    return { submitted: true, questionIds: (pending.questionIds ?? []).map(question => `${id}:${question}`) };
   }
 
   /** 打断时把挂起的审批回 decline，避免 JSON-RPC 请求悬空 */

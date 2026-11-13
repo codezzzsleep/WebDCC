@@ -7,6 +7,25 @@ function event(seq: number, kind: StoredEvent['kind'], data: unknown, itemKey = 
 }
 
 describe('M9 unified turn model', () => {
+  it('NP-05/06 shows one current item and one current question after replacement projections', () => {
+    const events = [
+      event(1, 'user.message', { text: 'ask' }),
+      event(2, 'turn.started', {}),
+      event(3, 'question', { questionId: 'q', prompt: 'question' }, 'question-original'),
+      event(4, 'command', { command: 'test', status: 'running' }, 'command'),
+      event(5, 'command', { command: 'test', status: 'completed' }, 'command'),
+      event(6, 'question', { questionId: 'q', prompt: 'question', status: 'answered' }, 'question-resolved'),
+      event(7, 'approval.request', { approvalId: 'approval', title: 'approve', detail: '', options: [] }, 'approval'),
+      event(8, 'approval.resolved', { approvalId: 'approval', optionId: 'deny', by: 'user' }, 'approval'),
+    ];
+    const view = reduceTurn(events);
+    expect(view.steps.filter(event => event.kind === 'question')).toHaveLength(1);
+    expect(view.steps.find(event => event.kind === 'question')?.data).toMatchObject({ status: 'answered' });
+    expect(view.steps.filter(event => event.kind === 'command')).toHaveLength(1);
+    expect(view.summary.commands).toBe(1);
+    expect(view.steps.filter(event => event.kind === 'approval.request')).toHaveLength(1);
+    expect(view.state).toBe('running');
+  });
   it('uses native final_answer and keeps encrypted empty reasoning closed', () => {
     const events = [
       event(1, 'user.message', { text: 'hi' }),

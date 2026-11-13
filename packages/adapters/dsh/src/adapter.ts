@@ -16,6 +16,7 @@ import type {
   TraceSink,
   TraceFrame,
   NativeHistoryRecord,
+  AnswerSubmission,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
@@ -669,7 +670,7 @@ export class DshAdapter implements AgentAdapter {
     }
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<{ submitted: boolean }> {
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<AnswerSubmission> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
     const entry = [...runtime.pending].find(([eventId, pending]) => pending.kind === 'question' && (questionId === eventId || pending.questionIds?.some(id => `${eventId}:${id}` === questionId)));
@@ -683,7 +684,7 @@ export class DshAdapter implements AgentAdapter {
     if (pending.answers.size < (pending.questionIds?.length ?? 1)) return { submitted: false };
     await this.call(client, '$events/result', { clientId: this.clientId, eventId, outcome: { kind: 'result', value: { answers: [...pending.answers.values()] } } }, sessionId);
     runtime.pending.delete(eventId);
-    return { submitted: true };
+    return { submitted: true, questionIds: (pending.questionIds ?? [id]).map(question => `${eventId}:${question}`) };
   }
 
   /** 运行期切换连接（设置页粘贴 DSH 链接后调用） */

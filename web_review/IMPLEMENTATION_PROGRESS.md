@@ -45,8 +45,19 @@
 - 51 个测试文件 / 218 项（阶段新增测试后以最新源码报告为准）；恢复前回调、事务回滚、SQLite 重开去重、无关旧轮次结束、真实 DSH S01 录制经 manager 不重复输入已通过针对性测试。
 - L1 3,681 帧重新检查后没有 I1–I8 语义不变量失败；仍有 16 个 NOT_TRIGGERED 与 11 个 GOLDEN。golden 因修复后的消息身份/内部保真事件与旧输出不一致；未修改 golden，门禁保持失败。完整 L1 历史投影统一仍待 NP-15 完成。
 
+## Claude 块与问答阶段（2026-11-13）
+
+- DSH 阶段源码已提交为 `d0ed37b`，仅独立分支本地提交；六类源码门禁通过。
+- Claude 的流式内容已提取到 actor/message/block/generation reducer；两个文本块分别完成、单块 SDK 投递、thinking/text 混排、主/子 Agent 同编号以及主结果不提前完成后台子块都有生产 Handler 回归。
+- Claude system/init、压缩、状态、任务与未知系统消息不再从生产路径丢弃；原生 API 错误不再统一误标用户中断，explicit aborted_* 按原生终态区分。
+- 三 adapter 的多题收集返回 submitted 状态和整组 questionIds；manager 等整组传输提交后同步问题卡。同步产生的问题不会被 send 成功后的 running 状态覆盖。
+- Web 问答/审批卡依据服务端事件确认完成，提交中不本地提前显示解决；失败保留原文、旧 ACK 不覆盖新重试、uncertain 保持等待对账。共用 Turn reducer 展示条目/问题最新投影，避免旧 pending 卡与重复工具计数。
+- Chromium 原始源码 UI→真实 WS→manager→Codex adapter fixture 回复→失败重试→刷新已走通，保留文本首尾空格。测试页面从临时目录真实提供，未关闭 Chromium 安全策略，未使用部署目录。
+- 局部测试通过；完整源码门禁正在刷新。已有单元测试 52 文件 / 227 项，新补背景子块回归后以最新报告为准；独立 Chromium 新增一项问答回归。L1 无 I1–I8 失败，但 22 个旧 GOLDEN 与 16 个 NOT_TRIGGERED 仍使门禁失败。未更新 golden；不宣称原生验收完成。
+- 仍需持久 interaction、跨浏览器竞争、真正 native 解决确认、secret、计时问题与 query 代际/换模型全生命周期；以上局部修复不代表 NP-06/09 已完整完成。
+
 ## 下一步
 
-完成当前源码门禁，提交独立分支源码检查点，然后继续 NP-09 Claude block/system/generation 和 NP-07 inherit/requested/effective；补持久 owner/reconciliation、完整 raw ledger、权威交互状态机及 secret 存储。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据。再按矩阵依赖推进全部 M1–M3。
+完成当前源码门禁，提交独立分支源码检查点，然后继续 NP-07 inherit/requested/effective 和 Claude query 控制/代际；补持久 owner/reconciliation、完整 raw ledger、权威交互状态机及 secret 存储。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据。再按矩阵依赖推进全部 M1–M3。
 
 运行入口：所有命令在 `/root/WebDCC-repair` 执行。`pnpm check:source` 构建只写 `.artifacts/<runId>/`；不要执行 release 或重启服务。真实 Codex 0.167.0 与付费模型对照尚未准备，不能拿 0.168.0 当基线通过证据。

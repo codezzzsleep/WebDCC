@@ -14,6 +14,7 @@ import type {
   UserInput,
   TraceSink,
   TraceFrame,
+  AnswerSubmission,
 } from '@webdcc/protocol';
 import {
   query,
@@ -26,6 +27,9 @@ import {
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { buildFileChanges, isValidEventData, traceFrame, normalizeQuestionAnswer } from '@webdcc/protocol';
+
+import { ClaudeContentReducer } from './content.js';
+import { claudeSystemEvent } from './system.js';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -178,15 +182,12 @@ interface SessionRuntime {
   generationMs: number;
   pending: Map<string, PendingInteraction>;
   toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
-  messageSeq: number;
   /** 会话的任务列表（F19：由 TaskCreate / TaskUpdate 及其结果算出） */
   tasks: Map<string, { text: string; status: 'pending' | 'in_progress' | 'completed' }>;
   taskOrder: string[];
   /** init 消息里的斜杠命令（F8） */
   slashCommands: string[];
-  /** 这一块是否已经发过 item.start（SDK 不一定给 block-start，按首个 delta 兜底） */
-  liveStarted: boolean;
-  liveItems: Map<number, { itemKey: string; kind: 'reasoning' | 'assistant.message'; text: string }>;
+  content: ClaudeContentReducer;
   ready: Promise<void>;
   frameSeq: number;
 }
@@ -227,6 +228,7 @@ export class ClaudeAdapter implements AgentAdapter {
   private readonly listeners: ((sessionId: string, event: AdapterEvent) => void)[] = [];
   private readonly sessions = new Map<string, SessionRuntime>();
   private readonly options: ClaudeAdapterOptions;
+  private readonly generations = new Map<string, number>();
 
   constructor(options: ClaudeAdapterOptions = {}) {
     this.options = options;
@@ -239,8 +241,8 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime: SessionRuntime = {
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
       pump: Promise.resolve(), turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
-      pending: new Map(), toolItems: new Map(), messageSeq: 0, tasks: new Map(), taskOrder: [],
-      slashCommands: [], liveStarted: false, liveItems: new Map(), ready: Promise.resolve(), frameSeq: 0,
+      pending: new Map(), toolItems: new Map(), tasks: new Map(), taskOrder: [],
+      slashCommands: [], content: new ClaudeContentReducer(1), ready: Promise.resolve(), frameSeq: 0,
     };
     adapter.sessions.set(sessionId, runtime);
     let events: AdapterEvent[] = [];
@@ -367,6 +369,8 @@ export class ClaudeAdapter implements AgentAdapter {
     };
 
     const q = query({ prompt: input.iterable, options: this.buildOptions(opts, canUseTool, resume) });
+    const generation = (this.generations.get(sessionId) ?? 0) + 1;
+    this.generations.set(sessionId, generation);
     const runtime: SessionRuntime = {
       nativeId: resume ?? '',
       ...(opts.model === undefined ? {} : { model: opts.model }),
@@ -379,12 +383,10 @@ export class ClaudeAdapter implements AgentAdapter {
       generationMs: 0,
       pending: new Map(),
       toolItems: new Map(),
-      messageSeq: 0,
       tasks: new Map(),
       taskOrder: [],
       slashCommands: [],
-      liveStarted: false,
-      liveItems: new Map(),
+      content: new ClaudeContentReducer(generation),
       ready,
       frameSeq: 0,
     };
@@ -396,8 +398,6 @@ export class ClaudeAdapter implements AgentAdapter {
         traceFrame(this.options.traceSink ?? opts.traceSink, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message });
         if (this.sessions.get(sessionId) !== runtime) return;
         if (message.type === 'system' && message.subtype === 'init') {
-          runtime.nativeId = message.session_id;
-          this.emit(sessionId, { type: 'native-id', nativeId: message.session_id });
           markReady();
         }
         this.onSdkMessage(sessionId, message);
@@ -507,7 +507,7 @@ export class ClaudeAdapter implements AgentAdapter {
     }
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<AnswerSubmission> {
     const runtime = this.sessions.get(sessionId);
     const pending = runtime?.pending.get(questionId.split(':')[0] ?? questionId);
     if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Claude 问题已结束或不存在'), { statusCode: 409 });
@@ -519,9 +519,10 @@ export class ClaudeAdapter implements AgentAdapter {
     pending.answers ??= Object.create(null) as Record<string, string>;
     pending.answers[String(question['question'] ?? '请回答')] = value.join(', ');
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'control', frame: { questionId, answer } });
-    if (Object.keys(pending.answers).length < questions.length) return;
+    if (Object.keys(pending.answers).length < questions.length) return { submitted: false };
     runtime.pending.delete(questionId.split(':')[0] ?? questionId);
     pending.resolve({ approved: true, optionId: 'answer', answers: pending.answers });
+    return { submitted: true, questionIds: questions.map((_, index) => `${questionId.split(':')[0]}:${index}`) };
   }
 
   debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
@@ -658,85 +659,24 @@ export class ClaudeAdapter implements AgentAdapter {
     switch (message.type) {
       case 'system': {
         if (message.subtype === 'init') {
-          const initMessage = message as unknown as { slash_commands?: string[]; slashCommands?: string[] };
-          runtime.slashCommands = initMessage.slash_commands ?? initMessage.slashCommands ?? [];
-          this.emit(sessionId, {
-            type: 'item.complete',
-            itemKey: `internal-init`,
-            kind: 'internal',
-            data: { nativeType: 'system/init' },
-            native: message,
-          });
+          runtime.nativeId = message.session_id;
+          this.emit(sessionId, { type: 'native-id', nativeId: message.session_id });
+          runtime.slashCommands = message.slash_commands ?? [];
         }
+        this.emit(sessionId, claudeSystemEvent(message, runtime.frameSeq));
         return;
       }
       case 'stream_event': {
-        const event = message.event as {
-          type?: string;
-          index?: number;
-          block?: { type?: string };
-          content_block?: { type?: string };
-          delta?: { type?: string; text?: string; thinking?: string };
-        };
-        if (event.type === 'content_block_start') {
-          runtime.generationStartedAt ??= this.now();
-          runtime.messageSeq += 1;
-          runtime.liveStarted = true;
-          const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
-          const blockType = event.content_block?.type ?? event.block?.type ?? 'text';
-          const itemKey = `msg-${runtime.messageSeq}-${index}`;
-          if (blockType !== 'text' && blockType !== 'thinking') return;
-          const kind = blockType === 'thinking' ? 'reasoning' : 'assistant.message';
-          runtime.liveItems.set(index, { itemKey, kind, text: '' });
-          this.emit(sessionId, {
-            type: 'item.start',
-            itemKey,
-            kind,
-            data: { text: '' },
-          });
-          return;
-        }
-        if (event.type === 'content_block_delta') {
-          runtime.generationStartedAt ??= this.now();
-          const delta = event.delta ?? {};
-          if (delta.type !== 'text_delta' && delta.type !== 'thinking_delta') return;
-          const index = typeof event.index === 'number' ? event.index : runtime.messageSeq;
-          let live = runtime.liveItems.get(index);
-          if (live === undefined) {
-            const kind = delta.type === 'thinking_delta' ? 'reasoning' : 'assistant.message';
-            live = { itemKey: `msg-${runtime.messageSeq}-${index}`, kind, text: '' };
-            runtime.liveItems.set(index, live);
-            this.emit(sessionId, { type: 'item.start', itemKey: live.itemKey, kind, data: { text: '' } });
-          }
-          if (delta.type === 'text_delta' && delta.text !== undefined) {
-            live.text += delta.text;
-            this.emit(sessionId, { type: 'item.delta', itemKey: live.itemKey, field: 'text', append: delta.text });
-          }
-          if (delta.type === 'thinking_delta' && delta.thinking !== undefined) {
-            live.text += delta.thinking;
-            this.emit(sessionId, { type: 'item.delta', itemKey: live.itemKey, field: 'text', append: delta.thinking });
-          }
-        }
+        if (message.event.type === 'content_block_start' || message.event.type === 'content_block_delta') runtime.generationStartedAt ??= this.now();
+        for (const event of runtime.content.stream(message)) this.emit(sessionId, event);
         return;
       }
       case 'assistant': {
         this.finishGeneration(runtime);
         const content = (message.message?.content ?? []) as unknown as Record<string, unknown>[];
-        const textParts = content.filter((block) => block['type'] === 'text').map((block) => String(block['text'] ?? ''));
-        const thinking = content.filter((block) => block['type'] === 'thinking').map((block) => String(block['thinking'] ?? '')).join('');
-        const hadLive = runtime.liveItems.size > 0;
-        for (const [index, live] of [...runtime.liveItems]) {
-          const text = live.kind === 'reasoning' ? thinking : textParts.join('\n');
-          this.emit(sessionId, { type: 'item.complete', itemKey: live.itemKey, kind: live.kind, data: { text }, native: message });
-          runtime.liveItems.delete(index);
-        }
-        if (!hadLive && thinking !== '' && textParts.length === 0) {
-          this.emit(sessionId, { type: 'item.complete', itemKey: `msg-${runtime.messageSeq}-thinking`, kind: 'reasoning', data: { text: thinking }, native: message });
-        }
-        if (!hadLive && textParts.length > 0 && content.length > 0) {
-          const key = `msg-${runtime.messageSeq}-complete`;
-          this.emit(sessionId, { type: 'item.complete', itemKey: key, kind: 'assistant.message', data: { text: textParts.join('\n') }, native: message });
-        }
+        const reduced = runtime.content.assistant(message);
+        for (const event of reduced.events) this.emit(sessionId, event);
+        if (reduced.duplicate) return;
         for (const block of content) {
           if (block['type'] !== 'tool_use') continue;
           const toolId = String(block['id'] ?? '');
@@ -831,17 +771,20 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'result': {
+        for (const event of runtime.content.flush(message.session_id)) this.emit(sessionId, event);
         const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; modelUsage?: Record<string, unknown>; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
         this.finishGeneration(runtime);
         const generationMs = runtime.generationMs > 0 ? runtime.generationMs : undefined;
         runtime.generationMs = 0;
         const resultText = (message as unknown as { result?: unknown }).result;
+        const aborted = message.terminal_reason === 'aborted_streaming' || message.terminal_reason === 'aborted_tools';
+        if (result.is_error === true && !aborted) this.emit(sessionId, { type: 'item.complete', itemKey: `result-error-${runtime.frameSeq}`, kind: 'error', data: { message: 'errors' in message && message.errors.length > 0 ? message.errors.join('\n') : 'Claude 原生执行失败' }, native: message });
         if (typeof resultText === 'string' && resultText !== '') {
           this.emit(sessionId, { type: 'item.complete', itemKey: `result-${runtime.frameSeq}`, kind: 'assistant.message', data: { text: resultText, nativePhase: 'final_result' }, native: message });
         }
         this.emit(sessionId, {
           type: 'turn.end',
-          status: result.is_error === true ? (result.subtype === 'error_during_execution' ? 'interrupted' : 'failed') : 'completed',
+          status: result.is_error === true ? aborted ? 'interrupted' : 'failed' : 'completed',
           ...(result.usage === undefined
             ? {}
             : { usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens, cacheReadInputTokens: result.usage.cache_read_input_tokens, cacheCreationInputTokens: result.usage.cache_creation_input_tokens, totalCostUsd: result.total_cost_usd, modelUsage: result.modelUsage, scope: 'turn', ...(generationMs === undefined ? {} : { generationMs }) } }),
@@ -850,6 +793,7 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       default:
+        this.emit(sessionId, { type: 'item.complete', itemKey: `unknown-sdk-${runtime.frameSeq}`, kind: 'unknown', data: { nativeType: message.type }, native: message });
         return;
     }
   }

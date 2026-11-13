@@ -23,3 +23,25 @@ it('NP-06 browser-shaped free text passes through HTTP, manager and the Codex na
     expect(native.replies).toEqual([{ id: 'opaque:request', result: { answers: { language: { answers: [custom] } } } }]);
   } finally { await ctx.close(); }
 });
+
+it('NP-06 keeps all cards pending while collecting a batch and resolves every question after submission', async () => {
+  const ctx = await createTestApp();
+  try {
+    const workspace = ctx.store.createWorkspace('batch', ctx.dataDir);
+    const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+    ctx.store.updateSession(session.id, { nativeId: 'native' });
+    const native = CodexAdapter.replay(session.id);
+    native.adapter.resume = async () => undefined;
+    native.adapter.send = async () => { native.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 'batch', method: 'item/tool/requestUserInput', params: { questions: [{ id: 'first', question: 'first' }, { id: 'second', question: 'second' }] } } }); };
+    native.adapter.dispose = async () => undefined;
+    ctx.manager.registerAdapter(native.adapter);
+    await ctx.manager.send(session.id, { text: 'ask' });
+    const ids = ctx.store.allEvents(session.id).filter(event => event.kind === 'question').map(event => (event.data as EventData['question']).questionId);
+    expect(await ctx.manager.answer(session.id, ids[0]!, { custom: 'first' })).toEqual({ submitted: false });
+    expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'question' && (event.data as EventData['question']).status === 'answered')).toHaveLength(0);
+    expect(ctx.manager.getRuntime(session.id)?.status).toBe('waiting');
+    await ctx.manager.answer(session.id, ids[1]!, { custom: 'second' });
+    expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'question' && (event.data as EventData['question']).status === 'answered')).toHaveLength(2);
+    expect(native.replies).toHaveLength(1);
+  } finally { await ctx.close(); }
+});
