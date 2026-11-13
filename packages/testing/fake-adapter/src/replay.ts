@@ -10,17 +10,23 @@ export interface ReplayAdapterOptions {
   speed?: number;
 }
 
+interface ReplayHandler {
+  feed: (frame: TraceFrame) => AdapterEvent[];
+  respond?: (decision: ApprovalDecision) => Promise<void>;
+  answer?: (questionId: string, answer: unknown) => Promise<void>;
+}
 export interface ReplayScript {
+  createHandler?: (sessionId: string) => ReplayHandler;
   key: string;
   prompt?: string;
   frames: TraceFrame[];
   translate: (frame: TraceFrame) => AdapterEvent[];
 }
 
-interface ReplaySession { cancelled: boolean; nativeId: string; script?: ReplayScript; cursor: number; lastT: number; }
+interface ReplaySession { cancelled: boolean; nativeId: string; script?: ReplayScript; handler?: ReplayHandler; cursor: number; lastT: number; }
 
-/** Adapter used by L2/L3: native frames are translated by the real pure
- * translator, then delivered at recorded relative times. */
+/** Adapter used by L2/L3: native frames are processed by the production
+ * Handler, then delivered at recorded relative times. */
 export class ReplayAdapter implements AgentAdapter {
   readonly kind = 'fake' as const;
   readonly id: AgentId;
@@ -52,6 +58,7 @@ export class ReplayAdapter implements AgentAdapter {
     }
     const script = session.script;
     if (script === undefined) throw new Error(`no replay recorded for input: ${input.text}`);
+    session.handler ??= script.createHandler?.(sessionId);
     const speed = this.options.speed ?? 1;
     let previous = session.lastT;
     for (; session.cursor < script.frames.length; session.cursor += 1) {
@@ -62,7 +69,7 @@ export class ReplayAdapter implements AgentAdapter {
       session.lastT = frame.t;
       if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
       if (session.cancelled) return;
-      const events = script.translate(frame);
+      const events = session.handler?.feed(frame) ?? script.translate(frame);
       for (const event of events) {
         this.emit(sessionId, event);
         // A single recorded trace can contain more than one user turn (S10).
@@ -76,6 +83,7 @@ export class ReplayAdapter implements AgentAdapter {
     }
   }
   async interrupt(sessionId: string): Promise<void> { const session = this.sessions.get(sessionId); if (session !== undefined) session.cancelled = true; }
-  async respond(_sessionId: string, _decision: ApprovalDecision): Promise<void> { return; }
+  async respond(sessionId: string, decision: ApprovalDecision): Promise<void> { await this.sessions.get(sessionId)?.handler?.respond?.(decision); }
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> { await this.sessions.get(sessionId)?.handler?.answer?.(questionId, answer); }
   async dispose(sessionId: string): Promise<void> { this.sessions.delete(sessionId); }
 }

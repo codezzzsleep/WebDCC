@@ -1,7 +1,7 @@
 [
   {
     "turnId": "trace:claude-code:S09:turn:1",
-    "state": "failed",
+    "state": "interrupted",
     "user": {
       "text": "运行命令 false-command-wdcc（它不存在），把报错原样告诉我，不要重试。",
       "at": "<timestamp>"
@@ -11,12 +11,51 @@
     "endedAt": "<timestamp>",
     "userSeq": 1,
     "activity": null,
-    "steps": [],
+    "steps": [
+      {
+        "sessionId": "trace:claude-code:S09",
+        "seq": 23,
+        "turnId": "trace:claude-code:S09:turn:1",
+        "kind": "command",
+        "itemKey": "tool-toolu_01VhHg2mgoN4xf1dxeYYgvsk",
+        "data": {
+          "command": "false-command-wdcc",
+          "status": "failed",
+          "outputTail": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "content": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+                "is_error": true,
+                "tool_use_id": "toolu_01VhHg2mgoN4xf1dxeYYgvsk"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "519c445c-85ee-490c-9f7d-cd5b26ead37e",
+          "uuid": "36e1ddf0-2883-4d05-856c-38b92c3a4a03",
+          "timestamp": "2026-11-11T23:35:28.506Z",
+          "tool_use_result": "User rejected tool use",
+          "tool_result_meta": [
+            {
+              "id": "toolu_01VhHg2mgoN4xf1dxeYYgvsk",
+              "non_execution_kind": "user-rejected"
+            }
+          ]
+        }
+      }
+    ],
     "live": [],
     "answer": [],
     "changes": [],
     "summary": {
-      "commands": 0,
+      "commands": 1,
       "reads": 0,
       "edits": 0,
       "tools": 0

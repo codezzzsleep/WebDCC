@@ -4,6 +4,7 @@
  */
 import { build } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 const output = process.env['WDCC_SERVER_OUT'] ?? 'packages/server/dist/main.js';
 await mkdir(output.slice(0, output.lastIndexOf('/')) || '.', { recursive: true });
@@ -23,3 +24,4 @@ await build({
   logLevel: 'info',
 });
 process.stdout.write('built packages/server/dist/main.js\n');
+await build({ entryPoints: ['packages/server/src/native-http-recorder.ts'], outfile: join(dirname(output), 'native-http-recorder.cjs'), bundle: true, platform: 'node', format: 'cjs', target: 'node24', logLevel: 'info' });

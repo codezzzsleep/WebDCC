@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S05",
-        "seq": 4,
-        "turnId": "trace:codex:S05:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S05",
         "seq": 7,
         "turnId": "trace:codex:S05:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-5",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -43,34 +31,10 @@
       },
       {
         "sessionId": "trace:codex:S05",
-        "seq": 9,
-        "turnId": "trace:codex:S05:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S05",
-        "seq": 12,
-        "turnId": "trace:codex:S05:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S05",
-        "seq": 15,
+        "seq": 16,
         "turnId": "trace:codex:S05:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_0b5c28cb9bd728de016af4fa3f552887d082005e1c8d0c525c",
+        "itemKey": "rs_0b5c28cb9bd728de016af4fa3f552887d082005e1c8d0c525c",
         "data": {
           "text": ""
         },
@@ -86,10 +50,10 @@
       },
       {
         "sessionId": "trace:codex:S05",
-        "seq": 16,
+        "seq": 17,
         "turnId": "trace:codex:S05:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_0b5c28cb9bd728de016af4fa3f885087d0be5d31d14403eb6a",
+        "itemKey": "msg_0b5c28cb9bd728de016af4fa3f885087d0be5d31d14403eb6a",
         "data": {
           "text": "我会在 `/tmp` 下创建该文件并写入 `ok`。",
           "phase": "interim",
@@ -110,10 +74,10 @@
       },
       {
         "sessionId": "trace:codex:S05",
-        "seq": 17,
+        "seq": 18,
         "turnId": "trace:codex:S05:turn:1",
         "kind": "command",
-        "itemKey": "item-exec-a852f0ab-a45c-4e8c-bfbf-6951a0c68102",
+        "itemKey": "exec-a852f0ab-a45c-4e8c-bfbf-6951a0c68102",
         "data": {
           "command": "/bin/bash -lc \"printf '%s' 'ok' > /tmp/wdcc-trace-probe-2.txt && cat /tmp/wdcc-trace-probe-2.txt\"",
           "cwd": "/tmp/wdcc-real-trace-QvkcUq/sample-repo",
@@ -147,12 +111,17 @@
       },
       {
         "sessionId": "trace:codex:S05",
-        "seq": 18,
+        "seq": 19,
         "turnId": "trace:codex:S05:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-38",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-31",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15966,
+          "outputTokens": 136,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 20,
+          "scope": "attempt",
+          "generationMs": 108
         },
         "at": "<timestamp>",
         "native": {
@@ -181,10 +150,10 @@
       },
       {
         "sessionId": "trace:codex:S05",
-        "seq": 20,
+        "seq": 21,
         "turnId": "trace:codex:S05:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_0b5c28cb9bd728de016af4fa430cd487d0b96732a872c0dd7f",
+        "itemKey": "msg_0b5c28cb9bd728de016af4fa430cd487d0b96732a872c0dd7f",
         "data": {
           "text": "已创建 `/tmp/wdcc-trace-probe-2.txt`，内容为 `ok`。",
           "phase": "final",
@@ -205,12 +174,17 @@
       },
       {
         "sessionId": "trace:codex:S05",
-        "seq": 21,
+        "seq": 22,
         "turnId": "trace:codex:S05:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-63",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-56",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 16126,
+          "outputTokens": 25,
+          "cacheReadInputTokens": 15744,
+          "reasoningOutputTokens": 0,
+          "scope": "attempt",
+          "generationMs": 6
         },
         "at": "<timestamp>",
         "native": {
@@ -241,7 +215,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_0b5c28cb9bd728de016af4fa430cd487d0b96732a872c0dd7f",
+        "itemKey": "msg_0b5c28cb9bd728de016af4fa430cd487d0b96732a872c0dd7f",
         "text": "已创建 `/tmp/wdcc-trace-probe-2.txt`，内容为 `ok`。"
       }
     ],
@@ -251,6 +225,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 32092,
+      "outputTokens": 161,
+      "cacheReadInputTokens": 29056,
+      "reasoningOutputTokens": 20,
+      "scope": "turn",
+      "generationMs": 114,
+      "tokensPerSecond": 1412.280701754386
     }
   }
 ]

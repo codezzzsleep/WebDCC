@@ -17,6 +17,7 @@
     "@webdcc/adapter-codex": "workspace:*",
     "@webdcc/adapter-dsh": "workspace:*",
     "@webdcc/protocol": "workspace:*",
+    "@webdcc/model-proxy": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.8"
   },

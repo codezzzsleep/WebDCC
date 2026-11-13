@@ -39,6 +39,8 @@ export interface CreateOpts {
   accessMode?: string;
   /** Optional side-channel recorder; it never changes Agent input/output. */
   traceSink?: TraceSink;
+  /** Observer-only endpoint override; keeps the native provider/auth identity. */
+  recordingEndpoint?: { url: string; codexProvider?: string };
 }
 
 export interface UserInput {

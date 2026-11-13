@@ -154,7 +154,8 @@ function usageFor(events: readonly StoredEvent[], completedData: EventData['turn
     const inputTokens = attempts.reduce((sum, sample) => sum + (sample.inputTokens ?? 0), 0);
     const outputTokens = attempts.reduce((sum, sample) => sum + (sample.outputTokens ?? 0), 0);
     const generationMs = attempts.reduce((sum, sample) => sum + (sample.generationMs ?? 0), 0);
-    return { inputTokens, outputTokens, scope: 'turn', ...(generationMs > 0 ? { generationMs, tokensPerSecond: outputTokens / (generationMs / 1000) } : {}) };
+    const sum = (field: 'cacheReadInputTokens' | 'cacheCreationInputTokens' | 'reasoningOutputTokens' | 'totalCostUsd'): number | undefined => attempts.some(sample => sample[field] !== undefined) ? attempts.reduce((total, sample) => total + (sample[field] ?? 0), 0) : undefined;
+    return { inputTokens, outputTokens, cacheReadInputTokens: sum('cacheReadInputTokens'), cacheCreationInputTokens: sum('cacheCreationInputTokens'), reasoningOutputTokens: sum('reasoningOutputTokens'), totalCostUsd: sum('totalCostUsd'), scope: 'turn', ...(generationMs > 0 ? { generationMs, tokensPerSecond: outputTokens / (generationMs / 1000) } : {}) };
   }
   const latestSample = samples.at(-1);
   const latest = latestSample?.data ?? completedData?.usage;

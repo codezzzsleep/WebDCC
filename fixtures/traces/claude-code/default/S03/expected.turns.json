@@ -1,7 +1,7 @@
 [
   {
     "turnId": "trace:claude-code:S03:turn:1",
-    "state": "failed",
+    "state": "interrupted",
     "user": {
       "text": "新建 notes.txt，内容两行：第一行 alpha，第二行 beta。然后把 README.md 的标题改成 \"Sample Repo (edited)\"。做完后告诉我改了什么。",
       "at": "<timestamp>"
@@ -11,14 +11,117 @@
     "endedAt": "<timestamp>",
     "userSeq": 1,
     "activity": null,
-    "steps": [],
+    "steps": [
+      {
+        "sessionId": "trace:claude-code:S03",
+        "seq": 37,
+        "turnId": "trace:claude-code:S03:turn:1",
+        "kind": "file.read",
+        "itemKey": "tool-toolu_01HgVgkcm9vUA25CawU6g6pJ",
+        "data": {
+          "path": "/tmp/wdcc-real-trace-q3sHdV/sample-repo/README.md"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "tool_use_id": "toolu_01HgVgkcm9vUA25CawU6g6pJ",
+                "type": "tool_result",
+                "content": "1\t# Sample Repo\n2\t\n3\tWebDCC trace sample.\n4\t"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "f345d66a-b497-4b13-9142-9556122fcfee",
+          "uuid": "27e2bde8-706c-456d-9968-3f546937fd24",
+          "timestamp": "2026-11-11T23:33:55.473Z",
+          "tool_use_result": {
+            "type": "text",
+            "file": {
+              "filePath": "/tmp/wdcc-real-trace-q3sHdV/sample-repo/README.md",
+              "content": "# Sample Repo\n\nWebDCC trace sample.\n",
+              "numLines": 4,
+              "startLine": 1,
+              "totalLines": 4
+            }
+          },
+          "tool_result_meta": [
+            {
+              "id": "toolu_01HgVgkcm9vUA25CawU6g6pJ",
+              "permission_decision": {
+                "decision": "accept",
+                "source": "config",
+                "reason_type": "mode"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S03",
+        "seq": 38,
+        "turnId": "trace:claude-code:S03:turn:1",
+        "kind": "file.change",
+        "itemKey": "tool-toolu_01FXbtPZxBeA7pT8qV7Hx6Ro",
+        "data": {
+          "changes": [
+            {
+              "path": "/tmp/wdcc-real-trace-q3sHdV/sample-repo/notes.txt",
+              "kind": "add",
+              "added": 2,
+              "removed": 0,
+              "note": "整文件写入，未取得原内容",
+              "diff": "--- /dev/null\n+++ b//tmp/wdcc-real-trace-q3sHdV/sample-repo/notes.txt\n@@ -0,0 +1,2 @@\n+alpha\n+beta\n"
+            }
+          ],
+          "status": "failed"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "content": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+                "is_error": true,
+                "tool_use_id": "toolu_01FXbtPZxBeA7pT8qV7Hx6Ro"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "f345d66a-b497-4b13-9142-9556122fcfee",
+          "uuid": "bd02b462-57ac-4a00-ba95-a5abd789eb60",
+          "timestamp": "2026-11-11T23:33:55.513Z",
+          "tool_use_result": "User rejected tool use",
+          "tool_result_meta": [
+            {
+              "id": "toolu_01FXbtPZxBeA7pT8qV7Hx6Ro",
+              "non_execution_kind": "user-rejected"
+            }
+          ]
+        }
+      }
+    ],
     "live": [],
     "answer": [],
-    "changes": [],
+    "changes": [
+      {
+        "path": "/tmp/wdcc-real-trace-q3sHdV/sample-repo/notes.txt",
+        "kind": "add",
+        "added": 2,
+        "removed": 0,
+        "note": "整文件写入，未取得原内容"
+      }
+    ],
     "summary": {
       "commands": 0,
-      "reads": 0,
-      "edits": 0,
+      "reads": 1,
+      "edits": 1,
       "tools": 0
     }
   }

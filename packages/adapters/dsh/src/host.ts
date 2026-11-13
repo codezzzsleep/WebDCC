@@ -34,6 +34,7 @@ export interface SidecarOptions {
   env: Record<string, string | undefined>;
   cwd?: string;
   command?: string;
+  args?: string[];
   bootTimeoutMs?: number;
 }
 
@@ -50,7 +51,7 @@ export interface Sidecar {
 /** 启动 `dsh web --no-open`，从 stdout 解析带 token 的 URL */
 export async function startSidecar(options: SidecarOptions): Promise<Sidecar> {
   const command = options.command ?? 'dsh';
-  const args = ['web', '--no-open', '--port', String(options.port)];
+  const args = options.args ?? ['web', '--no-open', '--port', String(options.port), '--host', '127.0.0.1'];
   const child = spawn(command, args, {
     cwd: options.cwd,
     env: options.env as NodeJS.ProcessEnv,

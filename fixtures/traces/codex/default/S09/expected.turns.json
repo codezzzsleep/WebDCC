@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S09",
-        "seq": 4,
-        "turnId": "trace:codex:S09:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S09",
         "seq": 7,
         "turnId": "trace:codex:S09:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-5",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -43,34 +31,10 @@
       },
       {
         "sessionId": "trace:codex:S09",
-        "seq": 9,
-        "turnId": "trace:codex:S09:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S09",
-        "seq": 12,
-        "turnId": "trace:codex:S09:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S09",
-        "seq": 15,
+        "seq": 16,
         "turnId": "trace:codex:S09:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_0efbdb2f2e8a2058016af4fa85355087d0bfed553f648e2950",
+        "itemKey": "rs_0efbdb2f2e8a2058016af4fa85355087d0bfed553f648e2950",
         "data": {
           "text": ""
         },
@@ -86,10 +50,10 @@
       },
       {
         "sessionId": "trace:codex:S09",
-        "seq": 16,
+        "seq": 17,
         "turnId": "trace:codex:S09:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_0efbdb2f2e8a2058016af4fa85591487d0bd1867c5a752a447",
+        "itemKey": "msg_0efbdb2f2e8a2058016af4fa85591487d0bd1867c5a752a447",
         "data": {
           "text": "我现在运行指定命令一次，并原样返回错误。",
           "phase": "interim",
@@ -110,10 +74,10 @@
       },
       {
         "sessionId": "trace:codex:S09",
-        "seq": 17,
+        "seq": 18,
         "turnId": "trace:codex:S09:turn:1",
         "kind": "command",
-        "itemKey": "item-exec-216414b4-d026-4909-9c12-c251a0ea4075",
+        "itemKey": "exec-216414b4-d026-4909-9c12-c251a0ea4075",
         "data": {
           "command": "/bin/bash -lc false-command-wdcc",
           "cwd": "/tmp/wdcc-real-trace-sRijKy/sample-repo",
@@ -147,12 +111,17 @@
       },
       {
         "sessionId": "trace:codex:S09",
-        "seq": 18,
+        "seq": 19,
         "turnId": "trace:codex:S09:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-34",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-27",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15009,
+          "outputTokens": 99,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 17,
+          "scope": "attempt",
+          "generationMs": 75
         },
         "at": "<timestamp>",
         "native": {
@@ -181,10 +150,10 @@
       },
       {
         "sessionId": "trace:codex:S09",
-        "seq": 20,
+        "seq": 21,
         "turnId": "trace:codex:S09:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_0efbdb2f2e8a2058016af4fa88266087d0a55f5e6870a3ddc4",
+        "itemKey": "msg_0efbdb2f2e8a2058016af4fa88266087d0a55f5e6870a3ddc4",
         "data": {
           "text": "`/bin/bash: line 1: false-command-wdcc: command not found`",
           "phase": "final",
@@ -205,12 +174,17 @@
       },
       {
         "sessionId": "trace:codex:S09",
-        "seq": 21,
+        "seq": 22,
         "turnId": "trace:codex:S09:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-56",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-49",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15147,
+          "outputTokens": 22,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 0,
+          "scope": "attempt",
+          "generationMs": 5
         },
         "at": "<timestamp>",
         "native": {
@@ -241,7 +215,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_0efbdb2f2e8a2058016af4fa88266087d0a55f5e6870a3ddc4",
+        "itemKey": "msg_0efbdb2f2e8a2058016af4fa88266087d0a55f5e6870a3ddc4",
         "text": "`/bin/bash: line 1: false-command-wdcc: command not found`"
       }
     ],
@@ -251,6 +225,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 30156,
+      "outputTokens": 121,
+      "cacheReadInputTokens": 26624,
+      "reasoningOutputTokens": 17,
+      "scope": "turn",
+      "generationMs": 80,
+      "tokensPerSecond": 1512.5
     }
   }
 ]

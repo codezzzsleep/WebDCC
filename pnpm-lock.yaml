@@ -250,6 +250,9 @@ importers:
       '@webdcc/adapter-dsh':
         specifier: workspace:*
         version: link:../adapters/dsh
+      '@webdcc/model-proxy':
+        specifier: workspace:*
+        version: link:../testing/model-proxy
       '@webdcc/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -277,6 +280,8 @@ importers:
         version: link:../../protocol
 
   packages/testing/mock-models: {}
+
+  packages/testing/model-proxy: {}
 
   packages/web:
     dependencies:

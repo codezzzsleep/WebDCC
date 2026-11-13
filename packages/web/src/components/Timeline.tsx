@@ -8,7 +8,7 @@ import { api } from '../lib/api.js';
 import { duration, shortNumber } from '../lib/format.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Icon, Spinner, type IconName } from './Icon.js';
-import { Markdown } from './Markdown.js';
+import { Markdown, MarkdownWorkspace } from './Markdown.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -59,6 +59,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   };
 
   return (
+    <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
       <div className="timeline-inner" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
         {virtualizer.getVirtualItems().map((item) => {
@@ -88,6 +89,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
         })}
       </div>
     </div>
+    </MarkdownWorkspace.Provider>
   );
 }
 
@@ -240,9 +242,12 @@ function outboxLabel(status: 'pending' | 'queued' | 'sent' | 'failed'): string {
 function formatUsageData(data: UsageData): string {
   const parts: string[] = [];
   if (data.inputTokens !== undefined || data.outputTokens !== undefined) {
-    parts.push(`用量 ${shortNumber((data.inputTokens ?? 0) + (data.outputTokens ?? 0))} tok`);
+    parts.push(`输入 ${shortNumber(data.inputTokens ?? 0)} / 输出 ${shortNumber(data.outputTokens ?? 0)} tok`);
   }
-  if (data.tokensPerSecond !== undefined) parts.push(`${data.tokensPerSecond.toFixed(1)} tok/s`);
+  if (data.cacheReadInputTokens !== undefined) parts.push(`缓存读取 ${shortNumber(data.cacheReadInputTokens)} tok`);
+  if (data.cacheCreationInputTokens !== undefined) parts.push(`缓存写入 ${shortNumber(data.cacheCreationInputTokens)} tok`);
+  if (data.totalCostUsd !== undefined) parts.push(`SDK 估算 $${data.totalCostUsd.toFixed(4)}`);
+  if (data.tokensPerSecond !== undefined) parts.push(`约 ${data.tokensPerSecond.toFixed(1)} tok/s`);
   if (data.cacheHitRatio !== undefined) parts.push(`缓存命中 ${Math.round(data.cacheHitRatio * 100)}%`);
   return parts.join(' · ');
 }

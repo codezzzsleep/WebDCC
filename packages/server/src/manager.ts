@@ -16,6 +16,9 @@ import type { Store } from './store.js';
 import { resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
+import type { InteractionRecorder } from './interaction-recorder.js';
+import type { ModelRecording } from './model-recording.js';
+import type { CreateOpts } from '@webdcc/protocol';
 
 const TURN_SETTLE_MS = 1_500;
 
@@ -71,6 +74,8 @@ export class SessionManager {
       /** 把 diff 文本存成文件，返回 fileId（C2 / F10） */
       saveDiff?: (name: string, diff: string) => string;
       watchdogDataDir?: string;
+      recorder?: InteractionRecorder;
+      modelRecording?: ModelRecording;
     },
   ) {
     // A previous process may have stopped after writing turn.started. Close
@@ -118,6 +123,15 @@ export class SessionManager {
     this.adapters.set(adapter.id, adapter);
     adapter.onEvent((sessionId, event) => this.handleAdapterEvent(sessionId, event));
     if (adapter.id === 'codex') this.watchdog.start();
+  }
+
+  private async prepareLaunch<T extends CreateOpts>(session: SessionDto, opts: T): Promise<T> {
+    const recorder = this.options.recorder;
+    if (recorder === undefined) return opts;
+    recorder.bind({ sessionId: session.id, agent: session.agent as AgentId, workspaceId: session.workspaceId, cwd: opts.cwd, nativeId: session.nativeId, model: opts.model, providerId: opts.providerId });
+    const traced = { ...opts, traceSink: recorder.sink(session.id) };
+    if (this.adapters.get(session.agent)?.kind === 'fake') return traced;
+    return this.options.modelRecording?.prepare(traced, session.agent as AgentId) as Promise<T> | undefined ?? traced;
   }
 
   adapter(id: AgentId): AgentAdapter | undefined {
@@ -194,7 +208,7 @@ export class SessionManager {
     const provider = this.options.resolveProvider?.(input.providerId ?? null) ?? null;
     let created: { nativeId: string };
     try {
-      created = await adapter.create({
+      created = await adapter.create(await this.prepareLaunch(session, {
         sessionId: session.id,
         cwd: workspace.path,
         providerId: input.providerId ?? null,
@@ -202,8 +216,9 @@ export class SessionManager {
         ...(input.model === undefined ? {} : { model: input.model }),
         ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
         ...(accessMode === undefined ? {} : { accessMode }),
-      });
+      }));
     } catch (error) {
+      await this.options.modelRecording?.close(session.id);
       // 建会话失败就回滚，不留 native_id 为空的孤儿记录（SPEC-M8 F1）
       this.store.deleteSession(session.id);
       throw error;
@@ -213,6 +228,7 @@ export class SessionManager {
       created.nativeId === ''
         ? session
         : this.store.updateSession(session.id, { nativeId: created.nativeId });
+    if (created.nativeId !== '') this.options.recorder?.nativeId(session.id, created.nativeId);
     const runtime = this.ensureRuntime(updated as SessionDto, adapter, workspace.path, created.nativeId);
     this.touchIdle(runtime);
     const createPatch: FeedPatch = {
@@ -264,7 +280,7 @@ export class SessionManager {
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) return existing;
     if (session.nativeId === undefined) throw Object.assign(new Error('会话缺少原生 id，无法恢复'), { statusCode: 500 });
-    await adapter.resume({
+    await adapter.resume(await this.prepareLaunch(session, {
       sessionId: session.id,
       cwd: workspacePath,
       providerId: session.providerId ?? null,
@@ -273,7 +289,7 @@ export class SessionManager {
       ...(session.reasoningEffort === undefined ? {} : { reasoningEffort: session.reasoningEffort }),
       ...(accessMode === undefined ? {} : { accessMode }),
       nativeId: session.nativeId,
-    });
+    }));
     const effectiveSession = session.accessMode === undefined && accessMode !== undefined
       ? this.store.updateSessionAndFeed(session.id, { accessMode }, { accessMode }).session ?? session
       : session;
@@ -309,6 +325,8 @@ export class SessionManager {
     if (session === undefined) throw new Error('会话不存在');
     runtime.turnId = turnId;
     runtime.turnStartedAt = Date.now();
+    if (this.options.recorder !== undefined) await this.options.recorder.turnContext(sessionId, turnId);
+    this.options.recorder?.record(sessionId, 'web', 'input', { input, clientCommandId }, 'out');
 
     const userEvent = this.store.appendEvent({
       sessionId,
@@ -515,6 +533,7 @@ export class SessionManager {
     runtime.queued.length = 0;
     if (runtime.turnId !== null) this.finishTurn(runtime, 'interrupted', 'session-disposed');
     await runtime.adapter.dispose(sessionId);
+    await this.options.modelRecording?.close(sessionId);
     this.runtimes.delete(sessionId);
     // 回收之后状态回到空闲，否则界面上会一直显示"停止"（AG-*-11）
     if (runtime.status !== 'idle') this.setStatus(runtime, 'idle');
@@ -559,6 +578,9 @@ export class SessionManager {
   }
 
   private handleAdapterEvent(sessionId: string, event: AdapterEvent): void {
+    this.options.recorder?.observeFiles(sessionId, event);
+    this.options.recorder?.record(sessionId, 'mapped', event.type, event, 'in');
+    if (event.type === 'native-id') this.options.recorder?.nativeId(sessionId, event.nativeId);
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
     const nativeEffort = this.nativeReasoningEffort(event);
@@ -733,6 +755,7 @@ export class SessionManager {
       this.hooks.onEvent(event);
     }
     runtime.hot.clear();
+    this.options.recorder?.turn(runtime.sessionId, null);
     this.turns.end(runtime.sessionId, turnId, status);
     runtime.turnId = null;
     runtime.turnStartedAt = null;

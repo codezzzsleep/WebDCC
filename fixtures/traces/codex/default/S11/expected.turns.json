@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S11",
-        "seq": 4,
-        "turnId": "trace:codex:S11:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S11",
         "seq": 7,
         "turnId": "trace:codex:S11:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-5",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -43,34 +31,10 @@
       },
       {
         "sessionId": "trace:codex:S11",
-        "seq": 9,
-        "turnId": "trace:codex:S11:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S11",
-        "seq": 12,
-        "turnId": "trace:codex:S11:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S11",
-        "seq": 15,
+        "seq": 16,
         "turnId": "trace:codex:S11:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_0c34b206567cebe7016af4fab1243087d082d2d46278f4ee79",
+        "itemKey": "msg_0c34b206567cebe7016af4fab1243087d082d2d46278f4ee79",
         "data": {
           "text": "我会运行该命令并查看最后一个数字。",
           "phase": "interim",
@@ -91,10 +55,10 @@
       },
       {
         "sessionId": "trace:codex:S11",
-        "seq": 16,
+        "seq": 17,
         "turnId": "trace:codex:S11:turn:1",
         "kind": "command",
-        "itemKey": "item-exec-41f071aa-3301-491b-bcf0-47cc6d8c8672",
+        "itemKey": "exec-41f071aa-3301-491b-bcf0-47cc6d8c8672",
         "data": {
           "command": "/bin/bash -lc 'seq 1 3000'",
           "cwd": "/tmp/wdcc-real-trace-q9Kp22/sample-repo",
@@ -128,12 +92,17 @@
       },
       {
         "sessionId": "trace:codex:S11",
-        "seq": 17,
+        "seq": 18,
         "turnId": "trace:codex:S11:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-31",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-24",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15005,
+          "outputTokens": 64,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 0,
+          "scope": "attempt",
+          "generationMs": 77
         },
         "at": "<timestamp>",
         "native": {
@@ -162,10 +131,10 @@
       },
       {
         "sessionId": "trace:codex:S11",
-        "seq": 19,
+        "seq": 20,
         "turnId": "trace:codex:S11:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_0c34b206567cebe7016af4fab4b5c087d08a24a2f9466d0d50",
+        "itemKey": "msg_0c34b206567cebe7016af4fab4b5c087d08a24a2f9466d0d50",
         "data": {
           "text": "3000",
           "phase": "final",
@@ -186,12 +155,17 @@
       },
       {
         "sessionId": "trace:codex:S11",
-        "seq": 20,
+        "seq": 21,
         "turnId": "trace:codex:S11:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-37",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-30",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 23093,
+          "outputTokens": 6,
+          "cacheReadInputTokens": 14848,
+          "reasoningOutputTokens": 0,
+          "scope": "attempt",
+          "generationMs": 5
         },
         "at": "<timestamp>",
         "native": {
@@ -222,7 +196,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_0c34b206567cebe7016af4fab4b5c087d08a24a2f9466d0d50",
+        "itemKey": "msg_0c34b206567cebe7016af4fab4b5c087d08a24a2f9466d0d50",
         "text": "3000"
       }
     ],
@@ -232,6 +206,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 38098,
+      "outputTokens": 70,
+      "cacheReadInputTokens": 28160,
+      "reasoningOutputTokens": 0,
+      "scope": "turn",
+      "generationMs": 82,
+      "tokensPerSecond": 853.6585365853658
     }
   }
 ]

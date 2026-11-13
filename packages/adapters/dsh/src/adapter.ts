@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -14,6 +14,7 @@ import type {
   ProbeResult,
   UserInput,
   TraceSink,
+  TraceFrame,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid } from '@webdcc/protocol';
 import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
@@ -30,6 +31,8 @@ export interface DshAdapterOptions {
   attachUrl?: string;
   attachCookie?: string;
   traceSink?: TraceSink;
+  traceSinkFactory?: (sessionId: string) => TraceSink;
+  nativeRecorder?: { directory: string; module: string };
 }
 
 /** 扫描 /proc，找同一 DSH_HOME 上已在运行的 dsh 进程（spawn 模式的冲突检查） */
@@ -131,11 +134,16 @@ const INTERNAL_EVENTS = new Set([
   'system/message',
   'session/title-llm-request',
   'session-log-deepseek/delivery-accepted',
+  'assistant/attempt',
+  'llm/retry',
+  'llm/retry-started',
 ]);
 
 interface PendingInteraction {
   kind: 'approval' | 'question';
   eventId: string;
+  questionIds?: string[];
+  answers?: Map<string, { id: string; selected: string[]; custom?: string }>;
 }
 
 interface SessionRuntime {
@@ -196,10 +204,37 @@ export class DshAdapter implements AgentAdapter {
   private booting: Promise<void> | null = null;
   private options: DshAdapterOptions;
   private traceSeq = 0;
+  private readonly traceSinks = new Map<string, TraceSink>();
+  private trace(sessionId: string, dir: 'in' | 'out', ch: string, frame: unknown): void {
+    traceFrame(this.options.traceSink ?? this.traceSinks.get(sessionId) ?? this.options.traceSinkFactory?.(sessionId || 'dsh-host'), { i: ++this.traceSeq, t: 0, dir, ch, frame });
+  }
 
   constructor(options: DshAdapterOptions = {}) {
     this.options = options;
   }
+
+  /** Recorded mux frames pass through the live stream and event handlers. */
+  static replay(sessionId = 'replay'): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: DshAdapter; replies: unknown[] } {
+    const adapter = new DshAdapter();
+    const runtime: SessionRuntime = {
+      nativeId: '', workspaceId: '', followStream: null, lastSeq: 0, turnStartedAt: 0,
+      pending: new Map(), toolCalls: new Map(), toolInputs: new Map(), assistantKey: '', assistantText: '',
+      reasoningKey: '', reasoningText: '', streamedAssistant: false, streamedReasoning: false, generationStartedAt: null, frameSeq: 0,
+    };
+    adapter.sessions.set(sessionId, runtime);
+    const replies: unknown[] = [];
+    adapter.client = { rpc: async (endpoint: string, args: unknown) => { replies.push({ endpoint, args }); return { accepted: true }; } } as unknown as DshHostClient;
+    let events: AdapterEvent[] = [];
+    adapter.onEvent((_id, event) => events.push(event));
+    return { adapter, replies, feed(frame) {
+      events = []; adapter.replayTime = frame.t;
+      if (frame.dir === 'in' && frame.ch.startsWith('mux:')) adapter.onEventFrame(sessionId, frame.frame as StreamFrame);
+      return events.length > 0 ? [...events] : [{ type: 'item.complete', itemKey: `transport-${frame.ch}-${frame.i}`, kind: 'internal', data: { nativeType: frame.ch }, native: frame.frame }];
+    } };
+  }
+
+  private replayTime?: number;
+  private now(): number { return this.replayTime ?? Date.now(); }
 
   onEvent(cb: (sessionId: string, event: AdapterEvent) => void): void {
     this.listeners.push(cb);
@@ -213,7 +248,7 @@ export class DshAdapter implements AgentAdapter {
     if ((this.options.mode ?? 'spawn') === 'spawn') {
       const dshHome = this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? join(homedir(), '.dsh');
       const running = findDshProcessOn(dshHome);
-      if (running !== undefined) {
+      if (running !== undefined && this.booting === null && running !== this.sidecar?.child.pid) {
         return {
           installed: false,
           pinnedVersion: PINNED_VERSION,
@@ -278,15 +313,26 @@ export class DshAdapter implements AgentAdapter {
   /** 3.3 的机器检查入口：只启动一个只监听 127.0.0.1 的侧车 */
   buildLaunchSpec(): LaunchSpec {
     const port = String(this.options.port ?? process.env['WDCC_DSH_PORT'] ?? 3091);
+    const recorder = this.options.nativeRecorder;
+    const patch = recorder === undefined ? undefined : join(recorder.directory, 'dsh-recorder.patch.yml');
+    if (patch !== undefined && recorder !== undefined) writeFileSync(patch, `- insert:\n    - id: webdcc-native-http-recorder\n      name: ${JSON.stringify(recorder.module)}\n`, { mode: 0o600 });
     return {
       command: this.options.command ?? 'dsh',
-      args: ['web', '--no-open', '--port', port, '--host', '127.0.0.1'],
-      env: { ...(this.options.env ?? {}) },
+      args: ['web', ...(patch === undefined ? [] : ['--patch', patch]), '--no-open', '--port', port, '--host', '127.0.0.1'],
+      env: { ...(this.options.env ?? {}), ...(recorder === undefined ? {} : { WDCC_TRACE_DIR: recorder.directory, NODE_OPTIONS: `${this.options.env?.['NODE_OPTIONS'] ?? process.env['NODE_OPTIONS'] ?? ''} --require ${recorder.module}`.trim() }) },
     };
   }
 
   private async ensureSidecar(): Promise<DshHostClient> {
     if (this.client !== null) return this.client;
+    // Metadata/model discovery and session creation can arrive concurrently.
+    // A process started by this adapter belongs to the pending boot, rather
+    // than being an unrelated host using the same native home.
+    if (this.booting !== null) {
+      await this.booting;
+      if (this.client !== null) return this.client;
+      throw new Error('dsh: 侧车启动失败');
+    }
     if ((this.options.mode ?? 'spawn') === 'attach') {
       this.booting ??= (async () => {
         const url = new URL(this.options.attachUrl ?? 'http://127.0.0.1:3080');
@@ -310,9 +356,10 @@ export class DshAdapter implements AgentAdapter {
     this.booting ??= (async () => {
       const spec = this.buildLaunchSpec();
       this.sidecar = await startSidecar({
-        port: Number((spec.args ?? [])[3] ?? process.env['WDCC_DSH_PORT'] ?? 3091),
+        port: this.options.port ?? Number(process.env['WDCC_DSH_PORT'] ?? 3091),
         env: { ...process.env, ...spec.env },
         ...(spec.command === undefined ? {} : { command: spec.command }),
+        args: spec.args,
       });
       const client = new DshHostClient(this.sidecar.port);
       await client.authenticate(this.sidecar.tokenUrl);
@@ -372,24 +419,36 @@ export class DshAdapter implements AgentAdapter {
     if (accessMode === undefined) return;
     const line = `/permission ${accessMode}`;
     if (!isAllowedCommandLine(line)) throw new Error(`dsh: 不允许的 commands/execute line: ${line}`);
-    await client.rpc('commands/execute', { agentId: nativeId, line, submittedAttachments: [] });
+    await this.call(client, 'commands/execute', { agentId: nativeId, line, submittedAttachments: [] });
   }
 
   /** 所有 RPC 都经过白名单检查 */
-  private async call<T>(client: DshHostClient, endpoint: string, args: Record<string, unknown> = {}): Promise<T> {
+  private async call<T>(client: DshHostClient, endpoint: string, args: Record<string, unknown> = {}, sessionId?: string): Promise<T> {
     if (!isAllowedEndpoint(endpoint)) throw new Error(`dsh: 端点不在白名单内：${endpoint}`);
-    traceFrame(this.options.traceSink, { i: ++this.traceSeq, t: 0, dir: 'out', ch: `rpc:${endpoint}`, frame: { endpoint, args } });
-    return client.rpc<T>(endpoint, args);
+    const request = (args['request'] ?? {}) as Record<string, unknown>;
+    const nativeId = args['agentId'] ?? args['sessionId'] ?? request['sessionId'];
+    const owner = sessionId ?? [...this.sessions].find(([, runtime]) => runtime.nativeId === nativeId)?.[0] ?? '';
+    const requestId = ++this.traceSeq;
+    this.trace(owner, 'out', `rpc:${endpoint}`, { requestId, endpoint, args });
+    try {
+      const result = await client.rpc<T>(endpoint, args);
+      this.trace(owner, 'in', `rpc:${endpoint}`, { requestId, endpoint, result });
+      return result;
+    } catch (error) {
+      this.trace(owner, 'in', `rpc:${endpoint}`, { requestId, endpoint, error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
   }
 
   async create(opts: CreateOpts): Promise<{ nativeId: string }> {
+    if (opts.traceSink !== undefined) this.traceSinks.set(opts.sessionId, opts.traceSink);
     const client = await this.ensureSidecar();
-    const workspace = await client.rpc<{ workspace: { workspaceId: string } }>('workspace/create', {
+    const workspace = await this.call<{ workspace: { workspaceId: string } }>(client, 'workspace/create', {
       request: { path: opts.cwd },
-    });
-    const created = await client.rpc<{ sessionId: string }>('session/create', {
+    }, opts.sessionId);
+    const created = await this.call<{ sessionId: string }>(client, 'session/create', {
       request: { workspaceId: workspace.workspace.workspaceId },
-    });
+    }, opts.sessionId);
     const runtime: SessionRuntime = {
       nativeId: created.sessionId,
       workspaceId: workspace.workspace.workspaceId,
@@ -410,18 +469,21 @@ export class DshAdapter implements AgentAdapter {
       generationStartedAt: null,
       frameSeq: 0,
     };
-    await this.permission(client, created.sessionId, opts.accessMode);
-    if (opts.model !== undefined && opts.model !== '') await this.selectModel(client, runtime, opts.model, opts.reasoningEffort);
     this.sessions.set(opts.sessionId, runtime);
+    try {
+      await this.permission(client, created.sessionId, opts.accessMode);
+      if (opts.model !== undefined && opts.model !== '') await this.selectModel(client, runtime, opts.model, opts.reasoningEffort);
+    } catch (error) { this.sessions.delete(opts.sessionId); throw error; }
     this.openFollow(opts.sessionId, runtime);
     return { nativeId: created.sessionId };
   }
 
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
+    if (opts.traceSink !== undefined) this.traceSinks.set(opts.sessionId, opts.traceSink);
     const client = await this.ensureSidecar();
-    const workspace = await client.rpc<{ workspace: { workspaceId: string } }>('workspace/create', {
+    const workspace = await this.call<{ workspace: { workspaceId: string } }>(client, 'workspace/create', {
       request: { path: opts.cwd },
-    });
+    }, opts.sessionId);
     const runtime: SessionRuntime = {
       nativeId: opts.nativeId,
       workspaceId: workspace.workspace.workspaceId,
@@ -449,6 +511,7 @@ export class DshAdapter implements AgentAdapter {
   private openFollow(sessionId: string, runtime: SessionRuntime): void {
     const client = this.client;
     if (client === null) return;
+    this.trace(sessionId, 'out', 'openStream:session/follow', { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } });
     runtime.followStream = client.openStream(
       'session/follow',
       { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } },
@@ -459,7 +522,7 @@ export class DshAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
-    traceFrame(this.options.traceSink, { i: ++this.traceSeq, t: 0, dir: 'out', ch: 'events-result', frame: input });
+    this.trace(sessionId, 'out', 'input', input);
     // 第一行是命令时走 commands/execute，不走 session/prompt（F8 / SL-02）
     const firstLine = input.text.split(/\r?\n/)[0] ?? '';
     if (firstLine.startsWith('/') && isAllowedCommandLine(firstLine.trim(), input.text)) {
@@ -476,9 +539,12 @@ export class DshAdapter implements AgentAdapter {
       });
       return;
     }
-    runtime.turnStartedAt = Date.now();
+    runtime.turnStartedAt = this.now();
     const content: Record<string, unknown>[] = [{ type: 'text', text: input.text }];
-    for (const image of input.images ?? []) content.push({ type: 'image', path: image.path, mime: image.mime });
+    for (const image of input.images ?? []) {
+      if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime)) throw new Error(`DSH 不支持图片格式 ${image.mime}`);
+      content.push({ type: 'image', mediaType: image.mime, data: readFileSync(image.path).toString('base64') });
+    }
     await this.call(client, 'session/prompt', {
       request: { requestId: ulid(), sessionId: runtime.nativeId, mode: 'queue', content },
     });
@@ -541,14 +607,18 @@ export class DshAdapter implements AgentAdapter {
   async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
-    runtime.pending.delete(questionId);
-    const value = (answer as { selected?: string[]; custom?: string }) ?? {};
-    const answers = [{ id: questionId, selected: value.selected ?? [], ...(value.custom === undefined || value.custom === '' ? {} : { custom: value.custom }) }];
-    await this.call(client, '$events/result', {
-      clientId: this.clientId,
-      eventId: questionId,
-      outcome: { kind: 'result', value: { answers } },
-    });
+    const entry = [...runtime.pending].find(([eventId, pending]) => pending.kind === 'question' && (questionId === eventId || pending.questionIds?.some(id => `${eventId}:${id}` === questionId)));
+    if (entry === undefined) throw new Error('DSH 问题已结束或不存在');
+    const [eventId, pending] = entry;
+    const id = questionId === eventId ? pending.questionIds?.[0] ?? questionId : questionId.slice(eventId.length + 1);
+    const value = (answer as { selected?: string[]; custom?: string; value?: string | string[]; text?: string }) ?? {};
+    const selected = value.selected ?? (Array.isArray(value.value) ? value.value : value.value === undefined ? [] : [value.value]);
+    const custom = value.custom ?? value.text;
+    pending.answers ??= new Map();
+    pending.answers.set(id, { id, selected, ...(custom === undefined || custom === '' ? {} : { custom }) });
+    if (pending.answers.size < (pending.questionIds?.length ?? 1)) return;
+    runtime.pending.delete(eventId);
+    await this.call(client, '$events/result', { clientId: this.clientId, eventId, outcome: { kind: 'result', value: { answers: [...pending.answers.values()] } } }, sessionId);
   }
 
   /** 运行期切换连接（设置页粘贴 DSH 链接后调用） */
@@ -600,10 +670,9 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private onEventFrame(sessionId: string, frame: StreamFrame): void {
-    const frameValue = this.frameValue(frame);
-    const traceIndex = Number(frameValue?.['seq'] ?? 0) || ++this.traceSeq;
-    traceFrame(this.options.traceSink, { i: traceIndex, t: 0, dir: 'in', ch: 'mux:$events', frame });
     const value = this.frameValue(frame);
+    const owner = sessionId || [...this.sessions].find(([, runtime]) => runtime.nativeId === value?.['agentId'])?.[0] || '';
+    this.trace(owner, 'in', 'mux:$events', frame);
     if (value === undefined) return;
 
     if (value['type'] === 'ready') {
@@ -737,6 +806,7 @@ export class DshAdapter implements AgentAdapter {
             ? { command: String(input['command'] ?? ''), status: 'running' }
             : kind === 'file.read'
               ? { path: String(input['file_path'] ?? input['pattern'] ?? '') }
+              : kind === 'file.change' ? { changes: buildFileChanges(name, input), status: 'running' }
               : { name, input, status: 'running' };
         runtime.toolCalls.set(callId, { itemKey: `tool-${callId}`, kind, data: eventData, name, input });
         runtime.toolInputs.set(callId, input);
@@ -845,7 +915,7 @@ export class DshAdapter implements AgentAdapter {
     if (frame['type'] !== 'chunk') return;
     const chunk = (frame['chunk'] ?? {}) as Record<string, unknown>;
     const kind = String(chunk['type'] ?? '');
-    if (runtime.generationStartedAt === null) runtime.generationStartedAt = Date.now();
+    if (runtime.generationStartedAt === null) runtime.generationStartedAt = this.now();
     if (kind === 'block-start') {
       const blockType = String(chunk['blockType'] ?? '');
       if (blockType === 'reasoning') {
@@ -890,14 +960,15 @@ export class DshAdapter implements AgentAdapter {
       return;
     }
     if (kind === 'usage') {
-      const usage = (chunk['usage'] ?? {}) as { inputTokens?: number; outputTokens?: number };
-      const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, Date.now() - runtime.generationStartedAt);
+      const usage = (chunk['usage'] ?? {}) as { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+      const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, this.now() - runtime.generationStartedAt);
       runtime.generationStartedAt = null;
       this.emit(sessionId, {
         type: 'item.complete',
         itemKey: `usage-${++runtime.frameSeq}`,
         kind: 'usage',
-        data: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, scope: 'attempt', ...(generationMs === undefined ? {} : { generationMs }) },
+        data: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cacheReadInputTokens: usage.cacheReadTokens, cacheCreationInputTokens: usage.cacheWriteTokens, scope: 'attempt', ...(generationMs === undefined ? {} : { generationMs }) },
+        native: chunk,
       });
     }
   }
@@ -977,15 +1048,15 @@ export class DshAdapter implements AgentAdapter {
     }
 
     if (event === 'user-questions/request') {
-      runtime.pending.set(eventId, { kind: 'question', eventId });
       const questions = (request['questions'] as Record<string, unknown>[]) ?? [];
-      const first = questions[0] ?? {};
-      this.emit(target, {
+      const ids = questions.map((question, index) => String(question['id'] ?? index));
+      runtime.pending.set(eventId, { kind: 'question', eventId, questionIds: ids });
+      for (const [index, first] of questions.entries()) this.emit(target, {
         type: 'item.complete',
-        itemKey: `question-${eventId}`,
+        itemKey: `question-${eventId}-${ids[index]}`,
         kind: 'question',
         data: {
-          questionId: eventId,
+          questionId: `${eventId}:${ids[index]}`,
           prompt: String(first['question'] ?? '请回答'),
           ...(first['header'] === undefined ? {} : { header: String(first['header']) }),
           options: ((first['options'] as Record<string, unknown>[]) ?? []).map((option) => ({

@@ -1,4 +1,4 @@
-import { createReadStream, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -27,6 +27,9 @@ import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
 import { updateDshHomePatch } from './dsh-settings.js';
 import { SystemMetricsReader } from './system-metrics.js';
+import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
+import type { InteractionRecorder } from './interaction-recorder.js';
+import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
 
 export interface RouteDeps {
   store: Store;
@@ -40,9 +43,9 @@ export interface RouteDeps {
   commit?: string;
   builtAt?: string;
   dataDir: string;
+  recordFileOperation?: (event: FileOperation) => void;
+  recorder?: InteractionRecorder;
 }
-
-const MAX_TEXT_READ = 1024 * 1024;
 
 interface DshSettingsView {
   writable: boolean;
@@ -156,6 +159,18 @@ async function resolveNewInsideWorkspace(workspacePath: string, requested: strin
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { store, files, manager, dispatcher } = deps;
   const metrics = new SystemMetricsReader(deps.dataDir);
+  const workspaceFiles = new WorkspaceFiles(deps.recordFileOperation);
+  app.get('/api/sessions/:id/trace', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const session = store.getSession(id);
+    if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+    if (deps.recorder === undefined) throw Object.assign(new Error('原始轨迹记录未启用'), { statusCode: 503 });
+    if ((request.query as { format?: string }).format === 'jsonl') {
+      reply.header('content-disposition', `attachment; filename="${id}-trace.jsonl"`);
+      return reply.type('application/x-ndjson').send(await deps.recorder.read(id, session.nativeId, session.workspaceId));
+    }
+    return deps.recorder.summary(id, session.nativeId, session.workspaceId);
+  });
 
   app.get('/api/watchdog', async () => manager.watchdog.view());
   app.patch('/api/watchdog', async (request) => {
@@ -288,12 +303,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       };
     }
 
-    const buffer = await readFile(target);
-    return {
-      path: relative(workspace.path, target),
-      content: buffer.subarray(0, MAX_TEXT_READ).toString('utf8'),
-      truncated: buffer.byteLength > MAX_TEXT_READ,
-    };
+    return workspaceFiles.read(id, workspace.path, relative(workspace.path, target));
+  });
+
+  app.put('/api/workspaces/:id/fs', { bodyLimit: 6 * MAX_EDIT_BYTES + 4096 }, async (request) => {
+    const { id } = request.params as { id: string };
+    const workspace = store.getWorkspace(id);
+    if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
+    const body = request.body as { path?: string; content?: string; version?: string };
+    if (typeof body?.path !== 'string' || typeof body?.content !== 'string') throw badRequest('需要文件路径和文本内容');
+    if (typeof body.version !== 'string') throw Object.assign(new Error('保存需要读取时的文件版本'), { statusCode: 428 });
+    return workspaceFiles.save(id, workspace.path, body.path, body.content, body.version);
   });
 
   app.post('/api/workspaces/:id/fs', async (request) => {
@@ -323,9 +343,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const query = request.query as { path?: string };
     const workspace = store.getWorkspace(id);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
-    const target = await resolveInsideWorkspace(workspace.path, query.path ?? '').catch(() => undefined);
+    const target = await workspaceAsset(workspace.path, query.path ?? '').catch(() => undefined);
     if (target === undefined) throw badRequest('路径必须在工作区内');
-    return reply.send(createReadStream(target));
+    return sendWorkspaceAsset(reply, target);
   });
 
   // ---------- feed / sessions ----------

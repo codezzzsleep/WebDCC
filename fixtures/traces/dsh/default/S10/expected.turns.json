@@ -14,184 +14,42 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S10",
-        "seq": 49,
+        "seq": 45,
         "turnId": "trace:dsh:S10:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-92a4f77e-48cf-4d62-8d08-18818c80eaeb",
+        "itemKey": "msg-live-1",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S10",
+        "seq": 46,
+        "turnId": "trace:dsh:S10:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-2",
+        "data": {
+          "inputTokens": 437,
+          "outputTokens": 55,
+          "cacheReadInputTokens": 8448,
+          "scope": "attempt",
+          "generationMs": 242
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 17,
-              "time": 1794482491733,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_ujvuhlm0sdyqm6bxzwbc9644",
-                      "name": "read",
-                      "arguments": "{\"file_path\":\"README.md\",\"limit\":1}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482490475b3d24476cb0847a2446e1bf5e527b37b71e3f6",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "92a4f77e-48cf-4d62-8d08-18818c80eaeb"
-                },
-                "usage": {
-                  "inputTokens": 437,
-                  "outputTokens": 55,
-                  "totalTokens": 8940,
-                  "cacheReadTokens": 8448
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482491492,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482491492,
-                    "index": 0,
-                    "dt": [
-                      1,
-                      0,
-                      102,
-                      1,
-                      75,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      16,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      42
-                    ],
-                    "id": "call_00_ujvuhlm0sdyqm6bxzwbc9644",
-                    "name": "read",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "README",
-                      ".md",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "limit",
-                      "\"",
-                      ": ",
-                      "1",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482491732,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_ujvuhlm0sdyqm6bxzwbc9644",
-                        "name": "read",
-                        "arguments": "{\"file_path\":\"README.md\",\"limit\":1}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482491733,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 437,
-                        "outputTokens": 55,
-                        "totalTokens": 8940,
-                        "cacheReadTokens": 8448
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482491733,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482490475b3d24476cb0847a2446e1bf5e527b37b71e3f6",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 437,
+            "outputTokens": 55,
+            "totalTokens": 8940,
+            "cacheReadTokens": 8448
           }
         }
       },
       {
         "sessionId": "trace:dsh:S10",
-        "seq": 51,
+        "seq": 50,
         "turnId": "trace:dsh:S10:turn:1",
         "kind": "file.read",
         "itemKey": "tool-call_00_ujvuhlm0sdyqm6bxzwbc9644",
@@ -200,194 +58,79 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 19,
-              "time": 1794482491741,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_ujvuhlm0sdyqm6bxzwbc9644"
-                  },
-                  "toolCallId": "call_00_ujvuhlm0sdyqm6bxzwbc9644",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md</path>\n<type>file</type>\n<content>\n1: # Sample Repo\n\n(Showing lines 1-1 of 3. Use offset=2 to continue.)\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "3295e6cd-2529-48e4-b687-ee4ccfcadaf7"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md",
-                  "offset": 1,
-                  "lines": [
-                    {
-                      "number": 1,
-                      "text": "# Sample Repo"
-                    }
-                  ],
-                  "totalLines": 3,
-                  "lang": "md"
-                }
+          "type": "tool/result",
+          "seq": 19,
+          "time": 1794482491741,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_ujvuhlm0sdyqm6bxzwbc9644"
               },
-              "sourceEventSeqs": [
-                18
+              "toolCallId": "call_00_ujvuhlm0sdyqm6bxzwbc9644",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md</path>\n<type>file</type>\n<content>\n1: # Sample Repo\n\n(Showing lines 1-1 of 3. Use offset=2 to continue.)\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "3295e6cd-2529-48e4-b687-ee4ccfcadaf7"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md",
+              "offset": 1,
+              "lines": [
+                {
+                  "number": 1,
+                  "text": "# Sample Repo"
+                }
+              ],
+              "totalLines": 3,
+              "lang": "md"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            18
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S10",
-        "seq": 65,
+        "seq": 55,
         "turnId": "trace:dsh:S10:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-f299bb88-52ba-49d7-979e-5f238487fa26",
+        "itemKey": "msg-live-3",
         "data": {
           "text": "README.md 的第一行是：\n\n```\n# Sample Repo\n```"
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S10",
+        "seq": 57,
+        "turnId": "trace:dsh:S10:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-4",
+        "data": {
+          "inputTokens": 181,
+          "outputTokens": 15,
+          "cacheReadInputTokens": 8832,
+          "scope": "attempt",
+          "generationMs": 1743
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 23,
-              "time": 1794482493474,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "README.md 的第一行是：\n\n```\n# Sample Repo\n```"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482492252b3d24476cb0847a2446e1bf5e527b37b9ae805",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "f299bb88-52ba-49d7-979e-5f238487fa26"
-                },
-                "usage": {
-                  "inputTokens": 181,
-                  "outputTokens": 15,
-                  "totalTokens": 9028,
-                  "cacheReadTokens": 8832
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482493361,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482493361,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      111
-                    ],
-                    "texts": [
-                      "README.md 的第一行是",
-                      "：\n\n```\n# Sample Repo",
-                      "\n",
-                      "```"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482493473,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "README.md 的第一行是：\n\n```\n# Sample Repo\n```"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482493473,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 181,
-                        "outputTokens": 15,
-                        "totalTokens": 9028,
-                        "cacheReadTokens": 8832
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482493473,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482492252b3d24476cb0847a2446e1bf5e527b37b9ae805",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 181,
+            "outputTokens": 15,
+            "totalTokens": 9028,
+            "cacheReadTokens": 8832
           }
         }
       }
@@ -395,7 +138,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-f299bb88-52ba-49d7-979e-5f238487fa26",
+        "itemKey": "msg-live-3",
         "text": "README.md 的第一行是：\n\n```\n# Sample Repo\n```"
       }
     ],
@@ -405,6 +148,14 @@
       "reads": 1,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 618,
+      "outputTokens": 70,
+      "cacheReadInputTokens": 17280,
+      "scope": "turn",
+      "generationMs": 1985,
+      "tokensPerSecond": 35.26448362720403
     }
   },
   {
@@ -417,201 +168,47 @@
     "startedAt": "<timestamp>",
     "durationMs": 0,
     "endedAt": "<timestamp>",
-    "userSeq": 69,
+    "userSeq": 63,
     "activity": null,
     "steps": [
       {
         "sessionId": "trace:dsh:S10",
-        "seq": 108,
+        "seq": 98,
         "turnId": "trace:dsh:S10:turn:2",
         "kind": "assistant.message",
-        "itemKey": "message-9a39d87e-c83f-4c58-a575-bc4bd9638e51",
+        "itemKey": "msg-live-5",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S10",
+        "seq": 99,
+        "turnId": "trace:dsh:S10:turn:2",
+        "kind": "usage",
+        "itemKey": "usage-6",
+        "data": {
+          "inputTokens": 81,
+          "outputTokens": 71,
+          "cacheReadInputTokens": 8960,
+          "scope": "attempt",
+          "generationMs": 243
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 31,
-              "time": 1794482495355,
-              "data": {
-                "turn": 2,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_8n7kivcyss92oeoyaqptixy2",
-                      "name": "read",
-                      "arguments": "{\"file_path\":\"README.md\",\"offset\":2,\"limit\":1}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482494077b3d24476cb0847a2446e1bf5e527b37be445cb",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "9a39d87e-c83f-4c58-a575-bc4bd9638e51"
-                },
-                "usage": {
-                  "inputTokens": 81,
-                  "outputTokens": 71,
-                  "totalTokens": 9112,
-                  "cacheReadTokens": 8960
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482495113,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482495114,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      15,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      175,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      45,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0
-                    ],
-                    "id": "call_00_8n7kivcyss92oeoyaqptixy2",
-                    "name": "read",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "README",
-                      ".md",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "offset",
-                      "\"",
-                      ": ",
-                      "2",
-                      ", ",
-                      "\"",
-                      "limit",
-                      "\"",
-                      ": ",
-                      "1",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482495354,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_8n7kivcyss92oeoyaqptixy2",
-                        "name": "read",
-                        "arguments": "{\"file_path\":\"README.md\",\"offset\":2,\"limit\":1}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482495355,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 81,
-                        "outputTokens": 71,
-                        "totalTokens": 9112,
-                        "cacheReadTokens": 8960
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482495355,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482494077b3d24476cb0847a2446e1bf5e527b37be445cb",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 81,
+            "outputTokens": 71,
+            "totalTokens": 9112,
+            "cacheReadTokens": 8960
           }
         }
       },
       {
         "sessionId": "trace:dsh:S10",
-        "seq": 110,
+        "seq": 103,
         "turnId": "trace:dsh:S10:turn:2",
         "kind": "file.read",
         "itemKey": "tool-call_00_8n7kivcyss92oeoyaqptixy2",
@@ -620,190 +217,79 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 33,
-              "time": 1794482495362,
-              "data": {
-                "turn": 2,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_8n7kivcyss92oeoyaqptixy2"
-                  },
-                  "toolCallId": "call_00_8n7kivcyss92oeoyaqptixy2",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md</path>\n<type>file</type>\n<content>\n2: \n\n(Showing lines 2-2 of 3. Use offset=3 to continue.)\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "c1abf398-0867-47f1-a9d2-40b20bb674b5"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md",
-                  "offset": 2,
-                  "lines": [
-                    {
-                      "number": 2,
-                      "text": ""
-                    }
-                  ],
-                  "totalLines": 3,
-                  "lang": "md"
-                }
+          "type": "tool/result",
+          "seq": 33,
+          "time": 1794482495362,
+          "data": {
+            "turn": 2,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_8n7kivcyss92oeoyaqptixy2"
               },
-              "sourceEventSeqs": [
-                32
+              "toolCallId": "call_00_8n7kivcyss92oeoyaqptixy2",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md</path>\n<type>file</type>\n<content>\n2: \n\n(Showing lines 2-2 of 3. Use offset=3 to continue.)\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "c1abf398-0867-47f1-a9d2-40b20bb674b5"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-real-trace-NGZmD7/sample-repo/README.md",
+              "offset": 2,
+              "lines": [
+                {
+                  "number": 2,
+                  "text": ""
+                }
+              ],
+              "totalLines": 3,
+              "lang": "md"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            32
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S10",
-        "seq": 121,
+        "seq": 107,
         "turnId": "trace:dsh:S10:turn:2",
         "kind": "assistant.message",
-        "itemKey": "message-e18bcdc5-1568-4925-b60b-62e74608d077",
+        "itemKey": "msg-live-7",
         "data": {
           "text": "README.md 的第二行是空行。"
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S10",
+        "seq": 109,
+        "turnId": "trace:dsh:S10:turn:2",
+        "kind": "usage",
+        "itemKey": "usage-8",
+        "data": {
+          "inputTokens": 221,
+          "outputTokens": 10,
+          "cacheReadInputTokens": 8960,
+          "scope": "attempt",
+          "generationMs": 1633
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 36,
-              "time": 1794482496987,
-              "data": {
-                "turn": 2,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "README.md 的第二行是空行。"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482495929b3d24476cb0847a2446e1bf5e527b37b460c19",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "e18bcdc5-1568-4925-b60b-62e74608d077"
-                },
-                "usage": {
-                  "inputTokens": 221,
-                  "outputTokens": 10,
-                  "totalTokens": 9191,
-                  "cacheReadTokens": 8960
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482496985,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482496985,
-                    "index": 0,
-                    "dt": [
-                      0
-                    ],
-                    "texts": [
-                      "README.md 的第二行是",
-                      "空行。"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482496986,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "README.md 的第二行是空行。"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482496986,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 221,
-                        "outputTokens": 10,
-                        "totalTokens": 9191,
-                        "cacheReadTokens": 8960
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482496986,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482495929b3d24476cb0847a2446e1bf5e527b37b460c19",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 221,
+            "outputTokens": 10,
+            "totalTokens": 9191,
+            "cacheReadTokens": 8960
           }
         }
       }
@@ -811,7 +297,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-e18bcdc5-1568-4925-b60b-62e74608d077",
+        "itemKey": "msg-live-7",
         "text": "README.md 的第二行是空行。"
       }
     ],
@@ -821,6 +307,14 @@
       "reads": 1,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 302,
+      "outputTokens": 81,
+      "cacheReadInputTokens": 17920,
+      "scope": "turn",
+      "generationMs": 1876,
+      "tokensPerSecond": 43.1769722814499
     }
   }
 ]

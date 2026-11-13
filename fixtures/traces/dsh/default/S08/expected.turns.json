@@ -14,399 +14,81 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 136,
+        "seq": 25,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-1",
+        "data": {
+          "text": "The user wants me to ask which language first using the question tool. Then write after they answer.\n\nI should ask the question with two options.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 120,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-b2b003b1-86a7-4270-89e4-787a2cba2d49",
+        "itemKey": "msg-live-2",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 122,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-3",
+        "data": {
+          "inputTokens": 460,
+          "outputTokens": 155,
+          "cacheReadInputTokens": 8448,
+          "scope": "attempt",
+          "generationMs": 571
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 17,
-              "time": 1794482475551,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "The user wants me to ask which language first using the question tool. Then write after they answer.\n\nI should ask the question with two options."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_gb6ogol4bpbetp8nya205p3b",
-                      "name": "ask_user_question",
-                      "arguments": "{\"questions\":[{\"id\":\"hello_lang\",\"header\":\"选择语言\",\"question\":\"你想用哪种语言写 hello world？\",\"options\":[{\"label\":\"Python\",\"description\":\"生成 hello.py，通常用 print(\\\"Hello, World!\\\")。\"},{\"label\":\"JavaScript\",\"description\":\"生成 hello.js，通常用 console.log(\\\"Hello, World!\\\")。\"}]}]}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482473923b3d24476cb0847a2446e1bf5e527b37b20d15d",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "b2b003b1-86a7-4270-89e4-787a2cba2d49"
-                },
-                "usage": {
-                  "inputTokens": 460,
-                  "outputTokens": 155,
-                  "totalTokens": 9063,
-                  "cacheReadTokens": 8448
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482474983,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482474983,
-                    "index": 0,
-                    "dt": [
-                      1,
-                      0,
-                      68,
-                      0,
-                      79,
-                      1,
-                      0,
-                      0,
-                      67,
-                      0
-                    ],
-                    "texts": [
-                      "The",
-                      " user wants",
-                      " me to ask which",
-                      " language first",
-                      " using the",
-                      " question tool. Then",
-                      " write after",
-                      " they",
-                      " answer.\n\nI should ask the",
-                      " question with",
-                      " two options."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482475200,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482475200,
-                    "index": 1,
-                    "dt": [
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      22,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      54,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      5,
-                      1,
-                      0,
-                      0,
-                      1,
-                      18,
-                      1,
-                      59,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      10,
-                      55,
-                      1,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      21,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      6,
-                      0,
-                      0,
-                      1,
-                      48,
-                      0,
-                      0,
-                      1,
-                      27,
-                      1
-                    ],
-                    "id": "call_00_gb6ogol4bpbetp8nya205p3b",
-                    "name": "ask_user_question",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "questions",
-                      "\"",
-                      ": ",
-                      "[",
-                      "{\"",
-                      "id",
-                      "\":",
-                      " \"",
-                      "hello",
-                      "_l",
-                      "ang",
-                      "\",",
-                      " \"",
-                      "header",
-                      "\":",
-                      " \"",
-                      "选择",
-                      "语言",
-                      "\",",
-                      " \"",
-                      "question",
-                      "\":",
-                      " \"",
-                      "你想",
-                      "用",
-                      "哪种",
-                      "语言",
-                      "写",
-                      " hello",
-                      " world",
-                      "？",
-                      "\",",
-                      " \"",
-                      "options",
-                      "\":",
-                      " [",
-                      "{\"",
-                      "label",
-                      "\":",
-                      " \"",
-                      "Python",
-                      "\",",
-                      " \"",
-                      "description",
-                      "\":",
-                      " \"",
-                      "生成",
-                      " hello",
-                      ".py",
-                      "，",
-                      "通常",
-                      "用",
-                      " print",
-                      "(\\",
-                      "\"",
-                      "Hello",
-                      ",",
-                      " World",
-                      "!\\",
-                      "\")",
-                      "。\"",
-                      "},",
-                      " {\"",
-                      "label",
-                      "\":",
-                      " \"",
-                      "JavaScript",
-                      "\",",
-                      " \"",
-                      "description",
-                      "\":",
-                      " \"",
-                      "生成",
-                      " hello",
-                      ".js",
-                      "，",
-                      "通常",
-                      "用",
-                      " console",
-                      ".log",
-                      "(\\",
-                      "\"",
-                      "Hello",
-                      ",",
-                      " World",
-                      "!\\",
-                      "\")",
-                      "。\"",
-                      "}]",
-                      "}]",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482475550,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "The user wants me to ask which language first using the question tool. Then write after they answer.\n\nI should ask the question with two options."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482475551,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_gb6ogol4bpbetp8nya205p3b",
-                        "name": "ask_user_question",
-                        "arguments": "{\"questions\":[{\"id\":\"hello_lang\",\"header\":\"选择语言\",\"question\":\"你想用哪种语言写 hello world？\",\"options\":[{\"label\":\"Python\",\"description\":\"生成 hello.py，通常用 print(\\\"Hello, World!\\\")。\"},{\"label\":\"JavaScript\",\"description\":\"生成 hello.js，通常用 console.log(\\\"Hello, World!\\\")。\"}]}]}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482475551,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 460,
-                        "outputTokens": 155,
-                        "totalTokens": 9063,
-                        "cacheReadTokens": 8448
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482475551,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482473923b3d24476cb0847a2446e1bf5e527b37b20d15d",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 460,
+            "outputTokens": 155,
+            "totalTokens": 9063,
+            "cacheReadTokens": 8448
           }
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 140,
+        "seq": 126,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "question",
+        "itemKey": "question-63c004ee-bd01-4ac6-a91c-200c2fd98219-hello_lang",
+        "data": {
+          "questionId": "63c004ee-bd01-4ac6-a91c-200c2fd98219:hello_lang",
+          "prompt": "你想用哪种语言写 hello world？",
+          "header": "选择语言",
+          "options": [
+            {
+              "id": "Python",
+              "label": "Python",
+              "description": "生成 hello.py，通常用 print(\"Hello, World!\")。"
+            },
+            {
+              "id": "JavaScript",
+              "label": "JavaScript",
+              "description": "生成 hello.js，通常用 console.log(\"Hello, World!\")。"
+            }
+          ],
+          "multiSelect": false,
+          "allowsFreeText": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 128,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "tool.call",
         "itemKey": "tool-call_00_gb6ogol4bpbetp8nya205p3b",
@@ -436,305 +118,85 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 19,
-              "time": 1794482475563,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_gb6ogol4bpbetp8nya205p3b"
-                  },
-                  "toolCallId": "call_00_gb6ogol4bpbetp8nya205p3b",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "{\"answers\":[{\"id\":\"63c004ee-bd01-4ac6-a91c-200c2fd98219\",\"selected\":[\"Python\"]}]}"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "966e4e2f-8c9b-421d-bca8-3f1354ad9ee0"
-                }
+          "type": "tool/result",
+          "seq": 19,
+          "time": 1794482475563,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_gb6ogol4bpbetp8nya205p3b"
               },
-              "sourceEventSeqs": [
-                18
+              "toolCallId": "call_00_gb6ogol4bpbetp8nya205p3b",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"answers\":[{\"id\":\"63c004ee-bd01-4ac6-a91c-200c2fd98219\",\"selected\":[\"Python\"]}]}"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "966e4e2f-8c9b-421d-bca8-3f1354ad9ee0"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            18
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 190,
+        "seq": 133,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-4",
+        "data": {
+          "text": "User selected Python. Write hello.py.\n\nLet me check the working directory contents first? I can just write. Maybe list to see conventions.\n\nWrite hello.py in cwd.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 158,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-4cc248d6-43c6-4610-945a-5e11c5f12d4e",
+        "itemKey": "msg-live-5",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 160,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-6",
+        "data": {
+          "inputTokens": 277,
+          "outputTokens": 94,
+          "cacheReadInputTokens": 8832,
+          "scope": "attempt",
+          "generationMs": 1959
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 23,
-              "time": 1794482477511,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "User selected Python. Write hello.py.\n\nLet me check the working directory contents first? I can just write. Maybe list to see conventions.\n\nWrite hello.py in cwd."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_llz1514m89b11s2jh5yfc2iq",
-                      "name": "bash",
-                      "arguments": "{\"command\":\"ls -la\",\"description\":\"List files in working directory\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482476097b3d24476cb0847a2446e1bf5e527b37b500485",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "4cc248d6-43c6-4610-945a-5e11c5f12d4e"
-                },
-                "usage": {
-                  "inputTokens": 277,
-                  "outputTokens": 94,
-                  "totalTokens": 9203,
-                  "cacheReadTokens": 8832
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482477144,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482477144,
-                    "index": 0,
-                    "dt": [
-                      1,
-                      0,
-                      61,
-                      0,
-                      1,
-                      0,
-                      73,
-                      1,
-                      0,
-                      0,
-                      63,
-                      1,
-                      0,
-                      0
-                    ],
-                    "texts": [
-                      "User",
-                      " selected",
-                      " Python. Write",
-                      " hello.py.\n\nLet me check",
-                      " the working",
-                      " directory contents",
-                      " first? I can",
-                      " just write",
-                      ".",
-                      " Maybe list to",
-                      " see",
-                      " conventions",
-                      ".\n\nWrite",
-                      " hello.py in c",
-                      "wd."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482477358,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482477358,
-                    "index": 1,
-                    "dt": [
-                      10,
-                      6,
-                      0,
-                      4,
-                      1,
-                      0,
-                      0,
-                      12,
-                      0,
-                      1,
-                      0,
-                      18,
-                      1,
-                      0,
-                      0,
-                      16,
-                      0,
-                      0,
-                      1,
-                      15,
-                      1,
-                      0,
-                      0
-                    ],
-                    "id": "call_00_llz1514m89b11s2jh5yfc2iq",
-                    "name": "bash",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "command",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "ls",
-                      " -",
-                      "la",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "description",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "List",
-                      " files",
-                      " in",
-                      " working",
-                      " directory",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482477510,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "User selected Python. Write hello.py.\n\nLet me check the working directory contents first? I can just write. Maybe list to see conventions.\n\nWrite hello.py in cwd."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482477510,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_llz1514m89b11s2jh5yfc2iq",
-                        "name": "bash",
-                        "arguments": "{\"command\":\"ls -la\",\"description\":\"List files in working directory\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482477510,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 277,
-                        "outputTokens": 94,
-                        "totalTokens": 9203,
-                        "cacheReadTokens": 8832
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482477510,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482476097b3d24476cb0847a2446e1bf5e527b37b500485",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 277,
+            "outputTokens": 94,
+            "totalTokens": 9203,
+            "cacheReadTokens": 8832
           }
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 194,
+        "seq": 166,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "command",
         "itemKey": "tool-call_00_llz1514m89b11s2jh5yfc2iq",
@@ -745,277 +207,76 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 27,
-              "time": 1794482477617,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_llz1514m89b11s2jh5yfc2iq"
-                  },
-                  "toolCallId": "call_00_llz1514m89b11s2jh5yfc2iq",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 19:21 .\ndrwx------ 5 root root 4096 Nov 12 19:21 ..\n-rw-r--r-- 1 root root   21 Nov 12 19:21 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 19:21 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 19:21 README.md\n-rw-r--r-- 1 root root   32 Nov 12 19:21 SPEC.md\n"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "826801fb-0ee6-4234-9101-caa5d83e5a30"
-                },
-                "meta": {
-                  "cwd": "/tmp/wdcc-real-trace-0Di2fG/sample-repo"
-                }
+          "type": "tool/result",
+          "seq": 27,
+          "time": 1794482477617,
+          "data": {
+            "turn": 1,
+            "step": 2,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_llz1514m89b11s2jh5yfc2iq"
               },
-              "sourceEventSeqs": [
-                24
+              "toolCallId": "call_00_llz1514m89b11s2jh5yfc2iq",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 19:21 .\ndrwx------ 5 root root 4096 Nov 12 19:21 ..\n-rw-r--r-- 1 root root   21 Nov 12 19:21 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 19:21 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 19:21 README.md\n-rw-r--r-- 1 root root   32 Nov 12 19:21 SPEC.md\n"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "826801fb-0ee6-4234-9101-caa5d83e5a30"
+            },
+            "meta": {
+              "cwd": "/tmp/wdcc-real-trace-0Di2fG/sample-repo"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            24
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 246,
+        "seq": 214,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-3d877e23-6d75-469f-aeb0-fdd7e5637e1b",
+        "itemKey": "msg-live-7",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 215,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-8",
+        "data": {
+          "inputTokens": 261,
+          "outputTokens": 79,
+          "cacheReadInputTokens": 9088,
+          "scope": "attempt",
+          "generationMs": 2085
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 30,
-              "time": 1794482479596,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_jn046fvk1vnwqv873fwxdfgx",
-                      "name": "write",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-0Di2fG/sample-repo/hello.py\",\"content\":\"print(\\\"Hello, World!\\\")\\n\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482478136b3d24476cb0847a2446e1bf5e527b37bc416e1",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "3d877e23-6d75-469f-aeb0-fdd7e5637e1b"
-                },
-                "usage": {
-                  "inputTokens": 261,
-                  "outputTokens": 79,
-                  "totalTokens": 9428,
-                  "cacheReadTokens": 9088
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482479347,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482479347,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      9,
-                      0,
-                      0,
-                      0,
-                      33,
-                      1,
-                      141,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      53,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      4,
-                      0
-                    ],
-                    "id": "call_00_jn046fvk1vnwqv873fwxdfgx",
-                    "name": "write",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-real",
-                      "-t",
-                      "race",
-                      "-",
-                      "0",
-                      "Di",
-                      "2",
-                      "f",
-                      "G",
-                      "/s",
-                      "ample",
-                      "-re",
-                      "po",
-                      "/",
-                      "hello",
-                      ".py",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "content",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "print",
-                      "(\\\"",
-                      "Hello",
-                      ",",
-                      " World",
-                      "!\\\")\\n",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482479596,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_jn046fvk1vnwqv873fwxdfgx",
-                        "name": "write",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-real-trace-0Di2fG/sample-repo/hello.py\",\"content\":\"print(\\\"Hello, World!\\\")\\n\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482479596,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 261,
-                        "outputTokens": 79,
-                        "totalTokens": 9428,
-                        "cacheReadTokens": 9088
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482479596,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482478136b3d24476cb0847a2446e1bf5e527b37bc416e1",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 261,
+            "outputTokens": 79,
+            "totalTokens": 9428,
+            "cacheReadTokens": 9088
           }
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 248,
+        "seq": 219,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "file.change",
         "itemKey": "tool-call_00_jn046fvk1vnwqv873fwxdfgx",
@@ -1034,239 +295,78 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 32,
-              "time": 1794482479606,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_jn046fvk1vnwqv873fwxdfgx"
-                  },
-                  "toolCallId": "call_00_jn046fvk1vnwqv873fwxdfgx",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-0Di2fG/sample-repo/hello.py</path>\n<type>file</type>\n<content>\nCreated file\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "e86c8dda-ca7b-44a7-bf07-f08aeb16ebdc"
-                },
-                "meta": {
-                  "operation": "create",
-                  "path": "/tmp/wdcc-real-trace-0Di2fG/sample-repo/hello.py",
-                  "diffs": []
-                }
+          "type": "tool/result",
+          "seq": 32,
+          "time": 1794482479606,
+          "data": {
+            "turn": 1,
+            "step": 3,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_jn046fvk1vnwqv873fwxdfgx"
               },
-              "sourceEventSeqs": [
-                31
+              "toolCallId": "call_00_jn046fvk1vnwqv873fwxdfgx",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-0Di2fG/sample-repo/hello.py</path>\n<type>file</type>\n<content>\nCreated file\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "e86c8dda-ca7b-44a7-bf07-f08aeb16ebdc"
+            },
+            "meta": {
+              "operation": "create",
+              "path": "/tmp/wdcc-real-trace-0Di2fG/sample-repo/hello.py",
+              "diffs": []
             }
-          }
+          },
+          "sourceEventSeqs": [
+            31
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 280,
+        "seq": 247,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-cebf4a9d-facd-42fb-92f7-da60589143fc",
+        "itemKey": "msg-live-9",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 248,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-10",
+        "data": {
+          "inputTokens": 136,
+          "outputTokens": 59,
+          "cacheReadInputTokens": 9344,
+          "scope": "attempt",
+          "generationMs": 1937
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 35,
-              "time": 1794482481533,
-              "data": {
-                "turn": 1,
-                "step": 4,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_re84n26974577w9rs2q32e6p",
-                      "name": "bash",
-                      "arguments": "{\"command\":\"python3 hello.py\",\"description\":\"Run hello world script\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482480122b3d24476cb0847a2446e1bf5e527b37b6d9d35",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "cebf4a9d-facd-42fb-92f7-da60589143fc"
-                },
-                "usage": {
-                  "inputTokens": 136,
-                  "outputTokens": 59,
-                  "totalTokens": 9539,
-                  "cacheReadTokens": 9344
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482481291,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482481291,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      1,
-                      16,
-                      1,
-                      0,
-                      0,
-                      26,
-                      1,
-                      148,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      44,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0
-                    ],
-                    "id": "call_00_re84n26974577w9rs2q32e6p",
-                    "name": "bash",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "command",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "python",
-                      "3",
-                      " hello",
-                      ".py",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "description",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "Run",
-                      " hello",
-                      " world",
-                      " script",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482481532,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_re84n26974577w9rs2q32e6p",
-                        "name": "bash",
-                        "arguments": "{\"command\":\"python3 hello.py\",\"description\":\"Run hello world script\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482481533,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 136,
-                        "outputTokens": 59,
-                        "totalTokens": 9539,
-                        "cacheReadTokens": 9344
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482481533,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482480122b3d24476cb0847a2446e1bf5e527b37b6d9d35",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 136,
+            "outputTokens": 59,
+            "totalTokens": 9539,
+            "cacheReadTokens": 9344
           }
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 284,
+        "seq": 254,
         "turnId": "trace:dsh:S08:turn:1",
         "kind": "command",
         "itemKey": "tool-call_00_re84n26974577w9rs2q32e6p",
@@ -1277,203 +377,89 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 39,
-              "time": 1794482481738,
-              "data": {
-                "turn": 1,
-                "step": 4,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_re84n26974577w9rs2q32e6p"
-                  },
-                  "toolCallId": "call_00_re84n26974577w9rs2q32e6p",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "Hello, World!\n"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "bb4952f3-d3f4-42fe-bcb3-6f042703db7b"
-                },
-                "meta": {
-                  "cwd": "/tmp/wdcc-real-trace-0Di2fG/sample-repo"
-                }
+          "type": "tool/result",
+          "seq": 39,
+          "time": 1794482481738,
+          "data": {
+            "turn": 1,
+            "step": 4,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_re84n26974577w9rs2q32e6p"
               },
-              "sourceEventSeqs": [
-                36
+              "toolCallId": "call_00_re84n26974577w9rs2q32e6p",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello, World!\n"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "bb4952f3-d3f4-42fe-bcb3-6f042703db7b"
+            },
+            "meta": {
+              "cwd": "/tmp/wdcc-real-trace-0Di2fG/sample-repo"
             }
+          },
+          "sourceEventSeqs": [
+            36
+          ],
+          "surfaceOp": "append"
+        }
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 258,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-live-11",
+        "data": {
+          "text": "按照你的选择，我用 Python 写好了，并运行验证通过。\n\n文件：[hello.py](hello.py)\n\n```python\nprint(\"Hello, World!\")\n```\n\n运行输出：\n\n```\nHello, World!\n```"
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S08",
+        "seq": 259,
+        "turnId": "trace:dsh:S08:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-12",
+        "data": {
+          "inputTokens": 83,
+          "outputTokens": 43,
+          "cacheReadInputTokens": 9472,
+          "scope": "attempt",
+          "generationMs": 2348
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "usage",
+          "usage": {
+            "inputTokens": 83,
+            "outputTokens": 43,
+            "totalTokens": 9598,
+            "cacheReadTokens": 9472
           }
         }
       },
       {
         "sessionId": "trace:dsh:S08",
-        "seq": 305,
+        "seq": 264,
         "turnId": "trace:dsh:S08:turn:1",
-        "kind": "assistant.message",
-        "itemKey": "message-c1f17560-79b9-4ce8-820e-71b957e03bae",
+        "kind": "unknown",
+        "itemKey": "unknown-workspace/changes-44",
         "data": {
-          "text": "按照你的选择，我用 Python 写好了，并运行验证通过。\n\n文件：[hello.py](hello.py)\n\n```python\nprint(\"Hello, World!\")\n```\n\n运行输出：\n\n```\nHello, World!\n```"
+          "nativeType": "workspace/changes"
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 42,
-              "time": 1794482483881,
-              "data": {
-                "turn": 1,
-                "step": 5,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "按照你的选择，我用 Python 写好了，并运行验证通过。\n\n文件：[hello.py](hello.py)\n\n```python\nprint(\"Hello, World!\")\n```\n\n运行输出：\n\n```\nHello, World!\n```"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482482250b3d24476cb0847a2446e1bf5e527b37bd9e08b",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "c1f17560-79b9-4ce8-820e-71b957e03bae"
-                },
-                "usage": {
-                  "inputTokens": 83,
-                  "outputTokens": 43,
-                  "totalTokens": 9598,
-                  "cacheReadTokens": 9472
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482483557,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482483557,
-                    "index": 0,
-                    "dt": [
-                      1,
-                      0,
-                      51,
-                      0,
-                      0,
-                      0,
-                      133,
-                      0,
-                      1,
-                      0,
-                      137,
-                      0
-                    ],
-                    "texts": [
-                      "按照你的",
-                      "选择，我用",
-                      " Python 写",
-                      "好了，并运行",
-                      "验证通过。\n\n文件",
-                      "：[hello.py](hello.py",
-                      ")\n\n```python\nprint",
-                      "(\"Hello, World!\")\n",
-                      "```\n\n运行输出：\n\n```\nHello",
-                      ",",
-                      " World",
-                      "!\n",
-                      "```"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482483881,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "按照你的选择，我用 Python 写好了，并运行验证通过。\n\n文件：[hello.py](hello.py)\n\n```python\nprint(\"Hello, World!\")\n```\n\n运行输出：\n\n```\nHello, World!\n```"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482483881,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 83,
-                        "outputTokens": 43,
-                        "totalTokens": 9598,
-                        "cacheReadTokens": 9472
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482483881,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482482250b3d24476cb0847a2446e1bf5e527b37bd9e08b",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "workspace/changes",
+          "seq": 44,
+          "time": 1794482483884,
+          "data": {
+            "turn": 1
           }
         }
       }
@@ -1481,7 +467,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-c1f17560-79b9-4ce8-820e-71b957e03bae",
+        "itemKey": "msg-live-11",
         "text": "按照你的选择，我用 Python 写好了，并运行验证通过。\n\n文件：[hello.py](hello.py)\n\n```python\nprint(\"Hello, World!\")\n```\n\n运行输出：\n\n```\nHello, World!\n```"
       }
     ],
@@ -1499,6 +485,14 @@
       "reads": 0,
       "edits": 1,
       "tools": 1
+    },
+    "usage": {
+      "inputTokens": 1217,
+      "outputTokens": 430,
+      "cacheReadInputTokens": 45184,
+      "scope": "turn",
+      "generationMs": 8900,
+      "tokensPerSecond": 48.31460674157303
     }
   }
 ]

@@ -14,10 +14,42 @@
     "steps": [
       {
         "sessionId": "trace:claude-code:S08",
+        "seq": 43,
+        "turnId": "trace:claude-code:S08:turn:1",
+        "kind": "tool.call",
+        "itemKey": "tool-toolu_01BZJjv3v1dtagKnbRo9kSLD",
+        "data": {
+          "name": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "你想用哪种语言写 hello world？",
+                "header": "语言",
+                "multiSelect": false,
+                "options": [
+                  {
+                    "label": "Python",
+                    "description": "用 Python 编写 hello world"
+                  },
+                  {
+                    "label": "JavaScript",
+                    "description": "用 JavaScript 编写 hello world"
+                  }
+                ]
+              }
+            ]
+          },
+          "status": "completed",
+          "output": "The user did not answer the questions."
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:claude-code:S08",
         "seq": 46,
         "turnId": "trace:claude-code:S08:turn:1",
         "kind": "assistant.message",
-        "itemKey": "msg-sdk-57",
+        "itemKey": "msg-2-0",
         "data": {
           "text": "你还没有回答，所以我先不写。你想用 Python 还是 JavaScript 写 hello world？告诉我之后我就动手。"
         },
@@ -62,10 +94,10 @@
         "seq": 50,
         "turnId": "trace:claude-code:S08:turn:1",
         "kind": "assistant.message",
-        "itemKey": "result-sdk-61",
+        "itemKey": "result-61",
         "data": {
           "text": "你还没有回答，所以我先不写。你想用 Python 还是 JavaScript 写 hello world？告诉我之后我就动手。",
-          "nativePhase": "final_answer"
+          "nativePhase": "final_result"
         },
         "at": "<timestamp>",
         "native": {
@@ -180,7 +212,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "result-sdk-61",
+        "itemKey": "result-61",
         "text": "你还没有回答，所以我先不写。你想用 Python 还是 JavaScript 写 hello world？告诉我之后我就动手。"
       }
     ],
@@ -189,7 +221,7 @@
       "commands": 0,
       "reads": 0,
       "edits": 0,
-      "tools": 0
+      "tools": 1
     }
   }
 ]

@@ -2,6 +2,7 @@ import type { Command } from '@webdcc/protocol';
 import type { FileStore } from './files.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
+import type { InteractionRecorder } from './interaction-recorder.js';
 
 export interface DispatchResult {
   ok: boolean;
@@ -18,14 +19,18 @@ export class CommandDispatcher {
     private readonly store: Store,
     private readonly manager: SessionManager,
     private readonly files: FileStore,
+    private readonly recorder?: InteractionRecorder,
   ) {}
 
   async dispatch(command: Command): Promise<DispatchResult> {
+    const owner = 'sessionId' in command ? command.sessionId : `command-${command.clientCommandId}`;
+    this.recorder?.record(owner, 'web', 'command', command, 'out');
     const existing = this.store.getCommandResult(command.clientCommandId);
     if (existing !== undefined) return existing.result as DispatchResult;
 
     const result = await this.execute(command);
     this.store.recordCommand(command.clientCommandId, command.op, result);
+    this.recorder?.record(owner, 'web', 'ack', result, 'in');
     return result;
   }
 
@@ -33,11 +38,12 @@ export class CommandDispatcher {
     try {
       switch (command.op) {
         case 'send': {
-          const images = (command.images ?? []).flatMap((fileId) => {
+          const images = (command.images ?? []).map((fileId) => {
             const file = this.store.getFile(fileId);
             const path = this.files.resolvePath(fileId);
-            if (file === undefined || path === undefined) return [];
-            return [{ fileId, path, mime: file.mime }];
+            if (file === undefined || path === undefined) throw Object.assign(new Error('上传文件不存在，消息未发送'), { statusCode: 404 });
+            this.recorder?.record(command.sessionId, 'file', 'attachment-resolved', { fileId, path, mime: file.mime, sha256: file.sha256, bytes: file.size });
+            return { fileId, path, mime: file.mime };
           });
           const { turnId, queued } = await this.manager.send(
             command.sessionId,

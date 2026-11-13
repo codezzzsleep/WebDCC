@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S06",
-        "seq": 4,
-        "turnId": "trace:codex:S06:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S06",
         "seq": 5,
         "turnId": "trace:codex:S06:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-3",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -40,42 +28,6 @@
           "summary": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
           "details": null
         }
-      },
-      {
-        "sessionId": "trace:codex:S06",
-        "seq": 9,
-        "turnId": "trace:codex:S06:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S06",
-        "seq": 12,
-        "turnId": "trace:codex:S06:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S06",
-        "seq": 16,
-        "turnId": "trace:codex:S06:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-16",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
       }
     ],
     "live": [],

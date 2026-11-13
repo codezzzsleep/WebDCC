@@ -2,9 +2,9 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AdapterEvent, EventData, EventKind, OpenItem, StoredEvent, TraceFrame, TurnView } from '../packages/protocol/src/index.js';
 import { checkTurnInvariants, reduceTurn, resolveAnswer } from '../packages/protocol/src/index.js';
-import { CodexTranslator, DELTA_FRAMES as CODEX_DELTAS } from '../packages/adapters/codex/src/translator.js';
-import { ClaudeTranslator, DELTA_FRAMES as CLAUDE_DELTAS } from '../packages/adapters/claude/src/translator.js';
-import { DshTranslator, DELTA_FRAMES as DSH_DELTAS } from '../packages/adapters/dsh/src/translator.js';
+import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
+import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.js';
+import { DshAdapter } from '../packages/adapters/dsh/src/adapter.js';
 
 interface Failure { id: string; frame: number; message: string; }
 interface Result {
@@ -37,10 +37,8 @@ function promptOf(frame: TraceFrame): string | undefined {
 }
 
 function adapterFor(agent: string): { feed: (frame: TraceFrame) => AdapterEvent[]; deltas: Set<string> } {
-  if (agent === 'codex') { const translator = new CodexTranslator(); return { feed: (frame) => translator.feed(frame), deltas: CODEX_DELTAS }; }
-  if (agent === 'claude-code') { const translator = new ClaudeTranslator(); return { feed: (frame) => translator.feed(frame), deltas: CLAUDE_DELTAS }; }
-  const translator = new DshTranslator();
-  return { feed: (frame) => translator.feed(frame), deltas: DSH_DELTAS };
+  const handler = agent === 'codex' ? CodexAdapter.replay() : agent === 'claude-code' ? ClaudeAdapter.replay() : DshAdapter.replay();
+  return { feed: handler.feed, deltas: new Set() };
 }
 
 /** Expected files deliberately ignore transport timestamps while retaining

@@ -17,7 +17,7 @@
         "seq": 7,
         "turnId": "trace:claude-code:S01:turn:1",
         "kind": "assistant.message",
-        "itemKey": "msg-sdk-18",
+        "itemKey": "msg-1-0",
         "data": {
           "text": "幂等是指同一个操作执行一次和执行多次所产生的结果完全相同,不会因重复执行而产生额外的副作用。"
         },
@@ -62,10 +62,10 @@
         "seq": 11,
         "turnId": "trace:claude-code:S01:turn:1",
         "kind": "assistant.message",
-        "itemKey": "result-sdk-22",
+        "itemKey": "result-22",
         "data": {
           "text": "幂等是指同一个操作执行一次和执行多次所产生的结果完全相同,不会因重复执行而产生额外的副作用。",
-          "nativePhase": "final_answer"
+          "nativePhase": "final_result"
         },
         "at": "<timestamp>",
         "native": {
@@ -180,7 +180,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "result-sdk-22",
+        "itemKey": "result-22",
         "text": "幂等是指同一个操作执行一次和执行多次所产生的结果完全相同,不会因重复执行而产生额外的副作用。"
       }
     ],

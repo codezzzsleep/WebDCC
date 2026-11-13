@@ -1,7 +1,7 @@
 [
   {
     "turnId": "trace:claude-code:S04:turn:1",
-    "state": "failed",
+    "state": "interrupted",
     "user": {
       "text": "在 /tmp 下创建文件 wdcc-trace-probe.txt，内容为 ok。",
       "at": "<timestamp>"
@@ -14,10 +14,50 @@
     "steps": [
       {
         "sessionId": "trace:claude-code:S04",
+        "seq": 20,
+        "turnId": "trace:claude-code:S04:turn:1",
+        "kind": "file.change",
+        "itemKey": "tool-toolu_0154XNAhBaVRcgX5uvNHpQ1Y",
+        "data": {
+          "changes": [
+            {
+              "path": "/tmp/wdcc-trace-probe.txt",
+              "kind": "add",
+              "added": 1,
+              "removed": 0,
+              "note": "整文件写入，未取得原内容",
+              "diff": "--- /dev/null\n+++ b//tmp/wdcc-trace-probe.txt\n@@ -0,0 +1,1 @@\n+ok\n"
+            }
+          ],
+          "status": "failed"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "content": "<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>",
+                "is_error": true,
+                "tool_use_id": "toolu_0154XNAhBaVRcgX5uvNHpQ1Y"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "7dd4de84-9772-4468-94fd-580c47c8c355",
+          "uuid": "ce0e01ae-da23-4e4a-b74b-d7c79e937459",
+          "timestamp": "2026-11-11T23:34:05.924Z",
+          "tool_use_result": "Error: File has not been read yet. Read it first before writing to it."
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S04",
         "seq": 30,
         "turnId": "trace:claude-code:S04:turn:1",
         "kind": "reasoning",
-        "itemKey": "msg-sdk-35",
+        "itemKey": "msg-2-0",
         "data": {
           "text": "I'm checking whether the file exists, and I'll read it first.\n\n"
         },
@@ -59,15 +99,59 @@
           "thinking_duration_ms": 2,
           "thinking_display": "updates"
         }
+      },
+      {
+        "sessionId": "trace:claude-code:S04",
+        "seq": 42,
+        "turnId": "trace:claude-code:S04:turn:1",
+        "kind": "file.read",
+        "itemKey": "tool-toolu_01UELrYZk6nXqkbK2LXcvnqv",
+        "data": {
+          "path": "/tmp/wdcc-trace-probe.txt"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "content": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+                "is_error": true,
+                "tool_use_id": "toolu_01UELrYZk6nXqkbK2LXcvnqv"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "7dd4de84-9772-4468-94fd-580c47c8c355",
+          "uuid": "a5733d4c-449b-4e6d-ab36-889afea8cd4d",
+          "timestamp": "2026-11-11T23:34:08.781Z",
+          "tool_use_result": "User rejected tool use",
+          "tool_result_meta": [
+            {
+              "id": "toolu_01UELrYZk6nXqkbK2LXcvnqv",
+              "non_execution_kind": "user-rejected"
+            }
+          ]
+        }
       }
     ],
     "live": [],
     "answer": [],
-    "changes": [],
+    "changes": [
+      {
+        "path": "/tmp/wdcc-trace-probe.txt",
+        "kind": "add",
+        "added": 1,
+        "removed": 0,
+        "note": "整文件写入，未取得原内容"
+      }
+    ],
     "summary": {
       "commands": 0,
-      "reads": 0,
-      "edits": 0,
+      "reads": 1,
+      "edits": 1,
       "tools": 0
     }
   }

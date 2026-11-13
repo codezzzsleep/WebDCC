@@ -14,291 +14,54 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S04",
-        "seq": 83,
+        "seq": 26,
+        "turnId": "trace:dsh:S04:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-1",
+        "data": {
+          "text": "The user wants to create /tmp/wdcc-trace-probe.txt with content \"ok\". File policy is workspace-write, workspace is /tmp/wdcc-real-trace-AuVFAW/sample-repo. /tmp itself is outside. \"Some platform temporary areas may also be writable.\" Let me just try writing. Approval prompts are enabled, so if it needs approval it may ask.\n\nLet me attempt the write.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S04",
+        "seq": 56,
         "turnId": "trace:dsh:S04:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-93aed14b-5de0-462c-8954-3f702a557014",
+        "itemKey": "msg-live-2",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S04",
+        "seq": 58,
+        "turnId": "trace:dsh:S04:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-3",
+        "data": {
+          "inputTokens": 502,
+          "outputTokens": 154,
+          "cacheReadInputTokens": 8448,
+          "scope": "attempt",
+          "generationMs": 467
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 25,
-              "time": 1794482379727,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "The user wants to create /tmp/wdcc-trace-probe.txt with content \"ok\". File policy is workspace-write, workspace is /tmp/wdcc-real-trace-AuVFAW/sample-repo. /tmp itself is outside. \"Some platform temporary areas may also be writable.\" Let me just try writing. Approval prompts are enabled, so if it needs approval it may ask.\n\nLet me attempt the write."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_haot4ifav2w1pyynk578om96",
-                      "name": "write",
-                      "arguments": "{\"file_path\":\"/tmp/wdcc-trace-probe.txt\",\"content\":\"ok\\n\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482378150b3d24476cb0847a2446e1bf5e527b37b3174b5",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "93aed14b-5de0-462c-8954-3f702a557014"
-                },
-                "usage": {
-                  "inputTokens": 502,
-                  "outputTokens": 154,
-                  "totalTokens": 9104,
-                  "cacheReadTokens": 8448
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482379262,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482379262,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      1,
-                      55,
-                      0,
-                      1,
-                      0,
-                      54,
-                      1,
-                      0,
-                      119,
-                      1,
-                      0,
-                      0,
-                      1,
-                      54,
-                      0,
-                      1,
-                      0,
-                      29,
-                      1,
-                      0
-                    ],
-                    "texts": [
-                      "The",
-                      " user wants to create /tmp",
-                      "/wdcc",
-                      "-trace-probe.txt with",
-                      " content \"ok\". File policy",
-                      " is workspace-write, workspace",
-                      " is /tmp/w",
-                      "dcc-real-trace-A",
-                      "uVFAW/s",
-                      "ample-repo. /tmp",
-                      " itself",
-                      " is outside. \"",
-                      "Some platform temporary areas may also",
-                      " be writable.\" Let me",
-                      " just",
-                      " try writing. Approval",
-                      " prompts are enabled",
-                      ", so if it",
-                      " needs approval it",
-                      " may ask.\n\nLet me attempt",
-                      " the",
-                      " write."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482379580,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482379580,
-                    "index": 1,
-                    "dt": [
-                      5,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      18,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      8,
-                      0,
-                      1,
-                      108,
-                      1,
-                      0,
-                      0,
-                      0
-                    ],
-                    "id": "call_00_haot4ifav2w1pyynk578om96",
-                    "name": "write",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "/",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-t",
-                      "race",
-                      "-pro",
-                      "be",
-                      ".txt",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "content",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "ok",
-                      "\\n",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482379726,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "The user wants to create /tmp/wdcc-trace-probe.txt with content \"ok\". File policy is workspace-write, workspace is /tmp/wdcc-real-trace-AuVFAW/sample-repo. /tmp itself is outside. \"Some platform temporary areas may also be writable.\" Let me just try writing. Approval prompts are enabled, so if it needs approval it may ask.\n\nLet me attempt the write."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482379726,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_haot4ifav2w1pyynk578om96",
-                        "name": "write",
-                        "arguments": "{\"file_path\":\"/tmp/wdcc-trace-probe.txt\",\"content\":\"ok\\n\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482379726,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 502,
-                        "outputTokens": 154,
-                        "totalTokens": 9104,
-                        "cacheReadTokens": 8448
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482379726,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482378150b3d24476cb0847a2446e1bf5e527b37b3174b5",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 502,
+            "outputTokens": 154,
+            "totalTokens": 9104,
+            "cacheReadTokens": 8448
           }
         }
       },
       {
         "sessionId": "trace:dsh:S04",
-        "seq": 85,
+        "seq": 62,
         "turnId": "trace:dsh:S04:turn:1",
         "kind": "file.change",
         "itemKey": "tool-call_00_haot4ifav2w1pyynk578om96",
@@ -317,306 +80,96 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 27,
-              "time": 1794482379740,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_haot4ifav2w1pyynk578om96"
-                  },
-                  "toolCallId": "call_00_haot4ifav2w1pyynk578om96",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-trace-probe.txt</path>\n<type>file</type>\n<content>\nUpdated file\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "3e890c12-904c-4a60-a5ae-391bfe2048ae"
-                },
-                "meta": {
-                  "operation": "update",
-                  "path": "/tmp/wdcc-trace-probe.txt",
-                  "diffs": [
-                    {
-                      "path": "/tmp/wdcc-trace-probe.txt",
-                      "oldText": "ok",
-                      "newText": "ok"
-                    }
-                  ]
-                }
+          "type": "tool/result",
+          "seq": 27,
+          "time": 1794482379740,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_haot4ifav2w1pyynk578om96"
               },
-              "sourceEventSeqs": [
-                26
+              "toolCallId": "call_00_haot4ifav2w1pyynk578om96",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-trace-probe.txt</path>\n<type>file</type>\n<content>\nUpdated file\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "3e890c12-904c-4a60-a5ae-391bfe2048ae"
+            },
+            "meta": {
+              "operation": "update",
+              "path": "/tmp/wdcc-trace-probe.txt",
+              "diffs": [
+                {
+                  "path": "/tmp/wdcc-trace-probe.txt",
+                  "oldText": "ok",
+                  "newText": "ok"
+                }
+              ]
             }
-          }
+          },
+          "sourceEventSeqs": [
+            26
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S04",
-        "seq": 130,
+        "seq": 67,
+        "turnId": "trace:dsh:S04:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-4",
+        "data": {
+          "text": "It succeeded. Verify content.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S04",
+        "seq": 99,
         "turnId": "trace:dsh:S04:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-d34e48d7-364f-46c3-a7ef-7912e3495fed",
+        "itemKey": "msg-live-5",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S04",
+        "seq": 101,
+        "turnId": "trace:dsh:S04:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-6",
+        "data": {
+          "inputTokens": 313,
+          "outputTokens": 72,
+          "cacheReadInputTokens": 8832,
+          "scope": "attempt",
+          "generationMs": 1746
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 31,
-              "time": 1794482381472,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "It succeeded. Verify content."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_rj3etw83uejthl43eeq2btny",
-                      "name": "bash",
-                      "arguments": "{\"command\":\"cat /tmp/wdcc-trace-probe.txt\",\"description\":\"Verify probe file content\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482380284b3d24476cb0847a2446e1bf5e527b37b77e085",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "d34e48d7-364f-46c3-a7ef-7912e3495fed"
-                },
-                "usage": {
-                  "inputTokens": 313,
-                  "outputTokens": 72,
-                  "totalTokens": 9217,
-                  "cacheReadTokens": 8832
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482381240,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482381240,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      1
-                    ],
-                    "texts": [
-                      "It",
-                      " succeeded. Verify",
-                      " content."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482381241,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482381241,
-                    "index": 1,
-                    "dt": [
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      14,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      0,
-                      31,
-                      1,
-                      0,
-                      0,
-                      18,
-                      0,
-                      0,
-                      1,
-                      108,
-                      0,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0
-                    ],
-                    "id": "call_00_rj3etw83uejthl43eeq2btny",
-                    "name": "bash",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "command",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "cat",
-                      " /",
-                      "tmp",
-                      "/w",
-                      "d",
-                      "cc",
-                      "-t",
-                      "race",
-                      "-pro",
-                      "be",
-                      ".txt",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "description",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "Verify",
-                      " probe",
-                      " file",
-                      " content",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482381471,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "It succeeded. Verify content."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482381472,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_rj3etw83uejthl43eeq2btny",
-                        "name": "bash",
-                        "arguments": "{\"command\":\"cat /tmp/wdcc-trace-probe.txt\",\"description\":\"Verify probe file content\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482381472,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 313,
-                        "outputTokens": 72,
-                        "totalTokens": 9217,
-                        "cacheReadTokens": 8832
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482381472,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482380284b3d24476cb0847a2446e1bf5e527b37b77e085",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 313,
+            "outputTokens": 72,
+            "totalTokens": 9217,
+            "cacheReadTokens": 8832
           }
         }
       },
       {
         "sessionId": "trace:dsh:S04",
-        "seq": 134,
+        "seq": 107,
         "turnId": "trace:dsh:S04:turn:1",
         "kind": "command",
         "itemKey": "tool-call_00_rj3etw83uejthl43eeq2btny",
@@ -627,257 +180,70 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 35,
-              "time": 1794482381590,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_rj3etw83uejthl43eeq2btny"
-                  },
-                  "toolCallId": "call_00_rj3etw83uejthl43eeq2btny",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "ok\n[stderr]\nlandlock-run: partial enforcement (older Landlock ABI)\n"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "4c306ce9-9d70-48e8-8d7a-6d8e05d840d8"
-                },
-                "meta": {
-                  "cwd": "/tmp/wdcc-real-trace-AuVFAW/sample-repo"
-                }
+          "type": "tool/result",
+          "seq": 35,
+          "time": 1794482381590,
+          "data": {
+            "turn": 1,
+            "step": 2,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_rj3etw83uejthl43eeq2btny"
               },
-              "sourceEventSeqs": [
-                32
+              "toolCallId": "call_00_rj3etw83uejthl43eeq2btny",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "ok\n[stderr]\nlandlock-run: partial enforcement (older Landlock ABI)\n"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "4c306ce9-9d70-48e8-8d7a-6d8e05d840d8"
+            },
+            "meta": {
+              "cwd": "/tmp/wdcc-real-trace-AuVFAW/sample-repo"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            32
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S04",
-        "seq": 183,
+        "seq": 111,
         "turnId": "trace:dsh:S04:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-26637d0b-0528-4a50-b73f-c4d425235e41",
+        "itemKey": "msg-live-7",
         "data": {
           "text": "已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。\n\n说明：写文件操作在 workspace-write 沙箱下直接成功，未触发审批提示；实际落盘路径是 `/tmp/wdcc-trace-probe.txt`，放在会话工作区 `/tmp/wdcc-real-trace-AuVFAW/sample-repo` 之外，这属于平台临时区域的可写例外情况。读取校验时 bash 返回 `landlock-run: partial enforcement` 警告，但文件内容已确认为 `ok`。"
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S04",
+        "seq": 113,
+        "turnId": "trace:dsh:S04:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-8",
+        "data": {
+          "inputTokens": 160,
+          "outputTokens": 121,
+          "cacheReadInputTokens": 9088,
+          "scope": "attempt",
+          "generationMs": 2514
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 38,
-              "time": 1794482383985,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。\n\n说明：写文件操作在 workspace-write 沙箱下直接成功，未触发审批提示；实际落盘路径是 `/tmp/wdcc-trace-probe.txt`，放在会话工作区 `/tmp/wdcc-real-trace-AuVFAW/sample-repo` 之外，这属于平台临时区域的可写例外情况。读取校验时 bash 返回 `landlock-run: partial enforcement` 警告，但文件内容已确认为 `ok`。"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482382113b3d24476cb0847a2446e1bf5e527b37b580bc0",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "26637d0b-0528-4a50-b73f-c4d425235e41"
-                },
-                "usage": {
-                  "inputTokens": 160,
-                  "outputTokens": 121,
-                  "totalTokens": 9369,
-                  "cacheReadTokens": 9088
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482383422,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482383422,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      0,
-                      98,
-                      0,
-                      1,
-                      0,
-                      62,
-                      0,
-                      0,
-                      0,
-                      89,
-                      0,
-                      0,
-                      1,
-                      50,
-                      0,
-                      1,
-                      0,
-                      49,
-                      0,
-                      0,
-                      1,
-                      66,
-                      0,
-                      1,
-                      0,
-                      80,
-                      0,
-                      1,
-                      0,
-                      60,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0
-                    ],
-                    "texts": [
-                      "已创建 `/tmp/wd",
-                      "cc-trace-probe.txt",
-                      "`，内容为 `ok",
-                      "`。\n\n说明",
-                      "：写文件",
-                      "操作",
-                      "在 workspace",
-                      "-write 沙箱下",
-                      "直接成功",
-                      "，未触发",
-                      "审批提示；实际",
-                      "落",
-                      "盘路径是",
-                      " `/tmp/w",
-                      "dcc-trace-probe",
-                      ".txt`，放在会话",
-                      "工作区 `/",
-                      "tmp/w",
-                      "dcc-real-trace-A",
-                      "uVFAW/sample",
-                      "-repo` 之外，",
-                      "这",
-                      "属于平台临时",
-                      "区域",
-                      "的可写例外",
-                      "情况。读取校验",
-                      "时",
-                      " bash",
-                      " 返回",
-                      " `landlock-run",
-                      ": partial enforcement`",
-                      " 警告",
-                      "，但文件",
-                      "内容已",
-                      "确",
-                      "认为",
-                      " `",
-                      "ok",
-                      "`",
-                      "。"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482383985,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。\n\n说明：写文件操作在 workspace-write 沙箱下直接成功，未触发审批提示；实际落盘路径是 `/tmp/wdcc-trace-probe.txt`，放在会话工作区 `/tmp/wdcc-real-trace-AuVFAW/sample-repo` 之外，这属于平台临时区域的可写例外情况。读取校验时 bash 返回 `landlock-run: partial enforcement` 警告，但文件内容已确认为 `ok`。"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482383985,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 160,
-                        "outputTokens": 121,
-                        "totalTokens": 9369,
-                        "cacheReadTokens": 9088
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482383985,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482382113b3d24476cb0847a2446e1bf5e527b37b580bc0",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 160,
+            "outputTokens": 121,
+            "totalTokens": 9369,
+            "cacheReadTokens": 9088
           }
         }
       }
@@ -885,7 +251,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-26637d0b-0528-4a50-b73f-c4d425235e41",
+        "itemKey": "msg-live-7",
         "text": "已创建 `/tmp/wdcc-trace-probe.txt`，内容为 `ok`。\n\n说明：写文件操作在 workspace-write 沙箱下直接成功，未触发审批提示；实际落盘路径是 `/tmp/wdcc-trace-probe.txt`，放在会话工作区 `/tmp/wdcc-real-trace-AuVFAW/sample-repo` 之外，这属于平台临时区域的可写例外情况。读取校验时 bash 返回 `landlock-run: partial enforcement` 警告，但文件内容已确认为 `ok`。"
       }
     ],
@@ -903,6 +269,14 @@
       "reads": 0,
       "edits": 1,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 975,
+      "outputTokens": 347,
+      "cacheReadInputTokens": 26368,
+      "scope": "turn",
+      "generationMs": 4727,
+      "tokensPerSecond": 73.40808123545588
     }
   }
 ]

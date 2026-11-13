@@ -14,10 +14,58 @@
     "steps": [
       {
         "sessionId": "trace:claude-code:S10",
+        "seq": 23,
+        "turnId": "trace:claude-code:S10:turn:1",
+        "kind": "file.read",
+        "itemKey": "tool-toolu_01NEwEwDyDC2L9Az2Ej33cts",
+        "data": {
+          "path": "/tmp/wdcc-real-trace-jxe8Vm/sample-repo/README.md"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "tool_use_id": "toolu_01NEwEwDyDC2L9Az2Ej33cts",
+                "type": "tool_result",
+                "content": "1\t# Sample Repo"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "3c6688c8-f90d-407d-b5af-e823bcdf77d1",
+          "uuid": "05e99e83-1baf-4228-a53d-8712959d4452",
+          "timestamp": "2026-11-11T23:35:36.835Z",
+          "tool_use_result": {
+            "type": "text",
+            "file": {
+              "filePath": "/tmp/wdcc-real-trace-jxe8Vm/sample-repo/README.md",
+              "content": "# Sample Repo",
+              "numLines": 1,
+              "startLine": 1,
+              "totalLines": 4
+            }
+          },
+          "tool_result_meta": [
+            {
+              "id": "toolu_01NEwEwDyDC2L9Az2Ej33cts",
+              "permission_decision": {
+                "decision": "accept",
+                "source": "config",
+                "reason_type": "mode"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S10",
         "seq": 26,
         "turnId": "trace:claude-code:S10:turn:1",
         "kind": "assistant.message",
-        "itemKey": "msg-sdk-29",
+        "itemKey": "msg-2-0",
         "data": {
           "text": "README.md 的第一行是:`# Sample Repo`"
         },
@@ -62,10 +110,10 @@
         "seq": 30,
         "turnId": "trace:claude-code:S10:turn:1",
         "kind": "assistant.message",
-        "itemKey": "result-sdk-33",
+        "itemKey": "result-33",
         "data": {
           "text": "README.md 的第一行是:`# Sample Repo`",
-          "nativePhase": "final_answer"
+          "nativePhase": "final_result"
         },
         "at": "<timestamp>",
         "native": {
@@ -180,14 +228,14 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "result-sdk-33",
+        "itemKey": "result-33",
         "text": "README.md 的第一行是:`# Sample Repo`"
       }
     ],
     "changes": [],
     "summary": {
       "commands": 0,
-      "reads": 0,
+      "reads": 1,
       "edits": 0,
       "tools": 0
     }
@@ -207,10 +255,58 @@
     "steps": [
       {
         "sessionId": "trace:claude-code:S10",
+        "seq": 56,
+        "turnId": "trace:claude-code:S10:turn:2",
+        "kind": "file.read",
+        "itemKey": "tool-toolu_01994y2zTptgsGKGeNMVzpGN",
+        "data": {
+          "path": "/tmp/wdcc-real-trace-jxe8Vm/sample-repo/README.md"
+        },
+        "at": "<timestamp>",
+        "native": {
+          "type": "user",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "tool_use_id": "toolu_01994y2zTptgsGKGeNMVzpGN",
+                "type": "tool_result",
+                "content": "2\t"
+              }
+            ]
+          },
+          "parent_tool_use_id": null,
+          "session_id": "3c6688c8-f90d-407d-b5af-e823bcdf77d1",
+          "uuid": "d1c6c9ce-d560-4cdf-b6db-5f84b68b47e0",
+          "timestamp": "2026-11-11T23:35:41.735Z",
+          "tool_use_result": {
+            "type": "text",
+            "file": {
+              "filePath": "/tmp/wdcc-real-trace-jxe8Vm/sample-repo/README.md",
+              "content": "",
+              "numLines": 1,
+              "startLine": 2,
+              "totalLines": 4
+            }
+          },
+          "tool_result_meta": [
+            {
+              "id": "toolu_01994y2zTptgsGKGeNMVzpGN",
+              "permission_decision": {
+                "decision": "accept",
+                "source": "config",
+                "reason_type": "mode"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "sessionId": "trace:claude-code:S10",
         "seq": 59,
         "turnId": "trace:claude-code:S10:turn:2",
         "kind": "assistant.message",
-        "itemKey": "msg-sdk-63",
+        "itemKey": "msg-4-0",
         "data": {
           "text": "README.md 的第二行是空行。"
         },
@@ -255,10 +351,10 @@
         "seq": 63,
         "turnId": "trace:claude-code:S10:turn:2",
         "kind": "assistant.message",
-        "itemKey": "result-sdk-67",
+        "itemKey": "result-67",
         "data": {
           "text": "README.md 的第二行是空行。",
-          "nativePhase": "final_answer"
+          "nativePhase": "final_result"
         },
         "at": "<timestamp>",
         "native": {
@@ -373,14 +469,14 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "result-sdk-67",
+        "itemKey": "result-67",
         "text": "README.md 的第二行是空行。"
       }
     ],
     "changes": [],
     "summary": {
       "commands": 0,
-      "reads": 0,
+      "reads": 1,
       "edits": 0,
       "tools": 0
     }

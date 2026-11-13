@@ -14,310 +14,64 @@
     "steps": [
       {
         "sessionId": "trace:dsh:S02",
-        "seq": 72,
+        "seq": 25,
         "turnId": "trace:dsh:S02:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-e56cddb6-d462-4cb8-bd7c-e9255e64d0aa",
+        "itemKey": "msg-live-1",
         "data": {
           "text": "I'll list the files and read the README."
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S02",
+        "seq": 50,
+        "turnId": "trace:dsh:S02:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-live-2",
+        "data": {
+          "text": ""
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S02",
+        "seq": 63,
+        "turnId": "trace:dsh:S02:turn:1",
+        "kind": "assistant.message",
+        "itemKey": "msg-live-3",
+        "data": {
+          "text": ""
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S02",
+        "seq": 66,
+        "turnId": "trace:dsh:S02:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-4",
+        "data": {
+          "inputTokens": 707,
+          "outputTokens": 98,
+          "cacheReadInputTokens": 8192,
+          "scope": "attempt",
+          "generationMs": 235
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 17,
-              "time": 1794482361042,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "I'll list the files and read the README."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_n9gaoceu07kilqv1w6ygiz0f",
-                      "name": "bash",
-                      "arguments": "{\"description\":\"List files in current directory\",\"command\":\"ls -la\"}"
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_01_xjokcbzwdtfih6e0itq6jt7l",
-                      "name": "read",
-                      "arguments": "{\"file_path\":\"README.md\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482359768b3d24476cb0847a2446e1bf5e527b37b79ddb3",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        },
-                        {
-                          "type": "tool-call"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "e56cddb6-d462-4cb8-bd7c-e9255e64d0aa"
-                },
-                "usage": {
-                  "inputTokens": 707,
-                  "outputTokens": 98,
-                  "totalTokens": 8997,
-                  "cacheReadTokens": 8192
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482360812,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482360812,
-                    "index": 0,
-                    "dt": [
-                      59,
-                      1
-                    ],
-                    "texts": [
-                      "I'll list the",
-                      " files and read the",
-                      " README."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482360873,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482360873,
-                    "index": 1,
-                    "dt": [
-                      1,
-                      0,
-                      1,
-                      0,
-                      0,
-                      73,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      22,
-                      1,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1
-                    ],
-                    "id": "call_00_n9gaoceu07kilqv1w6ygiz0f",
-                    "name": "bash",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "description",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "List",
-                      " files",
-                      " in",
-                      " current",
-                      " directory",
-                      "\"",
-                      ", ",
-                      "\"",
-                      "command",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "ls",
-                      " -",
-                      "la",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482360977,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 2,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482360978,
-                    "index": 2,
-                    "dt": [
-                      0,
-                      0,
-                      0,
-                      59,
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0
-                    ],
-                    "id": "call_01_xjokcbzwdtfih6e0itq6jt7l",
-                    "name": "read",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "README",
-                      ".md",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482361041,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "I'll list the files and read the README."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482361041,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_n9gaoceu07kilqv1w6ygiz0f",
-                        "name": "bash",
-                        "arguments": "{\"description\":\"List files in current directory\",\"command\":\"ls -la\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482361041,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 2,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_01_xjokcbzwdtfih6e0itq6jt7l",
-                        "name": "read",
-                        "arguments": "{\"file_path\":\"README.md\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482361041,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 707,
-                        "outputTokens": 98,
-                        "totalTokens": 8997,
-                        "cacheReadTokens": 8192
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482361041,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482359768b3d24476cb0847a2446e1bf5e527b37b79ddb3",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          },
-                          {
-                            "type": "tool-call"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 707,
+            "outputTokens": 98,
+            "totalTokens": 8997,
+            "cacheReadTokens": 8192
           }
         }
       },
       {
         "sessionId": "trace:dsh:S02",
-        "seq": 76,
+        "seq": 72,
         "turnId": "trace:dsh:S02:turn:1",
         "kind": "command",
         "itemKey": "tool-call_00_n9gaoceu07kilqv1w6ygiz0f",
@@ -328,48 +82,41 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 21,
-              "time": 1794482361150,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_n9gaoceu07kilqv1w6ygiz0f"
-                  },
-                  "toolCallId": "call_00_n9gaoceu07kilqv1w6ygiz0f",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 19:19 .\ndrwx------ 5 root root 4096 Nov 12 19:19 ..\n-rw-r--r-- 1 root root   21 Nov 12 19:19 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 19:19 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 19:19 README.md\n-rw-r--r-- 1 root root   32 Nov 12 19:19 SPEC.md\n"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "cbc7bdce-25dd-41c1-b4c9-7248c404936f"
-                },
-                "meta": {
-                  "cwd": "/tmp/wdcc-real-trace-wKjvaA/sample-repo"
-                }
+          "type": "tool/result",
+          "seq": 21,
+          "time": 1794482361150,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_n9gaoceu07kilqv1w6ygiz0f"
               },
-              "sourceEventSeqs": [
-                18
+              "toolCallId": "call_00_n9gaoceu07kilqv1w6ygiz0f",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "total 24\ndrwxr-xr-x 2 root root 4096 Nov 12 19:19 .\ndrwx------ 5 root root 4096 Nov 12 19:19 ..\n-rw-r--r-- 1 root root   21 Nov 12 19:19 AGENTS.md\n-rw-r--r-- 1 root root   21 Nov 12 19:19 CLAUDE.md\n-rw-r--r-- 1 root root   36 Nov 12 19:19 README.md\n-rw-r--r-- 1 root root   32 Nov 12 19:19 SPEC.md\n"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "cbc7bdce-25dd-41c1-b4c9-7248c404936f"
+            },
+            "meta": {
+              "cwd": "/tmp/wdcc-real-trace-wKjvaA/sample-repo"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            18
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S02",
-        "seq": 77,
+        "seq": 73,
         "turnId": "trace:dsh:S02:turn:1",
         "kind": "file.read",
         "itemKey": "tool-call_01_xjokcbzwdtfih6e0itq6jt7l",
@@ -378,297 +125,105 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 23,
-              "time": 1794482361160,
-              "data": {
-                "turn": 1,
-                "step": 1,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_01_xjokcbzwdtfih6e0itq6jt7l"
-                  },
-                  "toolCallId": "call_01_xjokcbzwdtfih6e0itq6jt7l",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-wKjvaA/sample-repo/README.md</path>\n<type>file</type>\n<content>\n1: # Sample Repo\n2: \n3: WebDCC trace sample.\n\n(End of file - total 3 lines)\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "d3687f4d-fab9-44d1-bfb7-d4f03e2deec9"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-real-trace-wKjvaA/sample-repo/README.md",
-                  "offset": 1,
-                  "lines": [
-                    {
-                      "number": 1,
-                      "text": "# Sample Repo"
-                    },
-                    {
-                      "number": 2,
-                      "text": ""
-                    },
-                    {
-                      "number": 3,
-                      "text": "WebDCC trace sample."
-                    }
-                  ],
-                  "totalLines": 3,
-                  "lang": "md"
-                }
+          "type": "tool/result",
+          "seq": 23,
+          "time": 1794482361160,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_01_xjokcbzwdtfih6e0itq6jt7l"
               },
-              "sourceEventSeqs": [
-                22
+              "toolCallId": "call_01_xjokcbzwdtfih6e0itq6jt7l",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-wKjvaA/sample-repo/README.md</path>\n<type>file</type>\n<content>\n1: # Sample Repo\n2: \n3: WebDCC trace sample.\n\n(End of file - total 3 lines)\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "d3687f4d-fab9-44d1-bfb7-d4f03e2deec9"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-real-trace-wKjvaA/sample-repo/README.md",
+              "offset": 1,
+              "lines": [
+                {
+                  "number": 1,
+                  "text": "# Sample Repo"
+                },
+                {
+                  "number": 2,
+                  "text": ""
+                },
+                {
+                  "number": 3,
+                  "text": "WebDCC trace sample."
+                }
+              ],
+              "totalLines": 3,
+              "lang": "md"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            22
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S02",
-        "seq": 113,
+        "seq": 78,
+        "turnId": "trace:dsh:S02:turn:1",
+        "kind": "reasoning",
+        "itemKey": "reasoning-live-5",
+        "data": {
+          "text": "The README is minimal. Let me maybe check SPEC.md for context, but user asked three sentences about what repo does. README doesn't say much. Could read SPEC.md quickly.",
+          "summary": true
+        },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S02",
+        "seq": 91,
         "turnId": "trace:dsh:S02:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-bb317a55-e8b9-426e-bb39-1e721d0043b4",
+        "itemKey": "msg-live-6",
         "data": {
           "text": ""
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S02",
+        "seq": 93,
+        "turnId": "trace:dsh:S02:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-7",
+        "data": {
+          "inputTokens": 383,
+          "outputTokens": 77,
+          "cacheReadInputTokens": 8832,
+          "scope": "attempt",
+          "generationMs": 2003
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 27,
-              "time": 1794482363047,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "reasoning",
-                      "text": "The README is minimal. Let me maybe check SPEC.md for context, but user asked three sentences about what repo does. README doesn't say much. Could read SPEC.md quickly."
-                    },
-                    {
-                      "type": "tool-call",
-                      "id": "call_00_oo5b19wepw0vws20zlkx2t9x",
-                      "name": "read",
-                      "arguments": "{\"file_path\":\"SPEC.md\"}"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482361699b3d24476cb0847a2446e1bf5e527b37bd5c31b",
-                        "stopReason": "toolUse"
-                      },
-                      "blocks": [
-                        {
-                          "type": "reasoning",
-                          "thinkingSignature": "reasoning_content"
-                        },
-                        {
-                          "type": "tool-call"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "bb317a55-e8b9-426e-bb39-1e721d0043b4"
-                },
-                "usage": {
-                  "inputTokens": 383,
-                  "outputTokens": 77,
-                  "totalTokens": 9292,
-                  "cacheReadTokens": 8832
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482362752,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "reasoning"
-                    }
-                  },
-                  {
-                    "type": "reasoning-chunks",
-                    "time0": 1794482362753,
-                    "index": 0,
-                    "dt": [
-                      0,
-                      1,
-                      60,
-                      1,
-                      0,
-                      5,
-                      120,
-                      0,
-                      1,
-                      0,
-                      60,
-                      1
-                    ],
-                    "texts": [
-                      "The",
-                      " README is",
-                      " minimal. Let me maybe",
-                      " check",
-                      " SPEC.md for",
-                      " context, but user asked",
-                      " three sentences",
-                      " about what",
-                      " repo does. READ",
-                      "ME doesn't say",
-                      " much. Could",
-                      " read SPEC.md quickly",
-                      "."
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482363002,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 1,
-                      "blockType": "tool-call"
-                    }
-                  },
-                  {
-                    "type": "tool-call-chunks",
-                    "time0": 1794482363002,
-                    "index": 1,
-                    "dt": [
-                      1,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      0,
-                      1,
-                      0,
-                      0,
-                      1
-                    ],
-                    "id": "call_00_oo5b19wepw0vws20zlkx2t9x",
-                    "name": "read",
-                    "args": [
-                      "",
-                      "{",
-                      "\"",
-                      "file",
-                      "_path",
-                      "\"",
-                      ": ",
-                      "\"",
-                      "SPEC",
-                      ".md",
-                      "\"",
-                      "}"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482363046,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "reasoning",
-                        "text": "The README is minimal. Let me maybe check SPEC.md for context, but user asked three sentences about what repo does. README doesn't say much. Could read SPEC.md quickly."
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482363046,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 1,
-                      "block": {
-                        "type": "tool-call",
-                        "id": "call_00_oo5b19wepw0vws20zlkx2t9x",
-                        "name": "read",
-                        "arguments": "{\"file_path\":\"SPEC.md\"}"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482363046,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 383,
-                        "outputTokens": 77,
-                        "totalTokens": 9292,
-                        "cacheReadTokens": 8832
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482363046,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "tool-calls"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482361699b3d24476cb0847a2446e1bf5e527b37bd5c31b",
-                          "stopReason": "toolUse"
-                        },
-                        "blocks": [
-                          {
-                            "type": "reasoning",
-                            "thinkingSignature": "reasoning_content"
-                          },
-                          {
-                            "type": "tool-call"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 383,
+            "outputTokens": 77,
+            "totalTokens": 9292,
+            "cacheReadTokens": 8832
           }
         }
       },
       {
         "sessionId": "trace:dsh:S02",
-        "seq": 115,
+        "seq": 97,
         "turnId": "trace:dsh:S02:turn:1",
         "kind": "file.read",
         "itemKey": "tool-call_00_oo5b19wepw0vws20zlkx2t9x",
@@ -677,308 +232,87 @@
         },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "tool/result",
-              "seq": 29,
-              "time": 1794482363054,
-              "data": {
-                "turn": 1,
-                "step": 2,
-                "message": {
-                  "role": "tool",
-                  "source": {
-                    "kind": "tool",
-                    "callId": "call_00_oo5b19wepw0vws20zlkx2t9x"
-                  },
-                  "toolCallId": "call_00_oo5b19wepw0vws20zlkx2t9x",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "<path>/tmp/wdcc-real-trace-wKjvaA/sample-repo/SPEC.md</path>\n<type>file</type>\n<content>\n1: # Spec\n2: \n3: Trace sample workspace.\n\n(End of file - total 3 lines)\n</content>"
-                    }
-                  ],
-                  "isError": false,
-                  "id": "9da7ec3b-b9a5-417e-8ce6-bfce15a7ba99"
-                },
-                "meta": {
-                  "path": "/tmp/wdcc-real-trace-wKjvaA/sample-repo/SPEC.md",
-                  "offset": 1,
-                  "lines": [
-                    {
-                      "number": 1,
-                      "text": "# Spec"
-                    },
-                    {
-                      "number": 2,
-                      "text": ""
-                    },
-                    {
-                      "number": 3,
-                      "text": "Trace sample workspace."
-                    }
-                  ],
-                  "totalLines": 3,
-                  "lang": "md"
-                }
+          "type": "tool/result",
+          "seq": 29,
+          "time": 1794482363054,
+          "data": {
+            "turn": 1,
+            "step": 2,
+            "message": {
+              "role": "tool",
+              "source": {
+                "kind": "tool",
+                "callId": "call_00_oo5b19wepw0vws20zlkx2t9x"
               },
-              "sourceEventSeqs": [
-                28
+              "toolCallId": "call_00_oo5b19wepw0vws20zlkx2t9x",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<path>/tmp/wdcc-real-trace-wKjvaA/sample-repo/SPEC.md</path>\n<type>file</type>\n<content>\n1: # Spec\n2: \n3: Trace sample workspace.\n\n(End of file - total 3 lines)\n</content>"
+                }
               ],
-              "surfaceOp": "append"
+              "isError": false,
+              "id": "9da7ec3b-b9a5-417e-8ce6-bfce15a7ba99"
+            },
+            "meta": {
+              "path": "/tmp/wdcc-real-trace-wKjvaA/sample-repo/SPEC.md",
+              "offset": 1,
+              "lines": [
+                {
+                  "number": 1,
+                  "text": "# Spec"
+                },
+                {
+                  "number": 2,
+                  "text": ""
+                },
+                {
+                  "number": 3,
+                  "text": "Trace sample workspace."
+                }
+              ],
+              "totalLines": 3,
+              "lang": "md"
             }
-          }
+          },
+          "sourceEventSeqs": [
+            28
+          ],
+          "surfaceOp": "append"
         }
       },
       {
         "sessionId": "trace:dsh:S02",
-        "seq": 181,
+        "seq": 101,
         "turnId": "trace:dsh:S02:turn:1",
         "kind": "assistant.message",
-        "itemKey": "message-4efb779e-62e1-4875-b237-e8a4943fee34",
+        "itemKey": "msg-live-8",
         "data": {
           "text": "**当前目录文件**\n\n- [AGENTS.md](AGENTS.md)（21 字节）\n- [CLAUDE.md](CLAUDE.md)（21 字节）\n- [README.md](README.md)（36 字节）\n- [SPEC.md](SPEC.md)（32 字节）\n\n**README.md 内容**：`# Sample Repo` 加一行 `WebDCC trace sample.`，共 3 行。\n\n**这个仓库做什么**（三句话）：\n\n1. 这是一个名为 \"Sample Repo\" 的示例仓库，定位是 WebDCC 的 trace（追踪）样例。\n2. [SPEC.md](SPEC.md) 同样只写了 \"Trace sample workspace.\"，说明它更像用于演示或测试追踪流程的最小工作区，而非真实产品代码。\n3. 仓库里只有四个纯文本文档、没有任何源码或构建配置，因此它本身不实现具体功能。"
         },
+        "at": "<timestamp>"
+      },
+      {
+        "sessionId": "trace:dsh:S02",
+        "seq": 103,
+        "turnId": "trace:dsh:S02:turn:1",
+        "kind": "usage",
+        "itemKey": "usage-9",
+        "data": {
+          "inputTokens": 276,
+          "outputTokens": 195,
+          "cacheReadInputTokens": 9088,
+          "scope": "attempt",
+          "generationMs": 2691
+        },
         "at": "<timestamp>",
         "native": {
-          "type": "item",
-          "streamId": "s2",
-          "value": {
-            "type": "event",
-            "event": {
-              "type": "assistant/message",
-              "seq": 32,
-              "time": 1794482365738,
-              "data": {
-                "turn": 1,
-                "step": 3,
-                "message": {
-                  "role": "assistant",
-                  "content": [
-                    {
-                      "type": "text",
-                      "text": "**当前目录文件**\n\n- [AGENTS.md](AGENTS.md)（21 字节）\n- [CLAUDE.md](CLAUDE.md)（21 字节）\n- [README.md](README.md)（36 字节）\n- [SPEC.md](SPEC.md)（32 字节）\n\n**README.md 内容**：`# Sample Repo` 加一行 `WebDCC trace sample.`，共 3 行。\n\n**这个仓库做什么**（三句话）：\n\n1. 这是一个名为 \"Sample Repo\" 的示例仓库，定位是 WebDCC 的 trace（追踪）样例。\n2. [SPEC.md](SPEC.md) 同样只写了 \"Trace sample workspace.\"，说明它更像用于演示或测试追踪流程的最小工作区，而非真实产品代码。\n3. 仓库里只有四个纯文本文档、没有任何源码或构建配置，因此它本身不实现具体功能。"
-                    }
-                  ],
-                  "source": {
-                    "kind": "model",
-                    "provider": "openai-next",
-                    "model": "deepseek-v4-1-flash-261017",
-                    "replayState": {
-                      "response": {
-                        "kind": "pi-ai",
-                        "version": 2,
-                        "api": "openai-completions",
-                        "provider": "openai-next",
-                        "model": "deepseek-v4-1-flash-261017",
-                        "responseId": "021794482363565b3d24476cb0847a2446e1bf5e527b37b9893dd",
-                        "stopReason": "stop"
-                      },
-                      "blocks": [
-                        {
-                          "type": "text"
-                        }
-                      ]
-                    }
-                  },
-                  "id": "4efb779e-62e1-4875-b237-e8a4943fee34"
-                },
-                "usage": {
-                  "inputTokens": 276,
-                  "outputTokens": 195,
-                  "totalTokens": 9559,
-                  "cacheReadTokens": 9088
-                },
-                "stream": [
-                  {
-                    "type": "chunk",
-                    "time": 1794482364758,
-                    "chunk": {
-                      "type": "block-start",
-                      "index": 0,
-                      "blockType": "text"
-                    }
-                  },
-                  {
-                    "type": "text-chunks",
-                    "time0": 1794482364758,
-                    "index": 0,
-                    "dt": [
-                      1,
-                      0,
-                      63,
-                      0,
-                      1,
-                      0,
-                      64,
-                      1,
-                      0,
-                      0,
-                      101,
-                      1,
-                      0,
-                      0,
-                      2,
-                      0,
-                      1,
-                      0,
-                      105,
-                      0,
-                      1,
-                      0,
-                      92,
-                      1,
-                      0,
-                      0,
-                      48,
-                      0,
-                      1,
-                      0,
-                      53,
-                      0,
-                      0,
-                      1,
-                      59,
-                      1,
-                      0,
-                      0,
-                      60,
-                      0,
-                      0,
-                      1,
-                      87,
-                      0,
-                      1,
-                      0,
-                      78,
-                      0,
-                      0,
-                      1,
-                      86,
-                      1,
-                      0,
-                      0,
-                      66,
-                      1
-                    ],
-                    "texts": [
-                      "**当前目录文件",
-                      "**\n\n- [",
-                      "AGENTS.md](AGENTS",
-                      ".md)",
-                      "（21 字节",
-                      "）\n- [CLAUDE",
-                      ".md](CLAUDE.md",
-                      ")（21 字节",
-                      "）\n- [README.md](README",
-                      ".md)（36 字节",
-                      "）\n- [SPEC.md](",
-                      "SPEC.md)（32 ",
-                      "字节）\n\n**README.md",
-                      " 内容**",
-                      "：`# Sample",
-                      " Repo` ",
-                      "加一行",
-                      " `WebD",
-                      "CC trace sample.`，",
-                      "共 3 ",
-                      "行。\n\n**这个仓库",
-                      "做什么",
-                      "**（三",
-                      "句话）：\n\n1. 这是一个",
-                      "名为 \"Sample",
-                      " Repo\" 的",
-                      "示例仓库，定位",
-                      "是",
-                      " WebDCC 的 trace",
-                      "（追踪",
-                      "）样例",
-                      "。\n2. [SPEC",
-                      ".md](SPEC.md) ",
-                      "同样只写了",
-                      " \"Trace sample",
-                      " workspace.\"",
-                      "，说明它更像",
-                      "用于",
-                      "演示",
-                      "或测试",
-                      "追踪流程",
-                      "的最小",
-                      "工作区，而非",
-                      "真实产品",
-                      "代码。\n3. 仓库",
-                      "里只有",
-                      "四个",
-                      "纯文",
-                      "本文档、",
-                      "没有任何源码",
-                      "或",
-                      "构建配置",
-                      "，因此它",
-                      "本身",
-                      "不实现",
-                      "具体",
-                      "功能。"
-                    ]
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482365737,
-                    "chunk": {
-                      "type": "block-end",
-                      "index": 0,
-                      "block": {
-                        "type": "text",
-                        "text": "**当前目录文件**\n\n- [AGENTS.md](AGENTS.md)（21 字节）\n- [CLAUDE.md](CLAUDE.md)（21 字节）\n- [README.md](README.md)（36 字节）\n- [SPEC.md](SPEC.md)（32 字节）\n\n**README.md 内容**：`# Sample Repo` 加一行 `WebDCC trace sample.`，共 3 行。\n\n**这个仓库做什么**（三句话）：\n\n1. 这是一个名为 \"Sample Repo\" 的示例仓库，定位是 WebDCC 的 trace（追踪）样例。\n2. [SPEC.md](SPEC.md) 同样只写了 \"Trace sample workspace.\"，说明它更像用于演示或测试追踪流程的最小工作区，而非真实产品代码。\n3. 仓库里只有四个纯文本文档、没有任何源码或构建配置，因此它本身不实现具体功能。"
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482365737,
-                    "chunk": {
-                      "type": "usage",
-                      "usage": {
-                        "inputTokens": 276,
-                        "outputTokens": 195,
-                        "totalTokens": 9559,
-                        "cacheReadTokens": 9088
-                      }
-                    }
-                  },
-                  {
-                    "type": "chunk",
-                    "time": 1794482365738,
-                    "chunk": {
-                      "type": "finish",
-                      "reason": {
-                        "kind": "stop"
-                      },
-                      "replayState": {
-                        "response": {
-                          "kind": "pi-ai",
-                          "version": 2,
-                          "api": "openai-completions",
-                          "provider": "openai-next",
-                          "model": "deepseek-v4-1-flash-261017",
-                          "responseId": "021794482363565b3d24476cb0847a2446e1bf5e527b37b9893dd",
-                          "stopReason": "stop"
-                        },
-                        "blocks": [
-                          {
-                            "type": "text"
-                          }
-                        ]
-                      }
-                    }
-                  }
-                ]
-              },
-              "surfaceOp": "append"
-            }
+          "type": "usage",
+          "usage": {
+            "inputTokens": 276,
+            "outputTokens": 195,
+            "totalTokens": 9559,
+            "cacheReadTokens": 9088
           }
         }
       }
@@ -986,7 +320,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "message-4efb779e-62e1-4875-b237-e8a4943fee34",
+        "itemKey": "msg-live-8",
         "text": "**当前目录文件**\n\n- [AGENTS.md](AGENTS.md)（21 字节）\n- [CLAUDE.md](CLAUDE.md)（21 字节）\n- [README.md](README.md)（36 字节）\n- [SPEC.md](SPEC.md)（32 字节）\n\n**README.md 内容**：`# Sample Repo` 加一行 `WebDCC trace sample.`，共 3 行。\n\n**这个仓库做什么**（三句话）：\n\n1. 这是一个名为 \"Sample Repo\" 的示例仓库，定位是 WebDCC 的 trace（追踪）样例。\n2. [SPEC.md](SPEC.md) 同样只写了 \"Trace sample workspace.\"，说明它更像用于演示或测试追踪流程的最小工作区，而非真实产品代码。\n3. 仓库里只有四个纯文本文档、没有任何源码或构建配置，因此它本身不实现具体功能。"
       }
     ],
@@ -996,6 +330,14 @@
       "reads": 2,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 1366,
+      "outputTokens": 370,
+      "cacheReadInputTokens": 26112,
+      "scope": "turn",
+      "generationMs": 4929,
+      "tokensPerSecond": 75.0659362953946
     }
   }
 ]

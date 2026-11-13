@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FsListResponse, FsReadResponse } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
@@ -6,8 +6,8 @@ import { store } from '../lib/store.js';
 import { agentText } from '../lib/agents.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
-import { Markdown } from './Markdown.js';
 import { Timeline } from './Timeline.js';
+import { FileEditor } from './FileEditor.js';
 
 export type DockState =
   | { kind: 'session'; sessionId: string }
@@ -110,13 +110,18 @@ function DiffView({ fileId, path }: { fileId: string; path: string }): React.Rea
 }
 
 function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement {
-  const [path, setPath] = useState('');
+  const [location, setLocation] = useState({ workspaceId, path: '' });
+  const path = location.workspaceId === workspaceId ? location.path : '';
+  const setPath = (next: string): void => setLocation({ workspaceId, path: next });
   const [listing, setListing] = useState<FsListResponse | FsReadResponse | null>(null);
-  const [preview, setPreview] = useState<{ path: string; content: string } | null>(null);
+  const [preview, setPreview] = useState<{ workspaceId: string; file: FsReadResponse } | null>(null);
+  const generation = useRef(0);
+  const currentWorkspace = useRef(workspaceId); currentWorkspace.current = workspaceId;
   const [creating, setCreating] = useState<'file' | 'dir' | null>(null);
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   useEffect(() => {
+    const epoch = ++generation.current;
     if (workspaceId === '') {
       setListing(null);
       return;
@@ -124,10 +129,12 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
     void api
       .fs(workspaceId, path)
       .then((result) => {
+        if (generation.current !== epoch) return;
         setListing(result);
         setPreview(null);
       })
-      .catch(() => setListing(null));
+      .catch(() => { if (generation.current === epoch) setListing(null); });
+    return () => { if (generation.current === epoch) generation.current += 1; };
   }, [workspaceId, path]);
   return (
     <div className="files-view">
@@ -183,11 +190,13 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
                 type="button"
                 onClick={() => {
                   if (entry.type === 'dir') setPath(entry.path);
-                  else
+                  else {
+                    const epoch = ++generation.current;
                     void api
                       .fs(workspaceId, entry.path)
-                      .then((result) => setPreview({ path: entry.path, content: 'content' in result ? result.content : '' }))
-                      .catch(() => setPreview({ path: entry.path, content: '（无法预览）' }));
+                      .then((result) => { if (generation.current === epoch && currentWorkspace.current === workspaceId && 'content' in result) setPreview({ workspaceId, file: result }); })
+                      .catch(() => { if (generation.current === epoch) setPreview({ workspaceId, file: { path: entry.path, content: '（无法预览）', truncated: false, editable: false } }); });
+                  }
                 }}
               >
                 <Icon name={entry.type === 'dir' ? 'folder' : 'fileText'} />
@@ -197,14 +206,7 @@ function FilesView({ workspaceId }: { workspaceId: string }): React.ReactElement
           ))}
         </ul>
       ) : null}
-      {preview !== null ? (
-        <div className="file-preview">
-          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-            {preview.path}
-          </div>
-          <Markdown text={`\`\`\`\n${preview.content}\n\`\`\``} />
-        </div>
-      ) : null}
+      {preview !== null && preview.workspaceId === workspaceId ? <FileEditor key={`${workspaceId}:${preview.file.path}`} workspaceId={workspaceId} initial={preview.file} /> : null}
     </div>
   );
 }

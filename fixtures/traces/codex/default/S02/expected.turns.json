@@ -14,22 +14,10 @@
     "steps": [
       {
         "sessionId": "trace:codex:S02",
-        "seq": 4,
-        "turnId": "trace:codex:S02:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-2",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S02",
         "seq": 7,
         "turnId": "trace:codex:S02:turn:1",
         "kind": "notice",
-        "itemKey": "notice-rpc-5",
+        "itemKey": "notice-configWarning-configWarning-1",
         "data": {
           "level": "info",
           "text": "Codex could not find bubblewrap on PATH. Install bubblewrap with your OS package manager. See the sandbox prerequisites: https://provider.example/codex/concepts/sandboxing#prerequisites. Codex will use the bundled bubblewrap in the meantime.",
@@ -43,34 +31,10 @@
       },
       {
         "sessionId": "trace:codex:S02",
-        "seq": 9,
-        "turnId": "trace:codex:S02:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-7",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S02",
-        "seq": 12,
-        "turnId": "trace:codex:S02:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-10",
-        "data": {
-          "nativeType": ""
-        },
-        "at": "<timestamp>",
-        "native": {}
-      },
-      {
-        "sessionId": "trace:codex:S02",
-        "seq": 15,
+        "seq": 16,
         "turnId": "trace:codex:S02:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_00b1842b79f86828016af4f9fce08487d093f7498f06690d8a",
+        "itemKey": "rs_00b1842b79f86828016af4f9fce08487d093f7498f06690d8a",
         "data": {
           "text": ""
         },
@@ -86,10 +50,10 @@
       },
       {
         "sessionId": "trace:codex:S02",
-        "seq": 16,
+        "seq": 17,
         "turnId": "trace:codex:S02:turn:1",
         "kind": "command",
-        "itemKey": "item-exec-cfeb47d8-d0ce-490f-9446-a37aff6c89ba",
+        "itemKey": "exec-cfeb47d8-d0ce-490f-9446-a37aff6c89ba",
         "data": {
           "command": "/bin/bash -lc 'ls -la && cat README.md'",
           "cwd": "/tmp/wdcc-real-trace-5TvTnL/sample-repo",
@@ -130,12 +94,17 @@
       },
       {
         "sessionId": "trace:codex:S02",
-        "seq": 17,
+        "seq": 18,
         "turnId": "trace:codex:S02:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-19",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-12",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15019,
+          "outputTokens": 83,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 22,
+          "scope": "attempt",
+          "generationMs": 74
         },
         "at": "<timestamp>",
         "native": {
@@ -164,10 +133,10 @@
       },
       {
         "sessionId": "trace:codex:S02",
-        "seq": 19,
+        "seq": 20,
         "turnId": "trace:codex:S02:turn:1",
         "kind": "reasoning",
-        "itemKey": "item-rs_00b1842b79f86828016af4fa0045f487d0bb6019b05b955158",
+        "itemKey": "rs_00b1842b79f86828016af4fa0045f487d0bb6019b05b955158",
         "data": {
           "text": ""
         },
@@ -183,10 +152,10 @@
       },
       {
         "sessionId": "trace:codex:S02",
-        "seq": 20,
+        "seq": 21,
         "turnId": "trace:codex:S02:turn:1",
         "kind": "assistant.message",
-        "itemKey": "item-msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
+        "itemKey": "msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
         "data": {
           "text": "当前目录包含 `AGENTS.md`、`CLAUDE.md`、`README.md` 和 `SPEC.md`。  \nREADME 表明这是一个名为 Sample Repo 的示例仓库。  \n它用于 WebDCC trace 演示或测试。",
           "phase": "final",
@@ -207,12 +176,17 @@
       },
       {
         "sessionId": "trace:codex:S02",
-        "seq": 21,
+        "seq": 22,
         "turnId": "trace:codex:S02:turn:1",
-        "kind": "unknown",
-        "itemKey": "unknown-rpc-79",
+        "kind": "usage",
+        "itemKey": "usage-thread-tokenUsage-updated-72",
         "data": {
-          "nativeType": "thread/tokenUsage/updated"
+          "inputTokens": 15273,
+          "outputTokens": 84,
+          "cacheReadInputTokens": 13312,
+          "reasoningOutputTokens": 23,
+          "scope": "attempt",
+          "generationMs": 10
         },
         "at": "<timestamp>",
         "native": {
@@ -243,7 +217,7 @@
     "live": [],
     "answer": [
       {
-        "itemKey": "item-msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
+        "itemKey": "msg_00b1842b79f86828016af4fa006d1487d0a306f224bf2194ac",
         "text": "当前目录包含 `AGENTS.md`、`CLAUDE.md`、`README.md` 和 `SPEC.md`。  \nREADME 表明这是一个名为 Sample Repo 的示例仓库。  \n它用于 WebDCC trace 演示或测试。"
       }
     ],
@@ -253,6 +227,15 @@
       "reads": 0,
       "edits": 0,
       "tools": 0
+    },
+    "usage": {
+      "inputTokens": 30292,
+      "outputTokens": 167,
+      "cacheReadInputTokens": 26624,
+      "reasoningOutputTokens": 45,
+      "scope": "turn",
+      "generationMs": 84,
+      "tokensPerSecond": 1988.095238095238
     }
   }
 ]
