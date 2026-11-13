@@ -6,3 +6,6 @@ test-results/
 playwright-report/
 e2e-real/.run.json
 test-results/
+
+WebDCC-*.apk
+WebDCC-Android-project.zip

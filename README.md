@@ -6,7 +6,7 @@ WebDCC 是一个部署在个人服务器上的统一网页端，用同一套界�
 - Codex
 - Claude Code
 
-WebDCC 负责启动或连接 Agent、逐字发送用户输入、保存并展示原生事件。它不追加系统提示词，不注入 MCP、工具、hooks 或 skills，也不改写用户配置。完整边界和协议以 [SPEC.md](SPEC.md) 为准。
+WebDCC 负责启动或连接 Agent、逐字发送用户输入、保存并展示原生事件。它不追加系统提示词或工具声明，也不改写用户配置；原始交互和模型传输采用旁路记录，保留原生权限流程。完整边界和协议以 [SPEC.md](SPEC.md) 为准。
 
 ## 当前状态
 
@@ -18,8 +18,15 @@ WebDCC 负责启动或连接 Agent、逐字发送用户输入、保存并展示�
 - Provider 导入、模型选择、附件、离线缓存、WebSocket 续传和发件箱
 - DSH attach 模式：自动发现本机运行的 DSH 并复用同一个进程；自动发现失败时保留手动链接入口
 - SQLite 事件存储、文件存储和 token → HttpOnly Cookie 认证
+- Web 文本文件编辑、版本冲突保护、工作区图片预览和原始交互轨迹下载
 
 M8 的完整 138 项双遍验收仍在继续，当前仓库中的验收报告会明确标出已通过、失败和未实现项目。
+
+## 原生 Android 客户端
+
+[Android 3.1.0 源码](android/README.md) · [APK Release](https://github.com/codezzzsleep/WebDCC/releases/tag/android-v3.1.0)
+
+**安卓端有意滞后于网页版，按独立计划迭代。源码晚于网页端更新是正常且预期的，不要求同步最新网页功能。** Android 3.1.0 保留原交付版本，对接 WebDCC `97b3c07` 协议基线；网页端继续独立更新。
 
 ## 架构
 
