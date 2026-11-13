@@ -184,6 +184,11 @@ function toEvent(row: EventRow): StoredEvent {
   };
 }
 
+function toWatchdogJob(data: string): WatchdogJob {
+  const job = JSON.parse(data) as WatchdogJob;
+  return { ...job, retries: job.retries ?? Math.max(0, job.attempts - job.handoffs) };
+}
+
 export class Store {
   constructor(private readonly db: Db) {}
 
@@ -197,12 +202,12 @@ export class Store {
   }
 
   watchdogJobs(): WatchdogJob[] {
-    return (this.db.prepare('SELECT data FROM watchdog_jobs').all() as { data: string }[]).map((row) => JSON.parse(row.data) as WatchdogJob);
+    return (this.db.prepare('SELECT data FROM watchdog_jobs').all() as { data: string }[]).map((row) => toWatchdogJob(row.data));
   }
 
   watchdogJob(sessionId: string): WatchdogJob | undefined {
     const row = this.db.prepare('SELECT data FROM watchdog_jobs WHERE session_id = ?').get(sessionId) as { data: string } | undefined;
-    return row === undefined ? undefined : JSON.parse(row.data) as WatchdogJob;
+    return row === undefined ? undefined : toWatchdogJob(row.data);
   }
 
   saveWatchdogJob(job: WatchdogJob): void {

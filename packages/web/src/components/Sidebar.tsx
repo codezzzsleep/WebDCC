@@ -23,45 +23,12 @@ interface SidebarProps {
   settingsActive: boolean;
 }
 
-interface Row {
-  session: SessionMeta;
-  depth: number;
-}
-
-/** 同一工作区内，按"接力"关系排成树：接续会话缩进在上一棒下面 */
-function chainRows(list: SessionMeta[]): Row[] {
-  const ids = new Set(list.map((session) => session.id));
-  const children = new Map<string, SessionMeta[]>();
-  const roots: SessionMeta[] = [];
-  for (const session of list) {
-    if (session.parentId !== undefined && ids.has(session.parentId)) {
-      const siblings = children.get(session.parentId) ?? [];
-      siblings.push(session);
-      children.set(session.parentId, siblings);
-    } else {
-      roots.push(session);
-    }
-  }
-  const latest = (session: SessionMeta): string => {
-    let best = session.updatedAt;
-    for (const child of children.get(session.id) ?? []) {
-      const value = latest(child);
-      if (value > best) best = value;
-    }
-    return best;
-  };
-  roots.sort((a, b) => {
+/** 来源链接保留在会话中；侧栏的所有独立会话按平级展示。 */
+function sessionRows(list: SessionMeta[]): SessionMeta[] {
+  return [...list].sort((a, b) => {
     if ((a.pinned === true) !== (b.pinned === true)) return a.pinned === true ? -1 : 1;
-    return latest(b).localeCompare(latest(a));
+    return b.updatedAt.localeCompare(a.updatedAt);
   });
-  const rows: Row[] = [];
-  const walk = (session: SessionMeta, depth: number): void => {
-    rows.push({ session, depth });
-    const kids = [...(children.get(session.id) ?? [])].sort((a, b) => (a.createdAt ?? a.updatedAt).localeCompare(b.createdAt ?? b.updatedAt));
-    for (const child of kids) walk(child, depth + 1);
-  };
-  for (const root of roots) walk(root, 0);
-  return rows;
 }
 
 export function Sidebar({
@@ -197,7 +164,7 @@ export function Sidebar({
 
       <div className="workspace-list">
         {workspaces.map((workspace) => {
-          const rows = chainRows(grouped.get(workspace.id) ?? []);
+          const rows = sessionRows(grouped.get(workspace.id) ?? []);
           if (query.trim() !== '' && rows.length === 0) return null;
           return (
             <div key={workspace.id} className="workspace-group">
@@ -215,11 +182,10 @@ export function Sidebar({
                   <Icon name="plus" size={15} />
                 </Link>
               </div>
-              {rows.map(({ session, depth }) => (
+              {rows.map((session) => (
                 <SessionRow
                   key={session.id}
                   session={session}
-                  depth={depth}
                   active={session.id === currentSessionId}
                   inDock={session.id === dockSessionId}
                   onNavigate={onNavigate}
@@ -280,13 +246,11 @@ export function Sidebar({
 
 function SessionRow({
   session,
-  depth,
   active,
   inDock,
   onNavigate,
 }: {
   session: SessionMeta;
-  depth: number;
   active: boolean;
   inDock: boolean;
   onNavigate: (() => void) | undefined;
@@ -298,13 +262,11 @@ function SessionRow({
       params={{ sid: session.id }}
       search={{}}
       className={`session-row ${active ? 'active' : ''} ${inDock ? 'in-dock' : ''}`}
-      style={{ paddingLeft: 10 + Math.min(depth, 3) * 14 }}
       data-testid="session-row"
       data-agent={session.agent}
       title={`${info.name} · ${session.title ?? '新会话'}`}
       onClick={() => onNavigate?.()}
     >
-      {depth > 0 ? <Icon name="cornerDownRight" size={13} strokeWidth={2} className="chain" label="接续会话" /> : null}
       <AgentMark agent={session.agent} />
       <span className="session-title">{session.title ?? '新会话'}</span>
       {session.pinned === true ? <Icon name="pin" size={13} strokeWidth={2} className="pinned" label="置顶" /> : null}

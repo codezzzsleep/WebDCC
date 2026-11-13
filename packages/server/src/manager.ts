@@ -284,8 +284,6 @@ export class SessionManager {
   async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
     const session = this.requireSession(sessionId);
     if (automatic === undefined) {
-      const job = this.store.watchdogJob(sessionId);
-      if (job !== undefined && this.store.watchdogJobs().some((candidate) => candidate.rootSessionId === job.rootSessionId && candidate.sessionId !== sessionId && this.runtimes.get(candidate.sessionId)?.turnId != null)) throw Object.assign(new Error('任务已在接续会话中执行，请在那里继续或先停止该会话'), { statusCode: 409 });
       this.watchdog.userInput(sessionId);
     }
     const workspace = this.requireWorkspace(session.workspaceId);
@@ -399,16 +397,7 @@ export class SessionManager {
 
   async interrupt(sessionId: string): Promise<void> {
     const session = this.requireSession(sessionId);
-    const job = this.store.watchdogJob(sessionId);
-    const delegated = job === undefined ? [] : this.store.watchdogJobs().filter((candidate) => candidate.rootSessionId === job.rootSessionId && candidate.sessionId !== sessionId && this.runtimes.get(candidate.sessionId)?.turnId != null);
     this.watchdog.cancel(sessionId, '用户停止了会话，取消自动恢复');
-    for (const child of delegated) {
-      const runtime = this.runtimes.get(child.sessionId);
-      if (runtime !== undefined) {
-        await runtime.adapter.interrupt(child.sessionId);
-        await runtime.adapter.cancelPending?.(child.sessionId);
-      }
-    }
     if (!this.runtimes.has(sessionId)) return;
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
