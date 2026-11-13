@@ -1,0 +1,21 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { ScenarioAdapter } from './scenario-adapter.mts';
+import { ProviderRegistry } from '../../WebDCC/packages/server/src/providers.ts';
+import { start } from '../../WebDCC/packages/server/src/main.ts';
+const root = resolve(process.argv[2]);
+const workspace=resolve(root,'sample-app');
+await mkdir(resolve(workspace,'src'),{recursive:true});
+if (!existsSync(resolve(workspace,'README.md'))) await writeFile(resolve(workspace,'README.md'),'# Orbit Notes\n\nA notes app for the mobile interaction acceptance test.\n');
+if (!existsSync(resolve(workspace,'src/theme.ts'))) await writeFile(resolve(workspace,'src/theme.ts'),'export const palette = {\n  accent: "#657185",\n  surface: "#FCFCFD",\n};\n');
+if (!existsSync(resolve(workspace,'.git'))) { execFileSync('git',['init','-q'],{cwd:workspace});execFileSync('git',['add','.'],{cwd:workspace});execFileSync('git',['-c','user.name=QA','-c','user.email=qa@localhost','commit','-qm','Sample'],{cwd:workspace}); }
+ProviderRegistry.prototype.scanLocal=async()=>({imported:0,skipped:0});
+const server=await start({host:'127.0.0.1',port:8927,token:'mobile-qa-token',dataDir:resolve(root,'server'),dshPort:3091,idleDisposeMin:30,version:'mobile-ui-qa'},{adapters:[new ScenarioAdapter('codex',workspace,root),new ScenarioAdapter('claude-code',workspace,root),new ScenarioAdapter('dsh',workspace,root)]});
+const project=server.store.listWorkspaces().find(w=>w.path===workspace) ?? server.store.createWorkspace('Orbit Notes',workspace);
+const send=server.manager.send.bind(server.manager);
+let rejected=false;
+server.manager.send=async (...args)=>{if(args[1].text.startsWith('fail-once')&&!rejected){rejected=true;throw new Error('测试连接拒绝了一次发送，请点击重试。');}return send(...args);};
+await writeFile(resolve(root,'ready.json'),JSON.stringify({port:8927,projectId:project.id,workspace}));console.log('MOBILE_QA_READY');
+process.on('SIGTERM',()=>{void server.close().then(()=>process.exit(0));});

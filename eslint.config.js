@@ -8,6 +8,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/schema/**',
       'fixtures/**',
+      'android/**', // Native Android and its archived QA use an independent workflow.
       '.webdcc/**',
       'packages/web/dist/**',
     ],

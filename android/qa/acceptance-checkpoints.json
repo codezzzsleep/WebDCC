@@ -1,0 +1,14 @@
+[
+  "diff → source → back restores the diff",
+  "line review stages a visible comment without sending it",
+  "draft survives leaving and reopening a task",
+  "follow-up can be entered and visibly queued while a task awaits approval",
+  "option and free-text answer survive closing the sheet and reach the server intact",
+  "approval and question completion resume the task and start the queued message exactly once",
+  "stop interrupts a task that is awaiting approval",
+  "a definitively rejected send retries successfully and is stored exactly once",
+  "offline message survives force-stop and reopening the task",
+  "reconnection sends the persisted outbox text exactly once",
+  "system document picker uploads a file back into the correct task",
+  "sending while reading older content jumps to the newly sent message and clears the composer"
+]

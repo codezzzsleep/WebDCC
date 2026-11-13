@@ -1,0 +1,11 @@
+[
+  "default follows system light/dark changes",
+  "manual light overrides a dark system",
+  "manual dark overrides a light system and survives cold restart",
+  "switching back to system immediately restores the system appearance",
+  "new task sends high as reasoningEffort to the server",
+  "existing task changes thinking through the server and Agent adapter",
+  "model capabilities limit choices and incompatible strength resets to a supported default",
+  "last selected strength is remembered after a cold restart",
+  "dark appearance covers chat, Markdown code and diff review"
+]
