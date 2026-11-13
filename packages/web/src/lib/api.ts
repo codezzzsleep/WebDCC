@@ -13,6 +13,8 @@ import type {
   WorkspaceFileSaveRequest,
   WatchdogSettings,
   WatchdogView,
+  CapabilitySnapshot,
+  QueuedInput,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -41,6 +43,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  queue: (sessionId: string) => request<{ inputs: QueuedInput[]; revision: number }>(`/api/sessions/${encodeURIComponent(sessionId)}/queue`),
+  cancelQueued: (sessionId: string, commandId: string) => request<void>(`/api/sessions/${encodeURIComponent(sessionId)}/queue/${encodeURIComponent(commandId)}`, { method: 'DELETE' }),
+  capabilities: (workspaceId?: string) => request<CapabilitySnapshot>(`/api/capabilities${workspaceId === undefined ? '' : `?workspaceId=${encodeURIComponent(workspaceId)}`}`),
   watchdog: () => request<WatchdogView>('/api/watchdog'),
   updateWatchdog: (settings: Partial<WatchdogSettings>) => request<WatchdogView>('/api/watchdog', { method: 'PATCH', body: JSON.stringify(settings) }),
   cancelWatchdog: (id: string) => request<WatchdogView>(`/api/watchdog/sessions/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' }),

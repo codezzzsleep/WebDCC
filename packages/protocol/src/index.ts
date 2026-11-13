@@ -9,5 +9,11 @@ export * from './trace.js';
 export * from './turn.js';
 export * from './invariants.js';
 export * from './watchdog.js';
+export * from './capabilities.js';
+export * from './build.js';
+export * from './native-evidence.js';
+export * from './command-validation.js';
+export * from './commands.js';
+export * from './question-answer.js';
 
 export const PROTOCOL_VERSION = 1;

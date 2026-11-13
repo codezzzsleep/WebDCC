@@ -1,0 +1,22 @@
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { FakeAdapter } from '../../../testing/fake-adapter/src/index.js';
+import { start } from '../../src/main.js';
+import { FileStore } from '../../src/files.js';
+import { CommandDispatcher } from '../../src/dispatcher.js';
+
+const dataDir = process.argv[2];
+if (dataDir === undefined) throw new Error('Missing isolated data directory');
+const server = await start({ host: '127.0.0.1', port: 0, token: 'queue-crash-fixture-token', dataDir, dshPort: 0, idleDisposeMin: 0, version: 'test', recordInteractions: false }, { adapters: [new FakeAdapter({ id: 'dsh', delayMs: 60_000 })] });
+const workspacePath = join(dataDir, 'workspace');
+await mkdir(workspacePath);
+const workspace = server.store.createWorkspace('crash', workspacePath);
+const session = await server.manager.createSession({ workspaceId: workspace.id, agent: 'dsh' });
+const files = new FileStore(dataDir, server.store);
+const image = await files.putBuffer(Buffer.from('queue-attachment'), 'image.png', 'image/png');
+const dispatcher = new CommandDispatcher(server.store, server.manager, files);
+const first = { op: 'send' as const, clientCommandId: 'CRASH-ACTIVE', sessionId: session.id, text: 'already submitted' };
+await dispatcher.dispatch(first);
+const queued = await dispatcher.dispatch({ op: 'send', clientCommandId: 'CRASH-QUEUED', sessionId: session.id, text: '已确认的队列正文\r\n', images: [image.id] });
+if (!queued.ok || !(queued.value as { queued?: boolean }).queued) throw new Error('Fixture did not queue');
+process.send?.({ sessionId: session.id, first, queued, fileId: image.id });

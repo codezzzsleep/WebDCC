@@ -1,5 +1,5 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView } from '@webdcc/protocol';
+import type { Command, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput } from '@webdcc/protocol';
 import { reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
@@ -36,7 +36,8 @@ export interface PendingMessage {
   clientCommandId: string;
   text: string;
   at: string;
-  status: 'pending' | 'queued' | 'sent' | 'failed';
+  status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain';
+  turnId?: string;
 }
 
 export interface TurnModel extends TurnView {
@@ -58,6 +59,8 @@ export class AppStore {
   private events = new Map<string, Map<number, StoredEvent>>();
   private hot = new Map<string, Map<string, HotItem>>();
   private pending = new Map<string, PendingMessage[]>();
+  private durableQueue = new Map<string, QueuedInput[]>();
+  private queueRevisions = new Map<string, number>();
   private drafts = new Map<string, { text: string; fileIds: string[] }>();
   private outbox = new Map<string, { command: Command; status: PendingMessage['status'] }>();
   private listeners = new Set<() => void>();
@@ -153,7 +156,7 @@ export class AppStore {
   private subscriptions(): { sessionId: string; afterSeq: number }[] {
     return [...this.sessions.keys()].map((sessionId) => ({
       sessionId,
-      afterSeq: Math.max(this.maxSeq(sessionId), this.cursors.get(sessionId) ?? 0),
+      afterSeq: this.cursors.get(sessionId) ?? this.contiguousSeq(sessionId, 0),
     }));
   }
 
@@ -165,11 +168,18 @@ export class AppStore {
     return max;
   }
 
+  private contiguousSeq(sessionId: string, after: number): number {
+    const events = this.events.get(sessionId);
+    while (events?.has(after + 1)) after++;
+    return after;
+  }
+
   // ---------- 服务端消息 ----------
 
   private handleMessage(message: ServerMessage): void {
     switch (message.op) {
       case 'feed': {
+        if (message.patch.queueRevision !== undefined) void this.refreshQueue(message.sessionId);
         this.feedSeq = Math.max(this.feedSeq, message.feedSeq);
         void cache.setMeta('feedSeq', this.feedSeq);
         const existing = this.sessions.get(message.sessionId);
@@ -209,7 +219,7 @@ export class AppStore {
         break;
       }
       case 'snapshot': {
-        const map = this.hot.get(message.sessionId) ?? new Map<string, HotItem>();
+        const map = new Map<string, HotItem>();
         for (const item of message.items) {
           map.set(item.itemKey, { itemKey: item.itemKey, kind: item.kind, data: item.data, ...(item.turnId === undefined ? {} : { turnId: item.turnId }) });
         }
@@ -253,15 +263,17 @@ export class AppStore {
       case 'ack': {
         const entry = this.outbox.get(message.clientCommandId);
         if (entry !== undefined) {
-          entry.status = message.result.ok ? 'sent' : 'failed';
+          entry.status = message.result.ok ? 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed';
           this.outbox.set(message.clientCommandId, entry);
-          if (message.result.ok) void cache.deleteOutbox(message.clientCommandId);
+          if (message.result.ok) { this.outbox.delete(message.clientCommandId); void cache.deleteOutbox(message.clientCommandId); }
+          else void cache.putOutbox({ clientCommandId: message.clientCommandId, command: entry.command, status: entry.status === 'uncertain' ? 'uncertain' : 'failed', createdAt: Date.now() });
         }
         for (const [sessionId, list] of this.pending) {
           const match = list.find((item) => item.clientCommandId === message.clientCommandId);
           if (match !== undefined) {
             const queued = message.result.ok && typeof message.result.value === 'object' && message.result.value !== null && (message.result.value as { queued?: unknown }).queued === true;
-            match.status = message.result.ok ? queued ? 'queued' : 'sent' : 'failed';
+            match.status = message.result.ok ? queued ? 'queued' : 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed';
+            if (message.result.ok && typeof message.result.value === 'object' && message.result.value !== null) match.turnId = (message.result.value as { turnId?: string }).turnId;
             this.pending.set(sessionId, list);
           }
         }
@@ -319,6 +331,7 @@ ${text}`;
     const seen = map.has(event.seq);
     map.set(event.seq, event);
     this.events.set(event.sessionId, map);
+    this.cursors.set(event.sessionId, this.contiguousSeq(event.sessionId, this.cursors.get(event.sessionId) ?? 0));
     const hot = this.hot.get(event.sessionId);
     if (hot !== undefined) hot.delete(event.itemKey);
     if (!seen && !historical && (event.kind === 'turn.completed' || event.kind === 'approval.request')) {
@@ -340,6 +353,7 @@ ${text}`;
   trace: Record<string, number> = {};
 
   async ensureSession(sessionId: string): Promise<void> {
+    void this.refreshQueue(sessionId);
     const t0 = performance.now();
     this.trace['ensureStart'] = t0;
     if (this.events.has(sessionId) === false) {
@@ -352,7 +366,7 @@ ${text}`;
     }
     performance.mark('wdcc:ensure-start');
     let serverLastSeq: number | undefined;
-    if (this.sessions.has(sessionId) === false) {
+    if (this.sessions.has(sessionId) === false || (this.events.get(sessionId)?.size ?? 0) === 0) {
       try {
         const detail = await api.session(sessionId);
         this.sessions.set(sessionId, detail as SessionMeta);
@@ -363,7 +377,6 @@ ${text}`;
       }
     }
     performance.mark('wdcc:detail-done');
-    const localMax = this.maxSeq(sessionId);
     // 没有缓存时只取最近 200 条，并从服务端最新的 seq 开始订阅：不整段重拉（SPEC 7.5 / A5）
     if ((this.events.get(sessionId)?.size ?? 0) === 0 && serverLastSeq !== undefined && serverLastSeq > 0) {
       const page = await api.events(sessionId, { before: serverLastSeq + 1, limit: 200 }).catch(() => undefined);
@@ -373,12 +386,13 @@ ${text}`;
         this.events.set(sessionId, map);
         void cache.putEvents(page.events);
       }
-      const cursor = Math.max(serverLastSeq, localMax);
+      const completeRecentPage = page !== undefined && page.events.length > 0 && page.events[page.events.length - 1]?.seq === serverLastSeq;
+      const cursor = completeRecentPage ? serverLastSeq : this.contiguousSeq(sessionId, this.cursors.get(sessionId) ?? 0);
       this.cursors.set(sessionId, cursor);
       this.connection.subscribe(sessionId, cursor);
       performance.mark('wdcc:events-done');
     } else {
-      const cursor = Math.max(this.cursors.get(sessionId) ?? 0, localMax);
+      const cursor = this.contiguousSeq(sessionId, this.cursors.get(sessionId) ?? 0);
       this.cursors.set(sessionId, cursor);
       this.connection.subscribe(sessionId, cursor);
     }
@@ -426,7 +440,30 @@ ${text}`;
   }
 
   getPending(sessionId: string): PendingMessage[] {
-    return this.pending.get(sessionId) ?? [];
+    const sent = new Set(this.getEvents(sessionId).filter(event => event.kind === 'user.message').map(event => (event.data as { clientCommandId?: string }).clientCommandId));
+    const authoritative = this.durableQueue.get(sessionId);
+    const queued = new Set((authoritative ?? []).filter(row => ['queued', 'uncertain'].includes(row.state)).map(row => row.commandId));
+    const pending = new Map((this.pending.get(sessionId) ?? []).filter(item => !sent.has(item.clientCommandId) && !(authoritative !== undefined && item.status === 'queued' && !queued.has(item.clientCommandId))).map(item => [item.clientCommandId, item]));
+    for (const row of this.durableQueue.get(sessionId) ?? []) {
+      if (sent.has(row.commandId) || !['queued', 'uncertain'].includes(row.state)) continue;
+      pending.set(row.commandId, { clientCommandId: row.commandId, turnId: row.turnId, text: row.input.text, at: row.createdAt, status: row.state === 'uncertain' ? 'uncertain' : 'queued' });
+    }
+    return [...pending.values()];
+  }
+
+  async refreshQueue(sessionId: string): Promise<void> {
+    const result = await api.queue(sessionId).catch(() => undefined);
+    if (result === undefined) return;
+    if (result.revision < (this.queueRevisions.get(sessionId) ?? -1)) return;
+    this.queueRevisions.set(sessionId, result.revision);
+    this.durableQueue.set(sessionId, result.inputs);
+    this.notify();
+  }
+
+  async cancelQueued(sessionId: string, commandId: string): Promise<void> {
+    await api.cancelQueued(sessionId, commandId);
+    this.pending.set(sessionId, (this.pending.get(sessionId) ?? []).filter(item => item.clientCommandId !== commandId));
+    await this.refreshQueue(sessionId);
   }
 
   getHot(sessionId: string): HotItem[] {
@@ -474,7 +511,8 @@ ${text}`;
     }
     this.orphans.set(sessionId, orphans);
     for (const pending of this.getPending(sessionId)) {
-      const turnId = `pending-${pending.clientCommandId}`;
+      const turnId = pending.turnId ?? `pending-${pending.clientCommandId}`;
+      if (byTurn.has(turnId)) continue;
       const turn: TurnModel = {
         ...reduceTurn([], []),
         turnId,
@@ -490,8 +528,10 @@ ${text}`;
     }
     const turns = order.map((turnId) => {
       const turn = byTurn.get(turnId) as TurnModel;
+      if (turn.pending !== undefined) return turn;
       const view = reduceTurn(turn.events, turn.hot as unknown as OpenItem[]);
-      return { ...turn, ...view, turnId };
+      const uncertain = (this.durableQueue.get(sessionId) ?? []).some(row => row.turnId === turnId && row.state === 'uncertain');
+      return { ...turn, ...view, turnId, ...(uncertain ? { commandState: 'uncertain' as const } : {}) };
     });
     this.derived.set(sessionId, { version: this.version, turns });
     return turns;
@@ -501,13 +541,17 @@ ${text}`;
 
   private enqueue(command: Command): void {
     this.outbox.set(command.clientCommandId, { command, status: 'pending' });
-    void cache.putOutbox({ clientCommandId: command.clientCommandId, command, status: 'pending', createdAt: Date.now() });
-    this.connection.sendCommand(command);
+    void cache.putOutbox({ clientCommandId: command.clientCommandId, command, status: 'pending', createdAt: Date.now() }).then(() => this.connection.sendCommand(command)).catch(() => {
+      const entry = this.outbox.get(command.clientCommandId);
+      if (entry !== undefined) entry.status = 'failed';
+      for (const item of this.pending.get('sessionId' in command ? command.sessionId : '') ?? []) if (item.clientCommandId === command.clientCommandId) item.status = 'failed';
+      this.notify();
+    });
   }
 
   private replayOutbox(): void {
     for (const entry of this.outbox.values()) {
-      if (entry.status === 'sent') continue;
+      if (entry.status !== 'pending') continue;
       this.connection.sendCommand(entry.command);
     }
   }
@@ -516,6 +560,12 @@ ${text}`;
     const entries = await cache.getOutbox().catch(() => []);
     for (const entry of entries) {
       this.outbox.set(entry.clientCommandId, { command: entry.command as Command, status: entry.status });
+      const command = entry.command as Command;
+      if (command.op === 'send') {
+        const list = this.pending.get(command.sessionId) ?? [];
+        list.push({ clientCommandId: command.clientCommandId, text: command.text, at: new Date(entry.createdAt).toISOString(), status: entry.status });
+        this.pending.set(command.sessionId, list);
+      }
     }
   }
 

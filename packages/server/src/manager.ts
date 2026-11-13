@@ -43,6 +43,7 @@ export interface Runtime {
   finishTimer: NodeJS.Timeout | null;
   finishAction: (() => void) | null;
   queued: { turnId: string; input: UserInput; clientCommandId?: string }[];
+  disposing: boolean;
 }
 
 export interface ManagerHooks {
@@ -58,6 +59,9 @@ export class SessionManager {
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly runtimes = new Map<string, Runtime>();
   private readonly turns = new TurnTracker();
+  private readonly sends = new Map<string, Promise<unknown>>();
+  private readonly activations = new Map<string, Promise<Runtime>>();
+  private readonly uncertainSessions = new Set<string>();
   private hooks: ManagerHooks = {
     onFeed: () => undefined,
     onEvent: () => undefined,
@@ -78,22 +82,23 @@ export class SessionManager {
       modelRecording?: ModelRecording;
     },
   ) {
-    // A previous process may have stopped after writing turn.started. Close
-    // those turns before adapters are resumed so refresh never shows a
-    // permanently running turn.
+    this.store.journal.recover();
+    // An unfinished legacy turn has no verifiable native outcome. Preserve it
+    // and prevent new sends until native reconciliation establishes ownership.
     for (const session of this.store.listSessions(true)) {
       const events = this.store.allEvents(session.id);
       const started = events.filter((event) => event.kind === 'turn.started');
       for (const begin of started) {
         if (events.some((event) => event.turnId === begin.turnId && event.kind === 'turn.completed')) continue;
-        this.store.appendEvent({
+        this.uncertainSessions.add(session.id);
+        if (!events.some(event => event.itemKey === `turn-uncertain-${begin.turnId}`)) this.store.appendEvent({
           sessionId: session.id,
           turnId: begin.turnId,
-          itemKey: `turn-recovered-${begin.turnId}`,
-          kind: 'turn.completed',
-          data: { status: 'interrupted', durationMs: 0, answerItemKeys: [], reason: 'server-restart' },
+          itemKey: `turn-uncertain-${begin.turnId}`,
+          kind: 'notice',
+          data: { level: 'warning', text: '服务重启，上次原生执行结果待核对；已接受的队列保留，暂不自动重发。', nativeType: 'command-uncertain' },
         });
-        this.store.updateSession(session.id, { status: 'idle' });
+        this.store.updateSessionAndFeed(session.id, { status: 'error' }, { status: 'error', queueRevision: Date.now() });
       }
     }
     this.watchdog = new CodexWatchdog(store, {
@@ -253,6 +258,7 @@ export class SessionManager {
   private ensureRuntime(session: SessionDto, adapter: AgentAdapter, workspacePath: string, nativeId: string): Runtime {
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) return existing;
+    const journal = this.store.journal;
     const runtime: Runtime = {
       sessionId: session.id,
       adapter,
@@ -265,7 +271,8 @@ export class SessionManager {
       idleTimer: null,
       finishTimer: null,
       finishAction: null,
-      queued: [],
+      get queued() { return journal.queue(session.id).filter(row => row.state === 'queued').map(row => ({ turnId: row.turnId, input: row.input, clientCommandId: row.commandId })); },
+      disposing: false,
     };
     this.runtimes.set(session.id, runtime);
     return runtime;
@@ -273,6 +280,14 @@ export class SessionManager {
 
   /** 确保会话运行时就绪（服务重启后按需 resume） */
   private async ensureReady(session: SessionDto, workspacePath: string): Promise<Runtime> {
+    const existing = this.activations.get(session.id);
+    if (existing !== undefined) return existing;
+    const pending = this.activate(session, workspacePath);
+    this.activations.set(session.id, pending);
+    try { return await pending; } finally { this.activations.delete(session.id); }
+  }
+
+  private async activate(session: SessionDto, workspacePath: string): Promise<Runtime> {
     const adapter = this.adapters.get(session.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${session.agent} adapter`), { statusCode: 400 });
     const accessMode = session.accessMode ?? this.defaultAccessMode(adapter);
@@ -301,7 +316,15 @@ export class SessionManager {
   // ---------- 发送 / 介入 ----------
 
   async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
+    const previous = this.sends.get(sessionId) ?? Promise.resolve();
+    const pending = previous.catch(() => undefined).then(() => this.sendAccepted(sessionId, input, clientCommandId, automatic));
+    this.sends.set(sessionId, pending);
+    try { return await pending; } finally { if (this.sends.get(sessionId) === pending) this.sends.delete(sessionId); }
+  }
+
+  private async sendAccepted(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
     const session = this.requireSession(sessionId);
+    if (this.uncertainSessions.has(sessionId) || this.store.journal.queue(sessionId).some(row => row.state === 'uncertain')) throw Object.assign(new Error('上次原生执行结果待核对，禁止自动重发'), { statusCode: 409 });
     if (automatic === undefined) {
       this.watchdog.userInput(sessionId);
     }
@@ -311,18 +334,21 @@ export class SessionManager {
     if (automatic !== undefined && runtime.turnId !== null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
 
     const turnId = ulid();
-    if (runtime.turnId !== null) {
-      runtime.queued.push({ turnId, input, ...(clientCommandId === undefined ? {} : { clientCommandId }) });
-      return { turnId, queued: true };
-    }
-    await this.startTurn(runtime, turnId, input, clientCommandId);
-    return { turnId, queued: false };
+    const accepted = this.store.journal.enqueue(clientCommandId ?? `internal-${turnId}`, sessionId, turnId, input);
+    this.queueChanged(sessionId);
+    if (accepted.state !== 'queued') return { turnId: accepted.turnId, queued: accepted.state !== 'completed' };
+    const next = runtime.turnId === null ? this.store.journal.next(sessionId) : undefined;
+    if (next !== undefined) await this.startTurn(runtime, next.turnId, next.input, next.commandId);
+    return { turnId: accepted.turnId, queued: next?.commandId !== accepted.commandId };
   }
 
   private async startTurn(runtime: Runtime, turnId: string, input: UserInput, clientCommandId?: string): Promise<void> {
     const sessionId = runtime.sessionId;
     const session = this.store.getSession(sessionId);
     if (session === undefined) throw new Error('会话不存在');
+    if (runtime.disposing) throw new Error('会话正在回收');
+    if (!this.store.journal.beginInput(turnId)) throw Object.assign(new Error('队列输入已被取消或占有'), { statusCode: 409 });
+    this.queueChanged(sessionId);
     runtime.turnId = turnId;
     runtime.turnStartedAt = Date.now();
     if (this.options.recorder !== undefined) await this.options.recorder.turnContext(sessionId, turnId);
@@ -363,9 +389,11 @@ export class SessionManager {
 
     try {
       await runtime.adapter.send(sessionId, input);
+      if (this.store.journal.queue(sessionId).some(row => row.turnId === turnId)) this.store.journal.inputState(turnId, 'native-accepted');
+      this.queueChanged(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.finishTurn(runtime, 'failed', message);
+      this.finishTurn(runtime, 'failed', `native-outcome-uncertain: ${message}`);
       throw error;
     }
     if (runtime.turnId === turnId) this.setStatus(runtime, 'running');
@@ -526,17 +554,17 @@ export class SessionManager {
   async dispose(sessionId: string): Promise<void> {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
+    runtime.disposing = true;
     if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
     if (runtime.finishTimer !== null) clearTimeout(runtime.finishTimer);
     runtime.finishTimer = null;
     runtime.finishAction = null;
-    runtime.queued.length = 0;
     if (runtime.turnId !== null) this.finishTurn(runtime, 'interrupted', 'session-disposed');
     await runtime.adapter.dispose(sessionId);
     await this.options.modelRecording?.close(sessionId);
     this.runtimes.delete(sessionId);
     // 回收之后状态回到空闲，否则界面上会一直显示"停止"（AG-*-11）
-    if (runtime.status !== 'idle') this.setStatus(runtime, 'idle');
+    this.setStatus(runtime, this.store.journal.queue(sessionId).some(row => row.state === 'uncertain') ? 'error' : 'idle');
   }
 
   async disposeAll(): Promise<void> {
@@ -758,13 +786,15 @@ export class SessionManager {
     this.options.recorder?.turn(runtime.sessionId, null);
     this.turns.end(runtime.sessionId, turnId, status);
     runtime.turnId = null;
+    this.store.journal.inputState(turnId, reason === 'session-disposed' || reason?.startsWith('native-outcome-uncertain:') ? 'uncertain' : status === 'failed' ? 'failed' : 'completed');
+    this.queueChanged(runtime.sessionId);
     runtime.turnStartedAt = null;
     this.setStatus(runtime, 'idle');
-    const next = runtime.queued.shift();
+    const next = runtime.disposing ? undefined : this.store.journal.next(runtime.sessionId);
     if (next !== undefined) {
       // A queued user message takes precedence over automatic recovery.
       this.watchdog.userInput(runtime.sessionId);
-      void this.startTurn(runtime, next.turnId, next.input, next.clientCommandId).catch((error: unknown) => {
+      void this.startTurn(runtime, next.turnId, next.input, next.commandId).catch((error: unknown) => {
         // startTurn persists the failed turn; keep the manager available for
         // later queued messages even when one queued input fails immediately.
         if (process.env['WDCC_DEBUG_QUEUE'] === '1') console.error('[queue] failed', error);
@@ -808,6 +838,12 @@ export class SessionManager {
   }
 
   // ---------- helpers ----------
+
+  queueChanged(sessionId: string): void {
+    const patch = { queueRevision: Date.now() };
+    const feedSeq = this.store.appendFeed(sessionId, patch);
+    this.hooks.onFeed(sessionId, patch, feedSeq);
+  }
 
   updateSessionAndFeed(
     sessionId: string,

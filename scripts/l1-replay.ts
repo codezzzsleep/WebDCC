@@ -1,7 +1,7 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AdapterEvent, EventData, EventKind, OpenItem, StoredEvent, TraceFrame, TurnView } from '../packages/protocol/src/index.js';
-import { checkTurnInvariants, reduceTurn, resolveAnswer } from '../packages/protocol/src/index.js';
+import { checkTurnInvariants, reduceTurn, resolveAnswer, nativePredicates, scenarioNativePredicates } from '../packages/protocol/src/index.js';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
 import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.js';
 import { DshAdapter } from '../packages/adapters/dsh/src/adapter.js';
@@ -13,6 +13,7 @@ interface Result {
   invariants: { passed: number; total: number; failures: Failure[] };
   views?: TurnView[];
   error?: string;
+  notTriggered: Failure[];
 }
 
 function parseFrames(text: string): TraceFrame[] {
@@ -69,6 +70,8 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
   const events: StoredEvent[] = [];
   const open = new Map<string, OpenItem>();
   const failures: Failure[] = [];
+  const predicates = nativePredicates(meta.agent as 'codex' | 'claude-code' | 'dsh', frames);
+  const notTriggered = scenarioNativePredicates(meta.scenario).filter(predicate => predicates[predicate] !== true).map(predicate => ({ id: 'NOT_TRIGGERED', frame: 0, message: `原生场景未触发：${predicate}` }));
   const checkedTerminal = new Set<string>();
 
   const startTurn = (prompt: string): string => {
@@ -165,7 +168,7 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
     }
   }
   const total = frames.length;
-  return { fixture, frames: total, invariants: { passed: Math.max(0, total - failures.length), total, failures }, views };
+  return { fixture, frames: total, invariants: { passed: Math.max(0, total - failures.length), total, failures }, views, notTriggered };
 }
 
 const root = process.argv[2] ?? 'fixtures/traces';
@@ -177,6 +180,6 @@ async function walk(path: string): Promise<void> {
   for (const entry of entries) if (entry.isDirectory()) await walk(join(path, entry.name));
 }
 await walk(root);
-const failures = results.flatMap((result) => result.invariants.failures.map((failure) => ({ fixture: result.fixture, ...failure })));
-process.stdout.write(JSON.stringify({ fixtures: results.length, frames: results.reduce((sum, result) => sum + result.frames, 0), passed: results.reduce((sum, result) => sum + result.invariants.passed, 0), total: results.reduce((sum, result) => sum + result.invariants.total, 0), failures }, null, 2) + '\n');
-if (failures.length > 0) process.exitCode = 1;
+const failures = results.flatMap((result) => [...result.invariants.failures, ...result.notTriggered].map((failure) => ({ fixture: result.fixture, ...failure })));
+process.stdout.write(JSON.stringify({ fixtures: results.length, frames: results.reduce((sum, result) => sum + result.frames, 0), passed: results.reduce((sum, result) => sum + result.invariants.passed, 0), total: results.reduce((sum, result) => sum + result.invariants.total, 0), scenarios: { passed: results.filter(result => result.notTriggered.length === 0 && result.invariants.failures.length === 0).length, total: results.length }, failures }, null, 2) + '\n');
+if (failures.length > 0 || results.length === 0) process.exitCode = 1;

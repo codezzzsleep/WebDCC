@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -15,7 +16,11 @@ import type {
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
+import { normalizeQuestionAnswer } from '@webdcc/protocol';
 import { JsonRpcStdio, type Frame } from './rpc.js';
+import { nativeRequest } from './controls.js';
+import type { ThreadStartParams } from './schema/v2/ThreadStartParams.js';
+import type { TurnStartParams } from './schema/v2/TurnStartParams.js';
 
 export const PINNED_VERSION = '0.167.0';
 
@@ -29,7 +34,7 @@ export interface CodexAdapterOptions {
 }
 
 interface PendingApproval {
-  requestId: number;
+  requestId: string | number;
   kind: 'commandExecution' | 'fileChange' | 'legacyExec' | 'legacyPatch' | 'userInput';
   questionIds?: string[];
   answers?: Record<string, { answers: string[] }>;
@@ -68,7 +73,7 @@ const ACCESS_MODES = [
   { id: 'danger-full-access', label: '完全访问' },
 ];
 
-function accessParams(mode: string | undefined): Record<string, unknown> {
+function accessParams(mode: string | undefined): Pick<ThreadStartParams, 'approvalPolicy' | 'sandbox' | 'approvalsReviewer'> {
   switch (mode) {
     // 原生值，仅供验收脚本触发"每条命令都问"的审批；不作为界面档位
     case 'untrusted':
@@ -377,7 +382,7 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
 }
 
 /** 纯函数：thread/start 参数（3.3 的机器检查用；永不包含 baseInstructions/developerInstructions） */
-export function buildThreadStartParams(opts: CreateOpts): Record<string, unknown> {
+export function buildThreadStartParams(opts: CreateOpts): ThreadStartParams {
   return {
     cwd: opts.cwd,
     ...(opts.model === undefined ? {} : { model: opts.model }),
@@ -393,17 +398,26 @@ export function buildTurnStartParams(
   model?: string | null,
   reasoningEffort?: string | null,
   images?: { path: string; mime: string }[],
-): Record<string, unknown> {
+  cwd?: string,
+): TurnStartParams {
+  const access = accessMode == null ? {} : accessParams(accessMode);
+  const sandboxPolicy: TurnStartParams['sandboxPolicy'] = access.sandbox === 'read-only'
+    ? { type: 'readOnly', networkAccess: false }
+    : access.sandbox === 'danger-full-access'
+      ? { type: 'dangerFullAccess' }
+      : access.sandbox === 'workspace-write'
+        ? { type: 'workspaceWrite', writableRoots: cwd === undefined ? [] : [cwd], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false }
+        : undefined;
   return {
     threadId,
     input: [
       // Codex 的附件是 localImage（SPEC-M8 F7）
-      ...(images ?? []).map((image) => ({ type: 'localImage', path: image.path })),
+      ...(images ?? []).map((image) => ({ type: 'localImage' as const, path: image.path })),
       { type: 'text', text, text_elements: [] },
     ],
     ...(model === undefined || model === null ? {} : { model }),
     ...(reasoningEffort === undefined || reasoningEffort === null ? {} : { effort: reasoningEffort }),
-    ...(accessMode === undefined || accessMode === null ? {} : accessParams(accessMode)),
+    ...(access.approvalPolicy === undefined ? {} : { approvalPolicy: access.approvalPolicy, approvalsReviewer: access.approvalsReviewer, sandboxPolicy }),
   };
 }
 
@@ -423,7 +437,7 @@ export class CodexAdapter implements AgentAdapter {
     const replies: unknown[] = [];
     const runtime: SessionRuntime = {
       nativeId: '', pid: 0, processToken: 'replay', ready: Promise.resolve(),
-      rpc: { respond: (id: number, result: unknown) => replies.push({ id, result }) } as unknown as JsonRpcStdio,
+      rpc: { respond: (id: string | number, result: unknown) => replies.push({ id, result }) } as unknown as JsonRpcStdio,
       cwd: '.', accessMode: null, model: null, reasoningEffort: null, turnId: null,
       frameSeq: 0, turnStartedAt: 0, generationStartedAt: null, approvals: new Map(), lastAssistantText: '', started: new Set(),
     };
@@ -434,7 +448,11 @@ export class CodexAdapter implements AgentAdapter {
       events = []; adapter.replayTime = frame.t;
       const raw = frame.frame as Frame;
       if (frame.dir === 'in' && typeof raw['method'] === 'string') {
-        if (raw['id'] !== undefined) adapter.onServerRequest(sessionId, raw);
+        if (raw['id'] !== undefined) {
+          try { adapter.onServerRequest(sessionId, raw); } catch (error) {
+            replies.push({ id: raw['id'], error: { code: (error as { code?: number }).code ?? -32000, message: String(error) } });
+          }
+        }
         else adapter.onNotification(sessionId, raw);
       }
       return events.length > 0 ? [...events] : [{ type: 'item.complete', itemKey: `transport-${frame.ch}-${frame.i}`, kind: 'internal', data: { nativeType: frame.ch }, native: frame.frame }];
@@ -464,7 +482,7 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async probe(): Promise<ProbeResult> {
-    const result = spawnSync(this.options.command ?? 'codex', ['--version'], { encoding: 'utf8' });
+    const result = spawnSync(this.options.command ?? 'codex', ['--version'], { encoding: 'utf8', env: this.options.env ?? process.env, timeout: 5000 });
     if (result.status !== 0) {
       return { installed: false, pinnedVersion: PINNED_VERSION, auth: 'unknown', notes: ['服务器上没有安装 Codex CLI'] };
     }
@@ -473,6 +491,7 @@ export class CodexAdapter implements AgentAdapter {
       installed: true,
       version,
       pinnedVersion: PINNED_VERSION,
+      compatible: version === PINNED_VERSION,
       auth: 'unknown',
       notes: version === PINNED_VERSION ? [] : [`版本 ${version} 与锁定版本 ${PINNED_VERSION} 不一致`],
     };
@@ -492,6 +511,7 @@ export class CodexAdapter implements AgentAdapter {
   /** 换模型（AG-*-12）：下一次 turn/start 带上新模型 */
   /** 访问模式来自 app-server 的 permissionProfile/list（MODE-codex-01） */
   async listAccessModes(): Promise<{ id: string; label: string }[]> {
+    if ((await this.probe()).compatible === false) return ACCESS_MODES;
     const labels: Record<string, string> = {
       ':read-only': '只读',
       ':workspace': '工作区可写',
@@ -499,9 +519,9 @@ export class CodexAdapter implements AgentAdapter {
     };
     const rpc = JsonRpcStdio.start({ command: 'codex', args: ['app-server'], env: { ...(this.options.env ?? process.env) } });
     try {
-      await rpc.request('initialize', { clientInfo: { name: 'webdcc', title: 'WebDCC', version: '0.1.0' }, capabilities: null });
+      await nativeRequest(rpc, 'initialize', { clientInfo: { name: 'webdcc', title: 'WebDCC', version: '0.1.0' }, capabilities: null });
       rpc.notify('initialized');
-      const result = await rpc.request<{ data?: { id?: string }[] }>('permissionProfile/list', {});
+      const result = await nativeRequest(rpc, 'permissionProfile/list', {});
       const modes = (result.data ?? [])
         .filter((entry) => typeof entry.id === 'string')
         .map((entry) => ({ id: String(entry.id), label: labels[String(entry.id)] ?? String(entry.id) }));
@@ -568,6 +588,7 @@ export class CodexAdapter implements AgentAdapter {
       env: { ...(this.options.env ?? process.env), ...spec.env },
       onFrame: (direction, frame) => traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++traceIndex, t: this.now() - traceStarted, dir: direction, ch: 'rpc', frame }),
       onExit: () => {
+        if (this.sessions.get(sessionId) !== runtimeRef.current) return;
         if (runtimeRef.current?.turnId !== null && runtimeRef.current?.turnId !== undefined) this.emit(sessionId, { type: 'turn.end', nativeTurnId: runtimeRef.current.turnId, status: 'failed', native: { reason: 'process-exited' } });
       },
     });
@@ -578,7 +599,7 @@ export class CodexAdapter implements AgentAdapter {
     const runtime: SessionRuntime = {
       nativeId: '',
       pid: rpc.child.pid ?? 0,
-      processToken: `${this.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      processToken: randomUUID(),
       ready,
       rpc,
       cwd: opts.cwd,
@@ -595,16 +616,20 @@ export class CodexAdapter implements AgentAdapter {
     };
     runtimeRef.current = runtime;
     rpc.onNotification((frame) => {
+      if (this.sessions.get(sessionId) !== runtime) return;
       if (frame['method'] === 'thread/started') markReady();
       this.onNotification(sessionId, frame);
     });
-    rpc.onServerRequest((frame) => this.onServerRequest(sessionId, frame));
+    rpc.onServerRequest((frame) => {
+      if (this.sessions.get(sessionId) !== runtime) throw new Error('Stale native process');
+      return this.onServerRequest(sessionId, frame);
+    });
     this.sessions.set(sessionId, runtime);
     return runtime;
   }
 
   private async handshake(rpc: JsonRpcStdio): Promise<void> {
-    await rpc.request('initialize', {
+    await nativeRequest(rpc, 'initialize', {
       clientInfo: { name: 'webdcc', title: 'WebDCC', version: '0.1.0' },
       capabilities: null,
     });
@@ -612,19 +637,24 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async create(opts: CreateOpts): Promise<{ nativeId: string }> {
+    await this.requirePinnedVersion();
     const runtime = this.startProcess(opts.sessionId, opts);
+    try {
     await this.handshake(runtime.rpc);
-    const response = await runtime.rpc.request<{ thread: { id: string } }>('thread/start', buildThreadStartParams(opts));
+    const response = await nativeRequest(runtime.rpc, 'thread/start', buildThreadStartParams(opts));
     runtime.nativeId = response.thread.id;
     return { nativeId: runtime.nativeId };
+    } catch (error) { await this.dispose(opts.sessionId); throw error; }
   }
 
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
+    await this.requirePinnedVersion();
     const runtime = this.startProcess(opts.sessionId, opts);
+    try {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resume process started');
     await this.handshake(runtime.rpc);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] initialize done, resuming');
-    const response = await runtime.rpc.request<{ thread: { id: string } }>('thread/resume', {
+    const response = await nativeRequest(runtime.rpc, 'thread/resume', {
       threadId: opts.nativeId,
       excludeTurns: true,
       ...(opts.model === undefined ? {} : { model: opts.model }),
@@ -634,6 +664,12 @@ export class CodexAdapter implements AgentAdapter {
     // thread/resume 返回后线程可能还没挂上；等 thread/started 或最多 2 秒
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resumed', runtime.nativeId);
+    } catch (error) { await this.dispose(opts.sessionId); throw error; }
+  }
+
+  private async requirePinnedVersion(): Promise<void> {
+    const probe = await this.probe();
+    if (!probe.installed || probe.version !== PINNED_VERSION) throw Object.assign(new Error(`Codex 版本不兼容：需要 ${PINNED_VERSION}，实际 ${probe.version ?? '未知'}`), { statusCode: 503, code: 'native-version-incompatible' });
   }
 
   async send(sessionId: string, input: UserInput): Promise<void> {
@@ -643,9 +679,9 @@ export class CodexAdapter implements AgentAdapter {
     const startedAt = this.now();
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
-    const response = await runtime.rpc.request<{ turn: { id: string } }>(
+    const response = await nativeRequest(runtime.rpc,
       'turn/start',
-      buildTurnStartParams(runtime.nativeId, input.text, runtime.accessMode, runtime.model, runtime.reasoningEffort, input.images),
+      buildTurnStartParams(runtime.nativeId, input.text, runtime.accessMode, runtime.model, runtime.reasoningEffort, input.images, runtime.cwd),
     );
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
     runtime.turnId = response.turn.id;
@@ -655,33 +691,36 @@ export class CodexAdapter implements AgentAdapter {
   async interrupt(sessionId: string): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime?.turnId === null || runtime?.turnId === undefined) return;
-    await runtime.rpc.request('turn/interrupt', { threadId: runtime.nativeId, turnId: runtime.turnId });
+    await nativeRequest(runtime.rpc, 'turn/interrupt', { threadId: runtime.nativeId, turnId: runtime.turnId });
   }
 
   async respond(sessionId: string, decision: ApprovalDecision): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     const pending = runtime?.approvals.get(decision.approvalId);
-    if (runtime === undefined || pending === undefined) return;
-    runtime.approvals.delete(decision.approvalId);
+    if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Codex 审批已结束或不存在'), { statusCode: 409 });
+    if (!['accept', 'acceptForSession', 'decline', 'cancel'].includes(decision.optionId)) throw Object.assign(new Error('审批选项无效'), { statusCode: 400 });
     const runtimeRpc = runtime.rpc;
     const decisionValue = pending.kind === 'legacyExec' || pending.kind === 'legacyPatch'
       ? (decision.optionId === 'accept' ? 'approved' : decision.optionId === 'acceptForSession' ? 'approved_for_session' : 'denied')
       : decision.optionId;
     runtimeRpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
+    runtime.approvals.delete(decision.approvalId);
   }
 
   async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
     const runtime = this.sessions.get(sessionId);
-    const entry = [...(runtime?.approvals ?? [])].find(([, pending]) => pending.kind === 'userInput' && pending.questionIds?.includes(questionId));
+    const candidates = [...(runtime?.approvals ?? [])].filter(([id, pending]) => pending.kind === 'userInput' && pending.questionIds?.some(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId));
+    const entry = candidates.length === 1 ? candidates[0] : undefined;
     if (runtime === undefined || entry === undefined) throw new Error('Codex 问题已结束或不存在');
     const [id, pending] = entry;
-    const data = (answer ?? {}) as { value?: string | string[]; selected?: string[]; text?: string };
-    const value = data.value ?? data.selected ?? data.text ?? '';
-    pending.answers ??= {};
-    pending.answers[questionId] = { answers: Array.isArray(value) ? value : [value] };
+    const nativeId = pending.questionIds?.find(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId);
+    if (nativeId === undefined) throw new Error('原生问题身份不一致');
+    const value = normalizeQuestionAnswer(answer).values;
+    pending.answers ??= Object.create(null) as Record<string, { answers: string[] }>;
+    pending.answers[nativeId] = { answers: value };
     if (Object.keys(pending.answers).length < (pending.questionIds?.length ?? 0)) return;
-    runtime.approvals.delete(id);
     runtime.rpc.respond(pending.requestId, { answers: pending.answers });
+    runtime.approvals.delete(id);
   }
 
   /** 打断时把挂起的审批回 decline，避免 JSON-RPC 请求悬空 */
@@ -991,7 +1030,12 @@ export class CodexAdapter implements AgentAdapter {
   private onServerRequest(sessionId: string, frame: Frame): unknown {
     const runtime = this.sessions.get(sessionId);
     const method = String(frame['method'] ?? '');
-    const id = Number(frame['id']);
+    const id = frame['id'];
+    if (typeof id !== 'string' && typeof id !== 'number') throw Object.assign(new Error('Invalid native request ID'), { code: -32600 });
+    if (!['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'execCommandApproval', 'applyPatchApproval', 'item/tool/requestUserInput'].includes(method)) {
+      this.emit(sessionId, { type: 'item.complete', itemKey: `unsupported-${String(id)}`, kind: 'unknown', data: { nativeType: method }, native: frame });
+      throw Object.assign(new Error(`Unsupported native request: ${method}`), { code: -32601 });
+    }
     const params = (frame['params'] ?? {}) as Record<string, unknown>;
 
     const options = ((): { id: string; label: string }[] => {
@@ -1028,12 +1072,12 @@ export class CodexAdapter implements AgentAdapter {
               ? 'legacyPatch'
               : 'userInput';
 
-    const approvalId = `${runtime?.processToken ?? 'p'}:${id}`;
+    const approvalId = `${runtime?.processToken ?? 'p'}:${typeof id}:${id}`;
     runtime?.approvals.set(approvalId, { requestId: id, kind });
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
       const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[]; isOther?: boolean }[];
       runtime?.approvals.set(approvalId, { requestId: id, kind, questionIds: questions.map(question => question.id) });
-      for (const question of questions) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.id}`, kind: 'question', data: { questionId: question.id, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }, native: frame });
+      for (const question of questions) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.id}`, kind: 'question', data: { questionId: `${approvalId}:${question.id}`, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }, native: frame });
       return undefined;
     }
 

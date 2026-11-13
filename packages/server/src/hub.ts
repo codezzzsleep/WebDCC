@@ -13,6 +13,7 @@ import type {
   UpdateMessage,
 } from '@webdcc/protocol';
 import { isAuthenticated, requestAuthority } from './auth.js';
+import { isClientMessage } from '@webdcc/protocol';
 import type { CommandDispatcher, DispatchResult } from './dispatcher.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
@@ -66,7 +67,7 @@ export class LiveHub {
         return;
       }
       socket.on('message', (raw: Buffer) => {
-        void this.onMessage(client, raw.toString());
+        void this.onMessage(client, raw.toString()).catch(() => socket.close(1011, 'message processing failed'));
       });
       socket.on('close', () => {
         this.clients.delete(client);
@@ -97,7 +98,9 @@ export class LiveHub {
   private async onMessage(client: ClientState, raw: string): Promise<void> {
     let message: ClientMessage;
     try {
-      message = JSON.parse(raw) as ClientMessage;
+      const value: unknown = JSON.parse(raw);
+      if (!isClientMessage(value)) { client.socket.close(1008, 'invalid message'); return; }
+      message = value;
     } catch {
       return;
     }

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FakeAdapter, type FakeAdapterOptions } from '@webdcc/fake-adapter';
 import type { FastifyInstance } from 'fastify';
@@ -23,12 +23,14 @@ export interface TestApp {
   manager: SessionManager;
   files: FileStore;
   config: Config;
+  dsh: DshConnectionStore;
   dataDir: string;
   cookie: string;
   close: () => Promise<void>;
 }
 
 // 单测也走同一套隔离（SPEC-M8 1.6.2）：绝不读取用户真实的 ~/.codex、~/.claude、~/.dsh
+process.env['PLAYWRIGHT_BROWSERS_PATH'] ??= join(homedir(), '.cache', 'ms-playwright');
 const isolated = isolatedEnv(process.env, 'wdcc-unit-test');
 for (const key of ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'DSH_HOME'] as const) {
   process.env[key] = isolated.env[key];
@@ -36,7 +38,7 @@ for (const key of ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'DSH_HOME'] as con
 process.env['WDCC_TEST_HOOKS'] = '1';
 assertTestIsolation(process.env);
 
-export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN): Promise<TestApp> {
+export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN, configPatch: Partial<Config> = {}): Promise<TestApp> {
   const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-test-'));
   const db: Db = openDb(':memory:');
   const store = new Store(db);
@@ -57,6 +59,7 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
     dshPort: 0,
     idleDisposeMin: 0,
     version: 'test',
+    ...configPatch,
   };
 
   const dsh = new DshConnectionStore(dataDir);
@@ -77,6 +80,7 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
     manager,
     files,
     config,
+    dsh,
     dataDir,
     cookie: `wdcc-auth=${issueCookie(token)}`,
     async close() {

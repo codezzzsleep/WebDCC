@@ -28,7 +28,7 @@ export interface CachedDraft {
 export interface CachedCommand {
   clientCommandId: string;
   command: unknown;
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'sent' | 'failed' | 'uncertain';
   createdAt: number;
 }
 
@@ -67,8 +67,9 @@ export const cache = {
 
   async getEvents(sessionId: string, limit = 500): Promise<StoredEvent[]> {
     const database = await db();
-    const range = IDBKeyRange.bound([sessionId, 0], [sessionId, Number.MAX_SAFE_INTEGER]);
-    const events = await database.getAll('events', range, limit);
+    const events: StoredEvent[] = [];
+    let cursor = await database.transaction('events').store.index('bySession').openCursor(sessionId, 'prev');
+    while (cursor !== null && events.length < limit) { events.push(cursor.value); cursor = await cursor.continue(); }
     return events.sort((a, b) => a.seq - b.seq);
   },
 

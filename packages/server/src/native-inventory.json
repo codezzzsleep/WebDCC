@@ -1,0 +1,3119 @@
+{
+  "formatVersion": 1,
+  "baseline": {
+    "codex": "0.167.0",
+    "claude-code": "0.3.322",
+    "claudeCli": "2.1.322",
+    "dsh": "0.2.2-rc.1",
+    "os": "linux"
+  },
+  "sources": {
+    "codex": {
+      "path": "packages/adapters/codex/src/json-schema/codex_app_server_protocol.schemas.json",
+      "sha256": "021462a9bacd117f4cd40c256a4888619d059cec6a65b795198d521ba660e554"
+    },
+    "dsh": {
+      "path": "fixtures/dsh/host-api-catalog.json",
+      "sha256": "b7d851bdb4e035de54dc0e849fda859cc7a5add1d93720e6697bf76248d73990"
+    },
+    "claude": {
+      "path": "@anthropic-ai/claude-agent-sdk/sdk.d.ts",
+      "sha256": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f"
+    }
+  },
+  "entries": [
+    {
+      "agent": "claude-code",
+      "method": "createSdkMcpServer",
+      "role": "action",
+      "capabilityId": "claude-code.createSdkMcpServer"
+    },
+    {
+      "agent": "claude-code",
+      "method": "deleteSession",
+      "role": "action",
+      "capabilityId": "claude-code.deleteSession"
+    },
+    {
+      "agent": "claude-code",
+      "method": "filterEscalatingDefaultMode",
+      "role": "action",
+      "capabilityId": "claude-code.filterEscalatingDefaultMode"
+    },
+    {
+      "agent": "claude-code",
+      "method": "foldSessionSummary",
+      "role": "action",
+      "capabilityId": "claude-code.foldSessionSummary"
+    },
+    {
+      "agent": "claude-code",
+      "method": "forkSession",
+      "role": "action",
+      "capabilityId": "claude-code.forkSession"
+    },
+    {
+      "agent": "claude-code",
+      "method": "getSessionInfo",
+      "role": "action",
+      "capabilityId": "claude-code.getSessionInfo"
+    },
+    {
+      "agent": "claude-code",
+      "method": "getSessionMessages",
+      "role": "action",
+      "capabilityId": "claude-code.getSessionMessages"
+    },
+    {
+      "agent": "claude-code",
+      "method": "getSubagentMessages",
+      "role": "action",
+      "capabilityId": "claude-code.getSubagentMessages"
+    },
+    {
+      "agent": "claude-code",
+      "method": "importSessionToStore",
+      "role": "action",
+      "capabilityId": "claude-code.importSessionToStore"
+    },
+    {
+      "agent": "claude-code",
+      "method": "listSessions",
+      "role": "action",
+      "capabilityId": "claude-code.listSessions"
+    },
+    {
+      "agent": "claude-code",
+      "method": "listSubagents",
+      "role": "action",
+      "capabilityId": "claude-code.listSubagents"
+    },
+    {
+      "agent": "claude-code",
+      "method": "native-cli-surface",
+      "role": "action",
+      "capabilityId": "claude-code.native-cli"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.abortController",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.additionalDirectories",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.agent",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.agentProgressSummaries",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.agents",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.allowDangerouslySkipPermissions",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.allowedTools",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.betas",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.canUseTool",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.continue",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.cwd",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.debug",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.debugFile",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.disallowedTools",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.effort",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.enableFileCheckpointing",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.env",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.executable",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.executableArgs",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.extraArgs",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.fallbackModel",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.forkSession",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.forwardSubagentText",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.hooks",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.includeHookEvents",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.includePartialMessages",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.loadTimeoutMs",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.managedSettings",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.maxBudgetUsd",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.maxThinkingTokens",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.maxTurns",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.mcpServers",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.model",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.onElicitation",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.onUserDialog",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.outputFormat",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.pathToClaudeCodeExecutable",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.permissionMode",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.permissionPrompts",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.permissionPromptToolName",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.persistSession",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.perTaskStopAffordance",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.planModeInstructions",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.pluginDelivery",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.plugins",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.projectConfigRoot",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.promptSuggestions",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.resume",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.resumeDropsTurn",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.resumeSessionAt",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.sandbox",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.sessionId",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.sessionStore",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.sessionStoreFlush",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.settings",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.settingSources",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.skills",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.spawnClaudeCodeProcess",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.stderr",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.strictMcpConfig",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.supportedDialogKinds",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.systemPrompt",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.taskBudget",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.thinking",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.title",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.toolAliases",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.toolConfig",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.tools",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Options.verbatimPrompts",
+      "role": "action",
+      "capabilityId": "claude-code.configuration"
+    },
+    {
+      "agent": "claude-code",
+      "method": "prewarm",
+      "role": "action",
+      "capabilityId": "claude-code.prewarm"
+    },
+    {
+      "agent": "claude-code",
+      "method": "query",
+      "role": "action",
+      "capabilityId": "claude-code.query"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.accountInfo",
+      "role": "action",
+      "capabilityId": "claude-code.accountInfo"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.applyFlagSettings",
+      "role": "action",
+      "capabilityId": "claude-code.applyFlagSettings"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.backgroundTasks",
+      "role": "action",
+      "capabilityId": "claude-code.backgroundTasks"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.close",
+      "role": "action",
+      "capabilityId": "claude-code.close"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.getContextUsage",
+      "role": "action",
+      "capabilityId": "claude-code.getContextUsage"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.initializationResult",
+      "role": "action",
+      "capabilityId": "claude-code.initializationResult"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.interrupt",
+      "role": "action",
+      "capabilityId": "claude-code.interrupt"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.mcpServerStatus",
+      "role": "action",
+      "capabilityId": "claude-code.mcpServerStatus"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.readFile",
+      "role": "action",
+      "capabilityId": "claude-code.readFile"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.readMcpResource",
+      "role": "action",
+      "capabilityId": "claude-code.readMcpResource"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.reconnectMcpServer",
+      "role": "action",
+      "capabilityId": "claude-code.reconnectMcpServer"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.reinitialize",
+      "role": "action",
+      "capabilityId": "claude-code.reinitialize"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.reloadOutputStyles",
+      "role": "action",
+      "capabilityId": "claude-code.reloadOutputStyles"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.reloadPlugins",
+      "role": "action",
+      "capabilityId": "claude-code.reloadPlugins"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.reloadSkills",
+      "role": "action",
+      "capabilityId": "claude-code.reloadSkills"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.rewindFiles",
+      "role": "action",
+      "capabilityId": "claude-code.rewindFiles"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.seedReadState",
+      "role": "action",
+      "capabilityId": "claude-code.seedReadState"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.setMaxThinkingTokens",
+      "role": "action",
+      "capabilityId": "claude-code.setMaxThinkingTokens"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.setMcpPermissionModeOverride",
+      "role": "action",
+      "capabilityId": "claude-code.setMcpPermissionModeOverride"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.setMcpServers",
+      "role": "action",
+      "capabilityId": "claude-code.setMcpServers"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.setModel",
+      "role": "action",
+      "capabilityId": "claude-code.setModel"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.setPermissionMode",
+      "role": "action",
+      "capabilityId": "claude-code.setPermissionMode"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.stopTask",
+      "role": "action",
+      "capabilityId": "claude-code.stopTask"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.streamInput",
+      "role": "action",
+      "capabilityId": "claude-code.streamInput"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.supportedAgents",
+      "role": "action",
+      "capabilityId": "claude-code.supportedAgents"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.supportedCommands",
+      "role": "action",
+      "capabilityId": "claude-code.supportedCommands"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.supportedModels",
+      "role": "action",
+      "capabilityId": "claude-code.supportedModels"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.toggleMcpServer",
+      "role": "action",
+      "capabilityId": "claude-code.toggleMcpServer"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.updateSettings",
+      "role": "action",
+      "capabilityId": "claude-code.updateSettings"
+    },
+    {
+      "agent": "claude-code",
+      "method": "Query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET",
+      "role": "action",
+      "capabilityId": "claude-code.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET"
+    },
+    {
+      "agent": "claude-code",
+      "method": "renameSession",
+      "role": "action",
+      "capabilityId": "claude-code.renameSession"
+    },
+    {
+      "agent": "claude-code",
+      "method": "resolveSettings",
+      "role": "action",
+      "capabilityId": "claude-code.resolveSettings"
+    },
+    {
+      "agent": "claude-code",
+      "method": "startup",
+      "role": "action",
+      "capabilityId": "claude-code.startup"
+    },
+    {
+      "agent": "claude-code",
+      "method": "tagSession",
+      "role": "action",
+      "capabilityId": "claude-code.tagSession"
+    },
+    {
+      "agent": "claude-code",
+      "method": "tool",
+      "role": "action",
+      "capabilityId": "claude-code.tool"
+    },
+    {
+      "agent": "codex",
+      "method": "account/chatgptAuthTokens/refresh",
+      "role": "internal",
+      "capabilityId": "codex.account",
+      "reason": "Transport or managed authentication helper; no separate user action."
+    },
+    {
+      "agent": "codex",
+      "method": "account/gatewayOAuth/cancel",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/gatewayOAuth/changed",
+      "role": "observation",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/gatewayOAuth/login",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/gatewayOAuth/read",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/login/cancel",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/login/completed",
+      "role": "observation",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/login/start",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/logout",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/rateLimitResetCredit/consume",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/rateLimits/read",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/rateLimits/updated",
+      "role": "observation",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/read",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/sendAddCreditsNudgeEmail",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/updated",
+      "role": "observation",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/usage/read",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "account/workspaceMessages/read",
+      "role": "action",
+      "capabilityId": "codex.account"
+    },
+    {
+      "agent": "codex",
+      "method": "app/installed",
+      "role": "action",
+      "capabilityId": "codex.app"
+    },
+    {
+      "agent": "codex",
+      "method": "app/list",
+      "role": "action",
+      "capabilityId": "codex.app"
+    },
+    {
+      "agent": "codex",
+      "method": "app/list/updated",
+      "role": "observation",
+      "capabilityId": "codex.app"
+    },
+    {
+      "agent": "codex",
+      "method": "app/read",
+      "role": "action",
+      "capabilityId": "codex.app"
+    },
+    {
+      "agent": "codex",
+      "method": "applyPatchApproval",
+      "role": "action",
+      "capabilityId": "codex.applyPatchApproval"
+    },
+    {
+      "agent": "codex",
+      "method": "attestation/generate",
+      "role": "internal",
+      "capabilityId": "codex.attestation",
+      "reason": "Transport or managed authentication helper; no separate user action."
+    },
+    {
+      "agent": "codex",
+      "method": "autoApprovalReview/strictReviewRequired",
+      "role": "observation",
+      "capabilityId": "codex.autoApprovalReview"
+    },
+    {
+      "agent": "codex",
+      "method": "command/exec",
+      "role": "action",
+      "capabilityId": "codex.command"
+    },
+    {
+      "agent": "codex",
+      "method": "command/exec/outputDelta",
+      "role": "observation",
+      "capabilityId": "codex.command"
+    },
+    {
+      "agent": "codex",
+      "method": "command/exec/resize",
+      "role": "action",
+      "capabilityId": "codex.command"
+    },
+    {
+      "agent": "codex",
+      "method": "command/exec/terminate",
+      "role": "action",
+      "capabilityId": "codex.command"
+    },
+    {
+      "agent": "codex",
+      "method": "command/exec/write",
+      "role": "action",
+      "capabilityId": "codex.command"
+    },
+    {
+      "agent": "codex",
+      "method": "config/batchWrite",
+      "role": "action",
+      "capabilityId": "codex.config"
+    },
+    {
+      "agent": "codex",
+      "method": "config/mcpServer/reload",
+      "role": "action",
+      "capabilityId": "codex.config"
+    },
+    {
+      "agent": "codex",
+      "method": "config/read",
+      "role": "action",
+      "capabilityId": "codex.config"
+    },
+    {
+      "agent": "codex",
+      "method": "config/value/write",
+      "role": "action",
+      "capabilityId": "codex.config"
+    },
+    {
+      "agent": "codex",
+      "method": "configRequirements/read",
+      "role": "action",
+      "capabilityId": "codex.configRequirements"
+    },
+    {
+      "agent": "codex",
+      "method": "configWarning",
+      "role": "observation",
+      "capabilityId": "codex.configWarning"
+    },
+    {
+      "agent": "codex",
+      "method": "deprecationNotice",
+      "role": "observation",
+      "capabilityId": "codex.deprecationNotice"
+    },
+    {
+      "agent": "codex",
+      "method": "error",
+      "role": "observation",
+      "capabilityId": "codex.error"
+    },
+    {
+      "agent": "codex",
+      "method": "execCommandApproval",
+      "role": "action",
+      "capabilityId": "codex.execCommandApproval"
+    },
+    {
+      "agent": "codex",
+      "method": "experimentalFeature/enablement/set",
+      "role": "action",
+      "capabilityId": "codex.experimentalFeature"
+    },
+    {
+      "agent": "codex",
+      "method": "experimentalFeature/list",
+      "role": "action",
+      "capabilityId": "codex.experimentalFeature"
+    },
+    {
+      "agent": "codex",
+      "method": "externalAgentConfig/detect",
+      "role": "action",
+      "capabilityId": "codex.externalAgentConfig"
+    },
+    {
+      "agent": "codex",
+      "method": "externalAgentConfig/import",
+      "role": "action",
+      "capabilityId": "codex.externalAgentConfig"
+    },
+    {
+      "agent": "codex",
+      "method": "externalAgentConfig/import/completed",
+      "role": "observation",
+      "capabilityId": "codex.externalAgentConfig"
+    },
+    {
+      "agent": "codex",
+      "method": "externalAgentConfig/import/progress",
+      "role": "observation",
+      "capabilityId": "codex.externalAgentConfig"
+    },
+    {
+      "agent": "codex",
+      "method": "externalAgentConfig/import/readHistories",
+      "role": "action",
+      "capabilityId": "codex.externalAgentConfig"
+    },
+    {
+      "agent": "codex",
+      "method": "externalAgentConfig/import/recordHistory",
+      "role": "action",
+      "capabilityId": "codex.externalAgentConfig"
+    },
+    {
+      "agent": "codex",
+      "method": "feedback/save",
+      "role": "action",
+      "capabilityId": "codex.feedback"
+    },
+    {
+      "agent": "codex",
+      "method": "feedback/upload",
+      "role": "action",
+      "capabilityId": "codex.feedback"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/changed",
+      "role": "observation",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/copy",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/createDirectory",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/getMetadata",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/readDirectory",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/readFile",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/remove",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/unwatch",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/watch",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fs/writeFile",
+      "role": "action",
+      "capabilityId": "codex.fs"
+    },
+    {
+      "agent": "codex",
+      "method": "fuzzyFileSearch",
+      "role": "action",
+      "capabilityId": "codex.fuzzyFileSearch"
+    },
+    {
+      "agent": "codex",
+      "method": "fuzzyFileSearch/sessionCompleted",
+      "role": "observation",
+      "capabilityId": "codex.fuzzyFileSearch"
+    },
+    {
+      "agent": "codex",
+      "method": "fuzzyFileSearch/sessionUpdated",
+      "role": "observation",
+      "capabilityId": "codex.fuzzyFileSearch"
+    },
+    {
+      "agent": "codex",
+      "method": "guardianWarning",
+      "role": "observation",
+      "capabilityId": "codex.guardianWarning"
+    },
+    {
+      "agent": "codex",
+      "method": "hook/completed",
+      "role": "observation",
+      "capabilityId": "codex.hook"
+    },
+    {
+      "agent": "codex",
+      "method": "hook/started",
+      "role": "observation",
+      "capabilityId": "codex.hook"
+    },
+    {
+      "agent": "codex",
+      "method": "hooks/list",
+      "role": "action",
+      "capabilityId": "codex.hooks"
+    },
+    {
+      "agent": "codex",
+      "method": "initialize",
+      "role": "internal",
+      "capabilityId": "codex.initialize",
+      "reason": "Transport or managed authentication helper; no separate user action."
+    },
+    {
+      "agent": "codex",
+      "method": "item/agentMessage/delta",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/autoApprovalReview/completed",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/autoApprovalReview/started",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/commandExecution/outputDelta",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/commandExecution/requestApproval",
+      "role": "action",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/commandExecution/terminalInteraction",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/completed",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/fileChange/outputDelta",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/fileChange/patchUpdated",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/fileChange/requestApproval",
+      "role": "action",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/mcpToolCall/progress",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/permissions/requestApproval",
+      "role": "action",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/plan/delta",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/reasoning/summaryPartAdded",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/reasoning/summaryTextDelta",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/reasoning/textDelta",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/started",
+      "role": "observation",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/tool/call",
+      "role": "action",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "item/tool/requestUserInput",
+      "role": "action",
+      "capabilityId": "codex.item"
+    },
+    {
+      "agent": "codex",
+      "method": "marketplace/add",
+      "role": "action",
+      "capabilityId": "codex.marketplace"
+    },
+    {
+      "agent": "codex",
+      "method": "marketplace/remove",
+      "role": "action",
+      "capabilityId": "codex.marketplace"
+    },
+    {
+      "agent": "codex",
+      "method": "marketplace/upgrade",
+      "role": "action",
+      "capabilityId": "codex.marketplace"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServer/elicitation/request",
+      "role": "action",
+      "capabilityId": "codex.mcpServer"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServer/event/stream/notification",
+      "role": "observation",
+      "capabilityId": "codex.mcpServer"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServer/oauth/login",
+      "role": "action",
+      "capabilityId": "codex.mcpServer"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServer/oauthLogin/completed",
+      "role": "observation",
+      "capabilityId": "codex.mcpServer"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServer/resource/read",
+      "role": "action",
+      "capabilityId": "codex.mcpServer"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServer/startupStatus/updated",
+      "role": "observation",
+      "capabilityId": "codex.mcpServer"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServer/tool/call",
+      "role": "action",
+      "capabilityId": "codex.mcpServer"
+    },
+    {
+      "agent": "codex",
+      "method": "mcpServerStatus/list",
+      "role": "action",
+      "capabilityId": "codex.mcpServerStatus"
+    },
+    {
+      "agent": "codex",
+      "method": "model/list",
+      "role": "action",
+      "capabilityId": "codex.model"
+    },
+    {
+      "agent": "codex",
+      "method": "model/rerouted",
+      "role": "observation",
+      "capabilityId": "codex.model"
+    },
+    {
+      "agent": "codex",
+      "method": "model/safetyBuffering/updated",
+      "role": "observation",
+      "capabilityId": "codex.model"
+    },
+    {
+      "agent": "codex",
+      "method": "model/verification",
+      "role": "observation",
+      "capabilityId": "codex.model"
+    },
+    {
+      "agent": "codex",
+      "method": "modelProvider/authRecoveryCompleted",
+      "role": "observation",
+      "capabilityId": "codex.modelProvider"
+    },
+    {
+      "agent": "codex",
+      "method": "modelProvider/authRecoveryStarted",
+      "role": "observation",
+      "capabilityId": "codex.modelProvider"
+    },
+    {
+      "agent": "codex",
+      "method": "modelProvider/capabilities/read",
+      "role": "action",
+      "capabilityId": "codex.modelProvider"
+    },
+    {
+      "agent": "codex",
+      "method": "native-cli-surface",
+      "role": "action",
+      "capabilityId": "codex.native-cli"
+    },
+    {
+      "agent": "codex",
+      "method": "permissionProfile/list",
+      "role": "action",
+      "capabilityId": "codex.permissionProfile"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/install",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/installed",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/list",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/read",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/reconcile",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/share/checkout",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/share/delete",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/share/list",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/share/save",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/share/updateTargets",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/skill/read",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "plugin/uninstall",
+      "role": "action",
+      "capabilityId": "codex.plugin"
+    },
+    {
+      "agent": "codex",
+      "method": "process/exited",
+      "role": "observation",
+      "capabilityId": "codex.process"
+    },
+    {
+      "agent": "codex",
+      "method": "process/outputDelta",
+      "role": "observation",
+      "capabilityId": "codex.process"
+    },
+    {
+      "agent": "codex",
+      "method": "project/changed",
+      "role": "observation",
+      "capabilityId": "codex.project"
+    },
+    {
+      "agent": "codex",
+      "method": "remoteControl/status/changed",
+      "role": "observation",
+      "capabilityId": "codex.remoteControl"
+    },
+    {
+      "agent": "codex",
+      "method": "review/start",
+      "role": "action",
+      "capabilityId": "codex.review"
+    },
+    {
+      "agent": "codex",
+      "method": "serverRequest/resolved",
+      "role": "observation",
+      "capabilityId": "codex.serverRequest"
+    },
+    {
+      "agent": "codex",
+      "method": "skills/changed",
+      "role": "observation",
+      "capabilityId": "codex.skills"
+    },
+    {
+      "agent": "codex",
+      "method": "skills/config/write",
+      "role": "action",
+      "capabilityId": "codex.skills"
+    },
+    {
+      "agent": "codex",
+      "method": "skills/extraRoots/set",
+      "role": "action",
+      "capabilityId": "codex.skills"
+    },
+    {
+      "agent": "codex",
+      "method": "skills/list",
+      "role": "action",
+      "capabilityId": "codex.skills"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/approveGuardianDeniedAction",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/archive",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/archived",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/attachment/add",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/attachment/list",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/attachment/remove",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/attachment/updated",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/attachmentOwner/list",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/closed",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/compact/start",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/compacted",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/delete",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/deleted",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/environment/connected",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/environment/disconnected",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/fork",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/goal/clear",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/goal/cleared",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/goal/get",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/goal/set",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/goal/updated",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/inject_items",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/items/list",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/list",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/loaded/list",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/metadata/update",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/name/set",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/name/updated",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/prediction/updated",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/project/updated",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/queue/changed",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/read",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/readState/changed",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/closed",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/error",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/item/completed",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/item/started",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/item/transcript/delta",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/itemAdded",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/outputAudio/delta",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/sdp",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/started",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/transcript/delta",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/realtime/transcript/done",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/resume",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/revert",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/reverted",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/section/changed",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/section/move",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/settings/updated",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/shellCommand",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/start",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/started",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/status/changed",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/tokenUsage/updated",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/turns/list",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/unarchive",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/unarchived",
+      "role": "observation",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "thread/unsubscribe",
+      "role": "action",
+      "capabilityId": "codex.thread"
+    },
+    {
+      "agent": "codex",
+      "method": "threadSection/create",
+      "role": "action",
+      "capabilityId": "codex.threadSection"
+    },
+    {
+      "agent": "codex",
+      "method": "threadSection/delete",
+      "role": "action",
+      "capabilityId": "codex.threadSection"
+    },
+    {
+      "agent": "codex",
+      "method": "threadSection/list",
+      "role": "action",
+      "capabilityId": "codex.threadSection"
+    },
+    {
+      "agent": "codex",
+      "method": "threadSection/update",
+      "role": "action",
+      "capabilityId": "codex.threadSection"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/completed",
+      "role": "observation",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/diff/updated",
+      "role": "observation",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/interrupt",
+      "role": "action",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/moderationMetadata",
+      "role": "observation",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/plan/updated",
+      "role": "observation",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/start",
+      "role": "action",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/started",
+      "role": "observation",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "turn/steer",
+      "role": "action",
+      "capabilityId": "codex.turn"
+    },
+    {
+      "agent": "codex",
+      "method": "warning",
+      "role": "observation",
+      "capabilityId": "codex.warning"
+    },
+    {
+      "agent": "codex",
+      "method": "windows/worldWritableWarning",
+      "role": "observation",
+      "capabilityId": "codex.windows"
+    },
+    {
+      "agent": "codex",
+      "method": "windowsSandbox/readiness",
+      "role": "action",
+      "capabilityId": "codex.windowsSandbox"
+    },
+    {
+      "agent": "codex",
+      "method": "windowsSandbox/setupCompleted",
+      "role": "observation",
+      "capabilityId": "codex.windowsSandbox"
+    },
+    {
+      "agent": "codex",
+      "method": "windowsSandbox/setupStart",
+      "role": "action",
+      "capabilityId": "codex.windowsSandbox"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/ackBonusNotified",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/cancelSignIn",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/getBalance",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/getProfile",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/getState",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/getUnnotifiedBonuses",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/hasRunningAccountTasks",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/signOut",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/startSignIn",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/watch",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "account/watchExpiry",
+      "role": "action",
+      "capabilityId": "dsh.account"
+    },
+    {
+      "agent": "dsh",
+      "method": "actionCards/act",
+      "role": "action",
+      "capabilityId": "dsh.actionCards"
+    },
+    {
+      "agent": "dsh",
+      "method": "agentPresets/list",
+      "role": "action",
+      "capabilityId": "dsh.agentPresets"
+    },
+    {
+      "agent": "dsh",
+      "method": "agentPresets/read",
+      "role": "action",
+      "capabilityId": "dsh.agentPresets"
+    },
+    {
+      "agent": "dsh",
+      "method": "agentPresets/select",
+      "role": "action",
+      "capabilityId": "dsh.agentPresets"
+    },
+    {
+      "agent": "dsh",
+      "method": "commands/execute",
+      "role": "action",
+      "capabilityId": "dsh.commands"
+    },
+    {
+      "agent": "dsh",
+      "method": "commands/list",
+      "role": "action",
+      "capabilityId": "dsh.commands"
+    },
+    {
+      "agent": "dsh",
+      "method": "cotTranslation/limits",
+      "role": "action",
+      "capabilityId": "dsh.cotTranslation"
+    },
+    {
+      "agent": "dsh",
+      "method": "cotTranslation/translate",
+      "role": "action",
+      "capabilityId": "dsh.cotTranslation"
+    },
+    {
+      "agent": "dsh",
+      "method": "credentials/describe",
+      "role": "action",
+      "capabilityId": "dsh.credentials"
+    },
+    {
+      "agent": "dsh",
+      "method": "credentials/set",
+      "role": "action",
+      "capabilityId": "dsh.credentials"
+    },
+    {
+      "agent": "dsh",
+      "method": "credentials/unset",
+      "role": "action",
+      "capabilityId": "dsh.credentials"
+    },
+    {
+      "agent": "dsh",
+      "method": "directoryPicker/createDirectory",
+      "role": "action",
+      "capabilityId": "dsh.directoryPicker"
+    },
+    {
+      "agent": "dsh",
+      "method": "directoryPicker/list",
+      "role": "action",
+      "capabilityId": "dsh.directoryPicker"
+    },
+    {
+      "agent": "dsh",
+      "method": "directoryPicker/pick",
+      "role": "action",
+      "capabilityId": "dsh.directoryPicker"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/getClientCode",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/inventory",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/invoke",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/reportClientGuardFailure",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/reportRenderFailure",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/resolveInspectQuery",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/resolveRequestRun",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/runHostHalf",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/settleUserRun",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/stopFromPanel",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/syncInspectManifest",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "dynamicCordisRunner/undefineFromPanel",
+      "role": "action",
+      "capabilityId": "dsh.dynamicCordisRunner"
+    },
+    {
+      "agent": "dsh",
+      "method": "fileReferences/list",
+      "role": "action",
+      "capabilityId": "dsh.fileReferences"
+    },
+    {
+      "agent": "dsh",
+      "method": "fileUploads/upload",
+      "role": "action",
+      "capabilityId": "dsh.fileUploads"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/branches",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/cancelWorktree",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/changeRequestChecks",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/changeRequestDiff",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/changeRequestStates",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/changeRequestText",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/continueInProject",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/dismiss",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/follow",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/localDiff",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/localText",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/markReady",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/merge",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/refresh",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/requestWorktree",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/restoreWorktree",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/retryWorktree",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/stopCreation",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/submitReview",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "forgePanel/track",
+      "role": "action",
+      "capabilityId": "dsh.forgePanel"
+    },
+    {
+      "agent": "dsh",
+      "method": "goals/clear",
+      "role": "action",
+      "capabilityId": "dsh.goals"
+    },
+    {
+      "agent": "dsh",
+      "method": "goals/complete",
+      "role": "action",
+      "capabilityId": "dsh.goals"
+    },
+    {
+      "agent": "dsh",
+      "method": "goals/create",
+      "role": "action",
+      "capabilityId": "dsh.goals"
+    },
+    {
+      "agent": "dsh",
+      "method": "goals/edit",
+      "role": "action",
+      "capabilityId": "dsh.goals"
+    },
+    {
+      "agent": "dsh",
+      "method": "goals/get",
+      "role": "action",
+      "capabilityId": "dsh.goals"
+    },
+    {
+      "agent": "dsh",
+      "method": "goals/pause",
+      "role": "action",
+      "capabilityId": "dsh.goals"
+    },
+    {
+      "agent": "dsh",
+      "method": "goals/resume",
+      "role": "action",
+      "capabilityId": "dsh.goals"
+    },
+    {
+      "agent": "dsh",
+      "method": "job/follow",
+      "role": "action",
+      "capabilityId": "dsh.job"
+    },
+    {
+      "agent": "dsh",
+      "method": "job/kill",
+      "role": "action",
+      "capabilityId": "dsh.job"
+    },
+    {
+      "agent": "dsh",
+      "method": "job/list",
+      "role": "action",
+      "capabilityId": "dsh.job"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/audit",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/capabilities",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/create",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/identity",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/list",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/relay",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/setCapabilities",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/setRelay",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/stop",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/testPublish",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/testRelay",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "liveshareShares/updatePermissions",
+      "role": "action",
+      "capabilityId": "dsh.liveshareShares"
+    },
+    {
+      "agent": "dsh",
+      "method": "llm/discoverModels",
+      "role": "action",
+      "capabilityId": "dsh.llm"
+    },
+    {
+      "agent": "dsh",
+      "method": "llm/listConfigurableProviders",
+      "role": "action",
+      "capabilityId": "dsh.llm"
+    },
+    {
+      "agent": "dsh",
+      "method": "llm/listProviders",
+      "role": "action",
+      "capabilityId": "dsh.llm"
+    },
+    {
+      "agent": "dsh",
+      "method": "messageFeedback/delete",
+      "role": "action",
+      "capabilityId": "dsh.messageFeedback"
+    },
+    {
+      "agent": "dsh",
+      "method": "messageFeedback/list",
+      "role": "action",
+      "capabilityId": "dsh.messageFeedback"
+    },
+    {
+      "agent": "dsh",
+      "method": "messageFeedback/put",
+      "role": "action",
+      "capabilityId": "dsh.messageFeedback"
+    },
+    {
+      "agent": "dsh",
+      "method": "native-web-surface",
+      "role": "action",
+      "capabilityId": "dsh.native-web"
+    },
+    {
+      "agent": "dsh",
+      "method": "officeToPdf/generation",
+      "role": "action",
+      "capabilityId": "dsh.officeToPdf"
+    },
+    {
+      "agent": "dsh",
+      "method": "officeToPdf/render",
+      "role": "action",
+      "capabilityId": "dsh.officeToPdf"
+    },
+    {
+      "agent": "dsh",
+      "method": "permissionPresets/catalog",
+      "role": "action",
+      "capabilityId": "dsh.permissionPresets"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginInventory/list",
+      "role": "action",
+      "capabilityId": "dsh.pluginInventory"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/cancelInstall",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/inspect",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/installBundle",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/listBundles",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/listPlugins",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/listVersionExemptions",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/listVersions",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/readBundleDetail",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/registries",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/removeBundle",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/setBundleEnabled",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/setPluginEnabled",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/setVersionExemption",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/updateBundle",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginManager/waitForInstall",
+      "role": "action",
+      "capabilityId": "dsh.pluginManager"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginMarket/listIndexes",
+      "role": "action",
+      "capabilityId": "dsh.pluginMarket"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginMarket/readEntryDetail",
+      "role": "action",
+      "capabilityId": "dsh.pluginMarket"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginMarket/search",
+      "role": "action",
+      "capabilityId": "dsh.pluginMarket"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginMarket/setIndexes",
+      "role": "action",
+      "capabilityId": "dsh.pluginMarket"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginRecommendations/describe",
+      "role": "action",
+      "capabilityId": "dsh.pluginRecommendations"
+    },
+    {
+      "agent": "dsh",
+      "method": "pluginRegistryProbe/fastest",
+      "role": "action",
+      "capabilityId": "dsh.pluginRegistryProbe"
+    },
+    {
+      "agent": "dsh",
+      "method": "productAnalytics/enabled",
+      "role": "action",
+      "capabilityId": "dsh.productAnalytics"
+    },
+    {
+      "agent": "dsh",
+      "method": "productAnalytics/report",
+      "role": "action",
+      "capabilityId": "dsh.productAnalytics"
+    },
+    {
+      "agent": "dsh",
+      "method": "productAnalytics/watchPolicy",
+      "role": "action",
+      "capabilityId": "dsh.productAnalytics"
+    },
+    {
+      "agent": "dsh",
+      "method": "remoteAccess/follow",
+      "role": "action",
+      "capabilityId": "dsh.remoteAccess"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/catalog",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/create",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/deleteInactive",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/deliveryLimits",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/edit",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/history",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/list",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/run",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "schedule/view",
+      "role": "action",
+      "capabilityId": "dsh.schedule"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/attachment",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/cancel",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/canOpenWorkspacePath",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/control",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/create",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/events",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/follow",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/fork",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/initializeDefaultModel",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/list",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/modelCatalog",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/observeEvent",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/observeProjections",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/observeState",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/openWorkspacePath",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/page",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/projections",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/prompt",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/rename",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/search",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/selectModel",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/state",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/updateQueue",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/wait",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "session/workspacePathApplications",
+      "role": "action",
+      "capabilityId": "dsh.session"
+    },
+    {
+      "agent": "dsh",
+      "method": "sessionFeedback/record",
+      "role": "action",
+      "capabilityId": "dsh.sessionFeedback"
+    },
+    {
+      "agent": "dsh",
+      "method": "sessionReferenceResolver/candidates",
+      "role": "action",
+      "capabilityId": "dsh.sessionReferenceResolver"
+    },
+    {
+      "agent": "dsh",
+      "method": "settings/describe",
+      "role": "action",
+      "capabilityId": "dsh.settings"
+    },
+    {
+      "agent": "dsh",
+      "method": "settings/mutate",
+      "role": "action",
+      "capabilityId": "dsh.settings"
+    },
+    {
+      "agent": "dsh",
+      "method": "settings/openSettingsDocument",
+      "role": "action",
+      "capabilityId": "dsh.settings"
+    },
+    {
+      "agent": "dsh",
+      "method": "settings/replace",
+      "role": "action",
+      "capabilityId": "dsh.settings"
+    },
+    {
+      "agent": "dsh",
+      "method": "settings/update",
+      "role": "action",
+      "capabilityId": "dsh.settings"
+    },
+    {
+      "agent": "dsh",
+      "method": "skills/list",
+      "role": "action",
+      "capabilityId": "dsh.skills"
+    },
+    {
+      "agent": "dsh",
+      "method": "speech/cancelPreparation",
+      "role": "action",
+      "capabilityId": "dsh.speech"
+    },
+    {
+      "agent": "dsh",
+      "method": "speech/catalog",
+      "role": "action",
+      "capabilityId": "dsh.speech"
+    },
+    {
+      "agent": "dsh",
+      "method": "speech/configure",
+      "role": "action",
+      "capabilityId": "dsh.speech"
+    },
+    {
+      "agent": "dsh",
+      "method": "speech/follow",
+      "role": "action",
+      "capabilityId": "dsh.speech"
+    },
+    {
+      "agent": "dsh",
+      "method": "speech/prepare",
+      "role": "action",
+      "capabilityId": "dsh.speech"
+    },
+    {
+      "agent": "dsh",
+      "method": "speech/transcribe",
+      "role": "action",
+      "capabilityId": "dsh.speech"
+    },
+    {
+      "agent": "dsh",
+      "method": "subagents/interruptByParent",
+      "role": "action",
+      "capabilityId": "dsh.subagents"
+    },
+    {
+      "agent": "dsh",
+      "method": "subagents/prompt",
+      "role": "action",
+      "capabilityId": "dsh.subagents"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/attach",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/close",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/create",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/environment",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/list",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/rename",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/retain",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "terminal/shells",
+      "role": "action",
+      "capabilityId": "dsh.terminal"
+    },
+    {
+      "agent": "dsh",
+      "method": "toolResults/watch",
+      "role": "action",
+      "capabilityId": "dsh.toolResults"
+    },
+    {
+      "agent": "dsh",
+      "method": "userQuestions/answer",
+      "role": "action",
+      "capabilityId": "dsh.userQuestions"
+    },
+    {
+      "agent": "dsh",
+      "method": "userQuestions/attachWait",
+      "role": "action",
+      "capabilityId": "dsh.userQuestions"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/archiveSession",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/create",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/delete",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/follow",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/initializeDefault",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/insertBefore",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/insertSessionBefore",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/pinSession",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/rename",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/unarchiveSession",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspace/unpinSession",
+      "role": "action",
+      "capabilityId": "dsh.workspace"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspaceFiles/changes",
+      "role": "action",
+      "capabilityId": "dsh.workspaceFiles"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspaceFiles/list",
+      "role": "action",
+      "capabilityId": "dsh.workspaceFiles"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspaceFiles/read",
+      "role": "action",
+      "capabilityId": "dsh.workspaceFiles"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspaceFiles/readBytes",
+      "role": "action",
+      "capabilityId": "dsh.workspaceFiles"
+    },
+    {
+      "agent": "dsh",
+      "method": "workspaceFiles/stat",
+      "role": "action",
+      "capabilityId": "dsh.workspaceFiles"
+    }
+  ]
+}

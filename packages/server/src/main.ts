@@ -44,7 +44,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   await providers.init();
   const dshStore = new DshConnectionStore(config.dataDir);
   await dshStore.init();
-  const recorder = config.recordInteractions === false || config.dataDir === ':memory:' || process.env['WDCC_TEST_HOOKS'] === '1' ? undefined : new InteractionRecorder(config.dataDir);
+  const recorder = config.recordInteractions !== true || config.dataDir === ':memory:' || process.env['WDCC_TEST_HOOKS'] === '1' ? undefined : new InteractionRecorder(config.dataDir);
   await recorder?.init();
   recorder?.addSecret(config.token);
   const modelRecording = recorder === undefined ? undefined : new ModelRecording(recorder);

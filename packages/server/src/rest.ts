@@ -25,7 +25,10 @@ import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
-import { updateDshHomePatch } from './dsh-settings.js';
+import { fileResponseHeaders } from './file-response.js';
+import { CapabilityRegistry } from './capability-registry.js';
+import { buildManifest } from './build-info.js';
+import { isCommand } from '@webdcc/protocol';
 import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -206,11 +209,18 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     }
     return {
       version: deps.version,
-      commit: deps.commit ?? process.env['WDCC_COMMIT'] ?? 'unknown',
-      builtAt: deps.builtAt ?? process.env['WDCC_BUILT_AT'] ?? new Date(0).toISOString(),
+      commit: buildManifest?.commit ?? deps.commit ?? process.env['WDCC_COMMIT'] ?? 'unknown',
+      builtAt: buildManifest?.builtAt ?? deps.builtAt ?? process.env['WDCC_BUILT_AT'] ?? new Date(0).toISOString(),
+      ...(buildManifest === undefined ? {} : { build: buildManifest }),
       agents,
       runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
     };
+  });
+
+  const capabilities = new CapabilityRegistry(store, manager);
+  app.get('/api/capabilities', async request => {
+    const query = request.query as { workspaceId?: string; revision?: string };
+    return query.revision === undefined ? capabilities.snapshot(query.workspaceId ?? null) : capabilities.assertRevision(query.revision, query.workspaceId ?? null);
   });
 
   app.get('/api/system/metrics', async () => metrics.read());
@@ -427,11 +437,33 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return store.setDraft(id, body?.text ?? '', Array.isArray(body?.fileIds) ? body.fileIds : []);
   });
 
-  app.post('/api/commands', async (request) => {
+  app.post('/api/commands', async (request, reply) => {
     const body = request.body as { command?: Command; op?: string } & Partial<Command>;
     const command = (body?.command ?? (body as unknown as Command)) as Command;
-    if (typeof command?.clientCommandId !== 'string' || typeof command?.op !== 'string') throw badRequest('命令缺少 clientCommandId 或 op');
-    return dispatcher.dispatch(command);
+    if (!isCommand(command)) throw badRequest('命令格式无效');
+    const result = await dispatcher.dispatch(command);
+    if (result.code === 'command-conflict' || result.code === 'conflict') return reply.status(409).send(result);
+    return result;
+  });
+
+  app.get('/api/commands/:commandId', async request => {
+    const { commandId } = request.params as { commandId: string };
+    const command = store.journal.get(commandId);
+    if (command === undefined) throw Object.assign(new Error('命令不存在'), { statusCode: 404 });
+    return command;
+  });
+
+  app.get('/api/sessions/:id/queue', async request => {
+    const { id } = request.params as { id: string };
+    if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+    return { inputs: store.journal.queue(id), revision: store.maxFeedSeq() };
+  });
+
+  app.delete('/api/sessions/:id/queue/:commandId', async (request, reply) => {
+    const { id, commandId } = request.params as { id: string; commandId: string };
+    store.journal.cancel(id, commandId);
+    manager.queueChanged(id);
+    return reply.status(204).send();
   });
 
   // ---------- 测试钩子（只在 WDCC_TEST_HOOKS=1 时存在，SPEC-M8 6.4） ----------
@@ -593,7 +625,6 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const llm = namespaces.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
     const defaults = namespaces.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
     const llmValue = (llm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
-    const currentDefaultValue = (defaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
     const currentProvider: Record<string, unknown> = { ...(llmValue.providers?.[body.providerKey] ?? {}) };
     const currentModels = Array.isArray(currentProvider['models']) ? (currentProvider['models'] as Record<string, unknown>[]) : [];
     const nextModel: Record<string, unknown> = {
@@ -619,8 +650,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     };
     const providers = { ...(llmValue.providers ?? {}), [body.providerKey]: nextProvider };
 
-    let usedHomePatch = false;
-    try {
+    {
       dshEndpoint('settings/update');
       await client.rpc('settings/update', {
         ns: 'llm-pi-ai',
@@ -637,21 +667,6 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         },
         expectedRevision: Number(defaults?.['revision'] ?? 0),
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/overridden by a home patch/i.test(message)) throw error;
-      await updateDshHomePatch({
-        providerKey: body.providerKey,
-        baseURL: body.baseURL,
-        model: body.model,
-        previousModel: typeof currentDefaultValue.model === 'string' ? currentDefaultValue.model : undefined,
-        reasoning: body.reasoning,
-        reasoningEfforts: body.reasoningEfforts,
-        contextWindow: body.contextWindow,
-        maxTokens: body.maxTokens,
-        apiKeyEnv: String(nextProvider['apiKeyEnv'] ?? 'OPENAI_API_KEY'),
-      });
-      usedHomePatch = true;
     }
     if (body.apiKey !== undefined && body.apiKey !== '') {
       dshEndpoint('credentials/set');
@@ -678,7 +693,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         ...(refreshedDefaultValue.reasoningEffort === undefined ? {} : { reasoningEffort: String(refreshedDefaultValue.reasoningEffort) }),
       },
       namespaces: ns,
-      providerRevision: Number(currentLlm?.['revision'] ?? (usedHomePatch ? 1 : 0)),
+      providerRevision: Number(currentLlm?.['revision'] ?? 0),
       defaultModelRevision: Number(currentDefaults?.['revision'] ?? 0),
     });
   });
@@ -769,6 +784,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return files.completeUpload(uploadId);
   });
 
+  app.delete('/api/uploads/:uploadId', async (request, reply) => {
+    const { uploadId } = request.params as { uploadId: string };
+    await files.cancelUpload(uploadId);
+    return reply.status(204).send();
+  });
+
   // ---------- 附件：把上传的文件放进工作区（SPEC-M8 F7） ----------
   app.post('/api/workspaces/:id/attach', async (request) => {
     const { id } = request.params as { id: string };
@@ -811,7 +832,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (found === undefined) throw Object.assign(new Error('文件不存在'), { statusCode: 404 });
     const { file, buffer } = found;
     const etag = `"${file.sha256}"`;
-    reply.header('content-type', file.mime);
+    fileResponseHeaders(reply, file.name, buffer);
     reply.header('cache-control', 'private, max-age=31536000, immutable');
     reply.header('etag', etag);
     reply.header('accept-ranges', 'bytes');

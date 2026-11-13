@@ -1,4 +1,6 @@
 node_modules/
+/.artifacts/
+/web_review/evidence/
 dist/
 .webdcc/
 .env*

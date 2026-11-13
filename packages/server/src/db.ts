@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export type Db = Database.Database;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -57,10 +58,33 @@ CREATE TABLE IF NOT EXISTS watchdog_jobs (
 export function openDb(file: string): Db {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
   const db = new Database(file);
+  const schemaVersion = db.pragma('user_version', { simple: true }) as number;
+  if (schemaVersion > CURRENT_SCHEMA_VERSION) {
+    db.close();
+    throw new Error(`数据库版本 ${schemaVersion} 高于支持的 ${CURRENT_SCHEMA_VERSION}，拒绝修改`);
+  }
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
-  db.pragma('synchronous = NORMAL');
+  db.pragma('synchronous = FULL');
   db.exec(SCHEMA);
+  db.transaction(() => {
+    db.exec(`CREATE TABLE IF NOT EXISTS capability_snapshots (
+      scope TEXT PRIMARY KEY, revision TEXT NOT NULL, data TEXT NOT NULL, at TEXT NOT NULL
+    )`);
+    db.exec(`CREATE TABLE IF NOT EXISTS command_journal (
+      command_id TEXT PRIMARY KEY, payload_hash TEXT, payload TEXT, op TEXT NOT NULL,
+      session_id TEXT, state TEXT NOT NULL, turn_id TEXT, result TEXT, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS input_queue (
+      ordinal INTEGER PRIMARY KEY AUTOINCREMENT, command_id TEXT NOT NULL UNIQUE,
+      session_id TEXT NOT NULL REFERENCES sessions(id), turn_id TEXT NOT NULL UNIQUE,
+      input TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS input_queue_session ON input_queue(session_id, state, ordinal);
+    INSERT OR IGNORE INTO command_journal (command_id, op, state, result, updated_at)
+      SELECT client_command_id, op, 'uncertain', result, at FROM commands;`);
+    db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+  })();
   // M8 F16：Provider 增加来源与按协议的多端点
   const columns = db.prepare('PRAGMA table_info(providers)').all() as { name: string }[];
   const has = (name: string): boolean => columns.some((column) => column.name === name);

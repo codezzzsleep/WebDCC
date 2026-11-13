@@ -75,6 +75,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
             >
               <TurnView
+                sessionId={sessionId}
                 turn={turn}
                 expanded={isExpanded}
                 isLast={isLast}
@@ -96,6 +97,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
 const INTERACTIVE_KINDS = new Set(['approval.request', 'question']);
 
 function TurnView({
+  sessionId,
   turn,
   expanded,
   isLast,
@@ -105,6 +107,7 @@ function TurnView({
   onOpenDiff,
   onHandoff,
 }: {
+  sessionId: string;
   turn: ProtocolTurnView;
   expanded: boolean;
   isLast: boolean;
@@ -114,6 +117,7 @@ function TurnView({
   onOpenDiff: (fileId: string, path: string) => void;
   onHandoff: (text: string) => void;
 }): React.ReactElement {
+  const [cancelError, setCancelError] = useState('');
   const user = turn.user;
   const running = turn.state === 'starting' || turn.state === 'running' || turn.state === 'waiting';
   const steps = turn.steps;
@@ -137,9 +141,11 @@ function TurnView({
             <Markdown text={user.text} />
           </div>
           <div className="user-meta">
-            {turn.pending !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending.status)}</span> : null}
+            {turn.pending !== undefined || turn.commandState !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending?.status ?? turn.commandState ?? 'pending')}</span> : null}
+            {turn.pending?.status === 'queued' ? <button type="button" className="btn" onClick={() => { void store.cancelQueued(sessionId, turn.pending?.clientCommandId ?? '').catch(error => setCancelError(String(error))); }}>取消排队</button> : null}
             <span>{new Date(user.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
+          {cancelError ? <p role="alert">{cancelError}</p> : null}
         </div>
       ) : null}
 
@@ -232,7 +238,8 @@ function summaryLabel(turn: ProtocolTurnView): string {
   return parts.length === 0 ? '查看过程' : parts.join('，');
 }
 
-function outboxLabel(status: 'pending' | 'queued' | 'sent' | 'failed'): string {
+function outboxLabel(status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain'): string {
+  if (status === 'uncertain') return '原生结果待核对，未自动重发';
   if (status === 'pending') return '待发送';
   if (status === 'queued') return '队列中';
   if (status === 'sent') return '已送达';

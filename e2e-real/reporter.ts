@@ -10,9 +10,10 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
+import { createRunIdentity, requiredCasePredicates, type RunIdentity } from '../scripts/lib/gate-report.js';
 
 const SPEC = join(process.cwd(), 'docs/specs/SPEC-M8.md');
-const OUT = join(process.cwd(), 'docs/acceptance/M8');
+const OUT = process.env['WDCC_ACCEPT_OUT'] ?? join(process.cwd(), 'docs/acceptance/M8');
 const PASS = Number(process.env['M8_PASS'] ?? '1');
 
 export type CaseStatus = 'passed' | 'failed' | 'not-implemented';
@@ -24,6 +25,10 @@ export interface CaseResult {
   durationMs: number;
   error?: string;
   shots: string[];
+  requiredNativePredicates?: string[];
+  nativePredicates?: Record<string, boolean>;
+  uiActions?: string[];
+  evidence?: string[];
 }
 
 function expand(id: string): string[] {
@@ -50,19 +55,10 @@ export function parseSpecIds(): string[] {
   return [...ids].sort();
 }
 
-function commitSha(): string {
-  try {
-    const head = readFileSync(join(process.cwd(), '.git/HEAD'), 'utf8').trim();
-    if (!head.startsWith('ref: ')) return head.slice(0, 12);
-    return readFileSync(join(process.cwd(), '.git', head.slice(5)), 'utf8').trim().slice(0, 12);
-  } catch {
-    return 'unknown';
-  }
-}
-
 class M8Reporter implements Reporter {
   private readonly results: CaseResult[] = [];
   private startedAt = new Date().toISOString();
+  private identity: RunIdentity = createRunIdentity(process.env['M8_RUN_ID']);
 
   onBegin(): void {
     this.startedAt = new Date().toISOString();
@@ -74,7 +70,19 @@ class M8Reporter implements Reporter {
     const message = result.error?.message ?? '';
     const status: CaseStatus = result.status === 'passed' ? 'passed' : message.includes('NOT IMPLEMENTED:') ? 'not-implemented' : 'failed';
     const shots: string[] = [];
+    let nativePredicates: Record<string, boolean> = {};
+    let uiActions: string[] = [];
+    const evidence: string[] = [];
     for (const attachment of result.attachments) {
+      if (attachment.name === 'native-proof') {
+        try {
+          const text = attachment.body?.toString('utf8') ?? (attachment.path === undefined ? '' : readFileSync(attachment.path, 'utf8'));
+          const proof = JSON.parse(text) as { nativePredicates: Record<string, boolean>; uiActions: string[] };
+          nativePredicates = proof.nativePredicates;
+          uiActions = proof.uiActions;
+          evidence.push(`native-proof:${id}`);
+        } catch { nativePredicates = {}; uiActions = []; }
+      }
       if (attachment.path === undefined || !existsSync(attachment.path)) continue;
       mkdirSync(join(OUT, 'shots'), { recursive: true });
       const target = join(OUT, 'shots', `${id}-${basename(attachment.path)}`);
@@ -92,24 +100,27 @@ class M8Reporter implements Reporter {
       durationMs: result.duration,
       ...(message === '' ? {} : { error: message.slice(0, 800) }),
       shots,
+      requiredNativePredicates: requiredCasePredicates(id), nativePredicates, uiActions, evidence,
     });
   }
 
-  onEnd(): void {
+  async onEnd(): Promise<{ status: 'passed' | 'failed' }> {
     const expected = parseSpecIds();
     const executed = new Set(this.results.map((r) => r.id));
     const missing = expected.filter((id) => !executed.has(id));
     const extra = [...executed].filter((id) => !expected.includes(id));
     const failed = this.results.filter((r) => r.status !== 'passed');
     const passed = this.results.filter((r) => r.status === 'passed');
-    const ok = failed.length === 0 && missing.length === 0 && extra.length === 0;
-    const commit = commitSha();
+    const untriggered = this.results.filter(result => result.requiredNativePredicates?.some(predicate => result.nativePredicates?.[predicate] !== true));
+    const ok = failed.length === 0 && missing.length === 0 && extra.length === 0 && executed.size === this.results.length && untriggered.length === 0;
+    const commit = this.identity.commit;
     mkdirSync(OUT, { recursive: true });
     writeFileSync(
       join(OUT, `pass-${PASS}.json`),
       JSON.stringify(
         {
           commit,
+          identity: this.identity,
           pass: PASS,
           startedAt: this.startedAt,
           finishedAt: new Date().toISOString(),
@@ -131,6 +142,7 @@ class M8Reporter implements Reporter {
         `未通过：${failed.map((r) => r.id).join(', ') || '无'}；缺少：${missing.join(', ') || '无'}；多余：${extra.join(', ') || '无'}\n`,
       );
     }
+    return { status: ok ? 'passed' : 'failed' };
   }
 }
 

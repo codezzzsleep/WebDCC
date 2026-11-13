@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
-import { authorityOf, authState, cookieHeaderValue, cookieNameFor, isAuthenticated, issueCookie, tokenEquals } from './auth.js';
+import { authorityOf, authState, cookieHeaderValue, cookieNameFor, isAuthenticated, issueCookie, tokenEquals, requestBoundaryError } from './auth.js';
 import type { Config } from './config.js';
 import { CommandDispatcher } from './dispatcher.js';
 import type { FileStore } from './files.js';
@@ -44,12 +44,12 @@ const UNAUTHORIZED_HTML = `<!doctype html><meta charset="utf-8"><title>WebDCC</t
 /** 过渡期：合法但旧名字的 Cookie 换发按 Host 派生的新名字（F18） */
 function reissueIfLegacy(token: string, request: FastifyRequest, reply: FastifyReply, authority: string): void {
   if (authState(token, request.headers.cookie, authority) !== 'legacy') return;
-  reply.header('set-cookie', cookieHeaderValue(cookieNameFor(authority), issueCookie(token)));
+  reply.header('set-cookie', cookieHeaderValue(cookieNameFor(authority), issueCookie(token), request.protocol === 'https'));
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const { config, store, files, manager } = options;
-  const app = Fastify({ logger: false, bodyLimit: 200 * 1024 * 1024, trustProxy: true });
+  const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024, trustProxy: config.trustProxy ?? false });
   const dispatcher = new CommandDispatcher(store, manager, files, options.recorder);
   const hub = new LiveHub(store, manager, dispatcher, config.token, `${config.host}:${config.port}`);
 
@@ -57,9 +57,10 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
 
   app.addHook('onRequest', async (request, reply) => {
     const path = (request.url.split('?')[0] ?? '/').replace(/\/+$/, '') || '/';
+    const boundaryError = requestBoundaryError(request.headers, request.protocol, request.method, path === '/api/ws', config);
+    if (boundaryError !== undefined) return reply.status(403).send({ error: boundaryError });
     const protectedPath = path.startsWith('/api/') || path === '/api' || path.startsWith('/files/');
     if (!protectedPath) return;
-    if (path === '/api/ws') return; // WS 自己在 upgrade 后校验（hub.attach）
     const authority = authorityOf(request.headers, config.host, config.port);
     if (!isAuthenticated(config.token, request.headers.cookie, authority)) {
       return reply.status(401).send({ error: 'unauthorized' });
@@ -73,7 +74,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     const authority = authorityOf(request.headers, config.host, config.port);
     if (typeof query.token === 'string' && query.token !== '') {
       if (!tokenEquals(config.token, query.token)) return reply.status(403).type('text/html').send(UNAUTHORIZED_HTML);
-      reply.header('set-cookie', cookieHeaderValue(cookieNameFor(authority), issueCookie(config.token)));
+      reply.header('set-cookie', cookieHeaderValue(cookieNameFor(authority), issueCookie(config.token), request.protocol === 'https'));
       return reply.redirect('/', 302);
     }
     if (options.webDist !== undefined && existsSync(join(options.webDist, 'index.html'))) {

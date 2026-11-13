@@ -10,6 +10,7 @@ export interface ProbeResult {
   pinnedVersion: string;
   auth: 'ok' | 'missing' | 'unknown';
   notes?: string[];
+  compatible?: boolean;
 }
 
 export interface ModelOption {

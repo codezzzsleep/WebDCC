@@ -15,6 +15,7 @@ const INTERRUPT_TTL_MS = 60_000;
 
 /** 命令处理：去重、执行、记录结果（SPEC 7.4） */
 export class CommandDispatcher {
+  private readonly inFlight = new Map<string, Promise<DispatchResult>>();
   constructor(
     private readonly store: Store,
     private readonly manager: SessionManager,
@@ -25,13 +26,21 @@ export class CommandDispatcher {
   async dispatch(command: Command): Promise<DispatchResult> {
     const owner = 'sessionId' in command ? command.sessionId : `command-${command.clientCommandId}`;
     this.recorder?.record(owner, 'web', 'command', command, 'out');
-    const existing = this.store.getCommandResult(command.clientCommandId);
-    if (existing !== undefined) return existing.result as DispatchResult;
-
-    const result = await this.execute(command);
-    this.store.recordCommand(command.clientCommandId, command.op, result);
-    this.recorder?.record(owner, 'web', 'ack', result, 'in');
-    return result;
+    const claimed = this.store.journal.claim(command);
+    if (claimed.conflict) return { ok: false, code: 'command-conflict', error: '相同命令 ID 的正文不一致' };
+    const running = this.inFlight.get(command.clientCommandId);
+    if (running !== undefined) return running;
+    if (claimed.record.state === 'uncertain' || claimed.record.payloadHash === null) return { ok: false, code: 'uncertain', error: '原生执行结果待核对，禁止自动重发' };
+    if (claimed.record.result !== undefined) return claimed.record.result as DispatchResult;
+    if (!this.store.journal.acquire(command.clientCommandId)) return { ok: true, value: { commandId: command.clientCommandId, state: claimed.record.state, turnId: claimed.record.turnId, queued: claimed.record.state === 'queued' } };
+    const pending = this.execute(command).then(result => {
+      const state = this.store.journal.get(command.clientCommandId)?.state;
+      this.store.journal.state(command.clientCommandId, result.ok ? command.op === 'send' && state !== undefined ? state : 'completed' : result.code === 'uncertain' ? 'uncertain' : 'failed', result);
+      this.recorder?.record(owner, 'web', 'ack', result, 'in');
+      return result;
+    });
+    this.inFlight.set(command.clientCommandId, pending);
+    try { return await pending; } finally { this.inFlight.delete(command.clientCommandId); }
   }
 
   private async execute(command: Command): Promise<DispatchResult> {
@@ -119,10 +128,12 @@ export class CommandDispatcher {
       }
     } catch (error) {
       const statusCode = (error as { statusCode?: number }).statusCode;
+      const code = (error as { code?: string }).code;
+      const native = ['send', 'approve', 'answer', 'interrupt', 'create-session', 'set-model', 'set-access-mode', 'set-reasoning-effort'].includes(command.op);
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
-        ...(statusCode === 404 ? { code: 'not-found' } : {}),
+        code: code === 'native-version-incompatible' ? code : statusCode === 404 ? 'not-found' : statusCode === 409 ? 'conflict' : statusCode === 400 ? 'bad-request' : native ? 'uncertain' : 'failed',
       };
     }
   }

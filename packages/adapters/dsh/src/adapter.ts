@@ -16,7 +16,7 @@ import type {
   TraceSink,
   TraceFrame,
 } from '@webdcc/protocol';
-import { buildFileChanges, isValidEventData, traceFrame, ulid } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer } from '@webdcc/protocol';
 import { DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
@@ -578,12 +578,12 @@ export class DshAdapter implements AgentAdapter {
   async respond(sessionId: string, decision: ApprovalDecision): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
-    runtime.pending.delete(decision.approvalId);
     await this.call(client, '$events/result', {
       clientId: this.clientId,
       eventId: decision.approvalId,
       outcome: { kind: 'result', value: decision.optionId },
     });
+    runtime.pending.delete(decision.approvalId);
   }
 
   /** 打断时把自己挂起的审批标成 cancelled（只处理本会话的） */
@@ -611,14 +611,12 @@ export class DshAdapter implements AgentAdapter {
     if (entry === undefined) throw new Error('DSH 问题已结束或不存在');
     const [eventId, pending] = entry;
     const id = questionId === eventId ? pending.questionIds?.[0] ?? questionId : questionId.slice(eventId.length + 1);
-    const value = (answer as { selected?: string[]; custom?: string; value?: string | string[]; text?: string }) ?? {};
-    const selected = value.selected ?? (Array.isArray(value.value) ? value.value : value.value === undefined ? [] : [value.value]);
-    const custom = value.custom ?? value.text;
+    const { selected, custom } = normalizeQuestionAnswer(answer);
     pending.answers ??= new Map();
     pending.answers.set(id, { id, selected, ...(custom === undefined || custom === '' ? {} : { custom }) });
     if (pending.answers.size < (pending.questionIds?.length ?? 1)) return;
-    runtime.pending.delete(eventId);
     await this.call(client, '$events/result', { clientId: this.clientId, eventId, outcome: { kind: 'result', value: { answers: [...pending.answers.values()] } } }, sessionId);
+    runtime.pending.delete(eventId);
   }
 
   /** 运行期切换连接（设置页粘贴 DSH 链接后调用） */

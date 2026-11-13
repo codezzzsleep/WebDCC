@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { parsePublicOrigins } from './auth.js';
 
 export interface Config {
   host: string;
@@ -11,6 +12,8 @@ export interface Config {
   idleDisposeMin: number;
   version: string;
   recordInteractions?: boolean;
+  publicOrigins?: string[];
+  trustProxy?: boolean | string[];
 }
 
 function envInt(value: string | undefined, fallback: number): number {
@@ -30,7 +33,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dshPort: envInt(env['WDCC_DSH_PORT'], 3091),
     idleDisposeMin: envInt(env['WDCC_IDLE_DISPOSE_MIN'], 30),
     version: env['WDCC_VERSION'] ?? '0.1.0',
-    recordInteractions: env['WDCC_TRACE'] !== '0' && env['WDCC_TEST_HOOKS'] !== '1',
+    publicOrigins: parsePublicOrigins(env['WDCC_PUBLIC_ORIGINS']),
+    trustProxy: (env['WDCC_TRUST_PROXY'] ?? '').split(',').map(value => value.trim()).filter(Boolean),
+    recordInteractions: env['WDCC_TRACE'] === '1' && env['WDCC_TEST_HOOKS'] !== '1',
   };
 }
 

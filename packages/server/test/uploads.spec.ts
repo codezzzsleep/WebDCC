@@ -95,7 +95,7 @@ describe('A6-6f 可续传上传', () => {
       method: 'POST',
       url: '/api/uploads',
       headers: { cookie: ctx.cookie },
-      payload: { name: 'bad.bin', size: payload.byteLength, sha256: 'deadbeef', mime: 'application/octet-stream' },
+      payload: { name: 'bad.bin', size: payload.byteLength, sha256: '0'.repeat(64), mime: 'application/octet-stream' },
     });
     const { uploadId } = init.json() as { uploadId: string };
     await ctx.app.inject({

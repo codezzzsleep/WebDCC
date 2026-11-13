@@ -134,6 +134,7 @@ export interface CommandMessage {
 export type ClientMessage = HelloMessage | SubscribeMessage | UnsubscribeMessage | CommandMessage | PongMessage;
 
 export interface FeedPatch {
+  queueRevision?: number;
   title?: string;
   /** 创建事件里带上会话身份，便于新浏览器只靠 feed 重建侧边栏 */
   agent?: string;

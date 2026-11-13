@@ -1,6 +1,7 @@
 /** REST DTO（SPEC 11.1） */
 import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { ProbeResult } from './adapter.js';
+import type { BuildManifest } from './build.js';
 
 export interface AgentMeta extends ProbeResult {
   adapterKind?: 'real' | 'fake';
@@ -15,6 +16,7 @@ export interface MetaResponse {
   agents: Record<string, AgentMeta>;
   /** 服务进程是否以 root 运行：root 下 Claude 不能用 bypassPermissions（MODE-claude-01） */
   runningAsRoot?: boolean;
+  build?: BuildManifest;
 }
 
 export interface WorkspaceDto {

@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { cp, mkdir, readdir, readFile, readlink, rm, symlink, lstat, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, readlink, rename, rm, symlink, lstat, stat, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 
-interface ReadonlyDb { prepare: (sql: string) => { get: () => unknown }; close: () => void }
+interface ReadonlyDb { prepare: (sql: string) => { get: () => unknown }; pragma: (sql: string, options: { simple: boolean }) => unknown; close: () => void }
 type DatabaseConstructor = new (file: string, options: { readonly: boolean; fileMustExist: boolean }) => ReadonlyDb;
 const Database = createRequire(import.meta.url)('better-sqlite3') as DatabaseConstructor;
 
@@ -19,19 +20,19 @@ if (remoteHead !== commit) throw new Error(`HEAD 尚未推送：本地 ${commit}
 const staging = join(tmpdir(), `wdcc-release-${commit}-${process.pid}`);
 const checkout = join(staging, 'src');
 let restartAttempted = false;
+let maximumSchema = 0;
 
 function activeTurnCount(): number {
-  try {
+    if (!existsSync(join(dataDir, 'webdcc.db'))) return 0;
     const db = new Database(join(dataDir, 'webdcc.db'), { readonly: true, fileMustExist: true });
     try {
+      const schema = db.pragma('user_version', { simple: true }) as number;
+      if (schema > maximumSchema) throw new Error(`数据库 ${schema} 与产物最大版本 ${maximumSchema} 不兼容`);
       const row = db.prepare("SELECT COUNT(*) AS count FROM sessions WHERE status IN ('running', 'waiting')").get() as { count?: number };
       return Number(row.count ?? 0);
     } finally {
       db.close();
     }
-  } catch {
-    return 0;
-  }
 }
 await mkdir(staging, { recursive: true });
 try {
@@ -39,6 +40,9 @@ try {
   execFileSync('git', ['checkout', '--quiet', commit], { cwd: checkout, stdio: 'inherit' });
   execFileSync('pnpm', ['install', '--frozen-lockfile'], { cwd: checkout, stdio: 'inherit' });
   execFileSync('pnpm', ['build'], { cwd: checkout, stdio: 'inherit', env: { ...process.env, WDCC_COMMIT: commit, WDCC_BUILT_AT: new Date().toISOString() } });
+  const manifest = JSON.parse(await readFile(join(checkout, 'packages/server/dist/build-manifest.json'), 'utf8')) as { commit: string; sourceFingerprint: string; schemaFingerprint: string; database: { minimum: number; maximum: number } };
+  if (manifest.commit !== commit || !/^[a-f0-9]{64}$/.test(manifest.sourceFingerprint) || !/^[a-f0-9]{64}$/.test(manifest.schemaFingerprint) || !Number.isSafeInteger(manifest.database.maximum)) throw new Error('构建清单不完整或提交不匹配');
+  maximumSchema = manifest.database.maximum;
   const builtAt = new Date().toISOString();
   const target = join(releaseRoot, 'releases', commit);
   await mkdir(target, { recursive: true });
@@ -86,8 +90,7 @@ try {
   const previous = await readlinkSafe(current);
   const activeBeforeRestart = activeTurnCount();
   if (activeBeforeRestart > 0) throw new Error(`当前有 ${activeBeforeRestart} 个活动会话，发布已取消以避免中断执行`);
-  await rm(current, { force: true });
-  await symlink(target, current, 'dir');
+  await switchCurrent(current, target);
   try {
     const activeAtRestart = activeTurnCount();
     if (activeAtRestart > 0) throw new Error(`当前有 ${activeAtRestart} 个活动会话，发布已取消以避免中断执行`);
@@ -117,15 +120,16 @@ try {
     const meta = await metaResponse.json() as { commit?: string };
     if (meta.commit !== commit) throw new Error(`线上 commit 不匹配：${meta.commit ?? 'missing'}`);
   } catch (error) {
-    await rm(current, { force: true });
-    if (previous !== undefined) await symlink(previous, current, 'dir');
+    if (previous !== undefined) await switchCurrent(current, previous);
+    else await rm(current, { force: true });
     if (restartAttempted) execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
     throw error;
   }
-  const entries = (await readdir(join(releaseRoot, 'releases'))).sort().reverse();
+  const releasesDir = join(releaseRoot, 'releases');
+  const entries = await Promise.all((await readdir(releasesDir)).map(async name => ({ name, modified: (await stat(join(releasesDir, name))).mtimeMs })));
   // Keep the release just activated even when commit hashes do not sort by
   // deployment time (the current commit may lexically precede older hashes).
-  for (const old of entries.filter((entry) => entry !== commit).slice(5)) await rm(join(releaseRoot, 'releases', old), { recursive: true, force: true });
+  for (const old of entries.sort((a, b) => b.modified - a.modified).filter(entry => entry.name !== commit && join(releasesDir, entry.name) !== previous).slice(5)) await rm(join(releasesDir, old.name), { recursive: true, force: true });
   process.stdout.write(`released ${commit} -> ${target}\n`);
 } finally {
   await rm(staging, { recursive: true, force: true });
@@ -133,4 +137,11 @@ try {
 
 async function readlinkSafe(path: string): Promise<string | undefined> {
   try { return await (await lstat(path)).isSymbolicLink() ? readlink(path) : undefined; } catch { return undefined; }
+}
+
+async function switchCurrent(current: string, target: string): Promise<void> {
+  const stagedLink = `${current}.next-${process.pid}`;
+  await rm(stagedLink, { force: true });
+  try { await symlink(target, stagedLink, 'dir'); await rename(stagedLink, current); }
+  finally { await rm(stagedLink, { force: true }); }
 }

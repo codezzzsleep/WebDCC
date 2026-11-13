@@ -13,6 +13,7 @@ import type {
 } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
+import { CommandJournal } from './command-journal.js';
 
 interface SessionRow {
   id: string;
@@ -193,7 +194,8 @@ function toWatchdogJob(data: string): WatchdogJob {
 }
 
 export class Store {
-  constructor(private readonly db: Db) {}
+  readonly journal: CommandJournal;
+  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); }
 
   watchdogSettings(): WatchdogSettings | undefined {
     const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;
@@ -619,6 +621,20 @@ export class Store {
   getUpload(id: string): (UploadRow & { receivedList: number[] }) | undefined {
     const row = this.db.prepare('SELECT * FROM uploads WHERE id = ?').get(id) as UploadRow | undefined;
     return row === undefined ? undefined : { ...row, receivedList: JSON.parse(row.received) as number[] };
+  }
+
+  listUploads(): (UploadRow & { receivedList: number[] })[] {
+    return (this.db.prepare('SELECT * FROM uploads').all() as UploadRow[]).map(row => ({ ...row, receivedList: JSON.parse(row.received) as number[] }));
+  }
+
+  fileStorageUsage(): { stored: number; pending: number } {
+    const sum = (table: 'files' | 'uploads'): number => (this.db.prepare(`SELECT COALESCE(SUM(size), 0) AS bytes FROM ${table}`).get() as { bytes: number }).bytes;
+    return { stored: sum('files'), pending: sum('uploads') };
+  }
+
+  saveCapabilitySnapshot(scope: string, revision: string, data: unknown): void {
+    this.db.prepare('INSERT INTO capability_snapshots (scope, revision, data, at) VALUES (?, ?, ?, ?) ON CONFLICT(scope) DO UPDATE SET revision = excluded.revision, data = excluded.data, at = excluded.at')
+      .run(scope, revision, JSON.stringify(data), new Date().toISOString());
   }
 
   setUploadReceived(id: string, received: number[]): void {

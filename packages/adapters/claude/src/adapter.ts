@@ -25,7 +25,7 @@ import {
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, isValidEventData, traceFrame } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame, normalizeQuestionAnswer } from '@webdcc/protocol';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -356,10 +356,13 @@ export class ClaudeAdapter implements AgentAdapter {
     const ready = new Promise<void>((resolve) => {
       markReady = resolve;
     });
+    const ownerRef: { current?: SessionRuntime } = {};
     const canUseTool: CanUseTool = async (toolName, toolInput, options) => {
+      const owner = ownerRef.current;
+      if (owner === undefined || this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换' };
       const result = await this.handleCanUseTool(sessionId, toolName, toolInput, options);
-      const runtime = this.sessions.get(sessionId);
-      traceFrame(this.options.traceSink ?? opts.traceSink, { i: runtime === undefined ? 0 : ++runtime.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, result } });
+      if (this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换' };
+      traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++owner.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, result } });
       return result;
     };
 
@@ -386,10 +389,12 @@ export class ClaudeAdapter implements AgentAdapter {
       frameSeq: 0,
     };
     this.sessions.set(sessionId, runtime);
+    ownerRef.current = runtime;
     runtime.pump = (async () => {
       for await (const message of q as AsyncIterable<SDKMessage>) {
         runtime.frameSeq += 1;
         traceFrame(this.options.traceSink ?? opts.traceSink, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message });
+        if (this.sessions.get(sessionId) !== runtime) return;
         if (message.type === 'system' && message.subtype === 'init') {
           runtime.nativeId = message.session_id;
           this.emit(sessionId, { type: 'native-id', nativeId: message.session_id });
@@ -445,6 +450,7 @@ export class ClaudeAdapter implements AgentAdapter {
   async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
     const runtime = this.require(sessionId);
     await runtime.q.setPermissionMode(mode as never);
+    runtime.launchOpts = { ...runtime.launchOpts, accessMode: mode };
     return { accessMode: mode };
   }
 
@@ -504,15 +510,14 @@ export class ClaudeAdapter implements AgentAdapter {
   async answer(sessionId: string, questionId: string, answer: unknown): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     const pending = runtime?.pending.get(questionId.split(':')[0] ?? questionId);
-    if (runtime === undefined || pending === undefined) return;
-    const answers = (answer as { value?: string | string[]; selected?: string[]; text?: string }) ?? {};
-    const value = answers.value ?? answers.selected ?? answers.text ?? '';
+    if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Claude 问题已结束或不存在'), { statusCode: 409 });
+    const value = normalizeQuestionAnswer(answer).values;
     const index = Number(questionId.slice(questionId.lastIndexOf(':') + 1));
     const questions = (pending.input['questions'] ?? []) as Record<string, unknown>[];
     const question = questions[index];
     if (question === undefined) throw new Error('问题不存在');
-    pending.answers ??= {};
-    pending.answers[String(question['question'] ?? '请回答')] = Array.isArray(value) ? value.join(', ') : value;
+    pending.answers ??= Object.create(null) as Record<string, string>;
+    pending.answers[String(question['question'] ?? '请回答')] = value.join(', ');
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'control', frame: { questionId, answer } });
     if (Object.keys(pending.answers).length < questions.length) return;
     runtime.pending.delete(questionId.split(':')[0] ?? questionId);
