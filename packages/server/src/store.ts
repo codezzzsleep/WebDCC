@@ -16,6 +16,7 @@ import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { CommandJournal } from './command-journal.js';
 import { NativeHistoryStore } from './native-history.js';
+import { InteractionStore } from './interactions.js';
 
 interface SessionRow {
   id: string;
@@ -201,7 +202,8 @@ function toWatchdogJob(data: string): WatchdogJob {
 export class Store {
   readonly journal: CommandJournal;
   readonly nativeHistory: NativeHistoryStore;
-  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); }
+  readonly interactions: InteractionStore;
+  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db); }
 
   watchdogSettings(): WatchdogSettings | undefined {
     const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;
@@ -470,7 +472,7 @@ export class Store {
           event.late === true ? 1 : 0,
         );
       this.db.prepare('UPDATE sessions SET last_seq = ?, updated_at = ? WHERE id = ?').run(seq, at, event.sessionId);
-      return {
+      const stored: StoredEvent = {
         sessionId: event.sessionId,
         seq,
         turnId: event.turnId,
@@ -482,6 +484,8 @@ export class Store {
         ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
         ...(event.late === true ? { late: true } : {}),
       };
+      this.interactions.observe(stored);
+      return stored;
     });
     return tx(input);
   }

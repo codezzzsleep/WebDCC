@@ -1104,7 +1104,7 @@ export class CodexAdapter implements AgentAdapter {
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
       const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[]; isOther?: boolean }[];
       runtime?.approvals.set(approvalId, { requestId: id, kind, questionIds: questions.map(question => question.id) });
-      for (const question of questions) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.id}`, kind: 'question', data: { questionId: `${approvalId}:${question.id}`, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }, native: frame });
+      for (const question of questions) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.id}`, kind: 'question', data: { questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }, native: frame });
       return undefined;
     }
 

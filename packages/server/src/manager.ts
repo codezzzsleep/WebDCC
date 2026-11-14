@@ -85,6 +85,7 @@ export class SessionManager {
     },
   ) {
     this.store.journal.recover();
+    this.store.interactions.recover();
     // An unfinished legacy turn has no verifiable native outcome. Preserve it
     // and prevent new sends until native reconciliation establishes ownership.
     for (const session of this.store.listSessions(true)) {
@@ -414,12 +415,16 @@ export class SessionManager {
     this.touchIdle(runtime);
   }
 
-  async approve(sessionId: string, decision: ApprovalDecision): Promise<void> {
+  async approve(sessionId: string, decision: ApprovalDecision, commandId = ulid()): Promise<void> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
-    await runtime.adapter.respond(sessionId, decision);
-    this.turns.resume(sessionId);
+    const pending = this.store.interactions.get(sessionId, 'approve', decision.approvalId);
+    if (pending === undefined) throw Object.assign(new Error('审批已结束或不存在'), { statusCode: 409 });
+    if (!(JSON.parse(pending.request) as Pick<EventData['approval.request'], 'options'>).options.some(option => option.id === decision.optionId)) throw Object.assign(new Error('审批选项无效'), { statusCode: 400 });
+    const claim = this.store.interactions.claim(sessionId, 'approve', decision.approvalId, commandId);
+    try { await runtime.adapter.respond(sessionId, decision); } catch (error) { this.store.interactions.fail(claim, error); throw error; }
+    if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return; }
     const resolvedTurn = runtime.turnId;
     const event = this.store.appendEvent({
       sessionId,
@@ -433,14 +438,16 @@ export class SessionManager {
     this.touchIdle(runtime);
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<AnswerSubmission> {
+  async answer(sessionId: string, questionId: string, answer: unknown, commandId = ulid()): Promise<AnswerSubmission> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.answer === undefined) throw Object.assign(new Error('该 Agent 不支持回答问题'), { statusCode: 400 });
-    const result = await runtime.adapter.answer(sessionId, questionId, answer);
-    if (result?.submitted === false) return result;
-    this.turns.resume(sessionId);
+    const claim = this.store.interactions.claim(sessionId, 'answer', questionId, commandId);
+    let result: void | AnswerSubmission;
+    try { result = await runtime.adapter.answer(sessionId, questionId, answer); } catch (error) { this.store.interactions.fail(claim, error); throw error; }
+    if (result?.submitted === false) { this.store.interactions.finish(claim, true); return result; }
+    if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result ?? { submitted: true, questionIds: [questionId] }; }
     for (const id of result?.questionIds ?? [questionId]) {
       const question = this.store.allEvents(sessionId).find((event) => event.kind === 'question' && (event.data as EventData['question']).questionId === id);
       if (question === undefined) continue;
@@ -469,6 +476,7 @@ export class SessionManager {
       if (event.kind === 'approval.resolved') approvals.delete((event.data as EventData['approval.resolved']).approvalId);
     }
     const waiting = approvals.size > 0 || [...questions.values()].some(question => question.status !== 'answered' && question.status !== 'skipped');
+    if (!waiting) this.turns.resume(runtime.sessionId);
     this.setStatus(runtime, waiting ? 'waiting' : runtime.turnId === null ? 'idle' : 'running');
   }
 
@@ -800,7 +808,7 @@ export class SessionManager {
           }
         }
         this.hooks.onEvent(stored);
-        if (event.kind === 'approval.request' || event.kind === 'question') this.setStatus(runtime, 'waiting');
+        if (event.kind === 'approval.request' || event.kind === 'approval.resolved' || event.kind === 'question') this.refreshInteractionStatus(runtime);
         if (event.kind === 'turn.completed') {
           this.finishTurn(runtime, (completeData as EventData['turn.completed']).status, undefined, stored);
         }

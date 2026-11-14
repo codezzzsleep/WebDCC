@@ -68,11 +68,11 @@ export class CommandDispatcher {
           await this.manager.approve(command.sessionId, {
             approvalId: command.approvalId,
             optionId: command.optionId,
-          });
+          }, command.clientCommandId);
           return { ok: true };
         }
         case 'answer': {
-          const value = await this.manager.answer(command.sessionId, command.questionId, command.answer);
+          const value = await this.manager.answer(command.sessionId, command.questionId, command.answer, command.clientCommandId);
           return { ok: true, value };
         }
         case 'interrupt': {
@@ -133,7 +133,7 @@ export class CommandDispatcher {
       return {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
-        code: code === 'native-version-incompatible' ? code : statusCode === 404 ? 'not-found' : statusCode === 409 ? 'conflict' : statusCode === 400 ? 'bad-request' : native ? 'uncertain' : 'failed',
+        code: code === 'native-version-incompatible' || code === 'uncertain' ? code : statusCode === 404 ? 'not-found' : statusCode === 409 ? 'conflict' : statusCode === 400 ? 'bad-request' : native ? 'uncertain' : 'failed',
       };
     }
   }

@@ -1214,6 +1214,7 @@ export class DshAdapter implements AgentAdapter {
         kind: 'question',
         data: {
           questionId: `${eventId}:${ids[index]}`,
+          groupId: eventId,
           prompt: String(first['question'] ?? '请回答'),
           ...(first['header'] === undefined ? {} : { header: String(first['header']) }),
           options: ((first['options'] as Record<string, unknown>[]) ?? []).map((option) => ({

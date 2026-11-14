@@ -520,7 +520,7 @@ export class ClaudeAdapter implements AgentAdapter {
   async respond(sessionId: string, decision: ApprovalDecision): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     const pending = runtime?.pending.get(decision.approvalId);
-    if (runtime === undefined || pending === undefined) return;
+    if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Claude 审批已结束或不存在'), { statusCode: 409 });
     runtime.pending.delete(decision.approvalId);
     pending.resolve({ approved: decision.optionId === 'allow', optionId: decision.optionId });
   }
@@ -537,7 +537,9 @@ export class ClaudeAdapter implements AgentAdapter {
 
   async answer(sessionId: string, questionId: string, answer: unknown): Promise<AnswerSubmission> {
     const runtime = this.sessions.get(sessionId);
-    const pending = runtime?.pending.get(questionId.split(':')[0] ?? questionId);
+    const separator = questionId.lastIndexOf(':');
+    const requestId = questionId.slice(0, separator);
+    const pending = runtime?.pending.get(requestId);
     if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Claude 问题已结束或不存在'), { statusCode: 409 });
     const value = normalizeQuestionAnswer(answer).values;
     const index = Number(questionId.slice(questionId.lastIndexOf(':') + 1));
@@ -548,9 +550,9 @@ export class ClaudeAdapter implements AgentAdapter {
     pending.answers[String(question['question'] ?? '请回答')] = value.join(', ');
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'control', frame: { questionId, answer } });
     if (Object.keys(pending.answers).length < questions.length) return { submitted: false };
-    runtime.pending.delete(questionId.split(':')[0] ?? questionId);
+    runtime.pending.delete(requestId);
     pending.resolve({ approved: true, optionId: 'answer', answers: pending.answers });
-    return { submitted: true, questionIds: questions.map((_, index) => `${questionId.split(':')[0]}:${index}`) };
+    return { submitted: true, questionIds: questions.map((_, index) => `${requestId}:${index}`) };
   }
 
   debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
@@ -622,7 +624,7 @@ export class ClaudeAdapter implements AgentAdapter {
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID } });
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
-      const questionId = `${options.toolUseID ?? `q-${runtime.frameSeq + 1}`}`;
+      const questionId = `${options.toolUseID ?? `q-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
       const questionPromise = this.waitForDecision(runtime, questionId, 'question', toolName, input, options.signal);
       for (const [index, question] of questions.entries()) this.emit(sessionId, {
         type: 'item.complete',
@@ -630,6 +632,7 @@ export class ClaudeAdapter implements AgentAdapter {
         kind: 'question',
         data: {
           questionId: `${questionId}:${index}`,
+          groupId: questionId,
           prompt: String(question['question'] ?? '请回答'),
           ...(question['header'] === undefined ? {} : { header: String(question['header']) }),
           options: ((question['options'] as Record<string, unknown>[]) ?? []).map((option) => ({
@@ -649,7 +652,7 @@ export class ClaudeAdapter implements AgentAdapter {
     }
 
     const isPlanMode = toolName === 'ExitPlanMode';
-    const approvalId = `${sessionId}:${options.toolUseID ?? `tool-${runtime.frameSeq + 1}`}`;
+    const approvalId = `${sessionId}:${options.toolUseID ?? `tool-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
     const decisionPromise = this.waitForDecision(runtime, approvalId, 'approval', toolName, input, options.signal);
     this.emit(sessionId, {
       type: 'item.complete',

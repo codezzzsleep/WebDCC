@@ -60,3 +60,46 @@ it('NP-06 a real browser keeps question input and pending state through submissi
     expect(await page.getByTestId('question-card').getByRole('button').count()).toBe(0);
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
+
+it('NP-06 two browser contexts cannot submit the same native question twice', async () => {
+  const ctx = await createSourceTestApp();
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  try {
+    const workspace = ctx.store.createWorkspace('two browsers', ctx.dataDir);
+    const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+    ctx.store.updateSession(session.id, { nativeId: 'native' });
+    const native = CodexAdapter.replay(session.id);
+    native.adapter.resume = async () => undefined;
+    native.adapter.send = async () => { native.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 'native-request', method: 'item/tool/requestUserInput', params: { questions: [{ id: 'one', question: '你的答案' }] } } }); };
+    native.adapter.dispose = async () => undefined;
+    const answer = native.adapter.answer.bind(native.adapter);
+    let attempts = 0;
+    native.adapter.answer = async (...args) => { attempts++; await gate; return answer(...args); };
+    ctx.manager.registerAdapter(native.adapter);
+    await ctx.manager.send(session.id, { text: 'ask' }, 'ASK-TWO');
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    const address = ctx.app.server.address();
+    if (address === null || typeof address === 'string') throw new Error('Missing listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    browser = await chromium.launch({ headless: true });
+    const pages = await Promise.all([browser.newPage(), browser.newPage()]);
+    for (const page of pages) {
+      await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+      await page.goto(`${base}/s/${session.id}`);
+      await page.getByTestId('question-card').waitFor();
+    }
+    const first = pages[0]!.getByTestId('question-card'); const second = pages[1]!.getByTestId('question-card');
+    await first.getByRole('textbox', { name: '其他回答' }).fill('first answer');
+    await first.getByRole('button').click();
+    await expect.poll(() => attempts).toBe(1);
+    await second.getByRole('textbox', { name: '其他回答' }).fill('competing answer');
+    await second.getByRole('button').click();
+    await expect.poll(() => second.getByRole('alert').textContent()).toContain('另一个客户端');
+    expect(attempts).toBe(1);
+    release();
+    await expect.poll(() => first.getAttribute('data-state')).toBe('resolved');
+    await expect.poll(() => second.getAttribute('data-state')).toBe('resolved');
+    expect(native.replies).toEqual([{ id: 'native-request', result: { answers: { one: { answers: ['first answer'] } } } }]);
+  } finally { release(); await browser?.close(); await ctx.close(); }
+}, 30_000);

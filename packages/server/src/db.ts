@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export type Db = Database.Database;
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -68,6 +68,14 @@ export function openDb(file: string): Db {
   db.pragma('synchronous = FULL');
   db.exec(SCHEMA);
   db.transaction(() => {
+    db.exec(`CREATE TABLE IF NOT EXISTS interactions (
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL, id TEXT NOT NULL, group_id TEXT NOT NULL,
+      state TEXT NOT NULL, revision INTEGER NOT NULL, command_id TEXT,
+      request TEXT NOT NULL, error TEXT,
+      PRIMARY KEY (session_id, kind, id)
+    ); CREATE INDEX IF NOT EXISTS interactions_group ON interactions(session_id, kind, group_id, state);`);
+    if (schemaVersion < 5) db.prepare('DELETE FROM app_settings WHERE key = ?').run('interaction-index-v5');
     const columns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
     if (!columns.some(column => column.name === 'permission_state')) db.exec('ALTER TABLE sessions ADD COLUMN permission_state TEXT');
     db.exec(`UPDATE sessions SET permission_state = json_object(

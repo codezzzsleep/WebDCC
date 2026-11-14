@@ -84,8 +84,17 @@
 - 已用真实 Node 子进程加载 native preload，验证正常/正文超限/文件超限均保持 request/response 原文；测试只访问临时目录和本地 HTTP fixture，没有真实模型调用。
 - 本阶段六类源码门禁通过：63 个测试文件 / 269 项单元测试、4 项 Chromium 测试；报告绑定 `c46f5e8` 及源码 fingerprint。仍需 SQLite/queue/command/outbox 的 secret-aware 存储、SDK/RPC 跨帧连续脱敏、全局跨进程配额、旧录制导出以及完整 native 对照；NP-14 保持未完整完成。
 
+## 持久交互占用与浏览器竞争阶段（2026-11-14）
+
+- 诊断阶段已提交 `ecdc138`；63 文件 / 269 项单元、4 项 Chromium 与完整源码门禁通过。
+- SQLite schema v5 添加 native interaction/group 占用，与 event 追加同事务；旧事件索引一次性迁移保留 URL、历史和 resolved 状态。索引只保存选项 ID、身份/状态和错误类别，不重复存储问答原文或审批详情。
+- 不同 clientCommandId / 浏览器回应同一 native group 时，原子 claim 只允许一个 sending；unknown 结果与重启中的 sending/collected 变为 uncertain，保持禁止盲重发。已接受的部分答案仍在命令账本，需要后续恢复对账与 rehydrate。
+- cancel/外部已解决状态胜过迟到本地完成；最新交互投影决定 waiting/running，避免解决卡片仍卡在等待。Claude 不再把已结束审批回成功，带冒号问题 ID 保持完整，fallback ID 含 query generation。
+- 20 个不同命令竞争审批只一次 native submission；多题最后提交期间不能重发前题；真实 SIGKILL 保留占用并恢复 uncertain；真实双 Chromium context 竞争只提交首个答案。均为本地隔离/adapter 合同 fixture，不是付费真实模型证据。
+- 本阶段六类源码门禁通过：64 个测试文件 / 276 项单元测试、5 项 Chromium 测试；报告绑定 `ecdc138` 及实际源码 fingerprint。真正 native 接收确认、deadline/revision、secret/URL/form、可操作 uncertain 对账与恢复、完整三家验收仍待推进，NP-06 保持未完整完成。
+
 ## 下一步
 
-完成本阶段源码门禁并提交；优先继续 NP-06 的持久权威交互状态/跨浏览器竞争和 secret 答案，再推进 NP-04 owner/reconciliation 与 NP-05 raw ledger。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据；全部 M1–M3 按矩阵依赖持续实施。
+完成当前源码门禁、源码检查点和 L1 语义回归；继续 NP-06 的恢复对账/secret，NP-04 持久 owner/fencing 与 NP-05 raw ledger。DSH activeAttempt/workspace 基线、计时问题和真实双界面恢复仍待证据；全部 48 项继续按矩阵依赖推进，没有改为只做当前几批。
 
 运行入口：所有命令在 `/root/WebDCC-repair` 执行。`pnpm check:source` 构建只写 `.artifacts/<runId>/`；不要执行 release 或重启服务。真实 Codex 0.167.0 与付费模型对照尚未准备，不能拿 0.168.0 当基线通过证据。

@@ -429,7 +429,13 @@
           "packages/web/src/lib/store.ts",
           "packages/web/src/components/Timeline.tsx",
           "packages/web/src/lib/store-recovery.spec.ts",
-          "browser-tests/interactions.spec.ts"
+          "browser-tests/interactions.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/events.ts",
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/fixtures/interaction-crash.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -446,7 +452,13 @@
           "packages/web/src/lib/store.ts",
           "packages/web/src/components/Timeline.tsx",
           "packages/web/src/lib/store-recovery.spec.ts",
-          "browser-tests/interactions.spec.ts"
+          "browser-tests/interactions.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/events.ts",
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/fixtures/interaction-crash.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -456,7 +468,7 @@
           "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
           "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
         ],
-        "remainingWork": "多题收集/传输提交与卡片完成分开，三 adapter 提交后统一更新整组问题；提交失败保留输入，旧 ACK 不覆盖新重试，uncertain 不自动重发。Chromium 原始 UI→WS→manager→adapter→回复→刷新链路已做隔离回归。持久权威 interaction、跨浏览器并发仲裁、真正 native 解决确认、secret/URL/form、超时和全部取消对账仍待完成。"
+        "remainingWork": "新增 SQLite v5 交互占用索引，与事件追加同事务写入。跨 clientCommandId 及浏览器按原生请求组拒绝竞争；unknown 提交与重启中 sending/collected 恢复为 uncertain，禁止盲重发；已接受的部分答案保留在命令账本。索引仅保存选项 ID 与身份/状态，不复制原文/详情/答案。原生 cancel/外部解决胜过迟到本地完成，等待状态依据最新投影；Claude 过期审批拒绝，带冒号问题身份和 fallback query generation 保留。仍需真正 native 收到决定的确认、uncertain 的可操作恢复与 partial answer rehydration、secret/URL/form、deadline/revision 控制、全部取消对账及真实三家验收。"
       },
       "dependencyIds": [
         "NP-03",
@@ -1089,7 +1101,23 @@
           "大输出和长期会话内存/磁盘有界，录制失败不阻断原生运行且coverage告警可见。"
         ],
         "remainingWork": "已统一诊断写前 field/JSON/known-secret/Cookie/URL 脱敏，HTTP 跨分片拼接后脱敏；保留原始 request/response 流式转发与背压，录制正文/分片/排队字节/单文件有界，超限完整丢弃正文并标 coverage；诊断 hash 改为 redacted bytes。启动或路由录制失败保持原生配置；周期按活动触发的过期清理、跨重启缺失标记和真实 Node preload 故障回归已做。SQLite/command/queue/IndexedDB 的 secret-aware 存储、原生 SDK/RPC 跨帧连续脱敏、所有 credential/provider 来源、跨进程全局配额、旧录制导出与完整 native launch/config 对照仍待完成。",
-        "budgetNote": "共用诊断 redactor/writer 覆盖 model proxy、native preload 与主 recorder，文件范围超过初始 NP-14 规划；其中新增测试/fixture 与公共边界提取单列。仍为分阶段实施，未下调完整验收。"
+        "budgetNote": "共用诊断 redactor/writer 覆盖 model proxy、native preload 与主 recorder，文件范围超过初始 NP-14 规划；其中新增测试/fixture 与公共边界提取单列。仍为分阶段实施，未下调完整验收。",
+        "revisedEstimate": {
+          "impl": [
+            700,
+            1250
+          ],
+          "tests": [
+            550,
+            950
+          ],
+          "files": [
+            18,
+            28
+          ],
+          "confidence": "中",
+          "reason": "共用诊断 writer/redactor 已跨主 recorder、native preload、model proxy，且完整敏感存储、原生分片脱敏、跨进程配额和旧录制导出仍需实现；原审查预算保留为基线估算，此执行估算覆盖余项。"
+        }
       },
       "dependencyIds": [
         "NP-02",
@@ -2734,14 +2762,18 @@
           "packages/server/src/native-history.ts",
           "packages/server/test/native-history.spec.ts",
           "packages/server/src/store.ts",
-          "packages/server/test/permission-migration.spec.ts"
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/interactions.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/db.ts",
           "packages/server/src/native-history.ts",
           "packages/server/test/native-history.spec.ts",
           "packages/server/src/store.ts",
-          "packages/server/test/permission-migration.spec.ts"
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/interactions.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -2751,7 +2783,7 @@
           "迁移中断可恢复，失败不启动不兼容应用；恢复演练包含附件hash和native session关联。",
           "备份/导出不带意外secret；缺外部native备份明确显示无法完整恢复范围。"
         ],
-        "remainingWork": "SQLite schema v4 增加独立权限状态；旧权限选择迁移为 unknown 意图并保留原生会话 URL、事件和输入原文。命令/原生历史迁移已有局部证据；完整备份、损坏/降级、附件 hash 与真实旧库恢复演练仍待完成。"
+        "remainingWork": "SQLite schema v5 增加请求/组占用索引，旧事件一次性重建索引并保留 session URL、历史、已解决状态；v4 权限迁移与 v2/v3 命令/原生历史迁移已有局部证据。完整备份、损坏/降级、附件 hash 与真实旧库恢复演练仍待完成。"
       },
       "dependencyIds": [
         "NP-03",

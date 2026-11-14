@@ -58,6 +58,8 @@ export interface ApprovalOption {
 
 export interface QuestionItem {
   questionId: string;
+  /** Native multi-question request identity. */
+  groupId?: string;
   prompt: string;
   header?: string;
   options?: { id: string; label: string; description?: string }[];
