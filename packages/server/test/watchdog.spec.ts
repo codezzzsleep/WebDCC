@@ -127,7 +127,9 @@ describe('Codex Watchdog', () => {
     const ws = await seedWorkspaceAndSession(ctx, 'codex');
     ctx.store.createProvider({ id: 'test-provider', name: 'test', baseUrl: 'https://example.invalid', protocols: ['openai-responses'], models: ['fake-model'], secretRef: 'fake-key-ref', codexCatalogPath: null });
     const source = await ctx.manager.createSession({ workspaceId: ws.workspaceId, agent: 'codex', providerId: 'test-provider', model: 'fake-model', reasoningEffort: 'high', accessMode: 'workspace' });
-    await ctx.manager.send(source.id, { text: '实现 Watchdog，暂不上线', images: [{ fileId: 'old-image', path: '/unused.png', mime: 'image/png' }] });
+    const image = await ctx.files.putBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nAAAAABJRU5ErkJggg==', 'base64'), 'old-image.png', 'image/png');
+    await ctx.files.attachToSession(source.id, image.id);
+    await ctx.manager.send(source.id, { text: '实现 Watchdog，暂不上线', images: [{ fileId: image.id, path: '/unused.png', mime: 'image/png' }] });
     codex.fire(source.id, { type: 'item.complete', itemKey: 'progress', kind: 'assistant.message', data: { text: '已完成数据库迁移' }, native: { encrypted_content: 'must-not-copy' } });
     codex.finish(source.id, 'failed', RESOURCE_ERROR);
     await vi.advanceTimersByTimeAsync(5000);

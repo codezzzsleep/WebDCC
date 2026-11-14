@@ -22,13 +22,15 @@ import type {
   NativeDshRpcCaptureMetadata,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
-import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation } from './host.js';
+import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
 import type { DshHistoryRecord, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
 import { DshHistoryBridge, type DshOpening } from './history.js';
 import { DshAssistantBridge } from './assistant.js';
 import { readDshHostIdentity, requireDshBaseline, type DshHostIdentity } from './identity.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
+import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
+import { dshInputParts, dshInputUnsupported, encodeDshInput, validateDshInputParts, type DshResolvableInput, type DshResolvedAttachment } from './input.js';
 
 export const PINNED_VERSION = '0.2.2-rc.1';
 
@@ -91,6 +93,8 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'skills/list',
   'pluginInventory/list',
   'llm/listProviders',
+  'llm/listConfigurableProviders',
+  'llm/discoverModels',
   'goals/get',
   'goals/create',
   'goals/edit',
@@ -148,6 +152,7 @@ const DSH_READ_RPC_ENDPOINTS: ReadonlySet<string> = new Set([
   'agentPresets/list', 'agentPresets/read', 'skills/list', 'pluginInventory/list', 'llm/listProviders', 'goals/get',
   'schedule/catalog', 'schedule/list', 'schedule/view', 'schedule/history', 'forgePanel/branches', 'settings/describe',
   'permissionPresets/catalog', 'commands/list',
+  'llm/listConfigurableProviders', 'llm/discoverModels',
 ]);
 
 /** commands/execute 只允许两种情况：访问模式界面生成的 /permission，或用户本人输入的命令原文 */
@@ -261,6 +266,7 @@ interface DshCatalogModel {
   id?: string;
   name?: string;
   reasoning?: { efforts?: { id: string; name?: string }[]; defaultEffort?: string };
+  inputModalities?: DshInputModality[];
 }
 
 interface DshCatalogGroup {
@@ -317,9 +323,9 @@ export class DshAdapter implements AgentAdapter {
   bindGlobalNativeEvents(sink: NonNullable<CreateOpts['nativeEvents']>): void { this.globalNativeSink = sink; }
 
   private recordRpc(sessionId: string, observation: DshRpcObservation, host: DshHostIdentity | undefined, epoch: number, generation: number,
-    sink: NonNullable<CreateOpts['nativeEvents']> | undefined, runtime: SessionRuntime | undefined): boolean {
+    sink: NonNullable<CreateOpts['nativeEvents']> | undefined, runtime: SessionRuntime | undefined, inputReference?: { fileIds: string[]; nativeRequestId?: string }): boolean {
     const frame = {
-      frame: observation.frame,
+      frame: observation.frame, ...(inputReference === undefined ? {} : { inputReference }),
       dshTransport: { endpoint: observation.endpoint, rpcId: observation.rpcId, coverage: observation.capture.coverage,
         ...(observation.httpStatus === undefined ? {} : { httpStatus: observation.httpStatus }),
         ...(observation.dir !== 'out' || observation.capture.jsonBytes === undefined ? {} : { byteLength: observation.capture.jsonBytes }),
@@ -530,8 +536,12 @@ export class DshAdapter implements AgentAdapter {
     const runtime = this.sessions.get(sessionId);
     if (runtime?.identity !== undefined) event = { ...event, runtime: runtime.identity };
     if (runtime?.envelopeId !== undefined) event = { ...event, nativeEnvelopeId: runtime.envelopeId };
+    if (runtime?.nativeTurnId !== undefined && event.scope !== 'session'
+      && (event.type === 'item.start' || event.type === 'item.delta' || event.type === 'item.update' || event.type === 'item.complete'
+        || event.type === 'item.cancel' || event.type === 'turn.start' || event.type === 'turn.end') && event.nativeTurnId === undefined) {
+      event = { ...event, nativeTurnId: runtime.nativeTurnId };
+    }
     if (runtime?.historyRecord !== undefined && event.type !== 'history') { runtime.historyRecord.events.push(event); return; }
-    if (runtime?.nativeTurnId !== undefined && ['item.start', 'item.complete', 'turn.start', 'turn.end'].includes(event.type)) event = { ...event, nativeTurnId: runtime.nativeTurnId } as AdapterEvent;
     for (const listener of this.listeners) listener(sessionId, event);
   }
 
@@ -576,10 +586,12 @@ export class DshAdapter implements AgentAdapter {
       const catalog = await this.modelCatalog(client);
       const groups = catalog.groups ?? [];
       if (groups.length === 0) return (catalog.models ?? []).filter(model => typeof model.id === 'string').map(model => ({ id: model.id as string, label: model.name ?? model.id as string }));
+      const inputs = await dshInputCapabilities(catalog, <T>(endpoint: string, args?: Record<string, unknown>) => this.call<T>(client, endpoint, args));
       return groups.flatMap(group => (group.models ?? []).filter(model => typeof model.id === 'string').map(model => ({
         id: providerForModel(catalog, model.id as string) === undefined ? `dsh:${Buffer.from(JSON.stringify([group.id, model.id])).toString('base64url')}` : model.id as string,
         label: `${model.name ?? model.id} · ${group.id}`,
         reasoningEfforts: model.reasoning?.efforts?.map(effort => effort.id), defaultReasoningEffort: model.reasoning?.defaultEffort,
+        ...(inputs.get(dshInputRoute(group.id ?? '', model.id as string))?.inputModalities === undefined ? {} : { inputModalities: inputs.get(dshInputRoute(group.id ?? '', model.id as string))!.inputModalities }),
         isDefault: catalog.default?.provider === group.id && catalog.default?.model === model.id, source: 'session/modelCatalog',
       })));
     } catch {
@@ -851,7 +863,8 @@ export class DshAdapter implements AgentAdapter {
   }
 
   /** 所有 RPC 都经过白名单检查 */
-  private async call<T>(client: DshHostClient, endpoint: string, args: Record<string, unknown> = {}, sessionId?: string): Promise<T> {
+  private async call<T>(client: DshHostClient, endpoint: string, args: Record<string, unknown> = {}, sessionId?: string,
+    inputReference?: { fileIds: string[]; nativeRequestId?: string }): Promise<T> {
     if (!isAllowedEndpoint(endpoint)) throw new Error(`dsh: 端点不在白名单内：${endpoint}`);
     const request = (args['request'] ?? {}) as Record<string, unknown>;
     const address = (request['address'] ?? {}) as Record<string, unknown>;
@@ -873,16 +886,17 @@ export class DshAdapter implements AgentAdapter {
       if (observation.dir !== 'in') return;
       if (sink !== undefined && observation.capture.coverage !== 'complete') this.rpcWritesBlocked = true;
       try {
-        if (!this.recordRpc(owner, observation, host, epoch, generation, sink, runtime)) this.rpcWritesBlocked = true;
+        if (!this.recordRpc(owner, observation, host, epoch, generation, sink, runtime, inputReference)) this.rpcWritesBlocked = true;
       } catch { this.rpcWritesBlocked = true; }
       // The response has already arrived. A failed observer revokes later
       // writes and must not replace this native result with an invented error.
     }, observation => {
       let accepted = false;
-      try { accepted = this.recordRpc(owner, observation, host, epoch, generation, sink, runtime); } catch { /* Uncertain before POST. */ }
+      try { accepted = this.recordRpc(owner, observation, host, epoch, generation, sink, runtime, inputReference); } catch { /* Uncertain before POST. */ }
       if (sink !== undefined && observation.capture.coverage !== 'complete') {
-        this.rpcWritesBlocked = true;
-        if (!readonly) accepted = false;
+        const persistedAttachmentInput = observation.capture.coverage === 'oversize' && accepted && inputReference?.fileIds.length
+          && owner !== '' && (endpoint === 'session/prompt' || endpoint === 'commands/execute');
+        if (!persistedAttachmentInput) { this.rpcWritesBlocked = true; if (!readonly) accepted = false; }
       }
       if (!accepted) this.rpcWritesBlocked = true;
       return accepted;
@@ -1026,14 +1040,39 @@ export class DshAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
+    const epoch = this.hostEpoch; const generation = this.muxGeneration;
     if (!this.trace(sessionId, 'out', 'input', input)) throw Object.assign(new Error('原生输入未持久化'), { code: 'uncertain' });
-    const submittedAttachments = (input.images ?? []).map(image => {
-      if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime)) throw new Error(`DSH 不支持图片格式 ${image.mime}`);
-      return { type: 'image', mediaType: image.mime, data: readFileSync(image.path).toString('base64') };
-    });
+    const prepared = input as UserInput & DshResolvableInput;
+    if (prepared.delivery !== undefined && !['send', 'queue', 'steer'].includes(prepared.delivery)) throw dshInputUnsupported('DSH delivery mode is unsupported');
+    const parts = dshInputParts(prepared);
+    for (const part of parts) if (!['text', 'image', 'file'].includes(part.type)) throw dshInputUnsupported(`DSH 0.2 native prompt schema does not support ${part.type} input`);
+    const command = input.text.startsWith('/') && isAllowedCommandLine(input.text, input.text);
+    if (prepared.delivery === 'steer') {
+      if (command) throw dshInputUnsupported('Native slash commands cannot be steered into an LLM turn');
+      const state = await this.call<{ running: boolean }>(client, 'session/state', { request: { sessionId: runtime.nativeId } }, sessionId);
+      if (!state.running) throw dshInputUnsupported('The native Session has no running turn to steer');
+    }
+    let inputModalities: DshInputModality[] | undefined;
+    if (parts.some(part => part.type === 'image') && !command) {
+      const projections = await this.call<{ kind?: string; asOfSeq?: number; values?: { modelSelection?: { provider: string; model: string } } }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
+      const catalog = await this.modelCatalog(client);
+      const selected = projections.values?.modelSelection ?? catalog.default;
+      if (projections.kind !== 'cached' && typeof projections.asOfSeq === 'number' && projections.asOfSeq >= (runtime.projections?.asOfSeq ?? -1) && projections.values !== undefined && typeof selected?.provider === 'string' && typeof selected.model === 'string') {
+        const inputs = await dshInputCapabilities(catalog, <T>(endpoint: string, args?: Record<string, unknown>) => this.call<T>(client, endpoint, args));
+        inputModalities = inputs.get(dshInputRoute(selected.provider, selected.model))?.inputModalities;
+      }
+    }
+    // Command image admission belongs to its native attachment declaration,
+    // independently of the LLM selected for ordinary Session prompts.
+    const encoded = await encodeDshInput(prepared, { inputModalities: command ? ['text', 'image'] : inputModalities,
+      uploadFile: (part, bytes) => this.uploadNativeFile(sessionId, runtime, client, part, bytes) });
+    const { submittedAttachments } = encoded;
+    const fileIds = parts.flatMap(part => part.type === 'image' || part.type === 'file' ? [part.fileId] : []);
+    const inputReference = fileIds.length === 0 ? undefined : { fileIds, ...(input.nativeRequestId === undefined ? {} : { nativeRequestId: input.nativeRequestId }) };
+    if (this.sessions.get(sessionId) !== runtime || this.client !== client || this.hostEpoch !== epoch || this.muxGeneration !== generation) throw Object.assign(new Error('DSH runtime changed during input preparation'), { code: 'uncertain' });
     // 第一行是命令时走 commands/execute，不走 session/prompt（F8 / SL-02）
-    if (input.text.startsWith('/') && isAllowedCommandLine(input.text, input.text)) {
-      const execution = await this.call<{ result?: { kind?: string; text?: string } }>(client, 'commands/execute', { agentId: runtime.nativeId, line: input.text, submittedAttachments });
+    if (command) {
+      const execution = await this.call<{ result?: { kind?: string; text?: string } }>(client, 'commands/execute', { agentId: runtime.nativeId, line: input.text, submittedAttachments }, sessionId, inputReference);
       if (execution.result?.kind !== 'success') throw dshNativeError(execution.result?.text ?? 'DSH command did not succeed', 409);
       this.emit(sessionId, {
         type: 'item.complete',
@@ -1048,9 +1087,56 @@ export class DshAdapter implements AgentAdapter {
       return;
     }
     runtime.turnStartedAt = this.now();
-    const content: Record<string, unknown>[] = [{ type: 'text', text: input.text }, ...submittedAttachments];
     await this.call(client, 'session/prompt', {
-      request: { requestId: input.nativeRequestId ?? ulid(), sessionId: runtime.nativeId, mode: 'queue', content },
+      request: { requestId: input.nativeRequestId ?? ulid(), sessionId: runtime.nativeId, mode: prepared.delivery === 'steer' ? 'steer' : 'queue', content: encoded.content },
+    }, sessionId, inputReference);
+  }
+
+  async steer(sessionId: string, input: UserInput): Promise<void> {
+    return this.send(sessionId, { ...input, delivery: 'steer' } as UserInput & { delivery: 'steer' });
+  }
+  async validateInput(sessionId: string, input: UserInput): Promise<void> {
+    const prepared = input as UserInput & DshResolvableInput;
+    const parts = dshInputParts(prepared);
+    const command = input.text.startsWith('/') && isAllowedCommandLine(input.text, input.text);
+    let modalities: DshInputModality[] | undefined = command ? ['text', 'image'] : undefined;
+    if (!command && parts.some(part => part.type === 'image')) {
+      const client = await this.ensureSidecar(); const runtime = this.require(sessionId);
+      const projections = await this.call<{ asOfSeq: number; values?: { modelSelection?: { provider: string; model: string } } }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
+      const catalog = await this.modelCatalog(client); const selected = projections.values?.modelSelection ?? catalog.default;
+      if (typeof selected?.provider === 'string' && typeof selected.model === 'string') {
+        const capabilities = await dshInputCapabilities(catalog, <T>(endpoint: string, args?: Record<string, unknown>) => this.call<T>(client, endpoint, args));
+        modalities = capabilities.get(dshInputRoute(selected.provider, selected.model))?.inputModalities;
+      }
+    }
+    validateDshInputParts(parts, modalities);
+    if (!input.text.trim() && !parts.some(part => part.type === 'file' || part.type === 'image')) throw dshInputUnsupported('请输入正文或选择附件');
+    if (input.delivery === 'steer' && command) throw dshInputUnsupported('Native slash commands cannot be steered into an LLM turn');
+  }
+
+  private async uploadNativeFile(sessionId: string, runtime: SessionRuntime, client: DshHostClient, part: DshResolvedAttachment, data: Uint8Array) {
+    if (this.rpcWritesBlocked) throw Object.assign(new Error('DSH native capture is incomplete'), { code: 'uncertain' });
+    const sink = this.nativeSinks.get(sessionId); const epoch = this.hostEpoch; const generation = this.muxGeneration;
+    const previousFingerprint = this.observedHost?.fingerprint;
+    const host = await this.hostIdentity(); requireDshBaseline(host);
+    if (this.client !== client || this.sessions.get(sessionId) !== runtime || this.hostEpoch !== epoch || this.muxGeneration !== generation
+      || previousFingerprint !== undefined && previousFingerprint !== host.fingerprint) throw Object.assign(new Error('DSH Host changed before file upload'), { code: 'uncertain' });
+    const record = (observation: DshBinaryUploadObservation): boolean => {
+      const frame = { i: ++this.traceSeq, t: 0, dir: observation.dir, ch: 'http:session/uploadFileBinary', frame: { frame: observation.frame,
+        dshUpload: { coverage: observation.coverage, sessionId: runtime.nativeId, ...(observation.httpStatus === undefined ? {} : { httpStatus: observation.httpStatus }),
+          hostEpoch: epoch, muxGeneration: generation, ...(host?.status === 'verified' && host.fingerprint !== undefined ? { verifiedHostFingerprint: host.fingerprint } : {}) } } };
+      const receipt = sink?.record(frame);
+      if (this.sessions.get(sessionId) === runtime && this.client === client && this.hostEpoch === epoch && this.muxGeneration === generation) runtime.envelopeId = receipt?.envelopeId;
+      traceFrame(this.options.traceSink ?? this.traceSinks.get(sessionId), frame); return receipt?.accepted !== false;
+    };
+    return client.uploadFileBinary({ sessionId: runtime.nativeId, data, fileId: part.fileId, ...(part.name === undefined ? {} : { name: part.name }) }, observation => {
+      if (observation.dir !== 'in') return;
+      if (sink !== undefined && observation.coverage !== 'complete') this.rpcWritesBlocked = true;
+      try { if (!record(observation)) this.rpcWritesBlocked = true; } catch { this.rpcWritesBlocked = true; }
+    }, observation => {
+      if (this.sessions.get(sessionId) !== runtime || this.client !== client || this.hostEpoch !== epoch || this.muxGeneration !== generation) return false;
+      let accepted = false; try { accepted = record(observation); } catch { /* before upload */ }
+      if (!accepted) this.rpcWritesBlocked = true; return accepted;
     });
   }
 

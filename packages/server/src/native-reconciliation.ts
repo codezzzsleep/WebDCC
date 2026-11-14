@@ -61,7 +61,7 @@ export class NativeReconciliationStore {
     if (observation.state === 'running' || observation.turns.some(turn => turn.status === 'inProgress')) reasons.push('原生记录仍包含运行中的工作。');
     const events = this.store.allEvents(sessionId);
     const unfinished = new Set(events.filter(event => event.kind === 'turn.started' && !events.some(end => end.kind === 'turn.completed' && end.turnId === event.turnId)).flatMap(event => event.turnId === null ? [] : [event.turnId]));
-    for (const row of this.store.journal.queue(sessionId)) if (row.state === 'uncertain') unfinished.add(row.turnId);
+    for (const row of this.store.journal.queue(sessionId)) if (row.state === 'uncertain') unfinished.add(this.store.journal.nativeTargetTurn(row.turnId) ?? row.turnId);
     const outcomes: ReconciliationView['outcomes'] = [];
     for (const turnId of unfinished) {
       const matches = observation.turns.filter(turn => this.store.nativeHistory.turn(sessionId, turn.nativeTurnId) === turnId || turn.clientCommandIds.some(id => {
@@ -75,6 +75,13 @@ export class NativeReconciliationStore {
       if (mapped !== undefined && mapped !== turnId || outcomes.some(outcome => outcome.nativeTurnId === turn.nativeTurnId)) { reasons.push('原生与 Web 轮次映射存在冲突。'); continue; }
       if (turn.status === 'inProgress' || !turn.itemsComplete || turn.completedAt === null || !Number.isFinite(Date.parse(turn.completedAt))) { reasons.push(`原生轮次 ${turn.nativeTurnId} 的终态或内容尚未完整读取。`); continue; }
       outcomes.push({ turnId, nativeTurnId: turn.nativeTurnId, status: turn.status });
+    }
+    for (const row of this.store.journal.queue(sessionId)) {
+      const target = this.store.journal.nativeTargetTurn(row.turnId);
+      if (target === undefined || !['uncertain', 'dispatching', 'native-accepted'].includes(row.state)) continue;
+      const requestId = this.store.journal.nativeRequestId(row.turnId);
+      const matched = observation.turns.filter(turn => turn.clientCommandIds.includes(requestId) && outcomes.some(outcome => outcome.turnId === target && outcome.nativeTurnId === turn.nativeTurnId));
+      if (matched.length !== 1) reasons.push(`介入输入 ${row.commandId} 缺少目标原生轮次中的真实接收身份，不能仅凭父轮次终态确认。`);
     }
     // A response outcome is still unknown if its request cannot be associated
     // with one of the terminal turns. Never silently unlock such a response.
@@ -135,6 +142,7 @@ export class NativeReconciliationStore {
           durationMs: Math.max(0, Date.parse(turn.completedAt!) - Date.parse(startedAt)), answerItemKeys: resolveAnswer(projected).map(event => event.itemKey),
           reason: '原生历史已确认终态；交互答案是否被接收未作推断。' } });
         this.store.journal.inputState(outcome.turnId, outcome.status === 'completed' ? 'completed' : 'failed');
+        this.store.journal.settleNativeInputs(sessionId, outcome.turnId, outcome.status === 'completed' ? 'completed' : 'failed', turn.clientCommandIds);
       }
       const owner = this.store.nativeOwners.get(sessionId)!;
       this.store.nativeOwners.reconcileRelease(sessionId, owner.ownerId, owner.generation);

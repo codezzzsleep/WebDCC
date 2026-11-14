@@ -226,3 +226,15 @@
 - 修复RPC.closed被误当作子进程已退出：丢失捕获或代际关闭时，SIGTERM可能被native忽略；后续dispose原本跳过kill并错误认为可释放。现在独立检查进程退出码/信号，等待真实exit，重复kill共享终止过程，超时或kill错误不声称已退出。
 - 新用真实Node子进程忽略SIGTERM复现：RPC闭合、输入拒绝后仍存活；并发kill最终SIGKILL确认且监听/请求计数清零。9项RPC/观察/owner检查及adapter typecheck通过。
 - 当前原部署读回：本机97b3c073c5ec67d50df58cf564d33537c109eddc、121的9b1ae9096c19162206361e3910b7ef2592c5f30b，两个webdcc服务active。未改部署、运行账户或部署库。
+
+## 接续整合：输入恢复、串流身份与备份（2026-11-14）
+
+- 真实产品 Composer 接上按会话保存的草稿、Blob 和上传任务，按钮与 Enter 共用准备检查；IndexedDB 持久接收命令后才清理未再编辑的草稿。支持暂停/续传/取消、失败正文与附件恢复、handoff、两种本机/云端 CAS 冲突处理。
+- 结构化输入保留文本顺序与字节、fileId/哈希/大小。服务端绑定会话授权并在原生发送、恢复队列与介入前验证当前 CAS。损坏队列保持原位，用户重新上传原字节后可显式重试。新会话先显式授予附件，再提交输入。
+- SQLite schema13 保留旧 URL、文件 ID、事件和授权。同字节的不同名称/MIME 有各自文件身份，共享物理 CAS；备份和容量统计按唯一 SHA 计数。介入输入有独立 native UUID 与目标轮次映射；RPC 接收和真实回声确认分开，父轮次终态不能替未确认介入背书。
+- 原生增量、全量更新、完成帧和 WebSocket 带正确轮次。跨轮同名条目、旧完成通知、迟到原生终态与50ms广播队列不会污染当前轮；全量更新之前先发送旧增量。Codex 非空摘要、缓存写入计数及每轮生成时间保留；旧请求确认保持原轮次，外来线程审批/问答被拒绝。
+- Codex file→mention 的假支持已撤销：原生 mention 消费路径不把普通 CAS 文件转为模型文件内容。Codex 独立 file/resource 明确拒绝；图片/音频依实际目录声明；Claude 图片能力因锁定 ModelInfo 不暴露而保持未知。原生边界详见 docs/native-input-boundaries.md。
+- 增加加密的隔离在线 SQLite/CAS/上传备份和恢复，校验配置/归档/哈希、容量及语义；外部原生 profile 和历史另行备份，不能以 WebDCC 数据目录承诺全量原生恢复。
+- 当前候选完整源码六门禁通过：108单元文件/519测试、14 Chromium文件/22测试及typecheck/lint/库存/build，源码指纹a8a10bcea1528ea1bb502c6484db096c2f8604bbe2c67e3f159f174102adc421。提交后重新生成同提交报告。固定Codex0.167.0实际直接RPC→Web→原生信封→Chromium→刷新验证了非空多行摘要；paidModel=false，仍须按最终提交重绑该证明。
+- 用户报告普通Codex提问未完善，已提Issue#41；已有问答分支与卡片不足以证明原生提问→回答→继续闭环，isBlocking和原生模式/能力边界仍待完成。NP-01–48继续，完整验收未完成，未调整黄金文件或把NOT_TRIGGERED记作通过。
+- 当前本机部署97b3c073c5ec67d50df58cf564d33537c109eddc、121部署9b1ae9096c19162206361e3910b7ef2592c5f30b只读确认active；本批未部署、发布或合并main。

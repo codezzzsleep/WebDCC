@@ -11,6 +11,7 @@ import type {
   WatchdogJob,
   WatchdogSettings,
   PermissionState,
+  InputContent,
 } from '@webdcc/protocol';
 import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
@@ -135,6 +136,7 @@ interface UploadRow {
   size: number;
   received: string;
   created_at: string;
+  session_id: string | null;
 }
 
 export interface AppendEventInput {
@@ -617,22 +619,23 @@ export class Store {
 
   // ---------- drafts ----------
   getDraft(sessionId: string): DraftDto {
-    const row = this.db.prepare('SELECT text, file_ids, updated_at FROM drafts WHERE session_id = ?').get(sessionId) as
-      | { text: string; file_ids: string; updated_at: string }
+    const row = this.db.prepare('SELECT text, file_ids, content_parts, revision, updated_at FROM drafts WHERE session_id = ?').get(sessionId) as
+      | { text: string; file_ids: string; content_parts: string | null; revision: number; updated_at: string }
       | undefined;
-    if (row === undefined) return { text: '', fileIds: [], updatedAt: new Date(0).toISOString() };
-    return { text: row.text, fileIds: JSON.parse(row.file_ids) as string[], updatedAt: row.updated_at };
+    if (row === undefined) return { text: '', fileIds: [], updatedAt: new Date(0).toISOString(), revision: 0 };
+    return { text: row.text, fileIds: JSON.parse(row.file_ids) as string[], updatedAt: row.updated_at, revision: row.revision, ...(row.content_parts === null ? {} : { contentParts: JSON.parse(row.content_parts) as InputContent }) };
   }
 
-  setDraft(sessionId: string, text: string, fileIds: string[]): DraftDto {
-    const at = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO drafts (session_id, text, file_ids, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(session_id) DO UPDATE SET text = excluded.text, file_ids = excluded.file_ids, updated_at = excluded.updated_at`,
-      )
-      .run(sessionId, text, JSON.stringify(fileIds), at);
-    return { text, fileIds, updatedAt: at };
+  setDraft(sessionId: string, text: string, fileIds: string[], options: { expectedRevision?: number; contentParts?: InputContent } = {}): DraftDto {
+    return this.db.transaction(() => {
+      const previous = this.getDraft(sessionId);
+      if (options.expectedRevision !== undefined && previous.revision !== options.expectedRevision) throw Object.assign(new Error('草稿已被另一端修改，请重新读取后合并'), { statusCode: 409, code: 'draft-conflict', revision: previous.revision });
+      const at = new Date().toISOString(); const revision = previous.revision + 1;
+      this.db.prepare(`INSERT INTO drafts (session_id, text, file_ids, content_parts, revision, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET text = excluded.text, file_ids = excluded.file_ids, content_parts = excluded.content_parts, revision = excluded.revision, updated_at = excluded.updated_at`)
+        .run(sessionId, text, JSON.stringify(fileIds), options.contentParts === undefined ? null : JSON.stringify(options.contentParts), revision, at);
+      return { text, fileIds, updatedAt: at, revision, ...(options.contentParts === undefined ? {} : { contentParts: options.contentParts }) };
+    })();
   }
 
   // ---------- files ----------
@@ -651,16 +654,29 @@ export class Store {
   }
 
   getFileBySha(sha256: string): FileDto | undefined {
-    const row = this.db.prepare('SELECT * FROM files WHERE sha256 = ?').get(sha256) as FileRow | undefined;
+    const row = this.db.prepare('SELECT * FROM files WHERE sha256 = ? ORDER BY created_at, id LIMIT 1').get(sha256) as FileRow | undefined;
     if (row === undefined) return undefined;
     return { id: row.id, sha256: row.sha256, name: row.name, mime: row.mime, size: row.size, createdAt: row.created_at };
   }
 
+  getFileByMetadata(sha256: string, name: string, mime: string): FileDto | undefined {
+    const row = this.db.prepare('SELECT id FROM files WHERE sha256 = ? AND name = ? AND mime = ? ORDER BY created_at, id LIMIT 1').get(sha256, name, mime) as { id: string } | undefined;
+    return row === undefined ? undefined : this.getFile(row.id);
+  }
+
   // ---------- uploads ----------
-  createUpload(input: { id: string; sha256: string; name: string; mime: string; size: number }): void {
+  grantFile(sessionId: string, fileId: string, source: 'upload' | 'user-attach'): void {
+    this.db.prepare('INSERT OR IGNORE INTO file_session_grants (session_id, file_id, source, created_at) VALUES (?, ?, ?, ?)').run(sessionId, fileId, source, new Date().toISOString());
+  }
+
+  hasFileGrant(sessionId: string, fileId: string): boolean {
+    return this.db.prepare('SELECT 1 FROM file_session_grants WHERE session_id = ? AND file_id = ?').get(sessionId, fileId) !== undefined;
+  }
+
+  createUpload(input: { id: string; sha256: string; name: string; mime: string; size: number; sessionId?: string }): void {
     this.db
-      .prepare('INSERT INTO uploads (id, sha256, name, mime, size, received, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(input.id, input.sha256, input.name, input.mime, input.size, '[]', new Date().toISOString());
+      .prepare('INSERT INTO uploads (id, sha256, name, mime, size, received, created_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(input.id, input.sha256, input.name, input.mime, input.size, '[]', new Date().toISOString(), input.sessionId ?? null);
   }
 
   getUpload(id: string): (UploadRow & { receivedList: number[] }) | undefined {
@@ -673,8 +689,8 @@ export class Store {
   }
 
   fileStorageUsage(): { stored: number; pending: number } {
-    const sum = (table: 'files' | 'uploads'): number => (this.db.prepare(`SELECT COALESCE(SUM(size), 0) AS bytes FROM ${table}`).get() as { bytes: number }).bytes;
-    return { stored: sum('files'), pending: sum('uploads') };
+    return { stored: (this.db.prepare('SELECT COALESCE(SUM(size), 0) AS bytes FROM (SELECT MAX(size) AS size FROM files GROUP BY sha256)').get() as { bytes: number }).bytes,
+      pending: (this.db.prepare('SELECT COALESCE(SUM(size), 0) AS bytes FROM uploads').get() as { bytes: number }).bytes };
   }
 
   saveCapabilitySnapshot(scope: string, revision: string, data: unknown): void {

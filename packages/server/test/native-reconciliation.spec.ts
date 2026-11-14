@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import type { NativeObservation, AgentAdapter } from '@webdcc/protocol';
 import { openDb } from '../src/db.js';
@@ -8,9 +11,11 @@ import { captureProcess, processState } from '../src/process-identity.js';
 import { SessionManager } from '../src/manager.js';
 import { FakeAdapter } from '@webdcc/fake-adapter';
 import { createTestApp } from './helpers.js';
+import { FileStore } from '../src/files.js';
 
 async function setup() {
   const db = openDb(':memory:'); const store = new Store(db);
+  const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-native-reconcile-')); const files = new FileStore(dataDir, store); await files.init();
   const workspace = store.createWorkspace('recovery', '/tmp');
   const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });
   store.updateSession(session.id, { nativeId: 'thread' });
@@ -23,7 +28,8 @@ async function setup() {
   store.journal.claim({ op: 'send', sessionId: session.id, clientCommandId: 'accepted', text: 'accepted text' });
   store.journal.enqueue('accepted', session.id, 'web-turn', { text: 'accepted text' });
   store.journal.inputState('web-turn', 'uncertain');
-  store.journal.enqueue('queued', session.id, 'queued-turn', { text: 'kept queue', images: [{ fileId: 'file', path: '/tmp/a.png', mime: 'image/png' }] });
+  const image = await files.putBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nAAAAABJRU5ErkJggg==', 'base64'), 'queue.png', 'image/png'); await files.attachToSession(session.id, image.id);
+  store.journal.enqueue('queued', session.id, 'queued-turn', { text: 'kept queue', images: [{ fileId: image.id, path: '/old/derived/a.png', mime: 'image/png' }] });
   store.nativeHistory.bind(session.id, 'native-turn', 'web-turn');
   store.appendEvent({ sessionId: session.id, turnId: 'web-turn', itemKey: 'start', kind: 'turn.started', data: {} });
   store.appendEvent({ sessionId: session.id, turnId: 'web-turn', itemKey: 'user', kind: 'user.message', data: { text: 'accepted text', clientCommandId: 'accepted' } });
@@ -31,7 +37,7 @@ async function setup() {
     state: 'unknown', authority: 'history-only', releasePolicy: 'managed-process', notes: ['notLoaded is observer-local'],
     turns: [{ nativeTurnId: 'native-turn', status: 'completed', itemsComplete: true, startedAt: '2026-11-14T00:00:00Z', completedAt: '2026-11-14T00:01:00Z', clientCommandIds: ['accepted'],
       items: [{ itemKey: 'answer', kind: 'assistant.message', data: { text: 'native final', phase: 'final' }, native: { type: 'agentMessage', id: 'answer', text: 'native final' } }] }] };
-  return { db, store, session, identity, observation };
+  return { db, store, session, identity, observation, image, files, async close() { db.close(); await rm(dataDir, { recursive: true, force: true }); } };
 }
 
 it('NP-04 tracks a real child by boot and start time; PID reuse and invalid identity cannot authorize a live writer', async () => {
@@ -48,7 +54,7 @@ it('NP-04 tracks a real child by boot and start time; PID reuse and invalid iden
 });
 
 it('NP-04/06 only applies a unique terminal native outcome, closes unknown response cards and preserves queued input', async () => {
-  const { db, store, session, observation } = await setup();
+  const { store, session, observation, image, close } = await setup();
   try {
     store.appendEvent({ sessionId: session.id, turnId: 'web-turn', itemKey: 'q', kind: 'question', data: { questionId: 'question', prompt: 'native question', status: 'pending', submission: 'uncertain' } });
     store.appendEvent({ sessionId: session.id, turnId: 'web-turn', itemKey: 'a', kind: 'approval.request', data: { approvalId: 'approval', title: 'native approval', detail: 'approval detail', options: [{ id: 'allow', label: 'allow' }] } });
@@ -57,18 +63,18 @@ it('NP-04/06 only applies a unique terminal native outcome, closes unknown respo
     const result = store.reconciliations.apply(session.id, preview.revision, observation);
     expect(result.view.applied).toBe(true);
     expect(store.journal.get('accepted')?.state).toBe('completed');
-    expect(store.journal.queue(session.id)).toEqual([expect.objectContaining({ commandId: 'queued', state: 'queued', input: { text: 'kept queue', images: [{ fileId: 'file', path: '/tmp/a.png', mime: 'image/png' }] } })]);
+    expect(store.journal.queue(session.id)).toEqual([expect.objectContaining({ commandId: 'queued', state: 'queued', input: { text: 'kept queue', images: [{ fileId: image.id, path: '/old/derived/a.png', mime: 'image/png' }] } })]);
     expect(store.allEvents(session.id).findLast(event => event.kind === 'question')?.data).toMatchObject({ status: 'skipped', resolution: 'outcome-unknown' });
     expect(store.allEvents(session.id).findLast(event => event.kind === 'approval.resolved')?.data).toMatchObject({ optionId: 'outcome-unknown', by: 'system' });
     expect(store.allEvents(session.id).findLast(event => event.kind === 'turn.completed')?.data).toMatchObject({ status: 'completed', durationMs: 60_000, answerItemKeys: ['answer'] });
     expect(store.reconciliations.get(session.id)).toMatchObject({ applied: true, canApply: false });
     expect(() => store.reconciliations.apply(session.id, preview.revision, observation)).toThrow('不可恢复');
     expect(store.allEvents(session.id).filter(event => event.kind === 'turn.completed')).toHaveLength(1);
-  } finally { db.close(); }
+  } finally { await close(); }
 });
 
 it('NP-04 notLoaded history cannot release a running or unknown old writer, nor missing/incomplete native turns', async () => {
-  const { db, store, session, identity, observation } = await setup();
+  const { db, store, session, identity, observation, close } = await setup();
   try {
     expect(store.reconciliations.capture(session.id, { ...observation, turns: [] }).canApply).toBe(false);
     expect(store.reconciliations.capture(session.id, { ...observation, turns: observation.turns.map(turn => ({ ...turn, itemsComplete: false })) }).canApply).toBe(false);
@@ -91,11 +97,11 @@ it('NP-04 notLoaded history cannot release a running or unknown old writer, nor 
     store.nativeOwners.release(session.id, identity, true);
     expect(store.reconciliations.capture(session.id, observation)).toMatchObject({ writer: 'running', canApply: false });
     expect(store.journal.queue(session.id)[0]?.state).toBe('uncertain');
-  } finally { db.close(); }
+  } finally { await close(); }
 });
 
 it('NP-04 stale previews and changed native content fail before changing commands, cards or owner; failed commits roll back', async () => {
-  const { db, store, session, observation } = await setup();
+  const { db, store, session, observation, close } = await setup();
   try {
     const first = store.reconciliations.capture(session.id, observation);
     store.updateSession(session.id, { title: 'changed' });
@@ -109,12 +115,12 @@ it('NP-04 stale previews and changed native content fail before changing command
     expect(store.journal.get('accepted')?.state).toBe('uncertain'); expect(store.reconciliations.get(session.id)?.applied).toBe(false);
     db.exec('DROP TRIGGER fail_recovery');
     expect(store.reconciliations.apply(session.id, second.revision, observation).view.applied).toBe(true);
-  } finally { db.close(); }
+  } finally { await close(); }
 });
 
 it('NP-04 a recovered manager reads native state twice and resumes queued work only on a later user send', async () => {
-  const { db, store, session, observation } = await setup();
-  const manager = new SessionManager(store, { idleDisposeMin: 0 });
+  const { store, session, observation, files, close } = await setup();
+  const manager = new SessionManager(store, { idleDisposeMin: 0, files });
   const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' }); let reads = 0; let sends = 0;
   adapter.observe = async () => { reads++; return observation; };
   adapter.send = async () => { sends++; }; manager.registerAdapter(adapter);
@@ -126,7 +132,7 @@ it('NP-04 a recovered manager reads native state twice and resumes queued work o
     expect(reads).toBe(2); expect(sends).toBe(0); expect(manager.getRuntime(session.id)).toBeUndefined();
     await manager.send(session.id, { text: 'new user input' });
     expect(sends).toBe(1); expect(store.journal.queue(session.id)).toContainEqual(expect.objectContaining({ input: { text: 'new user input' }, state: 'queued' }));
-  } finally { await manager.disposeAll(); db.close(); }
+  } finally { await manager.disposeAll(); await close(); }
 });
 
 it('NP-04 reconciliation routes require authentication, a preview revision and a native observation implementation', async () => {
@@ -139,4 +145,18 @@ it('NP-04 reconciliation routes require authentication, a preview revision and a
     expect((await ctx.app.inject({ method: 'POST', url: `${path}/apply`, payload: {}, headers: { cookie: ctx.cookie } })).statusCode).toBe(400);
     expect((await ctx.app.inject({ method: 'POST', url: path, payload: {}, headers: { cookie: ctx.cookie } })).statusCode).toBe(501);
   } finally { await ctx.close(); }
+});
+
+it('NP-19 requires the steer UUID in the actual native target turn before settling an uncertain admission', async () => {
+  const { store, session, observation, close } = await setup();
+  try {
+    store.journal.claim({ op: 'send', sessionId: session.id, clientCommandId: 'uncertain-steer', text: 'steer text', intent: 'steer', expectedTurnId: 'web-turn' });
+    store.journal.enqueue('uncertain-steer', session.id, 'steer-admission', { text: 'steer text', delivery: 'steer', expectedTurnId: 'web-turn' });
+    expect(store.journal.beginInput('steer-admission', 'web-turn')).toBe(true); store.journal.inputState('steer-admission', 'uncertain');
+    const requestId = store.journal.nativeRequestId('steer-admission');
+    const missing = store.reconciliations.capture(session.id, observation); expect(missing.canApply).toBe(false); expect(missing.reasons.join(' ')).toContain('真实接收身份'); expect(store.journal.get('uncertain-steer')?.state).toBe('uncertain');
+    const confirmed = structuredClone(observation); confirmed.turns[0]!.clientCommandIds.push(requestId);
+    const preview = store.reconciliations.capture(session.id, confirmed); expect(preview.canApply).toBe(true); store.reconciliations.apply(session.id, preview.revision, confirmed);
+    expect(store.journal.get('uncertain-steer')?.state).toBe('completed'); expect(store.journal.nativeInput(session.id, requestId)).toEqual({ commandId: 'uncertain-steer', turnId: 'web-turn' });
+  } finally { await close(); }
 });

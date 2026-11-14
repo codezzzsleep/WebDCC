@@ -1,8 +1,9 @@
-import type { Command } from '@webdcc/protocol';
+import type { Command, UserInput } from '@webdcc/protocol';
 import type { FileStore } from './files.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
+import { payloadHash } from './command-journal.js';
 
 export interface DispatchResult {
   ok: boolean;
@@ -19,12 +20,24 @@ export class CommandDispatcher {
   constructor(
     private readonly store: Store,
     private readonly manager: SessionManager,
-    private readonly files: FileStore,
+    files: FileStore,
     private readonly recorder?: InteractionRecorder,
-  ) {}
+  ) { this.manager.bindFileStore(files); }
 
   async dispatch(command: Command): Promise<DispatchResult> {
     const owner = 'sessionId' in command ? command.sessionId : `command-${command.clientCommandId}`;
+    const previous = this.store.journal.get(command.clientCommandId);
+    if (previous?.payloadHash !== null && previous?.payloadHash !== undefined && previous.payloadHash !== payloadHash(command)) return { ok: false, code: 'command-conflict', error: '相同命令 ID 的正文不一致' };
+    let prepared: UserInput | undefined;
+    if (command.op === 'send' && previous === undefined) {
+      try {
+        prepared = await this.manager.prepareInput(command.sessionId, { text: command.text,
+          ...(command.images === undefined ? {} : { images: command.images.map(fileId => ({ fileId })) }),
+          ...(command.contentParts === undefined ? {} : { contentParts: command.contentParts }),
+          ...(command.intent === undefined ? {} : { delivery: command.intent }),
+          ...(command.expectedTurnId === undefined ? {} : { expectedTurnId: command.expectedTurnId }) });
+      } catch (error) { return this.failure(error, false); }
+    }
     const sensitive = this.store.journal.isSensitive(command);
     if (sensitive && command.op === 'answer') {
       try { this.manager.protectAnswer(command.sessionId, command.questionId, command.answer); }
@@ -39,14 +52,15 @@ export class CommandDispatcher {
     if (claimed.record.state === 'uncertain' || claimed.record.payloadHash === null) return { ok: false, code: 'uncertain', error: '原生执行结果待核对，禁止自动重发' };
     if (claimed.record.result !== undefined) return claimed.record.result as DispatchResult;
     if (!this.store.journal.acquire(command.clientCommandId)) return { ok: true, value: { commandId: command.clientCommandId, state: claimed.record.state, turnId: claimed.record.turnId, queued: claimed.record.state === 'queued' } };
-    const pending = this.execute(command).then(nativeResult => {
+    const pending = this.execute(command, prepared).then(nativeResult => {
       const result = this.store.nativeEvents.redact(nativeResult) as DispatchResult;
       const state = this.store.journal.get(command.clientCommandId)?.state;
+      const blockedInput = command.op === 'send' ? this.store.journal.queue(command.sessionId).find(row => row.commandId === command.clientCommandId && row.preparationError !== undefined) : undefined;
       const interaction = command.op === 'answer' ? this.store.interactions.get(command.sessionId, 'answer', command.questionId)
         : command.op === 'approve' ? this.store.interactions.get(command.sessionId, 'approve', command.approvalId) : undefined;
       const acceptedState = interaction === undefined ? 'completed' : interaction.state === 'collected' ? 'queued'
         : interaction.state === 'resolved' || interaction.state === 'cancelled' ? 'completed' : interaction.state === 'uncertain' ? 'uncertain' : 'dispatching';
-      this.store.journal.state(command.clientCommandId, result.ok ? command.op === 'send' && state !== undefined ? state : acceptedState : result.code === 'uncertain' ? 'uncertain' : 'failed', result);
+      this.store.journal.state(command.clientCommandId, blockedInput !== undefined ? 'queued' : result.ok ? command.op === 'send' && state !== undefined ? state : acceptedState : result.code === 'uncertain' ? 'uncertain' : 'failed', result);
       this.recorder?.record(owner, 'web', 'ack', result, 'in');
       return result;
     });
@@ -54,23 +68,22 @@ export class CommandDispatcher {
     try { return await pending; } finally { this.inFlight.delete(command.clientCommandId); }
   }
 
-  private async execute(command: Command): Promise<DispatchResult> {
+  private async execute(command: Command, prepared?: UserInput): Promise<DispatchResult> {
     try {
       switch (command.op) {
         case 'send': {
-          const images = (command.images ?? []).map((fileId) => {
-            const file = this.store.getFile(fileId);
-            const path = this.files.resolvePath(fileId);
-            if (file === undefined || path === undefined) throw Object.assign(new Error('上传文件不存在，消息未发送'), { statusCode: 404 });
-            this.recorder?.record(command.sessionId, 'file', 'attachment-resolved', { fileId, path, mime: file.mime, sha256: file.sha256, bytes: file.size });
-            return { fileId, path, mime: file.mime };
-          });
-          const { turnId, queued } = await this.manager.send(
+          prepared ??= await this.manager.prepareInput(command.sessionId, { text: command.text,
+            ...(command.images === undefined ? {} : { images: command.images.map(fileId => ({ fileId })) }),
+            ...(command.contentParts === undefined ? {} : { contentParts: command.contentParts }),
+            ...(command.intent === undefined ? {} : { delivery: command.intent }),
+            ...(command.expectedTurnId === undefined ? {} : { expectedTurnId: command.expectedTurnId }) });
+          for (const attachment of prepared.contentParts?.parts ?? prepared.images ?? []) if ('fileId' in attachment) this.recorder?.record(command.sessionId, 'file', 'attachment-resolved', attachment);
+          const { turnId, queued, confirmed } = await this.manager.send(
             command.sessionId,
-            { text: command.text, ...(images.length === 0 ? {} : { images }) },
+            prepared,
             command.clientCommandId,
           );
-          return { ok: true, value: { turnId, queued } };
+          return { ok: true, value: { turnId, queued, ...(confirmed === undefined ? {} : { confirmed }) } };
         }
         case 'approve': {
           if (this.store.hasApprovalResolved(command.sessionId, command.approvalId)) {
@@ -138,14 +151,14 @@ export class CommandDispatcher {
         }
       }
     } catch (error) {
-      const statusCode = (error as { statusCode?: number }).statusCode;
-      const code = (error as { code?: string }).code;
       const native = ['send', 'approve', 'answer', 'interrupt', 'create-session', 'set-model', 'set-access-mode', 'set-reasoning-effort'].includes(command.op);
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-        code: code === 'native-version-incompatible' || code === 'uncertain' ? code : statusCode === 404 ? 'not-found' : statusCode === 409 ? 'conflict' : statusCode === 400 ? 'bad-request' : native ? 'uncertain' : 'failed',
-      };
+      return this.failure(error, native);
     }
+  }
+
+  private failure(error: unknown, native: boolean): DispatchResult {
+    const statusCode = (error as { statusCode?: number }).statusCode; const code = (error as { code?: string }).code;
+    return { ok: false, error: error instanceof Error ? error.message : String(error), code: code === 'native-version-incompatible' || code === 'uncertain' ? code
+      : statusCode === 404 ? 'not-found' : statusCode === 409 ? 'conflict' : statusCode === 403 ? 'forbidden' : statusCode === 413 ? 'too-large' : statusCode === 400 ? 'bad-request' : native ? 'uncertain' : 'failed' };
   }
 }

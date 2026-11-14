@@ -8,7 +8,7 @@
  *  - 认证：`GET /?token=<t>` → 303 + HttpOnly Cookie（`dsh-auth-<sha256(authority)>`）
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import WebSocket from 'ws';
 import { validateDshArgs, validateDshResult } from './contracts.js';
@@ -182,6 +182,16 @@ export interface DshRpcObservation {
 }
 export type DshRpcFrameObserver = (observation: DshRpcObservation) => void | Promise<void>;
 export type DshRpcAdmission = (request: DshRpcObservation) => boolean;
+export interface DshFileUploadValue { receiptId: string; file: { attachmentId: string; name: string; bytes: number } }
+export interface DshBinaryUploadObservation {
+  readonly dir: 'in' | 'out'; readonly sessionId: string; readonly httpStatus?: number;
+  readonly coverage: 'referenced' | DshRpcCaptureCoverage; readonly frame: DshRpcJson;
+}
+export type DshBinaryUploadObserver = (observation: DshBinaryUploadObservation) => void | Promise<void>;
+
+function rpcCaptureLimit(configured = 1024 * 1024): number {
+  return Number.isSafeInteger(configured) ? Math.max(0, Math.min(configured, 4 * 1024 * 1024)) : 1024 * 1024;
+}
 
 function freezeRpcJson(value: DshRpcJson): DshRpcJson {
   const pending: DshRpcJson[] = [value];
@@ -237,10 +247,59 @@ export class DshHostClient {
   get cookieHeader(): string { return this.cookie; }
   get isConnected(): boolean { return this.ws?.readyState === WebSocket.OPEN; }
 
+  /** Native authenticated streaming upload route; it has no RPC id. The
+   * durable caller file reference accompanies a body marker, never raw bytes. */
+  async uploadFileBinary(request: { sessionId: string; data: Uint8Array; name?: string; fileId: string },
+    observer?: DshBinaryUploadObserver, admit?: (request: DshBinaryUploadObservation) => boolean): Promise<DshFileUploadValue> {
+    const body = new Uint8Array(request.data);
+    const target = new URL('api/session/uploadFileBinary', this.base);
+    target.searchParams.set('sessionId', request.sessionId);
+    if (request.name !== undefined) target.searchParams.set('name', request.name);
+    const observe = (observation: DshBinaryUploadObservation): void => {
+      try { const pending = observer?.(observation); if (pending !== undefined) void pending.catch(() => undefined); } catch { /* observer only */ }
+    };
+    const outgoing: DshBinaryUploadObservation = Object.freeze({ dir: 'out', sessionId: request.sessionId, coverage: 'referenced',
+      frame: Object.freeze({ type: 'binary-upload-reference', sessionId: request.sessionId, fileId: request.fileId, byteLength: body.byteLength,
+        ...(request.name === undefined ? {} : { name: request.name }) }) });
+    observe(outgoing);
+    if (admit !== undefined) {
+      let accepted = false; try { accepted = admit(outgoing) === true; } catch { /* before dispatch */ }
+      if (!accepted) throw Object.assign(new Error('DSH binary upload was not durably admitted'), { code: 'uncertain' });
+    }
+    let response: Response;
+    try {
+      response = await fetch(target, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(this.options.rpcTimeoutMs ?? 30_000),
+        headers: { 'content-type': 'application/octet-stream', cookie: this.cookie }, body });
+    } catch (error) {
+      observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, coverage: 'transport-error', frame: Object.freeze({ type: 'binary-upload-capture', coverage: 'transport-error' }) })); throw error;
+    }
+    if ([401, 403].includes(response.status)) {
+      observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, httpStatus: response.status, coverage: 'http-auth-rejected', frame: Object.freeze({ type: 'binary-upload-capture', coverage: 'http-auth-rejected' }) }));
+      this.authenticationLost(); throw Object.assign(new Error('DSH 认证已失效，请重新连接目标 Host'), { code: 'dsh-needs-link', statusCode: 401 });
+    }
+    let envelope: unknown;
+    try { envelope = await response.json(); } catch {
+      observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, httpStatus: response.status, coverage: 'invalid-json', frame: Object.freeze({ type: 'binary-upload-capture', coverage: 'invalid-json' }) }));
+      throw new Error(`DSH native upload returned invalid JSON (HTTP ${response.status})`);
+    }
+    let frame: DshRpcJson; let coverage: DshBinaryUploadObservation['coverage'] = 'complete';
+    try {
+      const serialized = JSON.stringify(envelope);
+      if (Buffer.byteLength(serialized) > rpcCaptureLimit(this.options.maxRpcCaptureBytes)) throw new Error('capture limit');
+      frame = freezeRpcJson(JSON.parse(serialized) as DshRpcJson);
+    } catch { coverage = 'oversize'; frame = Object.freeze({ type: 'binary-upload-capture', coverage }); }
+    observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, httpStatus: response.status, coverage, frame }));
+    const result = envelope as { ok?: boolean; value?: DshFileUploadValue; error?: RpcError } | null;
+    if (result?.ok === false) throw new DshRpcError(result.error ?? { code: 'unknown', message: 'Native upload failed' });
+    if (!response.ok || result?.ok !== true || typeof result.value?.receiptId !== 'string' || !result.value.receiptId
+      || result.value.file?.attachmentId !== `sha256:${createHash('sha256').update(body).digest('hex')}`
+      || typeof result.value.file.name !== 'string' || result.value.file.bytes !== body.byteLength) throw new Error('DSH native upload response does not identify the exact uploaded file');
+    return result.value;
+  }
+
   private rpcObservation(dir: 'in' | 'out', endpoint: string, rpcId: string,
     payload: { json: unknown } | { serialized: string } | { coverage: Exclude<DshRpcCaptureCoverage, 'complete' | 'oversize'> }, httpStatus?: number): DshRpcObservation {
-    const configured = this.options.maxRpcCaptureBytes ?? 1024 * 1024;
-    const maxBytes = Number.isSafeInteger(configured) ? Math.max(0, Math.min(configured, 4 * 1024 * 1024)) : 1024 * 1024;
+    const maxBytes = rpcCaptureLimit(this.options.maxRpcCaptureBytes);
     let coverage: DshRpcCaptureCoverage;
     let jsonBytes: number | undefined;
     let frame: DshRpcJson;

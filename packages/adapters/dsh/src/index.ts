@@ -6,3 +6,5 @@ export * from './contracts.js';
 export * from './assistant.js';
 export * from './native.js';
 export * from './workspaces.js';
+export * from './input.js';
+export * from './input-capabilities.js';

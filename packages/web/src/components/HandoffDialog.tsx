@@ -22,6 +22,7 @@ export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHan
   useStoreVersion();
   const { meta } = useAppData();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const targets = useMemo(
     () =>
       store
@@ -33,11 +34,12 @@ export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHan
   );
 
   const handoffTo = async (sessionId: string, title: string): Promise<void> => {
-    setBusy(true);
+    setBusy(true); setError('');
     try {
       store.appendDraft(sessionId, text);
       await store.flushDraft(sessionId);
       onHanded(sessionId, title);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
     }
@@ -47,6 +49,7 @@ export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHan
     <div className="modal-backdrop" onClick={onClose} data-testid="handoff-dialog">
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="handoff-title" onClick={(event) => event.stopPropagation()}>
         <h2 id="handoff-title">带到…</h2>
+        {error ? <p role="alert">{error}</p> : null}
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
           回答原文会放进目标会话的输入框，你可以先改再发。WebDCC 不会替你发送任何东西。
         </p>
@@ -76,6 +79,7 @@ export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHan
               type="button"
               className="menu-item"
               disabled={busy}
+              data-testid={`handoff-target-${session.id}`}
               onClick={() => void handoffTo(session.id, session.title ?? '新会话')}
             >
               <AgentMark agent={session.agent} />

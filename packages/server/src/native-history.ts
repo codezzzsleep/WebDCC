@@ -27,9 +27,16 @@ export class NativeHistoryStore {
       let admittedTurn: string | undefined;
       for (const record of records) {
         for (const input of record.admittedInputs ?? []) {
-          const commandId = this.store.journal.nativeInput(sessionId, input.nativeRequestId)?.commandId ?? input.nativeRequestId;
+          const identity = this.store.journal.nativeInputRecord(sessionId, input.nativeRequestId);
+          if (identity !== undefined && identity.input.text !== input.text) throw new Error('原生输入身份相同但正文不同');
+          const commandId = identity?.commandId ?? input.nativeRequestId;
           const local = findUserEcho(existing, { text: input.text, clientCommandId: commandId });
-          if (local?.turnId != null) admittedTurn = local.turnId;
+          // A server-pinned steer input belongs to an already active turn. It
+          // must never seed the next native turn-start in an imported page.
+          if (identity?.steered) {
+            admittedTurn = undefined;
+            if (record.nativeTurnId !== undefined && this.turn(sessionId, record.nativeTurnId) !== identity.turnId) throw new Error('原生介入身份不属于已绑定的目标轮次');
+          } else if (identity !== undefined || local?.turnId != null) admittedTurn = identity?.turnId ?? local!.turnId!;
         }
         if (record.nativeTurnId !== undefined && record.events.some(event => event.type === 'turn.start') && admittedTurn !== undefined) {
           this.bind(sessionId, record.nativeTurnId, admittedTurn);
@@ -42,10 +49,13 @@ export class NativeHistoryStore {
         if (event.type !== 'item.complete' || event.kind !== 'user.message') continue;
         const data = event.data as EventData['user.message'];
         if (data.clientCommandId === undefined) continue;
-        const commandId = this.store.journal.nativeInput(sessionId, data.clientCommandId)?.commandId ?? data.clientCommandId;
+        const identity = this.store.journal.nativeInputRecord(sessionId, data.clientCommandId);
+        if (identity !== undefined && identity.input.text !== data.text) throw new Error('原生消息身份相同但正文不同');
+        const commandId = identity?.commandId ?? data.clientCommandId;
         const local = findUserEcho(existing, { ...data, clientCommandId: commandId });
         if (local === undefined || local.turnId === null) continue;
-        if (record.nativeTurnId !== undefined) this.bind(sessionId, record.nativeTurnId, local.turnId);
+        this.store.journal.confirmNativeInput(sessionId, data.clientCommandId, data.text, record.nativeTurnId);
+        if (record.nativeTurnId !== undefined) this.bind(sessionId, record.nativeTurnId, identity?.turnId ?? local.turnId);
         echoes.add(event.itemKey);
       }
       const emitted: StoredEvent[] = [];

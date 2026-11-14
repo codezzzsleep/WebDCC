@@ -16,6 +16,7 @@ import type {
   UploadInitResponse,
   UploadStatusResponse,
   WorkspaceDto,
+  InputContent,
 } from '@webdcc/protocol';
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
@@ -29,7 +30,7 @@ import type { Store } from './store.js';
 import { fileResponseHeaders } from './file-response.js';
 import { CapabilityRegistry } from './capability-registry.js';
 import { buildManifest } from './build-info.js';
-import { isCommand } from '@webdcc/protocol';
+import { isCommand, isInputContent } from '@webdcc/protocol';
 import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -410,8 +411,31 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.put('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {
     const { id } = request.params as { id: string };
     if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
-    const body = request.body as { text?: string; fileIds?: string[] };
-    return store.setDraft(id, body?.text ?? '', Array.isArray(body?.fileIds) ? body.fileIds : []);
+    const body = request.body as { text?: unknown; fileIds?: unknown; contentParts?: unknown; expectedRevision?: unknown };
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['text', 'fileIds', 'contentParts', 'expectedRevision'].includes(key)) || typeof body.text !== 'string') throw badRequest('草稿格式无效');
+    if (body.expectedRevision === undefined) throw Object.assign(new Error('保存草稿需要已读取的 expectedRevision'), { statusCode: 428 });
+    if (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 0) throw badRequest('草稿版本无效');
+    let contentParts: InputContent | undefined;
+    if (body.contentParts !== undefined) {
+      if (!isInputContent(body.contentParts, body.text)) throw badRequest('草稿结构化输入与正文不一致');
+      contentParts = body.contentParts;
+    }
+    const referenced = contentParts?.parts.flatMap(part => 'fileId' in part ? [part.fileId] : []);
+    const fileIds = body.fileIds ?? referenced ?? [];
+    if (!Array.isArray(fileIds) || fileIds.length > 32 || fileIds.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(id))) throw badRequest('草稿附件引用无效');
+    if (referenced !== undefined && JSON.stringify(referenced) !== JSON.stringify(fileIds)) throw badRequest('草稿附件清单与结构化输入顺序不一致');
+    // Saving a draft does not activate a native runtime. Only attachment CAS
+    // and session grants are checked; capabilities are checked on send.
+    for (const fileId of fileIds as string[]) await files.resolveAttachment({ type: 'file', fileId }, id);
+    if (contentParts !== undefined) for (const part of contentParts.parts) if ('fileId' in part) await files.resolveAttachment(part, id);
+    return store.setDraft(id, body.text, fileIds as string[], { expectedRevision: Number(body.expectedRevision), ...(contentParts === undefined ? {} : { contentParts }) });
+  });
+
+  app.post('/api/sessions/:id/attachments', async request => {
+    const { id } = request.params as { id: string }; const body = request.body as { fileId?: unknown };
+    if (!body || typeof body !== 'object' || Object.keys(body).some(key => key !== 'fileId') || typeof body.fileId !== 'string') throw badRequest('需要明确选择的 fileId');
+    const attachment = await files.attachToSession(id, body.fileId);
+    const { path: _path, type: _type, ...file } = attachment; return { attached: true, file };
   });
 
   app.post('/api/commands', async (request, reply) => {
@@ -441,6 +465,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     store.journal.cancel(id, commandId);
     manager.queueChanged(id);
     return reply.status(204).send();
+  });
+
+  app.post('/api/sessions/:id/queue/:commandId/retry', async request => {
+    const { id, commandId } = request.params as { id: string; commandId: string };
+    await manager.retryQueuedInput(id, commandId); return { accepted: true };
   });
 
   // ---------- 测试钩子（只在 WDCC_TEST_HOOKS=1 时存在，SPEC-M8 6.4） ----------
@@ -620,11 +649,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   // ---------- uploads ----------
   app.post('/api/uploads', async (request): Promise<UploadInitResponse & { existingFileId?: string }> => {
-    const body = request.body as { name?: string; size?: number; sha256?: string; mime?: string };
+    const body = request.body as { name?: string; size?: number; sha256?: string; mime?: string; sessionId?: string };
     if (typeof body?.name !== 'string' || typeof body?.size !== 'number' || (body?.sha256 !== undefined && typeof body.sha256 !== 'string')) {
       throw badRequest('需要 name、size；sha256 可选');
     }
-    return files.initUpload({ name: body.name, size: body.size, sha256: body.sha256, mime: body.mime ?? 'application/octet-stream' });
+    if (body.sessionId !== undefined && typeof body.sessionId !== 'string') throw badRequest('上传会话身份无效');
+    return files.initUpload({ name: body.name, size: body.size, sha256: body.sha256, mime: body.mime ?? 'application/octet-stream', ...(body.sessionId === undefined ? {} : { sessionId: body.sessionId }) });
   });
 
   app.put('/api/uploads/:uploadId/chunks/:index', async (request) => {

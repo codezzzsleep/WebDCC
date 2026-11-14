@@ -1,9 +1,13 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState } from '@webdcc/protocol';
-import { reduceTurn, ulid } from '@webdcc/protocol';
+import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent } from '@webdcc/protocol';
+import { isInputContent, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
 import { SyncConnection, type ConnectionState } from './connection.js';
+import { InputPreparationStore } from './input-preparation-store.js';
+import { UploadController } from './upload-controller.js';
+import { SyncedInputDraftStore } from './synced-input-draft-store.js';
+import type { PreparedPart } from './composer-input-controller.js';
 
 export interface SessionMeta {
   id: string;
@@ -33,12 +37,24 @@ export interface HotItem {
   turnId?: string | null;
 }
 
+const hotKey = (turnId: string | null | undefined, itemKey: string): string => JSON.stringify([turnId ?? null, itemKey]);
+function hotEntry(map: Map<string, HotItem>, itemKey: string, turnId: string | null | undefined): HotItem | undefined {
+  if (turnId !== undefined) return map.get(hotKey(turnId, itemKey));
+  // Legacy frames can update legacy items only. Their missing identity must
+  // not be inferred from whichever scoped item is currently visible.
+  const legacy = map.get(hotKey(undefined, itemKey));
+  return legacy?.turnId === undefined ? legacy : undefined;
+}
+
 export interface PendingMessage {
   clientCommandId: string;
   text: string;
   at: string;
   status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain';
   turnId?: string;
+  images?: string[];
+  contentParts?: InputContent;
+  error?: string;
 }
 
 export interface TurnModel extends TurnView {
@@ -69,7 +85,7 @@ export class AppStore {
   private durableQueue = new Map<string, QueuedInput[]>();
   private queueRevisions = new Map<string, number>();
   private drafts = new Map<string, { text: string; fileIds: string[] }>();
-  private outbox = new Map<string, { command: Command; status: PendingMessage['status'] }>();
+  private outbox = new Map<string, { command: Command; status: PendingMessage['status']; durable?: boolean; createdAt?: number; error?: string }>();
   private interactionSubmissions = new Map<string, InteractionSubmission>();
   private listeners = new Set<() => void>();
   private derived = new Map<string, { version: number; turns: TurnModel[] }>();
@@ -80,6 +96,10 @@ export class AppStore {
   private readonly sensitiveCommands = new Set<string>();
   private version = 0;
   private draftTimers = new Map<string, NodeJS.Timeout>();
+  private readonly preparationStore = new InputPreparationStore<PreparedPart>();
+  private readonly preparedDraftWrites = new Map<string, Promise<void>>();
+  private readonly syncedLegacyDrafts = new SyncedInputDraftStore(this.preparationStore, new UploadController({ store: this.preparationStore }));
+  private readonly draftRecovery = new Map<string, (input: Extract<Command, { op: 'send' }>) => boolean>();
 
   readonly connection: SyncConnection;
   /** 非当前查看的会话完成/等待审批时的未读数（A13） */
@@ -235,7 +255,7 @@ export class AppStore {
       case 'snapshot': {
         const map = new Map<string, HotItem>();
         for (const item of message.items) {
-          map.set(item.itemKey, { itemKey: item.itemKey, kind: item.kind, data: item.data, ...(item.turnId === undefined ? {} : { turnId: item.turnId }) });
+          map.set(hotKey(item.turnId, item.itemKey), { itemKey: item.itemKey, kind: item.kind, data: item.data, ...(item.turnId === undefined ? {} : { turnId: item.turnId }) });
         }
         this.hot.set(message.sessionId, map);
         this.notify();
@@ -243,7 +263,7 @@ export class AppStore {
       }
       case 'delta': {
         const map = this.hot.get(message.sessionId) ?? new Map<string, HotItem>();
-        const item = map.get(message.itemKey);
+        const item = hotEntry(map, message.itemKey, message.turnId);
         // A delta without a preceding item.start/update violates the adapter
         // contract. Ignore it; manufacturing a live item makes refresh differ
         // from streaming state and hides the real translator bug.
@@ -257,13 +277,16 @@ export class AppStore {
       }
       case 'update': {
         const map = this.hot.get(message.sessionId) ?? new Map<string, HotItem>();
-        const item = map.get(message.itemKey);
+        const item = hotEntry(map, message.itemKey, message.turnId);
         const payload = message.data as { started?: boolean; kind?: string; data?: unknown };
         if (item !== undefined) {
           item.data = payload.data ?? message.data;
         } else if (payload.started === true) {
+          const previous = this.events.get(message.sessionId);
+          if (previous !== undefined && [...previous.values()].some(event =>
+            (event.turnId ?? null) === (message.turnId ?? null) && (event.itemKey === message.itemKey || event.kind === 'turn.completed'))) break;
           // 流式期间新开始的条目：客户端先建热条目，后续 delta 才有地方增长
-          map.set(message.itemKey, {
+          map.set(hotKey(message.turnId, message.itemKey), {
             itemKey: message.itemKey,
             kind: (payload.kind ?? 'tool.call') as HotItem['kind'],
             data: payload.data ?? {},
@@ -289,13 +312,14 @@ export class AppStore {
           entry.status = message.result.ok ? 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed';
           this.outbox.set(message.clientCommandId, entry);
           if (message.result.ok) { this.outbox.delete(message.clientCommandId); void cache.deleteOutbox(message.clientCommandId); }
-          else void cache.putOutbox({ clientCommandId: message.clientCommandId, command: this.cachedCommand(entry.command), status: entry.status === 'uncertain' ? 'uncertain' : 'failed', createdAt: Date.now(), ...(this.sensitiveCommands.has(message.clientCommandId) ? { sensitive: true } : {}) });
+          else void cache.putOutbox({ clientCommandId: message.clientCommandId, command: this.cachedCommand(entry.command), status: entry.status === 'uncertain' ? 'uncertain' : 'failed', createdAt: entry.createdAt ?? Date.now(), error: message.result.error, ...(this.sensitiveCommands.has(message.clientCommandId) ? { sensitive: true } : {}) });
         }
         for (const [sessionId, list] of this.pending) {
           const match = list.find((item) => item.clientCommandId === message.clientCommandId);
           if (match !== undefined) {
             const queued = message.result.ok && typeof message.result.value === 'object' && message.result.value !== null && (message.result.value as { queued?: unknown }).queued === true;
             match.status = message.result.ok ? queued ? 'queued' : 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed';
+            match.error = message.result.ok ? undefined : message.result.error;
             if (message.result.ok && typeof message.result.value === 'object' && message.result.value !== null) match.turnId = (message.result.value as { turnId?: string }).turnId;
             this.pending.set(sessionId, list);
           }
@@ -347,9 +371,18 @@ export class AppStore {
 
   appendDraft(sessionId: string, text: string): void {
     const current = this.getDraft(sessionId);
-    const next = current.text === '' ? text : `${current.text}
-${text}`;
-    this.setDraft(sessionId, next, current.fileIds);
+    const pending = this.preparedDraftWrites.get(sessionId) ?? Promise.resolve();
+    const write = pending.catch(() => undefined).then(async () => {
+      const previous = await this.preparationStore.getDraft(sessionId);
+      const priorText = previous?.text ?? current.text;
+      const nextText = priorText === '' ? text : `${priorText}\n${text}`;
+      const contentParts = previous?.contentParts ?? { version: 1 as const, parts: current.fileIds.map(fileId => ({ type: 'image', fileId })) };
+      await this.preparationStore.putDraft({ sessionId, revision: (previous?.revision ?? 0) + 1, text: nextText, contentParts, updatedAt: Date.now() }, previous?.revision ?? 0);
+      const fileIds = contentParts.parts.flatMap(part => part.fileId === undefined ? [] : [part.fileId]);
+      this.drafts.set(sessionId, { text: nextText, fileIds });
+      await cache.putDraft({ sessionId, text: nextText, fileIds });
+    });
+    this.preparedDraftWrites.set(sessionId, write); void write.catch(() => undefined);
   }
 
   applyEvent(event: StoredEvent, historical = false): void {
@@ -359,7 +392,10 @@ ${text}`;
     this.events.set(event.sessionId, map);
     this.cursors.set(event.sessionId, this.contiguousSeq(event.sessionId, this.cursors.get(event.sessionId) ?? 0));
     const hot = this.hot.get(event.sessionId);
-    if (hot !== undefined) hot.delete(event.itemKey);
+    if (hot !== undefined) {
+      hot.delete(hotKey(event.turnId, event.itemKey));
+      if (event.kind === 'turn.completed') for (const [key, item] of hot) if (item.turnId === event.turnId) hot.delete(key);
+    }
     if (!seen && !historical && (event.kind === 'turn.completed' || event.kind === 'approval.request')) {
       this.bumpUnread(event.sessionId, this.sessions.get(event.sessionId)?.title ?? '会话');
     }
@@ -483,7 +519,11 @@ ${text}`;
     const pending = new Map((this.pending.get(sessionId) ?? []).filter(item => !sent.has(item.clientCommandId) && !(authoritative !== undefined && item.status === 'queued' && !queued.has(item.clientCommandId))).map(item => [item.clientCommandId, item]));
     for (const row of this.durableQueue.get(sessionId) ?? []) {
       if (sent.has(row.commandId) || !['queued', 'uncertain'].includes(row.state)) continue;
-      pending.set(row.commandId, { clientCommandId: row.commandId, turnId: row.turnId, text: row.input.text, at: row.createdAt, status: row.state === 'uncertain' ? 'uncertain' : 'queued' });
+      pending.set(row.commandId, { clientCommandId: row.commandId, turnId: row.turnId, text: row.input.text,
+        ...(row.input.contentParts === undefined ? {} : { contentParts: publicInputContent(row.input.contentParts) }),
+        ...(row.input.images === undefined ? {} : { images: row.input.images.map(image => image.fileId) }),
+        ...(row.preparationError === undefined ? {} : { error: row.preparationError }),
+        at: row.createdAt, status: row.state === 'uncertain' ? 'uncertain' : 'queued' });
     }
     return [...pending.values()];
   }
@@ -549,12 +589,13 @@ ${text}`;
     this.orphans.set(sessionId, orphans);
     for (const pending of this.getPending(sessionId)) {
       const turnId = pending.turnId ?? `pending-${pending.clientCommandId}`;
-      if (byTurn.has(turnId)) continue;
+      const existing = byTurn.get(turnId);
+      if (existing !== undefined) { existing.pendingInputs = [...existing.pendingInputs ?? [], pending]; continue; }
       const turn: TurnModel = {
         ...reduceTurn([], []),
         turnId,
         state: 'starting',
-        user: { text: pending.text, at: pending.at },
+        user: { text: pending.text, images: pending.images, contentParts: pending.contentParts, at: pending.at },
         startedAt: pending.at,
         events: [],
         hot: [],
@@ -580,28 +621,33 @@ ${text}`;
     return command.op === 'answer' && this.sensitiveCommands.has(command.clientCommandId) ? { ...command, answer: { omitted: 'sensitive-answer' } } : command;
   }
 
-  private enqueue(command: Command, sensitive = false): void {
+  private enqueue(command: Command, sensitive = false): Promise<boolean> {
     if (sensitive) this.sensitiveCommands.add(command.clientCommandId);
-    this.outbox.set(command.clientCommandId, { command, status: 'pending' });
+    const createdAt = Date.now();
+    this.outbox.set(command.clientCommandId, { command, status: 'pending', durable: false, createdAt });
     if (command.op === 'approve' || command.op === 'answer') {
       this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: 'pending' });
       this.notify();
     }
-    void cache.putOutbox({ clientCommandId: command.clientCommandId, command: this.cachedCommand(command), status: 'pending', createdAt: Date.now(), ...(sensitive ? { sensitive: true } : {}) }).then(() => this.connection.sendCommand(command)).catch(() => {
+    return cache.putOutbox({ clientCommandId: command.clientCommandId, command: this.cachedCommand(command), status: 'pending', createdAt, ...(sensitive ? { sensitive: true } : {}) }).then(() => {
+      const entry = this.outbox.get(command.clientCommandId); if (entry !== undefined) entry.durable = true;
+      this.connection.sendCommand(command); return true;
+    }).catch(() => {
       const entry = this.outbox.get(command.clientCommandId);
       if (entry !== undefined) entry.status = 'failed';
       if (command.op === 'approve' || command.op === 'answer') {
         const key = JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]);
         if (this.interactionSubmissions.get(key)?.commandId === command.clientCommandId) this.interactionSubmissions.set(key, { commandId: command.clientCommandId, status: 'failed', error: '答案未能保存，请重试' });
       }
-      for (const item of this.pending.get('sessionId' in command ? command.sessionId : '') ?? []) if (item.clientCommandId === command.clientCommandId) item.status = 'failed';
+      for (const item of this.pending.get('sessionId' in command ? command.sessionId : '') ?? []) if (item.clientCommandId === command.clientCommandId) { item.status = 'failed'; item.error = '消息未能保存，正文和附件仍在草稿中'; }
       this.notify();
+      return false;
     });
   }
 
   private replayOutbox(): void {
     for (const entry of this.outbox.values()) {
-      if (entry.status !== 'pending') continue;
+      if (entry.status !== 'pending' || entry.durable !== true) continue;
       this.connection.sendCommand(entry.command);
     }
   }
@@ -610,12 +656,13 @@ ${text}`;
     const entries = await cache.getOutbox().catch(() => []);
     for (const entry of entries) {
       const status = entry.sensitive && entry.status !== 'uncertain' ? 'failed' : entry.status;
-      this.outbox.set(entry.clientCommandId, { command: entry.command as Command, status });
+      this.outbox.set(entry.clientCommandId, { command: entry.command as Command, status, durable: true, createdAt: entry.createdAt, error: entry.error });
       const command = entry.command as Command;
       if (command.op === 'approve' || command.op === 'answer') this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: status === 'uncertain' ? 'uncertain' : status === 'failed' ? 'failed' : 'pending', ...(entry.sensitive && status === 'failed' ? { error: '敏感回答未保留，请重新输入；已送达的回应以原生状态为准。' } : {}) });
       if (command.op === 'send') {
         const list = this.pending.get(command.sessionId) ?? [];
-        list.push({ clientCommandId: command.clientCommandId, text: command.text, at: new Date(entry.createdAt).toISOString(), status: entry.status });
+        list.push({ clientCommandId: command.clientCommandId, text: command.text, images: command.images, contentParts: command.contentParts, error: entry.error,
+          ...(command.intent !== 'steer' || command.expectedTurnId === undefined ? {} : { turnId: command.expectedTurnId }), at: new Date(entry.createdAt).toISOString(), status: entry.status });
         this.pending.set(command.sessionId, list);
       }
     }
@@ -623,7 +670,7 @@ ${text}`;
 
   sendMessage(sessionId: string, text: string, images: string[] = []): PendingMessage {
     const clientCommandId = ulid();
-    const pending: PendingMessage = { clientCommandId, text, at: nowIso(), status: 'pending' };
+    const pending: PendingMessage = { clientCommandId, text, ...(images.length === 0 ? {} : { images }), at: nowIso(), status: 'pending' };
     const list = this.pending.get(sessionId) ?? [];
     list.push(pending);
     this.pending.set(sessionId, list);
@@ -636,6 +683,34 @@ ${text}`;
     });
     this.notify();
     return pending;
+  }
+
+  /** Resolve only after IndexedDB admits the exact command. A network ACK
+   * is separate; offline acceptance still retains the complete input. */
+  async sendStructuredMessage(sessionId: string, text: string, contentParts: InputContent, intent: InputIntent = 'send', expectedTurnId?: string): Promise<{ commandId: string }> {
+    if (!isInputContent(contentParts, text)) throw new Error('结构化输入与正文不一致或含有未授权字段');
+    const commandId = ulid();
+    const pending: PendingMessage = { clientCommandId: commandId, text, contentParts: structuredClone(contentParts),
+      ...(intent !== 'steer' || expectedTurnId === undefined ? {} : { turnId: expectedTurnId }), at: nowIso(), status: 'pending' };
+    this.pending.set(sessionId, [...this.pending.get(sessionId) ?? [], pending]);
+    const accepted = this.enqueue({ op: 'send', clientCommandId: commandId, sessionId, text, contentParts: structuredClone(contentParts), intent,
+      ...(expectedTurnId === undefined ? {} : { expectedTurnId }) });
+    this.notify();
+    if (!await accepted) throw new Error('消息未能保存，正文和附件仍在草稿中');
+    return { commandId };
+  }
+  bindDraftRecovery(sessionId: string, recover: (input: Extract<Command, { op: 'send' }>) => boolean): () => void {
+    this.draftRecovery.set(sessionId, recover);
+    return () => { if (this.draftRecovery.get(sessionId) === recover) this.draftRecovery.delete(sessionId); };
+  }
+  canRecoverFailedInput(commandId?: string): boolean {
+    const entry = commandId === undefined ? undefined : this.outbox.get(commandId);
+    return entry?.status === 'failed' && entry.command.op === 'send';
+  }
+  recoverFailedInput(sessionId: string, commandId: string): void {
+    const entry = this.outbox.get(commandId);
+    if (entry?.status !== 'failed' || entry.command.op !== 'send' || entry.command.sessionId !== sessionId) throw new Error('请先核对原生执行结果，不能直接重发结果未确认的输入');
+    if (this.draftRecovery.get(sessionId)?.(entry.command) !== true) throw new Error('请先打开该会话的输入框，待草稿恢复后再操作');
   }
 
   approve(sessionId: string, approvalId: string, optionId: string): void {
@@ -716,12 +791,19 @@ ${text}`;
   setDraft(sessionId: string, text: string, fileIds: string[] = []): void {
     this.drafts.set(sessionId, { text, fileIds });
     void cache.putDraft({ sessionId, text, fileIds });
+    const pending = this.preparedDraftWrites.get(sessionId) ?? Promise.resolve();
+    const write = pending.catch(() => undefined).then(async () => {
+      const previous = await this.preparationStore.getDraft(sessionId);
+      await this.preparationStore.putDraft({ sessionId, revision: (previous?.revision ?? 0) + 1, text,
+        contentParts: { version: 1, parts: fileIds.map(fileId => ({ type: 'image', fileId })) }, updatedAt: Date.now() }, previous?.revision ?? 0);
+    });
+    this.preparedDraftWrites.set(sessionId, write); void write.catch(() => undefined);
     const existing = this.draftTimers.get(sessionId);
     if (existing !== undefined) clearTimeout(existing);
     this.draftTimers.set(
       sessionId,
       setTimeout(() => {
-        void api.saveDraft(sessionId, text, fileIds).catch(() => undefined);
+        void this.flushDraft(sessionId).catch(() => undefined);
       }, 1000),
     );
   }
@@ -729,8 +811,11 @@ ${text}`;
   /** 立即把草稿写进 IndexedDB 与服务端（"带到…"后马上跳转时用） */
   async flushDraft(sessionId: string): Promise<void> {
     const draft = this.getDraft(sessionId);
-    await cache.putDraft({ sessionId, text: draft.text, fileIds: draft.fileIds }).catch(() => undefined);
-    await api.saveDraft(sessionId, draft.text, draft.fileIds).catch(() => undefined);
+    await cache.putDraft({ sessionId, text: draft.text, fileIds: draft.fileIds });
+    await this.preparedDraftWrites.get(sessionId);
+    await this.syncedLegacyDrafts.sync(sessionId);
+    const state = this.syncedLegacyDrafts.state(sessionId);
+    if (state?.error !== undefined) throw new Error(state.error);
   }
 
   async loadDraft(sessionId: string): Promise<{ text: string; fileIds: string[] }> {

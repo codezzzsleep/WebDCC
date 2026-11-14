@@ -104,7 +104,7 @@ export class NativeEventStore {
   mapping(context: Context, event: AdapterEvent, disposition: string): { id: number; duplicate: boolean } {
     const id = this.insert(context, 'mapping', 'in', event.type, event, disposition, event.nativeEnvelopeId);
     if (disposition !== 'accepted' || event.type !== 'item.complete') return { id, duplicate: false };
-    const immutable = event.kind === 'assistant.message' || event.kind === 'file.read'
+    const immutable = event.kind === 'assistant.message' || event.kind === 'reasoning' || event.kind === 'file.read'
       || ['command', 'file.change', 'tool.call'].includes(event.kind) && ['completed', 'failed'].includes(String(object(event.data)['status']));
     if (event.nativeSeq === undefined && (!immutable || event.native === undefined)) return { id, duplicate: false };
     const key = payloadHash({ sessionId: context.sessionId, nativeId: context.nativeId, seq: event.nativeSeq,

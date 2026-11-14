@@ -21,4 +21,5 @@ export interface QueuedInput {
   input: UserInput;
   state: CommandState;
   createdAt: string;
+  preparationError?: string;
 }

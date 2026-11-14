@@ -134,7 +134,7 @@ it('admits the frozen actual request separately from observers and rejects befor
 });
 
 type CallHarness = {
-  call<T>(host: DshHostClient, endpoint: string, args: Record<string, unknown>, sessionId?: string): Promise<T>;
+  call<T>(host: DshHostClient, endpoint: string, args: Record<string, unknown>, sessionId?: string, inputReference?: { fileIds: string[]; nativeRequestId?: string }): Promise<T>;
   nativeSinks: Map<string, NonNullable<CreateOpts['nativeEvents']>>;
   sessions: Map<string, { nativeId: string; envelopeId?: number }>;
   observedHost?: unknown;
@@ -225,4 +225,21 @@ it('an ambiguous native id stays global and a delayed response cannot acquire a 
     expect(nextRuntime).not.toHaveProperty('envelopeId');
     expect(server.requests).toHaveLength(2);
   } finally { finish?.(); await host.close(); await server.close(); }
+});
+
+it('bounded capture keeps an explicitly persisted image reference without changing or blocking its native payload', async () => {
+  const server = await rpcServer((request, response) => { response.end(JSON.stringify({ type: 'server-response', rpcId: request['rpcId'], result: { ok: true, value: 'native-result' } })); });
+  const local: TraceFrame[] = []; const global: TraceFrame[] = []; const { harness } = capturedAdapter(local, global);
+  const host = new DshHostClient(server.endpoint, { maxRpcCaptureBytes: 300 });
+  const payload = { ...args, submittedAttachments: [{ type: 'image', mediaType: 'image/png', data: Buffer.alloc(1024, 1).toString('base64') }] };
+  try {
+    expect(await harness.call(host, 'commands/execute', payload, 'web-A', { fileIds: ['persisted-image'], nativeRequestId: 'durable-input-id' })).toBe('native-result');
+    expect(server.requests[0]?.envelope['payload']).toEqual({ args: payload });
+    const outgoing = local.find(frame => frame.ch === 'rpc:commands/execute' && frame.dir === 'out');
+    expect(outgoing?.frame).toMatchObject({ frame: { type: 'dsh-rpc-capture', coverage: 'oversize' },
+      inputReference: { fileIds: ['persisted-image'], nativeRequestId: 'durable-input-id' }, dshTransport: { coverage: 'oversize' } });
+    expect(JSON.stringify(outgoing?.frame)).not.toContain(payload.submittedAttachments[0]!.data);
+    expect(await harness.call(host, 'commands/execute', args, 'web-A')).toBe('native-result');
+    expect(server.requests).toHaveLength(2);
+  } finally { await host.close(); await server.close(); }
 });

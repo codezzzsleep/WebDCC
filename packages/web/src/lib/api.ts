@@ -28,6 +28,8 @@ import type {
   NativeActionRequest,
   NativeActionResponse,
   NativeActionReceipt,
+  InputContent,
+  ModelOption,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -105,6 +107,11 @@ export const api = {
   draft: (id: string) => request<DraftDto>(`/api/sessions/${id}/draft`),
   saveDraft: (id: string, text: string, fileIds: string[]) =>
     request<DraftDto>(`/api/sessions/${id}/draft`, { method: 'PUT', body: JSON.stringify({ text, fileIds }) }),
+  saveInputDraft: (id: string, text: string, contentParts: InputContent, expectedRevision: number) =>
+    request<DraftDto>(`/api/sessions/${id}/draft`, { method: 'PUT', body: JSON.stringify({ text, contentParts, expectedRevision,
+      fileIds: contentParts.parts.flatMap(part => part.type === 'image' || part.type === 'file' || part.type === 'audio' ? [part.fileId] : []) }) }),
+  grantAttachment: (id: string, fileId: string) => request<void>(`/api/sessions/${id}/attachments`, { method: 'POST', body: JSON.stringify({ fileId }) }),
+  retryQueuedInput: (id: string, commandId: string) => request<void>(`/api/sessions/${id}/queue/${encodeURIComponent(commandId)}/retry`, { method: 'POST' }),
   providers: () => request<ProviderDto[]>('/api/providers'),
   slashCommands: (sessionId: string) =>
     request<{ commands: { name: string; description?: string }[] }>(`/api/sessions/${sessionId}/slash-commands`),
@@ -116,6 +123,11 @@ export const api = {
     const query = `agent=${encodeURIComponent(agent)}${providerId === null ? '' : `&providerId=${encodeURIComponent(providerId)}`}`;
     const result = await request<{ models: string[] }>(`/api/models?${query}`);
     return result.models;
+  },
+  modelOptions: async (agent: string, providerId: string | null): Promise<ModelOption[]> => {
+    const query = `agent=${encodeURIComponent(agent)}${providerId === null ? '' : `&providerId=${encodeURIComponent(providerId)}`}`;
+    const result = await request<{ options?: ModelOption[] }>(`/api/models?${query}`);
+    return result.options ?? [];
   },
   createProvider: (input: {
     name: string;

@@ -4,6 +4,7 @@ import type { InitializeResponse } from './schema/InitializeResponse.js';
 import type { ThreadStartResponse } from './schema/v2/ThreadStartResponse.js';
 import type { ThreadResumeResponse } from './schema/v2/ThreadResumeResponse.js';
 import type { TurnStartResponse } from './schema/v2/TurnStartResponse.js';
+import type { TurnSteerResponse } from './schema/v2/TurnSteerResponse.js';
 import type { TurnInterruptResponse } from './schema/v2/TurnInterruptResponse.js';
 import type { PermissionProfileListResponse } from './schema/v2/PermissionProfileListResponse.js';
 import type { ThreadReadResponse } from './schema/v2/ThreadReadResponse.js';
@@ -21,6 +22,7 @@ interface Results extends NativeControlResults {
   'thread/start': ThreadStartResponse;
   'thread/resume': ThreadResumeResponse;
   'turn/start': TurnStartResponse;
+  'turn/steer': TurnSteerResponse;
   'turn/interrupt': TurnInterruptResponse;
   'permissionProfile/list': PermissionProfileListResponse;
   'thread/read': ThreadReadResponse;
@@ -41,6 +43,7 @@ const responseRefs = {
   initialize: '#/definitions/InitializeResponse',
   'thread/start': '#/definitions/v2/ThreadStartResponse', 'thread/resume': '#/definitions/v2/ThreadResumeResponse',
   'turn/start': '#/definitions/v2/TurnStartResponse', 'turn/interrupt': '#/definitions/v2/TurnInterruptResponse', 'permissionProfile/list': '#/definitions/v2/PermissionProfileListResponse',
+  'turn/steer': '#/definitions/v2/TurnSteerResponse',
   'thread/read': '#/definitions/v2/ThreadReadResponse', 'thread/turns/list': '#/definitions/v2/ThreadTurnsListResponse',
   'model/list': '#/definitions/v2/ModelListResponse',
   'config/read': '#/definitions/v2/ConfigReadResponse',

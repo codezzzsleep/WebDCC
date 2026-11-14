@@ -8,8 +8,8 @@ export function payloadHash(value: unknown): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 interface Row { command_id: string; payload_hash: string | null; payload: string | null; op: string; session_id: string | null; state: CommandState; turn_id: string | null; result: string | null; updated_at: string }
-interface InputRow { ordinal: number; command_id: string; session_id: string; turn_id: string; input: string; state: CommandState; created_at: string }
-const input = (row: InputRow): QueuedInput => ({ ordinal: row.ordinal, commandId: row.command_id, sessionId: row.session_id, turnId: row.turn_id, input: JSON.parse(row.input) as UserInput, state: row.state, createdAt: row.created_at });
+interface InputRow { ordinal: number; command_id: string; session_id: string; turn_id: string; input: string; state: CommandState; created_at: string; preparation_error: string | null }
+const input = (row: InputRow): QueuedInput => ({ ordinal: row.ordinal, commandId: row.command_id, sessionId: row.session_id, turnId: row.turn_id, input: JSON.parse(row.input) as UserInput, state: row.state, createdAt: row.created_at, ...(row.preparation_error === null ? {} : { preparationError: row.preparation_error }) });
 
 /** SQLite owns acceptance and ordering; in-memory promises only coordinate work. */
 export class CommandJournal {
@@ -60,7 +60,12 @@ export class CommandJournal {
 
   next(sessionId: string): QueuedInput | undefined {
     const rows = this.queue(sessionId);
-    return rows.some(row => ['dispatching', 'native-accepted', 'uncertain'].includes(row.state)) ? undefined : rows.find(row => row.state === 'queued');
+    if (rows.some(row => ['dispatching', 'native-accepted', 'uncertain'].includes(row.state))) return undefined;
+    const next = rows.find(row => row.state === 'queued'); return next?.preparationError === undefined ? next : undefined;
+  }
+
+  preparationError(turnId: string, error: string | null): void {
+    this.db.prepare("UPDATE input_queue SET preparation_error = ? WHERE turn_id = ? AND state = 'queued'").run(error, turnId);
   }
 
   inputState(turnId: string, state: CommandState): void {
@@ -70,13 +75,13 @@ export class CommandJournal {
     })();
   }
 
-  beginInput(turnId: string): boolean {
+  beginInput(turnId: string, targetTurnId?: string): boolean {
     return this.db.transaction(() => {
       const changed = this.db.prepare("UPDATE input_queue SET state = 'dispatching' WHERE turn_id = ? AND state = 'queued'").run(turnId).changes === 1;
       if (changed) {
         this.db.prepare("UPDATE command_journal SET state = 'dispatching' WHERE turn_id = ?").run(turnId);
-        this.db.prepare('INSERT OR IGNORE INTO native_input_ids (command_id, session_id, turn_id, native_request_id) SELECT command_id, session_id, turn_id, ? FROM input_queue WHERE turn_id = ?')
-          .run(randomUUID(), turnId);
+        this.db.prepare('INSERT OR IGNORE INTO native_input_ids (command_id, session_id, turn_id, native_request_id, target_turn_id) SELECT command_id, session_id, turn_id, ?, ? FROM input_queue WHERE turn_id = ?')
+          .run(randomUUID(), targetTurnId ?? null, turnId);
       }
       return changed;
     })();
@@ -87,8 +92,33 @@ export class CommandJournal {
     return row.native_request_id;
   }
   nativeInput(sessionId: string, nativeRequestId: string): { commandId: string; turnId: string } | undefined {
-    const row = this.db.prepare('SELECT command_id, turn_id FROM native_input_ids WHERE session_id = ? AND native_request_id = ?').get(sessionId, nativeRequestId) as { command_id: string; turn_id: string } | undefined;
-    return row === undefined ? undefined : { commandId: row.command_id, turnId: row.turn_id };
+    const record = this.nativeInputRecord(sessionId, nativeRequestId); return record === undefined ? undefined : { commandId: record.commandId, turnId: record.turnId };
+  }
+
+  nativeInputRecord(sessionId: string, nativeRequestId: string): { commandId: string; turnId: string; admissionTurnId: string; input: UserInput; steered: boolean } | undefined {
+    const row = this.db.prepare(`SELECT n.command_id, n.turn_id, n.target_turn_id, q.input FROM native_input_ids n JOIN input_queue q ON q.turn_id = n.turn_id
+      WHERE n.session_id = ? AND q.session_id = n.session_id AND n.native_request_id = ?`).get(sessionId, nativeRequestId) as { command_id: string; turn_id: string; target_turn_id: string | null; input: string } | undefined;
+    return row === undefined ? undefined : { commandId: row.command_id, turnId: row.target_turn_id ?? row.turn_id, admissionTurnId: row.turn_id, input: JSON.parse(row.input) as UserInput, steered: row.target_turn_id !== null };
+  }
+
+  nativeTargetTurn(admissionTurnId: string): string | undefined {
+    return (this.db.prepare('SELECT target_turn_id FROM native_input_ids WHERE turn_id = ?').get(admissionTurnId) as { target_turn_id: string | null } | undefined)?.target_turn_id ?? undefined;
+  }
+
+  confirmNativeInput(sessionId: string, nativeRequestId: string, text: string, nativeTurnId?: string): boolean {
+    const record = this.nativeInputRecord(sessionId, nativeRequestId);
+    if (record === undefined || !record.steered) return false;
+    if (record.input.text !== text) throw new Error('原生介入输入身份相同但正文不同');
+    if (nativeTurnId !== undefined) {
+      const target = this.db.prepare('SELECT turn_id FROM native_turns WHERE session_id = ? AND native_turn_id = ?').get(sessionId, nativeTurnId) as { turn_id: string } | undefined;
+      if (target?.turn_id !== record.turnId) throw new Error('原生介入回声不属于服务端绑定的目标轮次');
+    }
+    this.inputState(record.admissionTurnId, 'completed'); return true;
+  }
+
+  settleNativeInputs(sessionId: string, turnId: string, state: 'completed' | 'failed', confirmedNativeIds: readonly string[]): void {
+    for (const row of this.db.prepare(`SELECT q.turn_id, n.native_request_id FROM input_queue q JOIN native_input_ids n ON n.turn_id = q.turn_id
+      WHERE n.session_id = ? AND n.target_turn_id = ? AND q.state IN ('uncertain', 'dispatching', 'native-accepted')`).all(sessionId, turnId) as { turn_id: string; native_request_id: string }[]) if (confirmedNativeIds.includes(row.native_request_id)) this.inputState(row.turn_id, state);
   }
 
   cancel(sessionId: string, commandId: string): void {

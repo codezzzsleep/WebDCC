@@ -3,8 +3,9 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export type Db = Database.Database;
-// v11 keeps native input UUIDs separate from browser/internal command IDs.
-export const CURRENT_SCHEMA_VERSION = 11;
+// v12 scopes input/drafts; v13 keeps file name/MIME identity separate from
+// shared content bytes, without changing any existing file ID.
+export const CURRENT_SCHEMA_VERSION = 13;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -37,9 +38,10 @@ CREATE TABLE IF NOT EXISTS commands (
   client_command_id TEXT PRIMARY KEY, op TEXT NOT NULL, result TEXT NOT NULL, at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS files (
-  id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, name TEXT NOT NULL, mime TEXT NOT NULL,
+  id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL,
   size INTEGER NOT NULL, created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS files_sha256_lookup ON files(sha256);
 CREATE TABLE IF NOT EXISTS uploads (
   id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL,
   size INTEGER NOT NULL, received TEXT NOT NULL, created_at TEXT NOT NULL
@@ -64,11 +66,19 @@ export function openDb(file: string): Db {
     db.close();
     throw new Error(`数据库版本 ${schemaVersion} 高于支持的 ${CURRENT_SCHEMA_VERSION}，拒绝修改`);
   }
+  if (schemaVersion >= 12) {
+    const columns = (table: string) => new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(column => column.name));
+    if (!columns('file_session_grants').has('file_id') || !columns('uploads').has('session_id') || !columns('drafts').has('revision') || !columns('drafts').has('content_parts') || !columns('native_input_ids').has('target_turn_id') || !columns('input_queue').has('preparation_error')) {
+      db.close(); throw new Error('数据库 schema v12 不完整，拒绝启动或补造授权');
+    }
+  }
+  if (schemaVersion >= 13 && uniqueFileHash(db)) { db.close(); throw new Error('数据库 schema v13 的文件别名能力不完整，拒绝启动'); }
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
   db.exec(SCHEMA);
-  db.transaction(() => {
+  try { db.transaction(() => {
+    if (schemaVersion < 13) migrateFileAliases(db);
     db.exec(`CREATE TABLE IF NOT EXISTS native_owners (
       session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
       agent TEXT NOT NULL, host_id TEXT NOT NULL, native_id TEXT,
@@ -145,8 +155,24 @@ export function openDb(file: string): Db {
       session_id TEXT NOT NULL REFERENCES sessions(id), turn_id TEXT NOT NULL UNIQUE,
       native_request_id TEXT NOT NULL UNIQUE
     )`);
+    const inputColumns = db.prepare('PRAGMA table_info(native_input_ids)').all() as { name: string }[];
+    if (!inputColumns.some(column => column.name === 'target_turn_id')) db.exec('ALTER TABLE native_input_ids ADD COLUMN target_turn_id TEXT');
+    const queueColumns = db.prepare('PRAGMA table_info(input_queue)').all() as { name: string }[];
+    if (!queueColumns.some(column => column.name === 'preparation_error')) db.exec('ALTER TABLE input_queue ADD COLUMN preparation_error TEXT');
+    const uploadColumns = db.prepare('PRAGMA table_info(uploads)').all() as { name: string }[];
+    if (!uploadColumns.some(column => column.name === 'session_id')) db.exec('ALTER TABLE uploads ADD COLUMN session_id TEXT REFERENCES sessions(id)');
+    const draftColumns = db.prepare('PRAGMA table_info(drafts)').all() as { name: string }[];
+    if (!draftColumns.some(column => column.name === 'revision')) db.exec('ALTER TABLE drafts ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)');
+    if (!draftColumns.some(column => column.name === 'content_parts')) db.exec('ALTER TABLE drafts ADD COLUMN content_parts TEXT');
+    db.exec(`CREATE TABLE IF NOT EXISTS file_session_grants (
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+      source TEXT NOT NULL, created_at TEXT NOT NULL,
+      PRIMARY KEY (session_id, file_id)
+    )`);
+    if (schemaVersion < 12) migrateFileGrants(db);
     db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
-  })();
+  })(); } catch (error) { db.close(); throw error; }
   // M8 F16：Provider 增加来源与按协议的多端点
   const columns = db.prepare('PRAGMA table_info(providers)').all() as { name: string }[];
   const has = (name: string): boolean => columns.some((column) => column.name === name);
@@ -183,6 +209,69 @@ export function openDb(file: string): Db {
   const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
   if (!eventColumns.some((column) => column.name === 'late')) db.exec('ALTER TABLE events ADD COLUMN late INTEGER NOT NULL DEFAULT 0');
   return db;
+}
+
+function uniqueFileHash(db: Db): boolean {
+  return (db.prepare('PRAGMA index_list(files)').all() as { name: string; unique: number }[]).some(index => {
+    const columns = db.prepare(`PRAGMA index_info("${index.name.replaceAll('"', '""')}")`).all() as { name: string | null }[];
+    return index.unique !== 0 && columns.length === 1 && columns[0]?.name === 'sha256';
+  });
+}
+
+/** Old files.sha256 UNIQUE combined byte identity with user-selected MIME.
+ * Rebuild only this known schema; preserve IDs and every existing grant. */
+function migrateFileAliases(db: Db): void {
+  if (!uniqueFileHash(db)) return;
+  const columns = db.prepare('PRAGMA table_info(files)').all() as { name: string }[];
+  if (columns.some(column => !['id', 'sha256', 'name', 'mime', 'size', 'created_at'].includes(column.name))) throw new Error('files 表包含未知字段，拒绝可能丢失数据的迁移');
+  const grantTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'file_session_grants'").get();
+  const grants = grantTable === undefined ? [] : db.prepare('SELECT session_id, file_id, source, created_at FROM file_session_grants').all() as { session_id: string; file_id: string; source: string; created_at: string }[];
+  const definitions = db.prepare("SELECT type, name, sql FROM sqlite_master WHERE tbl_name = 'files' AND type IN ('index', 'trigger') AND sql IS NOT NULL").all() as { type: string; name: string; sql: string }[];
+  const keep = definitions.filter(definition => {
+    if (definition.type !== 'index') return true;
+    const index = (db.prepare('PRAGMA index_list(files)').all() as { name: string; unique: number }[]).find(index => index.name === definition.name);
+    const fields = db.prepare(`PRAGMA index_info("${definition.name.replaceAll('"', '""')}")`).all() as { name: string | null }[];
+    return index?.unique === 0 || fields.length !== 1 || fields[0]?.name !== 'sha256';
+  });
+  db.pragma('defer_foreign_keys = ON');
+  db.exec(`CREATE TABLE files_migrate_v13 (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL);
+    INSERT INTO files_migrate_v13 (id, sha256, name, mime, size, created_at) SELECT id, sha256, name, mime, size, created_at FROM files;
+    DROP TABLE files; ALTER TABLE files_migrate_v13 RENAME TO files;`);
+  for (const definition of keep) db.exec(definition.sql);
+  db.exec('CREATE INDEX IF NOT EXISTS files_sha256_lookup ON files(sha256)');
+  if (grantTable !== undefined) for (const grant of grants) db.prepare('INSERT INTO file_session_grants (session_id, file_id, source, created_at) VALUES (?, ?, ?, ?)').run(grant.session_id, grant.file_id, grant.source, grant.created_at);
+  if ((db.pragma('foreign_key_check') as unknown[]).length !== 0) throw new Error('文件别名迁移外键检查失败');
+}
+
+/** Grant only identities already explicitly referenced by stored user data.
+ * Do not infer ownership from a global CAS entry or rewrite historical input. */
+function migrateFileGrants(db: Db): void {
+  const grant = db.prepare(`INSERT OR IGNORE INTO file_session_grants (session_id, file_id, source, created_at)
+    SELECT ?, id, ?, ? FROM files WHERE id = ? AND EXISTS (SELECT 1 FROM sessions WHERE id = ?)`);
+  const at = new Date().toISOString();
+  const references = new Map<string, { sessionId: string; fileId: string; source: string }>();
+  const parse = (value: string): unknown => { try { return JSON.parse(value) as unknown; } catch { return undefined; } };
+  const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const add = (sessionId: string, ids: unknown[], source: string): void => {
+    for (const id of ids) if (typeof id === 'string') references.set(JSON.stringify([sessionId, id]), { sessionId, fileId: id, source });
+  };
+  const parts = (value: unknown): unknown[] => {
+    const content = object(value); if (content['version'] !== 1 || !Array.isArray(content['parts'])) return [];
+    return content['parts'].flatMap(value => { const part = object(value); return ['image', 'file', 'audio'].includes(String(part['type'])) ? [part['fileId']] : []; });
+  };
+  for (const row of db.prepare('SELECT session_id, input FROM input_queue').iterate() as Iterable<{ session_id: string; input: string }>) {
+    const input = object(parse(row.input)); const images = Array.isArray(input['images']) ? input['images'].map(value => object(value)['fileId']) : [];
+    add(row.session_id, [...images, ...parts(input['contentParts'])], 'legacy-queue');
+  }
+  for (const row of db.prepare("SELECT session_id, data FROM events WHERE kind = 'user.message'").iterate() as Iterable<{ session_id: string; data: string }>) {
+    const data = object(parse(row.data)); add(row.session_id, [...(Array.isArray(data['images']) ? data['images'] : []), ...parts(data['contentParts'])], 'legacy-user-message');
+  }
+  for (const row of db.prepare('SELECT session_id, file_ids, content_parts FROM drafts').iterate() as Iterable<{ session_id: string; file_ids: string; content_parts: string | null }>) {
+    const ids = parse(row.file_ids); add(row.session_id, [...(Array.isArray(ids) ? ids : []), ...parts(row.content_parts === null ? undefined : parse(row.content_parts))], 'legacy-draft');
+  }
+  // Finish every read iterator before issuing writes. This also allows an
+  // insertion fault to roll back and close the DB without an active cursor.
+  for (const { sessionId, fileId, source } of references.values()) grant.run(sessionId, source, at, fileId, sessionId);
 }
 
 function backfillNativeReasoningEffort(db: Db): void {

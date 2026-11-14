@@ -414,7 +414,13 @@
           "packages/server/src/native-history.ts",
           "packages/adapters/claude/src/stdio-capture.ts",
           "packages/adapters/dsh/src/host.ts",
-          "packages/server/test/journal.spec.ts"
+          "packages/server/test/journal.spec.ts",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -423,7 +429,13 @@
           "web_review/evidence/native-recovery-current.json",
           "web_review/evidence/native-live-dsh.json",
           "web_review/evidence/native-live-codex-revalidated.json",
-          "web_review/evidence/native-claude-stdio.json"
+          "web_review/evidence/native-claude-stdio.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "remainingAcceptance": [
           "并发resume只创建一个owner，旧query晚到不能污染新会话。",
@@ -534,7 +546,13 @@
           "packages/server/src/native-reconciliation.ts",
           "packages/adapters/claude/src/stdio-capture.ts",
           "packages/adapters/dsh/src/host.ts",
-          "packages/server/test/journal.spec.ts"
+          "packages/server/test/journal.spec.ts",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -543,7 +561,13 @@
           ".artifacts/dsh-native-smoke.json",
           "web_review/evidence/native-live-dsh.json",
           "web_review/evidence/native-live-codex-revalidated.json",
-          "web_review/evidence/native-claude-stdio.json"
+          "web_review/evidence/native-claude-stdio.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "remainingAcceptance": [
           "历史API首次失败后下一次能补齐缺口，afterSeq不越过未接收区间。",
@@ -904,12 +928,24 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-e493ec4.json",
-          "web_review/evidence/native-elicitation.json"
+          "web_review/evidence/native-elicitation.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "remainingAcceptance": [
           "summary=[a,b]与plan.text均完整显示且只出现一次。",
@@ -1713,16 +1749,53 @@
         "F19"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
-        "evidence": [],
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/input.spec.ts",
+          "packages/adapters/codex/src/input.ts",
+          "packages/adapters/codex/test/input.spec.ts",
+          "packages/adapters/claude/src/input.ts",
+          "packages/adapters/claude/src/input.spec.ts",
+          "packages/adapters/dsh/src/input.ts",
+          "packages/adapters/dsh/src/input-capabilities.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/src/files.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/InputAttachments.tsx",
+          "docs/native-input-boundaries.md"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/input.spec.ts",
+          "packages/adapters/codex/src/input.ts",
+          "packages/adapters/codex/test/input.spec.ts",
+          "packages/adapters/claude/src/input.ts",
+          "packages/adapters/claude/src/input.spec.ts",
+          "packages/adapters/dsh/src/input.ts",
+          "packages/adapters/dsh/src/input-capabilities.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/src/files.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/InputAttachments.tsx",
+          "docs/native-input-boundaries.md"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
         "remainingAcceptance": [
           "发送文本字节与编辑框相同；skill/file引用精确绑定用户所选项。",
           "发送前后核对实际图片/文档hash，remote Host拿到同一字节。",
           "不支持图片的模型明确拒绝；纯图片输入只在原生支持时通过；历史中附件可重看。"
-        ]
+        ],
+        "remainingWork": "Structured input, exact bytes and honest native modality boundaries implemented with isolated mechanism/browser tests. Codex independent file/resource are explicitly unsupported; Claude image availability remains unknown. Full real-model image/audio/document/skill semantics and public remote Host acceptance remain unverified."
       },
       "dependencyIds": [
         "NP-03",
@@ -1763,16 +1836,45 @@
         "F20"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
-        "evidence": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/web/src/lib/draft-controller.ts",
+          "packages/web/src/lib/upload-controller.ts",
+          "packages/web/src/lib/input-preparation-store.ts",
+          "packages/web/src/lib/synced-input-draft-store.ts",
+          "packages/web/src/lib/composer-input-controller.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/server/src/store.ts",
+          "packages/server/src/db.ts",
+          "browser-tests/composer-input.spec.ts",
+          "browser-tests/input-preparation.spec.ts",
+          "docs/input-admission-and-draft.md"
+        ],
+        "actualFiles": [
+          "packages/web/src/lib/draft-controller.ts",
+          "packages/web/src/lib/upload-controller.ts",
+          "packages/web/src/lib/input-preparation-store.ts",
+          "packages/web/src/lib/synced-input-draft-store.ts",
+          "packages/web/src/lib/composer-input-controller.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/server/src/store.ts",
+          "packages/server/src/db.ts",
+          "browser-tests/composer-input.spec.ts",
+          "browser-tests/input-preparation.spec.ts",
+          "docs/input-admission-and-draft.md"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
         "remainingAcceptance": [
           "A/B快速切换、刷新和晚返回不会丢/串文字或图片。",
           "上传时Enter不发送缺附件消息；断网/服务端500后保持可重试状态。",
           "真实浏览器断网后续传并比较sha256；已发送气泡显示正确附件。"
-        ]
+        ],
+        "remainingWork": "Product Composer recovery, IndexedDB Blob/task persistence, late A/B isolation and local/remote draft CAS choices verified in real Chromium. Broader device/server-failure/large-upload matrix remains to be accepted."
       },
       "dependencyIds": [
         "NP-17"
@@ -1810,16 +1912,51 @@
         "F05"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
-        "evidence": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/src/invariants.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/src/invariants.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
         "remainingAcceptance": [
           "运行中介入不意外创建新轮；不支持时给明确原因。",
           "离线刷新仍可读待发送正文/附件/错误和真实时间，队列重启不丢。",
           "失败ACK恢复可操作状态；过期interrupt不作用于新的turn。"
-        ]
+        ],
+        "remainingWork": "Explicit busy send rejects; queue survives failures; steer uses independent native UUID with server-verified turn and real echo confirmation. Failed input restoration implemented. Queue editing and complete interrupt scope/expiry/native stop failure matrix remain unverified."
       },
       "dependencyIds": [
         "NP-03",
@@ -2588,11 +2725,23 @@
           "packages/adapters/claude/src/native-state.ts",
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
-          "packages/web/src/components/NativeControls.tsx"
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "evidence": [
           "web_review/evidence/native-live-claude.json",
-          "web_review/evidence/native-models-current.json"
+          "web_review/evidence/native-models-current.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
         ],
         "remainingAcceptance": [
           "同一session跨多轮及重连后用量无重复，原始usage可查。",
@@ -3730,7 +3879,7 @@
           "scripts/build-server.ts",
           "scripts/release.ts",
           "scripts/check-source.ts",
-          ".github/workflows/source-checks.yml",
+          "docs/ci/source-checks.yml",
           "packages/protocol/src/build.ts",
           "packages/server/src/build-info.ts",
           "packages/adapters/codex/test/version.spec.ts",
@@ -3756,7 +3905,7 @@
           "产物commit/schema/native version与报告绑定，错版本启动显示受限而非假正常。",
           "发布失败回滚到上一个产物，兼容数据库版本有明确检查。"
         ],
-        "remainingWork": "Fresh-container CI, artifact/database release rollback verification and all native version compatibility remain incomplete; no deployment performed.",
+        "remainingWork": "Fresh-container CI, artifact/database release rollback verification and all native version compatibility remain incomplete. The delivered CI definition is docs/ci/source-checks.yml; .github/workflows/source-checks.yml remains a planned file because the available GitHub credential lacks workflow scope. No GitHub Actions execution or deployment is claimed.",
         "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
       },
       "dependencyIds": [
@@ -3824,7 +3973,13 @@
           "packages/server/src/manager.ts",
           "packages/server/test/native-actions.spec.ts",
           "packages/server/test/native-controls.spec.ts",
-          "browser-tests/native-controls.spec.ts"
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/src/backup.ts",
+          "scripts/backup.ts",
+          "packages/server/test/backup.spec.ts",
+          "packages/server/src/files.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "docs/backup-and-restore.md"
         ],
         "actualFiles": [
           "packages/server/src/db.ts",
@@ -3858,7 +4013,13 @@
           "packages/server/src/command-journal.ts",
           "packages/adapters/claude/src/stdio-capture.ts",
           "packages/adapters/dsh/src/host.ts",
-          "packages/server/test/journal.spec.ts"
+          "packages/server/test/journal.spec.ts",
+          "packages/server/src/backup.ts",
+          "scripts/backup.ts",
+          "packages/server/test/backup.spec.ts",
+          "packages/server/src/files.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "docs/backup-and-restore.md"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -3867,14 +4028,16 @@
           "web_review/evidence/native-recovery-current.json",
           "web_review/evidence/native-live-dsh.json",
           "web_review/evidence/native-live-codex-revalidated.json",
-          "web_review/evidence/native-claude-stdio.json"
+          "web_review/evidence/native-claude-stdio.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
         ],
         "remainingAcceptance": [
           "从审核基线数据库升级保留sessionId/URL/events/files及已有命令结果。",
           "迁移中断可恢复，失败不启动不兼容应用；恢复演练包含附件hash和native session关联。",
           "备份/导出不带意外secret；缺外部native备份明确显示无法完整恢复范围。"
         ],
-        "remainingWork": "SQLite v7 原生 owner/信封/投影及事件关联与版本更新同事务；v6 升级保留旧会话/事件并标未记录原生证据。原先 v2–v6 队列/历史/权限/交互局部回归继续有效。完整备份、损坏/降级、附件 hash、迁移中断和真实审核基线恢复演练仍待完成。",
+        "remainingWork": "Encrypted isolated online SQLite/CAS/upload backup, semantic validation, schema13 migration and MIME aliases verified locally. External native profile/history backups and full clean-install rollback/restore acceptance remain required.",
         "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
       },
       "dependencyIds": [
@@ -3927,7 +4090,7 @@
           "全部目标能力无unclassified/假pass；native-fallback和structured覆盖分别显示，未测不标完成。",
           "报告绑定同一commit/环境且可复现，审阅人可沿证据链接看到native输入、动作、输出和恢复结果。"
         ],
-        "remainingWork": "All three providers have isolated basic real-model Read/command smoke evidence. Full 48-item and failure/multimodal/backup/performance/native ownership acceptance remains incomplete. CI lacks workflow scope; L1 22 GOLDEN/16 NOT_TRIGGERED remain unchanged. Final stable source gate pending."
+        "remainingWork": "Full shared candidate source gate passed:108 unit files/519 tests,14 Chromium files/22 tests, typecheck/lint/inventory/build. Actual pinned Codex nonempty reasoning direct RPC/Web/browser evidence also passed; report must be rebound after commit. All48 and real-model failure/multimodal/backup/performance/external owner acceptance remain incomplete. Issue41 tracks ordinary Codex user questions. CI is a template; historical L1 remains22 GOLDEN/16 NOT_TRIGGERED."
       },
       "dependencyIds": [
         "NP-01",
@@ -3986,6 +4149,8 @@
     "start_commit": "878c8c9",
     "deployment": "not-requested",
     "objective": "Implement all 48 requirements; repair source only, do not update the deployed version.",
-    "native_acceptance": "not-run; local Codex 0.168.0 differs from pinned 0.167.0"
+    "native_acceptance": "partial-local-and-native; isolated pinned Codex 0.167.0, Claude CLI 2.1.322 / SDK 0.3.322 and DSH 0.2.2-rc.1 smoke evidence exists, including limited real-model Read/command proofs; full NP-01–48/native failure/multimodal/ownership acceptance remains incomplete. Existing L1 has 22 GOLDEN and 16 NOT_TRIGGERED; no golden modifications.",
+    "source_checkpoint": "8ecc85b085363d13bc94ef07915115f44e8c70e1: stable source gate: 408 unit / 15 Chromium tests passed; current uncommitted continuation requires a new exact-source gate. Historical source-checks environment records local Codex 0.169.0; isolated 0.167.0 proof does not claim that default executable is pinned.",
+    "ci": "docs/ci/source-checks.yml is the delivered review template; .github/workflows/source-checks.yml is absent. GitHub Actions remains unenabled pending workflow-scope authorization; template presence is not CI execution."
   }
 }

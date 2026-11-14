@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import type {
@@ -13,6 +13,7 @@ import type {
   ModelOption,
   ProbeResult,
   UserInput,
+  InputSkillPart,
   TraceSink,
   TraceFrame,
   AccessModeOption,
@@ -31,6 +32,7 @@ import { nativeAccessMode, schemaHasSecrets } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 import { nativeRequest, validateNativeServerParams, type NativeParams } from './controls.js';
+import { codexInputParts, encodeCodexInput, unsupportedCodexInput } from './input.js';
 import { elicitationResponse } from './elicitation.js';
 import type { McpServerElicitationRequestParams } from './schema/v2/McpServerElicitationRequestParams.js';
 import type { PermissionsRequestApprovalParams } from './schema/v2/PermissionsRequestApprovalParams.js';
@@ -54,6 +56,7 @@ export interface CodexAdapterOptions {
 
 interface PendingApproval {
   requestId: string | number;
+  nativeTurnId?: string;
   kind: 'commandExecution' | 'fileChange' | 'legacyExec' | 'legacyPatch' | 'userInput' | 'elicitation' | 'permissions';
   elicitation?: McpServerElicitationRequestParams;
   permissions?: PermissionsRequestApprovalParams['permissions'];
@@ -64,6 +67,41 @@ interface PendingApproval {
   questions?: EventData['question'][];
   submitted?: boolean;
   decision?: string;
+}
+
+interface ReasoningSummary {
+  nativeTurnId: string | null;
+  parts: Map<number, string>;
+  started: boolean;
+}
+
+function reasoningText(summary: ReasoningSummary): string {
+  return [...summary.parts].sort(([a], [b]) => a - b).map(([, text]) => text).join('\n');
+}
+
+function completeReasoning(runtime: SessionRuntime, key: string): void {
+  runtime.reasoningSummaries?.delete(key);
+  const completed = runtime.completedReasoning ??= new Set();
+  completed.add(key);
+  if (completed.size > 1024) completed.delete(completed.values().next().value!);
+}
+
+function beginGeneration(runtime: SessionRuntime, turnId: string | undefined, at: number): void {
+  const identity = turnId ?? runtime.turnId;
+  if (identity !== null) {
+    const timers = runtime.generationByTurn ??= new Map();
+    if (!timers.has(identity)) timers.set(identity, at);
+  }
+  if (identity === runtime.turnId) runtime.generationStartedAt ??= at;
+}
+
+function endGeneration(runtime: SessionRuntime, turnId: string | undefined, at: number): number | undefined {
+  const identity = turnId ?? runtime.turnId;
+  const started = identity === null ? runtime.generationStartedAt : runtime.generationByTurn?.get(identity)
+    ?? (identity === runtime.turnId ? runtime.generationStartedAt : undefined);
+  if (identity !== null) runtime.generationByTurn?.delete(identity);
+  if (identity === runtime.turnId) runtime.generationStartedAt = null;
+  return started == null ? undefined : Math.max(1, at - started);
 }
 
 interface SessionRuntime {
@@ -86,11 +124,14 @@ interface SessionRuntime {
   reasoningEffort: string | null;
   turnId: string | null;
   observedTurns?: Set<string>;
+  reasoningSummaries?: Map<string, ReasoningSummary>;
+  completedReasoning?: Set<string>;
   goalId?: string;
   frameSeq: number;
   turnStartedAt: number;
   /** 模型输出开始时间；用于把 tok/s 的分母限制在生成阶段。 */
   generationStartedAt: number | null;
+  generationByTurn?: Map<string, number>;
   approvals: Map<string, PendingApproval>;
   lastAssistantText: string;
   /** 已经发过 item.start 的条目（Codex 的 agentMessage 不一定有 item/started） */
@@ -360,7 +401,7 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
         return { text: String(item['text'] ?? ''), phase, ...(nativePhase === undefined ? {} : { nativePhase }) };
       }
     case 'reasoning':
-      return { text: Array.isArray(item['summary']) ? (item['summary'] as { text?: string }[]).map((part) => part.text ?? '').join('') : '' };
+      return { text: Array.isArray(item['summary']) ? item['summary'].filter((part): part is string => typeof part === 'string').join('\n') : '' };
     case 'commandExecution':
       return {
         command: String(item['command'] ?? ''),
@@ -510,6 +551,13 @@ export class CodexAdapter implements AgentAdapter {
     const identity = current?.identity;
     if (identity !== undefined) event = { ...event, runtime: identity };
     if (current?.envelopeId !== undefined) event = { ...event, nativeEnvelopeId: current.envelopeId };
+    if ((event.type === 'item.start' || event.type === 'item.complete' || event.type === 'item.cancel' || event.type === 'turn.start' || event.type === 'turn.end')
+      && event.nativeTurnId === undefined && event.native !== null && typeof event.native === 'object') {
+      const native = event.native as Record<string, unknown>;
+      const params = native['params'] !== null && typeof native['params'] === 'object' ? native['params'] as Record<string, unknown> : native;
+      const nativeTurnId = this.nativeTurnId(params);
+      if (nativeTurnId !== undefined) event = { ...event, nativeTurnId };
+    }
     if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
       const degraded: AdapterEvent = {
         type: 'item.complete',
@@ -518,6 +566,8 @@ export class CodexAdapter implements AgentAdapter {
         data: { nativeType: event.kind },
         native: event.native ?? event.data,
         runtime: event.runtime,
+        nativeTurnId: event.nativeTurnId,
+        scope: event.scope,
         nativeEnvelopeId: event.nativeEnvelopeId,
       };
       for (const listener of this.listeners) listener(sessionId, degraded);
@@ -812,6 +862,9 @@ export class CodexAdapter implements AgentAdapter {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
     const mode = runtime.accessMode;
     const params = buildTurnStartParams(runtime.nativeId, input.text, mode, runtime.model, runtime.reasoningEffort, input.images, runtime.cwd);
+    const modalities = await this.inputModalities(sessionId, input);
+    params.input = await encodeCodexInput(input, modalities);
+    if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('Codex 运行实例在输入准备期间已替换'), { code: 'uncertain' });
     if (input.nativeRequestId !== undefined) params.clientUserMessageId = input.nativeRequestId;
     const response = await nativeRequest(runtime.rpc, 'turn/start', params);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
@@ -829,6 +882,42 @@ export class CodexAdapter implements AgentAdapter {
     catch {
       if (this.sessions.get(sessionId) === runtime) this.emit(sessionId, { type: 'permissions', observation: { effective: null, source: 'turn/start:policy-unconfirmed', scope: 'turn' } });
     }
+  }
+
+  private async inputModalities(sessionId: string, input: UserInput): Promise<readonly string[] | undefined> {
+    if (!codexInputParts(input).some(part => part.type === 'image' || part.type === 'audio')) return undefined;
+    const runtime = this.require(sessionId); let cursor: string | undefined;
+    const seen = new Set<string>();
+    do {
+      const catalog = await nativeRequest(runtime.rpc, 'model/list', { limit: 100, ...(cursor === undefined ? {} : { cursor }), includeHidden: false });
+      const selected = catalog.data.find(model => runtime.model === null ? model.isDefault : model.id === runtime.model || model.model === runtime.model);
+      if (selected !== undefined) return selected.inputModalities;
+      cursor = catalog.nextCursor ?? undefined;
+      if (cursor !== undefined && seen.has(cursor)) return undefined;
+      if (cursor !== undefined) seen.add(cursor);
+    } while (cursor !== undefined);
+    return undefined;
+  }
+  async validateInput(sessionId: string, input: UserInput): Promise<void> {
+    await encodeCodexInput(input, await this.inputModalities(sessionId, input));
+  }
+  async resolveInputSkill(sessionId: string, selection: InputSkillPart): Promise<{ path: string }> {
+    const runtime = this.require(sessionId);
+    const catalog = await nativeRequest(runtime.rpc, 'skills/list', { cwds: [runtime.cwd], forceReload: false });
+    if (this.sessions.get(sessionId) !== runtime) throw unsupportedCodexInput('技能目录属于已替换的原生会话');
+    const matches = catalog.data.flatMap(entry => entry.skills).filter(skill => skill.enabled && skill.name === selection.name
+      && createHash('sha256').update(JSON.stringify([skill.name, skill.path])).digest('hex') === selection.skillId);
+    if (matches.length !== 1) throw unsupportedCodexInput('技能引用不在当前原生目录中');
+    return { path: matches[0]!.path };
+  }
+  async steer(sessionId: string, input: UserInput): Promise<void> {
+    const runtime = this.require(sessionId);
+    if (runtime.turnId === null || input.expectedTurnId !== undefined && input.expectedTurnId !== runtime.turnId) throw unsupportedCodexInput('当前运行轮次已变化，无法介入');
+    const expectedTurnId = runtime.turnId;
+    const content = await encodeCodexInput(input, await this.inputModalities(sessionId, input));
+    if (this.sessions.get(sessionId) !== runtime || runtime.turnId !== expectedTurnId) throw unsupportedCodexInput('当前运行轮次已变化，无法介入');
+    await nativeRequest(runtime.rpc, 'turn/steer', { threadId: runtime.nativeId, expectedTurnId, input: content,
+      ...(input.nativeRequestId === undefined ? {} : { clientUserMessageId: input.nativeRequestId }) });
   }
 
   private async readPermissions(sessionId: string, runtime: SessionRuntime): Promise<void> {
@@ -1036,12 +1125,14 @@ export class CodexAdapter implements AgentAdapter {
         if (pending.kind === 'userInput' || pending.kind === 'elicitation') {
           for (const question of pending.questions ?? []) this.emit(sessionId, {
             type: 'item.complete', itemKey: `question-resolved-${question.questionId}`, kind: 'question',
+            nativeTurnId: pending.nativeTurnId,
             ...(pending.sessionScoped ? { scope: 'session' as const } : {}),
             data: { ...question, status: pending.submitted && pending.outcome !== 'cancel' && pending.outcome !== 'decline' ? 'answered' : 'skipped',
               resolution: pending.submitted ? 'native-acknowledged' : 'external', ...(pending.outcome === undefined ? {} : { outcome: pending.outcome }) }, native: frame,
           });
         } else this.emit(sessionId, {
           type: 'item.complete', itemKey: `approval-${approvalId}`, kind: 'approval.resolved',
+          nativeTurnId: pending.nativeTurnId,
           data: { approvalId, optionId: pending.decision ?? 'resolved-externally', by: pending.submitted ? 'user' : 'other' }, native: frame,
         });
         return;
@@ -1049,6 +1140,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'turn/started': {
         const nativeTurnId = this.nativeTurnId(params);
         if (nativeTurnId !== undefined) {
+          if (nativeTurnId !== runtime.turnId) runtime.generationStartedAt = null;
           runtime.turnId = nativeTurnId;
           this.rememberTurn(runtime, nativeTurnId);
           runtime.turnStartedAt = this.now();
@@ -1058,32 +1150,52 @@ export class CodexAdapter implements AgentAdapter {
       }
       case 'turn/completed': {
         const turn = (params['turn'] ?? {}) as { id?: string; status?: string };
+        const nativeTurnId = turn.id ?? this.nativeTurnId(params) ?? runtime.turnId;
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
-        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, this.now() - runtime.generationStartedAt);
-        runtime.generationStartedAt = null;
+        const generationMs = endGeneration(runtime, nativeTurnId ?? undefined, this.now());
         this.emit(sessionId, {
           type: 'turn.end',
-          nativeTurnId: turn.id ?? this.nativeTurnId(params),
+          nativeTurnId: nativeTurnId ?? undefined,
           status: turn.status === 'interrupted' ? 'interrupted' : turn.status === 'failed' ? 'failed' : 'completed',
           ...(usage === undefined ? {} : { usage: { ...usage, scope: 'turn' as const, ...(generationMs === undefined ? {} : { generationMs }) } }),
           native: params,
         });
-        runtime.turnId = null;
-        runtime.started.clear();
+        if (runtime.turnId === nativeTurnId) runtime.turnId = null;
+        for (const key of runtime.started) {
+          if ((JSON.parse(key) as [string | null, string])[0] === nativeTurnId) runtime.started.delete(key);
+        }
+        for (const [key, summary] of runtime.reasoningSummaries ?? []) {
+          if (summary.nativeTurnId === nativeTurnId) completeReasoning(runtime, key);
+        }
         return;
       }
       case 'item/started': {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
-        if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') runtime.generationStartedAt ??= this.now();
+        if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') beginGeneration(runtime, this.nativeTurnId(params), this.now());
+        if (type === 'agentMessage') runtime.started.add(JSON.stringify([this.nativeTurnId(params) ?? runtime.turnId, itemId]));
         const kind = mapItemKind(type);
         if (kind === 'internal') return;
+        let data = mapItemData(item);
+        if (type === 'reasoning') {
+          const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId;
+          const key = JSON.stringify([nativeTurnId, itemId]);
+          if (runtime.completedReasoning?.has(key)) return;
+          const summaries = runtime.reasoningSummaries ??= new Map();
+          const summary = summaries.get(key) ?? {
+            nativeTurnId, started: false, parts: new Map(
+              (Array.isArray(item['summary']) ? item['summary'] : []).flatMap((part, index) => typeof part === 'string' ? [[index, part] as const] : [])),
+          };
+          summaries.set(key, summary);
+          summary.started = true;
+          data = { text: reasoningText(summary) };
+        }
         this.emit(sessionId, {
           type: 'item.start',
           itemKey: itemId,
           kind,
-          data: mapItemData(item),
+          data,
           nativeTurnId: this.nativeTurnId(params),
           native: item,
         });
@@ -1107,6 +1219,10 @@ export class CodexAdapter implements AgentAdapter {
           return;
         }
         const data = mapItemData(item);
+        if (type === 'reasoning') {
+          const key = JSON.stringify([this.nativeTurnId(params) ?? runtime.turnId, itemId]);
+          completeReasoning(runtime, key);
+        }
         // 路径统一成相对工作区（改动卡片与 diff 标签都用相对路径）
         if (kind === 'file.change') {
           const changeData = data as EventData['file.change'];
@@ -1126,26 +1242,58 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'agentMessage/delta': {
-        runtime.generationStartedAt ??= this.now();
+        beginGeneration(runtime, this.nativeTurnId(params), this.now());
         const itemId = String(params['itemId'] ?? '');
-        if (!runtime.started.has(itemId)) {
-          runtime.started.add(itemId);
-          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'assistant.message', data: { text: '' }, nativeTurnId: this.nativeTurnId(params) });
+        const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId ?? undefined;
+        const key = JSON.stringify([nativeTurnId ?? null, itemId]);
+        if (!runtime.started.has(key)) {
+          runtime.started.add(key);
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'assistant.message', data: { text: '' }, nativeTurnId });
         }
-        this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
+        this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? ''), nativeTurnId });
         return;
       }
       case 'reasoning/summaryTextDelta': {
-        runtime.generationStartedAt ??= this.now();
         const itemId = String(params['itemId'] ?? '');
-        if (!runtime.started.has(itemId)) {
-          runtime.started.add(itemId);
-          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'reasoning', data: { text: '' }, nativeTurnId: this.nativeTurnId(params) });
+        const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId;
+        const key = JSON.stringify([nativeTurnId, itemId]);
+        if (runtime.completedReasoning?.has(key)) return;
+        const index = params['summaryIndex'] ?? 0;
+        if (!Number.isSafeInteger(index) || Number(index) < 0) {
+          this.emit(sessionId, { type: 'item.complete', itemKey: `invalid-reasoning-index-${frameKey}`, kind: 'unknown',
+            data: { nativeType: method }, native: params, nativeTurnId: nativeTurnId ?? undefined });
+          return;
         }
-        this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? '') });
+        beginGeneration(runtime, nativeTurnId ?? undefined, this.now());
+        const summaries = runtime.reasoningSummaries ??= new Map();
+        const summary = summaries.get(key) ?? { nativeTurnId, started: false, parts: new Map<number, string>() };
+        summaries.set(key, summary);
+        summary.parts.set(Number(index), `${summary.parts.get(Number(index)) ?? ''}${String(params['delta'] ?? '')}`);
+        if (!summary.started) {
+          summary.started = true;
+          this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'reasoning', data: { text: '' }, nativeTurnId: nativeTurnId ?? undefined });
+        }
+        this.emit(sessionId, { type: 'item.update', itemKey: itemId, nativeTurnId: nativeTurnId ?? undefined, data: { text: reasoningText(summary) } });
         return;
       }
       case 'reasoning/summaryPartAdded': {
+        const itemId = String(params['itemId'] ?? '');
+        const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId;
+        const key = JSON.stringify([nativeTurnId, itemId]);
+        const index = params['summaryIndex'] ?? 0;
+        if (!Number.isSafeInteger(index) || Number(index) < 0) {
+          this.emit(sessionId, { type: 'item.complete', itemKey: `invalid-reasoning-index-${frameKey}`, kind: 'unknown',
+            data: { nativeType: method }, native: params, nativeTurnId: nativeTurnId ?? undefined });
+          return;
+        }
+        if (!runtime.completedReasoning?.has(key)) {
+          const summaries = runtime.reasoningSummaries ??= new Map();
+          const summary = summaries.get(key) ?? { nativeTurnId, started: false, parts: new Map<number, string>() };
+          summaries.set(key, summary);
+          if (!summary.parts.has(Number(index))) summary.parts.set(Number(index), '');
+          if (summary.started) this.emit(sessionId, { type: 'item.update', itemKey: itemId, nativeTurnId: nativeTurnId ?? undefined,
+            data: { text: reasoningText(summary) } });
+        }
         // 已知通知：并入 reasoning，不算 unknown（F12）
         this.emit(sessionId, {
           type: 'item.complete',
@@ -1153,11 +1301,12 @@ export class CodexAdapter implements AgentAdapter {
           kind: 'internal',
           data: { nativeType: method },
           native: params,
+          nativeTurnId: nativeTurnId ?? undefined,
         });
         return;
       }
       case 'commandExecution/outputDelta': {
-        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'output', append: String(params['delta'] ?? '') });
+        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'output', append: String(params['delta'] ?? ''), nativeTurnId: this.nativeTurnId(params) });
         return;
       }
       case 'tokenUsage': {
@@ -1166,13 +1315,12 @@ export class CodexAdapter implements AgentAdapter {
         const inputTokens = Number(currentTurn['inputTokens'] ?? 0);
         const outputTokens = Number(currentTurn['outputTokens'] ?? 0);
         if (inputTokens === 0 && outputTokens === 0) return;
-        const generationMs = runtime.generationStartedAt === null ? undefined : Math.max(1, this.now() - runtime.generationStartedAt);
-        runtime.generationStartedAt = null;
+        const generationMs = endGeneration(runtime, this.nativeTurnId(params), this.now());
         this.emit(sessionId, {
           type: 'item.complete',
           itemKey: `usage-${frameKey}`,
           kind: 'usage',
-          data: { inputTokens, outputTokens, cacheReadInputTokens: currentTurn['cachedInputTokens'], reasoningOutputTokens: currentTurn['reasoningOutputTokens'], ...(generationMs === undefined ? { scope: 'turn' as const } : { scope: 'attempt' as const, generationMs }) },
+          data: { inputTokens, outputTokens, cacheReadInputTokens: currentTurn['cachedInputTokens'], cacheCreationInputTokens: currentTurn['cacheWriteInputTokens'], reasoningOutputTokens: currentTurn['reasoningOutputTokens'], ...(generationMs === undefined ? { scope: 'turn' as const } : { scope: 'attempt' as const, generationMs }) },
           native: params,
         });
         return;
@@ -1322,7 +1470,7 @@ export class CodexAdapter implements AgentAdapter {
       if (runtime.approvals.has(approvalId)) return undefined;
       if (method === 'item/permissions/requestApproval') {
         const permission = params as PermissionsRequestApprovalParams;
-        runtime.approvals.set(approvalId, { requestId: id, kind: 'permissions', permissions: permission.permissions });
+        runtime.approvals.set(approvalId, { requestId: id, kind: 'permissions', permissions: permission.permissions, nativeTurnId: permission.turnId });
         this.emit(sessionId, { type: 'item.complete', itemKey: `approval-${approvalId}`, kind: 'approval.request', nativeTurnId: permission.turnId, native: frame,
           data: { approvalId, title: '原生额外权限', tool: 'request_permissions', reason: permission.reason ?? undefined,
             detail: JSON.stringify({ cwd: permission.cwd, environmentId: permission.environmentId, permissions: permission.permissions }, null, 2),
@@ -1333,7 +1481,7 @@ export class CodexAdapter implements AgentAdapter {
           header: `MCP · ${elicitation.serverName}`, allowsFreeText: false, isSecret: elicitation.mode !== 'url' && schemaHasSecrets(elicitation.requestedSchema),
           elicitation: elicitation.mode === 'url' ? { kind: 'url', serverName: elicitation.serverName, url: elicitation.url, elicitationId: elicitation.elicitationId }
             : { kind: 'form', serverName: elicitation.serverName, schema: elicitation.requestedSchema as Record<string, unknown> } };
-        runtime.approvals.set(approvalId, { requestId: id, kind: 'elicitation', elicitation, questionIds: ['elicitation'], questions: [question], sessionScoped: elicitation.turnId === null });
+        runtime.approvals.set(approvalId, { requestId: id, kind: 'elicitation', elicitation, questionIds: ['elicitation'], questions: [question], sessionScoped: elicitation.turnId === null, nativeTurnId: elicitation.turnId ?? undefined });
         this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}`, kind: 'question', data: question, native: frame,
           ...(elicitation.turnId === null ? { scope: 'session' as const } : { nativeTurnId: elicitation.turnId }) });
       }
@@ -1344,6 +1492,10 @@ export class CodexAdapter implements AgentAdapter {
       throw Object.assign(new Error(`Unsupported native request: ${method}`), { code: -32601 });
     }
     const params = (frame['params'] ?? {}) as Record<string, unknown>;
+    const nativeThreadId = params['threadId'] === undefined ? params['conversationId'] : params['threadId'];
+    if (runtime !== undefined && nativeThreadId !== undefined && nativeThreadId !== runtime.nativeId) {
+      throw Object.assign(new Error('Reverse request belongs to another native thread'), { code: -32602 });
+    }
 
     const options = ((): { id: string; label: string }[] => {
       switch (method) {
@@ -1381,12 +1533,12 @@ export class CodexAdapter implements AgentAdapter {
 
     const approvalId = `${runtime?.processToken ?? 'p'}:${typeof id}:${id}`;
     if (runtime?.approvals.has(approvalId)) return undefined;
-    runtime?.approvals.set(approvalId, { requestId: id, kind });
+    runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params) });
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
       const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[] | null; isOther?: boolean; isSecret?: boolean }[];
       const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, isSecret: question.isSecret === true,
         allowsFreeText: question.isSecret === true || question.options == null || question.isOther !== false, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }));
-      runtime?.approvals.set(approvalId, { requestId: id, kind, questionIds: questions.map(question => question.id), questions: items });
+      runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params), questionIds: questions.map(question => question.id), questions: items });
       for (const question of items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.questionId.slice(approvalId.length + 1)}`, kind: 'question', data: question, native: frame });
       return undefined;
     }
@@ -1396,6 +1548,8 @@ export class CodexAdapter implements AgentAdapter {
       type: 'item.complete',
       itemKey: `approval-${approvalId}`,
       kind: 'approval.request',
+      nativeTurnId: this.nativeTurnId(params),
+      native: frame,
       data: {
         approvalId,
         title: (() => {

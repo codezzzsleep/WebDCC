@@ -11,6 +11,7 @@ import { ErrorBoundary } from './ErrorBoundary.js';
 import { Icon, Spinner, type IconName } from './Icon.js';
 import { Markdown, MarkdownWorkspace } from './Markdown.js';
 import { ElicitationForm } from './ElicitationForm.js';
+import { InputAttachments } from './InputAttachments.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -146,20 +147,32 @@ function TurnView({
 
   return (
     <section className={`turn ${running ? 'turn-running' : ''}`} id={turn.userSeq === undefined ? undefined : `e-${turn.userSeq}`}>
-      {turn.pending !== undefined || user.text !== '' ? (
+      {turn.pending !== undefined || user.text !== '' || (user.images?.length ?? 0) > 0 || user.contentParts?.parts.some(part => part.type !== 'text') ? (
         <div className="user-message" data-testid="user-message">
           <div className="user-bubble">
             <Markdown text={user.text} />
+            <InputAttachments contentParts={user.contentParts} images={user.images} />
           </div>
           <div className="user-meta">
             {turn.pending !== undefined || turn.commandState !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending?.status ?? turn.commandState ?? 'pending')}</span> : null}
             {turn.pending?.status === 'queued' ? <button type="button" className="btn" onClick={() => { void store.cancelQueued(sessionId, turn.pending?.clientCommandId ?? '').catch(error => setCancelError(String(error))); }}>取消排队</button> : null}
+            {turn.pending?.status === 'queued' && turn.pending.error !== undefined ? <button type="button" className="btn" onClick={() => void api.retryQueuedInput(sessionId, turn.pending!.clientCommandId).then(() => store.refreshQueue(sessionId)).catch(error => setCancelError(String(error)))}>重新核对附件并发送</button> : null}
             {turn.pending?.status === 'uncertain' || turn.commandState === 'uncertain' ? <Link to="/settings/native-events" search={{ sessionId }} className="btn">核对原生执行</Link> : null}
             <span>{new Date(user.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+            {store.canRecoverFailedInput(turn.pending?.clientCommandId ?? user.commandId) ? <button type="button" className="btn" onClick={() => {
+              try { store.recoverFailedInput(sessionId, turn.pending?.clientCommandId ?? user.commandId ?? ''); setCancelError(''); } catch (error) { setCancelError(String(error)); }
+            }}>放回输入框</button> : null}
           </div>
           {cancelError ? <p role="alert">{cancelError}</p> : null}
+          {turn.pending?.error !== undefined ? <p role="alert">{turn.pending.error}</p> : null}
         </div>
       ) : null}
+
+      {[...(turn.inputs?.slice(1) ?? []), ...(turn.pendingInputs ?? [])].map((input, index) => <div className="user-message" data-testid="additional-user-input" key={`additional-${index}`}>
+        <div className="user-bubble"><Markdown text={input.text} /><InputAttachments contentParts={input.contentParts} images={input.images} /></div>
+        <div className="user-meta"><span>本轮补充消息</span>{'status' in input ? <span className="outbox-status">{outboxLabel(input.status)}</span> : null}<span>{new Date(input.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span></div>
+        {'error' in input && input.error !== undefined ? <p role="alert">{input.error}</p> : null}
+      </div>)}
 
       {turn.pending !== undefined ? null : (
         <div className="turn-header">

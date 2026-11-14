@@ -1,4 +1,5 @@
 import type { EventData, EventKind, StoredEvent, UsageData } from './events.js';
+import type { InputContent } from './input.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -21,7 +22,9 @@ export interface LiveItem extends OpenItem {
 export interface TurnView {
   turnId: string;
   state: 'starting' | 'running' | 'waiting' | 'completed' | 'interrupted' | 'failed';
-  user: { text: string; images?: string[]; at: string };
+  user: { text: string; images?: string[]; contentParts?: InputContent; commandId?: string; at: string };
+  inputs?: { text: string; images?: string[]; contentParts?: InputContent; at: string; seq: number }[];
+  pendingInputs?: NonNullable<TurnView['pending']>[];
   userSeq?: number;
   startedAt: string;
   endedAt?: string;
@@ -35,7 +38,7 @@ export interface TurnView {
   plan?: EventData['plan']['items'];
   goal?: EventData['goal'];
   usage?: UsageData;
-  pending?: { clientCommandId: string; text: string; at: string; status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain'; turnId?: string };
+  pending?: { clientCommandId: string; text: string; images?: string[]; contentParts?: InputContent; error?: string; at: string; status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain'; turnId?: string };
   commandState?: 'uncertain';
 }
 
@@ -226,8 +229,13 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnVi
     user: {
       text: userData?.text ?? '',
       ...(userData?.images === undefined ? {} : { images: userData.images }),
+      ...(userData?.contentParts === undefined ? {} : { contentParts: userData.contentParts }),
+      ...(userData?.clientCommandId === undefined ? {} : { commandId: userData.clientCommandId }),
       at: userEvent?.at ?? startedAt,
     },
+    ...(events.filter(event => event.kind === 'user.message').length <= 1 ? {} : { inputs: events.filter(event => event.kind === 'user.message').map(event => {
+      const data = event.data as EventData['user.message']; return { text: data.text, images: data.images, contentParts: data.contentParts, at: event.at, seq: event.seq };
+    }) }),
     startedAt,
     ...(completedData?.durationMs === undefined ? {} : { durationMs: completedData.durationMs }),
     ...(completed === undefined ? {} : { endedAt: completed.at }),

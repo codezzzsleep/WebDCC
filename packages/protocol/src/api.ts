@@ -3,6 +3,7 @@ import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { ProbeResult } from './adapter.js';
 import type { BuildManifest } from './build.js';
 import type { AccessModeOption, PermissionState } from './permissions.js';
+import type { InputContent } from './input.js';
 
 export interface AgentMeta extends ProbeResult {
   adapterKind?: 'real' | 'fake';
@@ -96,6 +97,8 @@ export interface DraftDto {
   text: string;
   fileIds: string[];
   updatedAt: string;
+  revision: number;
+  contentParts?: InputContent;
 }
 
 export interface ProviderEndpointMap {

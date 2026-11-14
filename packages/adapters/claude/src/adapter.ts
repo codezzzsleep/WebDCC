@@ -37,6 +37,7 @@ import {
 import { buildFileChanges, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 
 import { ClaudeContentReducer } from './content.js';
+import { encodeClaudeInput, type ClaudeUserContent } from './input.js';
 import { claudeSystemEvent } from './system.js';
 import { managedClaudeProcess } from './managed-process.js';
 import type { ClaudeStdioCaptureState } from './stdio-capture.js';
@@ -123,7 +124,7 @@ function toClaudeEffort(value: string): EffortLevel {
 }
 
 interface InputQueue {
-  push: (text: string, images?: { media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }[], uuid?: string) => void;
+  push: (text: string, images?: { media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }[], uuid?: string, preparedContent?: ClaudeUserContent) => void;
   end: () => void;
   iterable: AsyncIterable<SDKUserMessage>;
 }
@@ -149,14 +150,14 @@ function createInputQueue(): InputQueue {
   };
   return {
     iterable,
-    push(text: string, images?: { media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }[], uuid?: string) {
-      const content =
+    push(text: string, images?: { media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string }[], uuid?: string, preparedContent?: ClaudeUserContent) {
+      const content = preparedContent ?? (
         images === undefined || images.length === 0
           ? text
           : [
               ...images.map((image) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: image.media_type, data: image.data } })),
               { type: 'text' as const, text },
-            ];
+            ]);
       if (uuid !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) throw nativeError('Claude nativeRequestId 必须为 UUID');
       const message: SDKUserMessage = { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, ...(uuid === undefined ? {} : { uuid: uuid as SDKUserMessage['uuid'] }) };
       queue.push(message);
@@ -533,20 +534,18 @@ export class ClaudeAdapter implements AgentAdapter {
     runtime.turnStartedAt = this.now();
     runtime.generationStartedAt = null;
     runtime.generationMs = 0;
-    const images = (input.images ?? []).map((image) => {
-        if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime)) throw new Error(`Claude 不支持图片格式 ${image.mime}`);
-        const mediaType = image.mime as
-          | 'image/png'
-          | 'image/jpeg'
-          | 'image/gif'
-          | 'image/webp';
-        return { media_type: mediaType, data: readFileSync(image.path).toString('base64') };
-    });
-    const content = images.length === 0 ? input.text : [...images.map(image => ({ type: 'image', source: { type: 'base64', media_type: image.media_type, data: image.data } })), { type: 'text', text: input.text }];
+    const content = await encodeClaudeInput(input);
+    if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('Claude 运行实例在输入准备期间已替换'), { code: 'uncertain' });
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'input', frame: input });
     if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'sdk-input', frame: { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, ...(input.nativeRequestId === undefined ? {} : { uuid: input.nativeRequestId }) } })) throw Object.assign(new Error('原生输入未持久化'), { code: 'uncertain' });
-    runtime.input.push(input.text, images.length === 0 ? undefined : images, input.nativeRequestId);
+    runtime.input.push(input.text, undefined, input.nativeRequestId, content);
     runtime.turnActive = true;
+  }
+
+  async validateInput(_sessionId: string, input: UserInput): Promise<void> {
+    // The pinned SDK ModelInfo has no input modality declaration. Preserve
+    // that unknown instead of guessing from model names or descriptions.
+    await encodeClaudeInput(input);
   }
 
   /** 切换访问模式（F6）：Claude Code 用 SDK 的 setPermissionMode */

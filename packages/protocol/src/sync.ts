@@ -2,6 +2,7 @@
 import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { SessionDto } from './api.js';
 import type { PermissionState } from './permissions.js';
+import type { InputContent, InputIntent } from './input.js';
 
 export interface SubscribeItem {
   sessionId: string;
@@ -41,6 +42,9 @@ export interface SendCommand extends CommandBase {
   sessionId: string;
   text: string;
   images?: string[];
+  contentParts?: InputContent;
+  intent?: InputIntent;
+  expectedTurnId?: string;
   /** 输入框原文与发送文本逐字节相等（SPEC 3.3） */
 }
 
@@ -191,6 +195,8 @@ export interface DeltaMessage {
   itemKey: string;
   field: 'text' | 'output';
   append: string;
+  /** Public turn identity; omitted only by legacy senders. */
+  turnId?: string | null;
 }
 
 export interface UpdateMessage {

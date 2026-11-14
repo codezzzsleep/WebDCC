@@ -70,7 +70,7 @@ it('NP-03 retains ACKed text and attachments after SIGKILL and blocks blind repl
     expect(queue.map(row => row.state)).toEqual(['uncertain', 'queued']);
     expect(queue[1]?.input.text).toBe('已确认的队列正文\r\n');
     expect(queue[1]?.input.images?.[0]?.fileId).toBe(message.fileId);
-    expect((await files.readAll(message.fileId))?.buffer.toString()).toBe('queue-attachment');
+    expect((await files.readAll(message.fileId))?.buffer).toEqual(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nAAAAABJRU5ErkJggg==', 'base64'));
     expect(store.journal.get('CRASH-QUEUED')?.result).toMatchObject({ ok: true, value: { queued: true } });
     const dispatcher = new CommandDispatcher(store, manager, files);
     expect(await dispatcher.dispatch(message.first)).toMatchObject({ ok: false, code: 'uncertain' });

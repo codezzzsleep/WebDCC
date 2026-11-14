@@ -17,9 +17,11 @@ import type {
   NativeControlSnapshot,
   NativeActionRequest,
   NativeActionResponse,
+  InputContent,
+  ResolvedInputPart,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
-import { initialPermissions, nativeAccessMode, normalizeQuestionAnswer, observePermissions, ulid } from '@webdcc/protocol';
+import { initialPermissions, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
@@ -29,8 +31,10 @@ import type { ModelRecording } from './model-recording.js';
 import type { CreateOpts } from '@webdcc/protocol';
 import type { InteractionRow } from './interactions.js';
 import { payloadHash } from './command-journal.js';
+import type { FileStore } from './files.js';
 
 const TURN_SETTLE_MS = 1_500;
+const hotKey = (turnId: string | null, itemKey: string): string => JSON.stringify([turnId, itemKey]);
 
 export interface HotItem {
   itemKey: string;
@@ -49,11 +53,12 @@ export interface Runtime {
   turnId: string | null;
   turnStartedAt: number | null;
   hot: Map<string, HotItem>;
+  completedItems?: Set<string>;
   idleTimer: NodeJS.Timeout | null;
   nativeActivity?: number;
   /** Codex 等 adapter 可能在 turn/end 后补发 item/diff；在终止前给它们一个收敛窗口。 */
   finishTimer: NodeJS.Timeout | null;
-  finishAction: (() => void) | null;
+  finishAction: ((followedByNativeTurn?: boolean) => void) | null;
   queued: { turnId: string; input: UserInput; clientCommandId?: string }[];
   disposing: boolean;
   ownershipTimer: NodeJS.Timeout | null;
@@ -62,10 +67,13 @@ export interface Runtime {
 export interface ManagerHooks {
   onFeed: (sessionId: string, patch: FeedPatch, feedSeq: number) => void;
   onEvent: (event: StoredEvent) => void;
-  onDelta: (sessionId: string, itemKey: string, field: 'text' | 'output', append: string) => void;
+  onDelta: (sessionId: string, itemKey: string, field: 'text' | 'output', append: string, turnId?: string | null) => void;
   onUpdate: (sessionId: string, itemKey: string, data: unknown, turnId?: string | null) => void;
   onStatus: (sessionId: string, status: SessionDto['status']) => void;
 }
+
+export interface SendResult { turnId: string; queued: boolean; confirmed?: boolean }
+const knownUnsubmittedInput = (error: unknown): boolean => error !== null && typeof error === 'object' && (error as { nativeAdmission?: unknown }).nativeAdmission === 'not-submitted';
 
 export class SessionManager {
   readonly watchdog: CodexWatchdog;
@@ -77,6 +85,7 @@ export class SessionManager {
   private readonly controls = new Map<string, Promise<unknown>>();
   private readonly uncertainSessions = new Set<string>();
   private readonly ownerId = randomUUID();
+  private files?: FileStore;
   private hooks: ManagerHooks = {
     onFeed: () => undefined,
     onEvent: () => undefined,
@@ -95,8 +104,10 @@ export class SessionManager {
       watchdogDataDir?: string;
       recorder?: InteractionRecorder;
       modelRecording?: ModelRecording;
+      files?: FileStore;
     },
   ) {
+    this.files = options.files;
     const recoverable = new Set(this.store.nativeOwners.recoverableSessions());
     this.store.journal.recover([...recoverable]);
     for (const row of this.store.interactions.recover([...recoverable])) this.persistInteractionSubmission(row, 'uncertain');
@@ -521,12 +532,51 @@ export class SessionManager {
 
   // ---------- 发送 / 介入 ----------
 
-  async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
+  bindFileStore(files: FileStore): void { this.files = files; }
+
+  /** May run before command acceptance and is repeated before native send.
+   * Only current server CAS/catalog identities determine native paths. */
+  async prepareInput(sessionId: string, input: { text: string; images?: { fileId: string; mime?: string }[]; contentParts?: InputContent | UserInput['contentParts']; delivery?: UserInput['delivery']; expectedTurnId?: string }, checkIntent = true): Promise<UserInput> {
+    const session = this.requireSession(sessionId); const adapter = this.adapters.get(session.agent);
+    if (typeof input.text !== 'string' || input.delivery !== undefined && !['send', 'queue', 'steer'].includes(input.delivery)) throw Object.assign(new Error('输入格式无效'), { statusCode: 400 });
+    const current = this.runtimes.get(sessionId);
+    if (checkIntent && input.delivery === 'send' && (current?.turnId != null || this.store.journal.queue(sessionId).length > 0)) throw Object.assign(new Error('会话正在执行或队列仍有已接受输入，请明确选择排队或介入'), { statusCode: 409 });
+    if (checkIntent && input.delivery === 'steer' && (current?.turnId == null || input.expectedTurnId !== current.turnId || current.adapter.steer === undefined)) throw Object.assign(new Error('介入目标轮次已变化或此 Agent 不支持介入，请刷新后重试'), { statusCode: 409 });
+    const reference = input.contentParts === undefined ? undefined : publicInputContent(input.contentParts as NonNullable<UserInput['contentParts']>);
+    if (reference !== undefined && (!isInputContent(reference, input.text) || input.images?.length)) throw Object.assign(new Error('结构化输入与正文不一致或混合了旧图片字段'), { statusCode: 400 });
+    if (input.text.trim() === '' && !(reference?.parts.some(part => part.type !== 'text') || input.images?.length)) throw Object.assign(new Error('普通消息正文不能为空'), { statusCode: 400 });
+    const output: UserInput = { text: input.text, ...(input.delivery === undefined ? {} : { delivery: input.delivery }), ...(input.expectedTurnId === undefined ? {} : { expectedTurnId: input.expectedTurnId }) };
+    if (reference !== undefined) {
+      const parts: ResolvedInputPart[] = [];
+      for (const part of reference.parts) {
+        if (part.type === 'image' || part.type === 'file' || part.type === 'audio') {
+          if (this.files === undefined) throw Object.assign(new Error('附件存储尚未绑定'), { statusCode: 503 });
+          parts.push(await this.files.resolveAttachment(part, sessionId));
+        } else if (part.type === 'skill') {
+          if (adapter?.resolveInputSkill === undefined) throw Object.assign(new Error('此 Agent 未提供可验证的 skill 目录'), { statusCode: 400 });
+          await this.ensureReady(session, this.requireWorkspace(session.workspaceId).path);
+          const resolved = await adapter.resolveInputSkill(sessionId, part); parts.push({ ...part, path: resolved.path });
+        } else if (part.type === 'text' || part.type === 'resource') parts.push(structuredClone(part));
+        else throw Object.assign(new Error('结构化输入类型无效'), { statusCode: 400 });
+      }
+      output.contentParts = { version: 1, parts };
+    } else if (input.images?.length) {
+      if (input.images.length > 32 || this.files === undefined) throw Object.assign(new Error('图片附件过多或附件存储尚未绑定'), { statusCode: 400 });
+      output.images = [];
+      for (const image of input.images) output.images.push(await this.files.resolveAttachment({ type: 'image', fileId: image.fileId, ...(image.mime === undefined ? {} : { mime: image.mime }) }, sessionId));
+    }
+    if (adapter?.validateInput !== undefined) { await this.ensureReady(session, this.requireWorkspace(session.workspaceId).path); await adapter.validateInput(sessionId, output); }
+    if (checkIntent && input.delivery === 'send' && this.runtimes.get(sessionId)?.turnId != null) throw Object.assign(new Error('会话已开始执行，输入未发送，请明确选择排队'), { statusCode: 409 });
+    return output;
+  }
+
+  async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<SendResult> {
     return this.control(sessionId, () => this.sendAccepted(sessionId, input, clientCommandId, automatic));
   }
 
-  private async sendAccepted(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
+  private async sendAccepted(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<SendResult> {
     const session = this.requireSession(sessionId);
+    input = await this.prepareInput(sessionId, input);
     if (this.uncertainSessions.has(sessionId) || this.store.journal.queue(sessionId).some(row => row.state === 'uncertain')) throw Object.assign(new Error('上次原生执行结果待核对，禁止自动重发'), { statusCode: 409 });
     if (automatic === undefined) {
       this.watchdog.userInput(sessionId);
@@ -536,6 +586,9 @@ export class SessionManager {
     if (this.requireSession(sessionId).permissions?.phase === 'failed') throw Object.assign(new Error('权限切换失败，请先重新选择权限再发送'), { statusCode: 409 });
     if (automatic !== undefined && !automatic()) throw new Error('Watchdog 已取消');
     if (automatic !== undefined && runtime.turnId !== null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
+    if (input.delivery === 'send' && runtime.turnId !== null) throw Object.assign(new Error('会话已开始执行，输入未发送，请明确选择排队'), { statusCode: 409 });
+
+    if (input.delivery === 'steer') return this.steerAccepted(runtime, input, clientCommandId);
 
     const turnId = ulid();
     const accepted = this.store.journal.enqueue(clientCommandId ?? `internal-${turnId}`, sessionId, turnId, input);
@@ -553,6 +606,15 @@ export class SessionManager {
     if (session === undefined) throw new Error('会话不存在');
     if (session.permissions?.phase === 'failed') throw Object.assign(new Error('权限切换失败，已接受的队列保留但暂停执行'), { statusCode: 409 });
     if (runtime.disposing) throw new Error('会话正在回收');
+    try { input = await this.prepareInput(sessionId, input, false); }
+    catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.store.journal.preparationError(turnId, message); this.queueChanged(sessionId);
+      const notice = this.store.appendEvent({ sessionId, turnId: null, itemKey: `queue-preparation-${turnId}`, kind: 'notice', data: { level: 'warning', text: `队列输入未发送：${message}。请核对附件后重试此输入。`, nativeType: 'input-preparation-failed' } });
+      this.hooks.onEvent(notice); throw error;
+    }
+    this.assertOwner(runtime);
+    if (runtime.turnId !== null) throw Object.assign(new Error('原生轮次已开始，已接受的输入继续排队'), { statusCode: 409 });
     if (!this.store.journal.beginInput(turnId)) throw Object.assign(new Error('队列输入已被取消或占有'), { statusCode: 409 });
     this.queueChanged(sessionId);
     runtime.turnId = turnId;
@@ -567,8 +629,10 @@ export class SessionManager {
       kind: 'user.message',
       data: {
         text: input.text,
+        intent: input.delivery ?? 'send',
         ...(clientCommandId === undefined ? {} : { clientCommandId }),
         ...(input.images === undefined ? {} : { images: input.images.map((image) => image.fileId) }),
+        ...(input.contentParts === undefined ? {} : { contentParts: publicInputContent(input.contentParts) }),
       },
     });
     this.hooks.onEvent(userEvent);
@@ -600,12 +664,64 @@ export class SessionManager {
       this.queueChanged(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing) this.finishTurn(runtime, 'failed', `native-outcome-uncertain: ${message}`);
-      else this.store.journal.inputState(turnId, 'uncertain');
+      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing) this.finishTurn(runtime, 'failed', `${knownUnsubmittedInput(error) ? 'native-input-not-submitted' : 'native-outcome-uncertain'}: ${message}`);
+      else this.store.journal.inputState(turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain');
       throw error;
     }
     if (runtime.turnId === turnId) this.refreshInteractionStatus(runtime);
     this.touchIdle(runtime);
+  }
+
+  private async steerAccepted(runtime: Runtime, input: UserInput, commandId?: string): Promise<SendResult> {
+    const target = runtime.turnId;
+    if (target === null || input.expectedTurnId !== target || runtime.adapter.steer === undefined) throw Object.assign(new Error('介入目标轮次已变化或此 Agent 不支持介入，请刷新后重试'), { statusCode: 409 });
+    input = await this.prepareInput(runtime.sessionId, input); this.assertOwner(runtime);
+    if (runtime.turnId !== target || runtime.disposing) throw Object.assign(new Error('介入目标轮次已结束，输入未发送'), { statusCode: 409 });
+    const nativeTarget = this.turns.nativeTurn(target);
+    if (nativeTarget === undefined) throw Object.assign(new Error('当前轮次尚无已验证的原生身份，输入未发送'), { statusCode: 409 });
+    const admissionId = ulid(); const accepted = this.store.journal.enqueue(commandId ?? `internal-${admissionId}`, runtime.sessionId, admissionId, input);
+    if (!this.store.journal.beginInput(accepted.turnId, target)) throw Object.assign(new Error('介入输入已被占有或取消'), { statusCode: 409 });
+    const user = this.store.appendEvent({ sessionId: runtime.sessionId, turnId: target, itemKey: `user-${admissionId}`, kind: 'user.message', data: { text: input.text, intent: 'steer', clientCommandId: accepted.commandId, ...(input.images === undefined ? {} : { images: input.images.map(image => image.fileId) }), ...(input.contentParts === undefined ? {} : { contentParts: publicInputContent(input.contentParts) }) } });
+    this.hooks.onEvent(user);
+    try {
+      await runtime.adapter.steer(runtime.sessionId, { ...input, expectedTurnId: nativeTarget, nativeRequestId: this.store.journal.nativeRequestId(accepted.turnId) });
+      this.assertOwner(runtime);
+      if (this.store.journal.get(accepted.commandId)?.state !== 'completed') this.store.journal.inputState(accepted.turnId, 'native-accepted');
+    } catch (error) {
+      // A real persisted echo can precede a lost RPC response. Its positive
+      // admission proof must not be downgraded into blind-replay uncertainty.
+      if (this.store.journal.get(accepted.commandId)?.state === 'completed') { this.queueChanged(runtime.sessionId); return { turnId: target, queued: false, confirmed: true }; }
+      this.store.journal.inputState(accepted.turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain'); this.queueChanged(runtime.sessionId); throw error;
+    }
+    this.queueChanged(runtime.sessionId); return { turnId: target, queued: false, confirmed: this.store.journal.get(accepted.commandId)?.state === 'completed' };
+  }
+
+  async retryQueuedInput(sessionId: string, commandId: string): Promise<void> {
+    return this.control(sessionId, async () => {
+      const row = this.store.journal.queue(sessionId).find(row => row.commandId === commandId);
+      if (row === undefined || row.state !== 'queued' || row.input.delivery === 'steer') throw Object.assign(new Error('此输入不是可重试的未发送队列输入'), { statusCode: 409 });
+      await this.prepareInput(sessionId, row.input, false); this.store.journal.preparationError(row.turnId, null); this.queueChanged(sessionId);
+      this.store.journal.state(commandId, 'queued', { ok: true, value: { turnId: row.turnId, queued: true } });
+      const session = this.requireSession(sessionId); const workspace = this.requireWorkspace(session.workspaceId); const runtime = await this.ensureReady(session, workspace.path);
+      await this.drainQueue(runtime);
+    });
+  }
+
+  /** A live echo from the already-owned writer can release accepted queue
+   * work. Read-only historical imports never activate or drain a runtime. */
+  confirmInputEcho(sessionId: string, nativeRequestId: string, text: string, nativeTurnId?: string): boolean {
+    let confirmed: boolean;
+    try { confirmed = this.store.journal.confirmNativeInput(sessionId, nativeRequestId, text, nativeTurnId); }
+    catch (error) {
+      const record = this.store.journal.nativeInputRecord(sessionId, nativeRequestId);
+      if (record !== undefined && this.store.journal.get(record.commandId)?.state !== 'completed') this.store.journal.inputState(record.admissionTurnId, 'uncertain');
+      const notice = this.store.appendEvent({ sessionId, turnId: record?.turnId ?? null, itemKey: `input-echo-mismatch-${ulid()}`, kind: 'notice', data: { level: 'warning', text: error instanceof Error ? error.message : '原生输入回声关联不一致，执行结果待核对', nativeType: 'input-echo-mismatch' } });
+      this.hooks.onEvent(notice); this.queueChanged(sessionId); return false;
+    }
+    if (!confirmed) return false;
+    this.queueChanged(sessionId); const runtime = this.runtimes.get(sessionId);
+    if (runtime !== undefined && runtime.turnId === null && !runtime.disposing) void this.control(sessionId, () => this.drainQueue(runtime)).catch(() => undefined);
+    return true;
   }
 
   async approve(sessionId: string, decision: ApprovalDecision, commandId = ulid()): Promise<void> {
@@ -958,7 +1074,13 @@ export class SessionManager {
         this.store.nativeActions.confirm(sessionId, runtime.identity, runtime.nativeId, { type: 'stop-task', taskId: native['task_id'], runId: native['run_id'] ?? null });
       }
     }
-    if (envelope.duplicate) { if (event.type === 'item.complete') runtime.hot.delete(event.itemKey); return; }
+    if (envelope.duplicate) {
+      if (event.type === 'item.complete') {
+        const assigned = this.turns.assignment(sessionId, event);
+        runtime.hot.delete(hotKey(assigned.turnId, event.itemKey));
+      }
+      return;
+    }
     this.options.recorder?.observeFiles(sessionId, event);
     if (event.type === 'native-id') this.options.recorder?.nativeId(sessionId, event.nativeId);
     if (event.type === 'transport.closed') {
@@ -973,7 +1095,6 @@ export class SessionManager {
       this.fenceRuntime(runtime);
       return;
     }
-    if (event.type === 'turn.start') this.store.nativeOwners.observe(sessionId, runtime.identity, event.nativeTurnId ?? null);
     if (event.type === 'permissions') {
       const session = this.requireSession(sessionId);
       const permissions = observePermissions(session.permissions ?? initialPermissions(session.accessMode), event.observation);
@@ -989,13 +1110,31 @@ export class SessionManager {
     }
     if (event.type === 'item.complete' && event.kind === 'user.message') {
       const data = event.data as EventData['user.message'];
-      const commandId = data.clientCommandId === undefined ? undefined : this.store.journal.nativeInput(sessionId, data.clientCommandId)?.commandId ?? data.clientCommandId;
+      const identity = data.clientCommandId === undefined ? undefined : this.store.journal.nativeInputRecord(sessionId, data.clientCommandId);
+      if (identity?.steered && !this.confirmInputEcho(sessionId, data.clientCommandId!, data.text, event.nativeTurnId)) return;
+      const commandId = identity?.commandId ?? data.clientCommandId;
       const local = findUserEcho(this.store.allEvents(sessionId), { ...data, clientCommandId: commandId });
       if (local !== undefined) {
         return;
       }
     }
     if (event.type === 'turn.start' && event.nativeTurnId !== undefined) {
+      const knownTurn = this.turns.publicTurn(sessionId, event.nativeTurnId) ?? this.store.nativeHistory.turn(sessionId, event.nativeTurnId);
+      // A delayed acknowledgement of an old native turn must not take over
+      // the active writer or restart its public turn.
+      if (knownTurn !== undefined && knownTurn !== runtime.turnId) return;
+      const currentNative = runtime.turnId === null ? undefined : this.turns.nativeTurn(runtime.turnId);
+      if (currentNative !== undefined && currentNative !== event.nativeTurnId) {
+        if (runtime.finishAction !== null) runtime.finishAction(true);
+        else {
+          // Native may start its next autonomous turn before the previous
+          // terminal frame reaches us. Preserve the previous admission and
+          // wait for its own identity instead of inventing a completion.
+          this.store.journal.inputState(runtime.turnId!, 'uncertain');
+          runtime.turnId = null;
+          runtime.turnStartedAt = null;
+        }
+      }
       if (runtime.turnId === null) {
         const publicTurn = this.store.nativeHistory.turn(sessionId, event.nativeTurnId) ?? ulid();
         runtime.turnId = publicTurn;
@@ -1007,6 +1146,7 @@ export class SessionManager {
         }
       }
       this.store.nativeHistory.bind(sessionId, event.nativeTurnId, runtime.turnId);
+      this.store.nativeOwners.observe(sessionId, runtime.identity, event.nativeTurnId);
     }
     const nativeEffort = this.nativeReasoningEffort(event);
     if (nativeEffort !== undefined && this.store.getSession(sessionId)?.reasoningEffort !== nativeEffort) {
@@ -1014,6 +1154,7 @@ export class SessionManager {
     }
     const assignment = this.turns.observe(sessionId, event);
     const turnId = assignment.turnId;
+    if ('nativeTurnId' in event && event.nativeTurnId !== undefined && turnId === null && event.scope !== 'session') return;
     // Keep extending the settle window while frames for the pending turn are
     // still arriving. This is a quiet-period debounce, so a long Codex diff
     // stream settles without leaking a partial terminal view.
@@ -1021,38 +1162,44 @@ export class SessionManager {
 
     switch (event.type) {
       case 'item.start': {
+        const key = hotKey(turnId, event.itemKey);
+        if (turnId !== null && this.turns.ended(turnId) || runtime.completedItems?.has(key)) break;
         const item: HotItem = {
           itemKey: event.itemKey,
           kind: event.kind,
           data: event.data as EventData[EventKind],
           turnId,
         };
-        runtime.hot.set(event.itemKey, item);
+        runtime.hot.set(key, item);
         this.hooks.onUpdate(sessionId, event.itemKey, { started: true, kind: event.kind, data: item.data }, turnId);
         break;
       }
       case 'item.delta': {
-        const item = runtime.hot.get(event.itemKey);
+        const item = runtime.hot.get(hotKey(turnId, event.itemKey));
+        if (item === undefined) break;
         if (item !== undefined) {
           const data = item.data as { text?: string; outputTail?: string };
           if (event.field === 'text') data.text = (data.text ?? '') + event.append;
           else data.outputTail = (data.outputTail ?? '') + event.append;
         }
-        this.hooks.onDelta(sessionId, event.itemKey, event.field, event.append);
+        this.hooks.onDelta(sessionId, event.itemKey, event.field, event.append, turnId);
         break;
       }
       case 'item.update': {
-        const item = runtime.hot.get(event.itemKey);
+        const item = runtime.hot.get(hotKey(turnId, event.itemKey));
+        if (item === undefined) break;
         if (item !== undefined) item.data = event.data as EventData[EventKind];
         this.hooks.onUpdate(sessionId, event.itemKey, event.data, item?.turnId ?? turnId);
         break;
       }
       case 'item.cancel': {
-        runtime.hot.delete(event.itemKey);
+        runtime.hot.delete(hotKey(turnId, event.itemKey));
+        (runtime.completedItems ??= new Set()).add(hotKey(turnId, event.itemKey));
         break;
       }
       case 'item.complete': {
-        runtime.hot.delete(event.itemKey);
+        runtime.hot.delete(hotKey(turnId, event.itemKey));
+        (runtime.completedItems ??= new Set()).add(hotKey(turnId, event.itemKey));
         // 改动卡片的数据来源：把 diff 文本存成文件，前端据此打开 diff 标签（C2）
         let completeData = event.data as EventData[EventKind];
         if (event.kind === 'file.change' || event.kind === 'turn.diff') {
@@ -1097,7 +1244,8 @@ export class SessionManager {
         this.hooks.onEvent(stored);
         if (event.kind === 'approval.request' || event.kind === 'approval.resolved' || event.kind === 'question') this.refreshInteractionStatus(runtime);
         if (event.kind === 'turn.completed') {
-          this.finishTurn(runtime, (completeData as EventData['turn.completed']).status, undefined, stored);
+          if (turnId === runtime.turnId) this.finishTurn(runtime, (completeData as EventData['turn.completed']).status, undefined, stored);
+          else if (turnId !== null) this.finishPreviousTurn(runtime, turnId, (completeData as EventData['turn.completed']).status, stored);
         }
         break;
       }
@@ -1107,7 +1255,10 @@ export class SessionManager {
         break;
       }
       case 'turn.end': {
-        if (turnId !== null) this.finishTurn(runtime, event.status, undefined, undefined, event.usage, event.native, envelope.id);
+        if (turnId !== null && !this.turns.ended(turnId)) {
+          if (turnId === runtime.turnId) this.finishTurn(runtime, event.status, undefined, undefined, event.usage, event.native, envelope.id);
+          else this.finishPreviousTurn(runtime, turnId, event.status, undefined, event.usage, event.native, envelope.id);
+        }
         break;
       }
       case 'status': {
@@ -1141,7 +1292,7 @@ export class SessionManager {
     // the public turn active briefly so those frames bind to this turn and a
     // refresh cannot observe a different summary from the live view.
     if (status === 'completed' && reason === undefined && existing === undefined) {
-      runtime.finishAction = () => this.finishTurnNow(runtime, status, reason, existing, usage, native, nativeEnvelopeId);
+      runtime.finishAction = followedByNativeTurn => this.finishTurnNow(runtime, status, reason, existing, usage, native, nativeEnvelopeId, followedByNativeTurn);
       this.armFinishTimer(runtime);
       return;
     }
@@ -1156,6 +1307,7 @@ export class SessionManager {
     usage?: EventData['usage'],
     native?: unknown,
     nativeEnvelopeId?: number,
+    followedByNativeTurn = false,
   ): void {
     const turnId = runtime.turnId;
     if (turnId === null) return;
@@ -1184,7 +1336,8 @@ export class SessionManager {
       });
       this.hooks.onEvent(event);
     }
-    runtime.hot.clear();
+    for (const [key, item] of runtime.hot) if (item.turnId === turnId) runtime.hot.delete(key);
+    for (const key of runtime.completedItems ?? []) if ((JSON.parse(key) as [string | null, string])[0] === turnId) runtime.completedItems?.delete(key);
     this.options.recorder?.turn(runtime.sessionId, null);
     this.turns.end(runtime.sessionId, turnId, status);
     runtime.turnId = null;
@@ -1192,6 +1345,7 @@ export class SessionManager {
     this.store.journal.inputState(turnId, reason === 'session-disposed' || reason?.startsWith('native-outcome-uncertain:') ? 'uncertain' : status === 'failed' ? 'failed' : 'completed');
     this.queueChanged(runtime.sessionId);
     runtime.turnStartedAt = null;
+    if (followedByNativeTurn) return;
     this.setStatus(runtime, 'idle');
     const next = runtime.disposing ? undefined : this.store.journal.next(runtime.sessionId);
     if (next !== undefined) {
@@ -1207,6 +1361,25 @@ export class SessionManager {
       const lastError = events.filter((event) => event.kind === 'error').at(-1)?.data as { message?: string } | undefined;
       this.watchdog.terminal(runtime.sessionId, turnId, status, terminalNative?.turn?.error ?? terminalNative?.error ?? reason ?? lastError?.message);
     }
+  }
+
+  /** A terminal frame for an earlier autonomous turn changes only that turn. */
+  private finishPreviousTurn(runtime: Runtime, turnId: string, status: 'completed' | 'interrupted' | 'failed', existing?: StoredEvent,
+    usage?: EventData['usage'], native?: unknown, nativeEnvelopeId?: number): void {
+    if (this.turns.ended(turnId)) return;
+    const events = this.store.allEvents(runtime.sessionId).filter(event => event.turnId === turnId);
+    if (existing === undefined && !events.some(event => event.kind === 'turn.completed')) {
+      const startedAt = this.turns.startedAt(turnId);
+      const stored = this.store.appendEvent({ sessionId: runtime.sessionId, turnId, itemKey: `turn-end-${turnId}`, kind: 'turn.completed', nativeEnvelopeId,
+        data: { status, durationMs: startedAt === undefined ? 0 : Math.max(0, Date.now() - startedAt), answerItemKeys: resolveAnswer(events).map(item => item.itemKey),
+          ...(usage === undefined ? {} : { usage }) }, ...(native === undefined ? {} : { native }) });
+      this.hooks.onEvent(stored);
+    }
+    for (const [key, item] of runtime.hot) if (item.turnId === turnId) runtime.hot.delete(key);
+    for (const key of runtime.completedItems ?? []) if ((JSON.parse(key) as [string | null, string])[0] === turnId) runtime.completedItems?.delete(key);
+    this.turns.end(runtime.sessionId, turnId, status);
+    this.store.journal.inputState(turnId, status === 'failed' ? 'failed' : 'completed');
+    this.queueChanged(runtime.sessionId);
   }
 
   private armFinishTimer(runtime: Runtime): void {

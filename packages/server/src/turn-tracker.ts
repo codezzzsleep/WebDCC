@@ -40,6 +40,9 @@ export class TurnTracker {
     if (nativeTurnId === undefined || nativeTurnId === '') return;
     const record = this.turns.get(turnId);
     if (record === undefined) return;
+    if (record.nativeTurnId !== undefined && record.nativeTurnId !== nativeTurnId) return;
+    const existing = this.nativeToTurn.get(JSON.stringify([record.sessionId, nativeTurnId]));
+    if (existing !== undefined && existing !== turnId) return;
     record.nativeTurnId = nativeTurnId;
     this.nativeToTurn.set(JSON.stringify([record.sessionId, nativeTurnId]), turnId);
   }
@@ -51,10 +54,13 @@ export class TurnTracker {
       const known = this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));
       if (known !== undefined) return { turnId: known, late: this.isLate(sessionId, known, at) };
       const current = this.active.get(sessionId);
-      if (current !== undefined) {
+      if (current !== undefined && this.turns.get(current)?.nativeTurnId === undefined) {
         this.bindNative(current, nativeTurnId);
         return { turnId: current, late: false };
       }
+      // An explicit but unknown native identity is not evidence that this
+      // frame belongs to the current public turn. Keep it in the raw ledger.
+      return { turnId: null, late: false };
     }
     const current = this.active.get(sessionId);
     if (current !== undefined) return { turnId: current, late: false };
@@ -70,6 +76,7 @@ export class TurnTracker {
     if (assigned.turnId === null) return assigned;
     const record = this.turns.get(assigned.turnId);
     if (record === undefined) return assigned;
+    if (record.endedAt !== undefined) return assigned;
     if (event.type === 'turn.start') record.state = 'running';
     if (event.type === 'status') {
       if (event.status === 'running') record.state = 'running';
@@ -115,6 +122,16 @@ export class TurnTracker {
     return this.active.get(sessionId);
   }
 
+  nativeTurn(turnId: string): string | undefined { return this.turns.get(turnId)?.nativeTurnId; }
+
+  publicTurn(sessionId: string, nativeTurnId: string): string | undefined {
+    return this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));
+  }
+
+  startedAt(turnId: string): number | undefined { return this.turns.get(turnId)?.startedAt; }
+
+  ended(turnId: string): boolean { return this.turns.get(turnId)?.endedAt !== undefined; }
+
   resume(sessionId: string): void {
     const turnId = this.active.get(sessionId);
     const record = turnId === undefined ? undefined : this.turns.get(turnId);
@@ -126,6 +143,7 @@ export class TurnTracker {
   }
 
   private isLate(sessionId: string, turnId: string, at: number): boolean {
+    if (this.turns.get(turnId)?.endedAt !== undefined) return true;
     const ended = this.lastEnded.get(sessionId);
     return ended?.turnId === turnId && at - ended.at <= this.lateWindowMs;
   }

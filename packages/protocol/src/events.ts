@@ -1,5 +1,6 @@
 /** 统一事件模型（SPEC 第 6 节） */
 import type { ElicitationForm, ElicitationAction } from './elicitation.js';
+import type { InputContent, InputIntent } from './input.js';
 
 export type EventKind =
   | 'user.message'
@@ -81,7 +82,7 @@ export interface PlanItem {
 }
 
 export interface EventData {
-  'user.message': { text: string; images?: string[]; clientCommandId?: string };
+  'user.message': { text: string; images?: string[]; contentParts?: InputContent; intent?: InputIntent; clientCommandId?: string };
   /** `phase` is retained for old rows. New translations preserve the native
    * phase in `nativePhase`; the turn reducer is the sole final-answer authority. */
   'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string };

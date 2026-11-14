@@ -1,4 +1,5 @@
 import type { ClientMessage, Command } from './sync.js';
+import { isInputContent } from './input.js';
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256;
@@ -11,7 +12,11 @@ export function isCommand(value: unknown): value is Command {
   const op = value['op'];
   if (op !== 'create-session' && !id(value['sessionId'])) return false;
   switch (op) {
-    case 'send': return typeof value['text'] === 'string' && (value['images'] === undefined || strings(value['images']));
+    case 'send': return typeof value['text'] === 'string' && (value['images'] === undefined || strings(value['images']))
+      && (value['contentParts'] === undefined || isInputContent(value['contentParts'], value['text']))
+      && !(value['contentParts'] !== undefined && Array.isArray(value['images']) && value['images'].length > 0)
+      && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
+      && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
     case 'approve': return opaqueId(value['approvalId']) && opaqueId(value['optionId']);
     case 'answer': return opaqueId(value['questionId']) && value['answer'] !== undefined;
     case 'interrupt': return sequence(value['createdAt']);

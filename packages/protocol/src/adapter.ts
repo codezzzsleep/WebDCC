@@ -6,6 +6,7 @@ import type { RuntimeIdentity } from './runtime.js';
 import type { NativeFrameSink } from './native-events.js';
 import type { NativeObservation } from './native-observation.js';
 import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } from './native-controls.js';
+import type { InputSkillPart, ResolvedInputContent } from './input.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -61,7 +62,10 @@ export interface UserInput {
   text: string;
   /** Identity minted and persisted by the server before native admission. */
   nativeRequestId?: string;
-  images?: { fileId: string; path: string; mime: string }[];
+  images?: { fileId: string; path: string; mime: string; name?: string; sha256?: string; size?: number }[];
+  contentParts?: ResolvedInputContent;
+  delivery?: 'send' | 'queue' | 'steer';
+  expectedTurnId?: string;
 }
 
 export interface ApprovalDecision {
@@ -91,8 +95,8 @@ type AdapterEventBody =
   | { type: 'permissions'; observation: NativePermissionObservation }
   | { type: 'history'; nativeId: string; records: NativeHistoryRecord[] }
   | { type: 'item.start'; itemKey: string; kind: EventKind; data: unknown; nativeTurnId?: string; /** @deprecated use nativeTurnId */ turnId?: string; native?: unknown }
-  | { type: 'item.delta'; itemKey: string; field: 'text' | 'output'; append: string }
-  | { type: 'item.update'; itemKey: string; data: unknown }
+  | { type: 'item.delta'; itemKey: string; field: 'text' | 'output'; append: string; nativeTurnId?: string }
+  | { type: 'item.update'; itemKey: string; data: unknown; nativeTurnId?: string }
   | { type: 'item.complete'; itemKey: string; kind: EventKind; data: unknown; nativeTurnId?: string; /** @deprecated use nativeTurnId */ turnId?: string; native?: unknown; nativeSeq?: number }
   | { type: 'item.cancel'; itemKey: string; nativeTurnId?: string; turnId?: string; native?: unknown }
   | { type: 'turn.start'; nativeTurnId?: string; native?: unknown }
@@ -135,6 +139,8 @@ export interface AgentAdapter {
   create(opts: CreateOpts): Promise<{ nativeId: string }>;
   resume(opts: CreateOpts & { nativeId: string }): Promise<void>;
   send(sessionId: string, input: UserInput): Promise<void>;
+  validateInput?(sessionId: string, input: UserInput): Promise<void>;
+  resolveInputSkill?(sessionId: string, selection: InputSkillPart): Promise<{ path: string }>;
   steer?(sessionId: string, input: UserInput): Promise<void>;
   interrupt(sessionId: string): Promise<void>;
   respond(sessionId: string, d: ApprovalDecision): Promise<void | NativeInteractionSubmission>;

@@ -68,7 +68,7 @@ export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, tok
   manager.setHooks({
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),
-    onDelta: (sessionId, itemKey, field, append) => hub.broadcastDelta(sessionId, itemKey, field, append),
+    onDelta: (sessionId, itemKey, field, append, turnId) => hub.broadcastDelta(sessionId, itemKey, field, append, turnId),
     onUpdate: (sessionId, itemKey, data, turnId) => hub.broadcastUpdate(sessionId, itemKey, data, turnId),
     onStatus: () => undefined,
   });

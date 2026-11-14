@@ -18,11 +18,19 @@ import type { CommandDispatcher, DispatchResult } from './dispatcher.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
 
+interface PendingDelta {
+  sessionId: string;
+  itemKey: string;
+  field: 'text' | 'output';
+  chunks: string[];
+  turnId?: string | null;
+}
+
 interface ClientState {
   id: string;
   socket: WebSocket;
   subs: Map<string, { afterSeq: number }>;
-  pendingDeltas: Map<string, { sessionId: string; itemKey: string; field: 'text' | 'output'; chunks: string[] }>;
+  pendingDeltas: Map<string, PendingDelta>;
   /** WebSocket message handlers are concurrent; serialize commands per client so a
    * model/access change is applied before the following send command. */
   commandQueue: Promise<void>;
@@ -183,6 +191,7 @@ export class LiveHub {
       turnId: item.turnId,
     }));
     const snapshot: SnapshotMessage = { op: 'snapshot', sessionId, items };
+    this.flushClientDeltas(client, pending => pending.sessionId === sessionId);
     this.send(client, snapshot);
   }
 
@@ -196,25 +205,33 @@ export class LiveHub {
   broadcastEvent(event: StoredEvent): void {
     const message: EventMessage = { op: 'event', event };
     for (const client of this.clients) {
-      if (client.subs.has(event.sessionId)) this.send(client, message);
+      if (client.subs.has(event.sessionId)) {
+        this.flushClientDeltas(client, pending => pending.sessionId === event.sessionId && pending.turnId === event.turnId &&
+          (pending.itemKey === event.itemKey || event.kind === 'turn.completed'));
+        this.send(client, message);
+      }
     }
   }
 
   broadcastUpdate(sessionId: string, itemKey: string, data: unknown, turnId?: string | null): void {
     const message: UpdateMessage = { op: 'update', sessionId, itemKey, data, ...(turnId === undefined ? {} : { turnId }) };
     for (const client of this.clients) {
-      if (client.subs.has(sessionId)) this.send(client, message);
+      if (client.subs.has(sessionId)) {
+        this.flushClientDeltas(client, pending => pending.sessionId === sessionId && pending.itemKey === itemKey &&
+          (turnId === undefined || pending.turnId === turnId));
+        this.send(client, message);
+      }
     }
   }
 
   /** 流式增量按 itemKey 每 50 ms 合并一次（SPEC 7.2） */
-  broadcastDelta(sessionId: string, itemKey: string, field: 'text' | 'output', append: string): void {
+  broadcastDelta(sessionId: string, itemKey: string, field: 'text' | 'output', append: string, turnId?: string | null): void {
     for (const client of this.clients) {
       if (!client.subs.has(sessionId)) continue;
-      const key = `${sessionId}\u0000${itemKey}\u0000${field}`;
+      const key = JSON.stringify([sessionId, turnId ?? null, itemKey, field]);
       const existing = client.pendingDeltas.get(key);
       if (existing === undefined) {
-        client.pendingDeltas.set(key, { sessionId, itemKey, field, chunks: [append] });
+        client.pendingDeltas.set(key, { sessionId, itemKey, field, chunks: [append], ...(turnId === undefined ? {} : { turnId }) });
       } else {
         existing.chunks.push(append);
       }
@@ -223,18 +240,23 @@ export class LiveHub {
 
   private flushDeltas(): void {
     for (const client of this.clients) {
-      if (client.pendingDeltas.size === 0) continue;
-      for (const pending of client.pendingDeltas.values()) {
-        const message: DeltaMessage = {
-          op: 'delta',
-          sessionId: pending.sessionId,
-          itemKey: pending.itemKey,
-          field: pending.field,
-          append: pending.chunks.join(''),
-        };
-        this.send(client, message);
-      }
-      client.pendingDeltas.clear();
+      this.flushClientDeltas(client, () => true);
+    }
+  }
+
+  private flushClientDeltas(client: ClientState, matches: (pending: PendingDelta) => boolean): void {
+    for (const [key, pending] of client.pendingDeltas) {
+      if (!matches(pending)) continue;
+      const message: DeltaMessage = {
+        op: 'delta',
+        sessionId: pending.sessionId,
+        itemKey: pending.itemKey,
+        field: pending.field,
+        append: pending.chunks.join(''),
+        ...(pending.turnId === undefined ? {} : { turnId: pending.turnId }),
+      };
+      this.send(client, message);
+      client.pendingDeltas.delete(key);
     }
   }
 
