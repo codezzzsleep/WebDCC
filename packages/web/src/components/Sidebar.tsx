@@ -105,6 +105,7 @@ export function Sidebar({
 
       <nav className="sidebar-nav">
         <Link to="/settings/capabilities" className="nav-item" activeProps={{ className: 'nav-item active' }} onClick={() => onNavigate?.()}><Icon name="listChecks" />原生能力</Link>
+        <Link to="/settings/native-events" search={{ sessionId: undefined }} className="nav-item" activeProps={{ className: 'nav-item active' }} onClick={() => onNavigate?.()}><Icon name="listChecks" />原生记录</Link>
         <Link
           to="/settings/providers"
           className={`nav-item ${settingsActive ? 'active' : ''}`}

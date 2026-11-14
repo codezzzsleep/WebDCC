@@ -2,6 +2,8 @@
 import type { EventKind, UsageData } from './events.js';
 import type { TraceSink } from './trace.js';
 import type { AccessModeOption, NativePermissionObservation } from './permissions.js';
+import type { RuntimeIdentity } from './runtime.js';
+import type { NativeFrameSink } from './native-events.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -36,6 +38,8 @@ export interface CreateOpts {
   providerId: string | null;
   /** providerId 对应的解析结果；null = 原生登录/原生配置 */
   provider?: ProviderRuntimeConfig | null;
+  runtime?: RuntimeIdentity;
+  nativeEvents?: NativeFrameSink;
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
@@ -74,7 +78,8 @@ export interface LaunchSpec {
   startParams?: Record<string, unknown>;
 }
 
-export type AdapterEvent =
+type AdapterEventBody =
+  | { type: 'transport.closed'; reason: string; activeWork: boolean; native?: unknown }
   | { type: 'permissions'; observation: NativePermissionObservation }
   | { type: 'history'; nativeId: string; records: NativeHistoryRecord[] }
   | { type: 'item.start'; itemKey: string; kind: EventKind; data: unknown; nativeTurnId?: string; /** @deprecated use nativeTurnId */ turnId?: string; native?: unknown }
@@ -88,6 +93,8 @@ export type AdapterEvent =
   | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error' }
   /** 原生 id 迟到（Claude Code 要等首条消息才有 session_id）：manager 收到后落库 */
   | { type: 'native-id'; nativeId: string };
+
+export type AdapterEvent = AdapterEventBody & { runtime?: RuntimeIdentity; nativeEnvelopeId?: number };
 
 export interface NativeHistoryRecord {
   nativeSeq: number;
@@ -136,4 +143,6 @@ export interface AgentAdapter {
   interruptSubagent?(sessionId: string, childSessionId: string): Promise<void>;
   dispose(sessionId: string): Promise<void>;
   onEvent(cb: (sessionId: string, e: AdapterEvent) => void): void;
+  /** Bind transport-free handlers and adapter lifecycle callbacks before activation. */
+  bindRuntime?(sessionId: string, identity: RuntimeIdentity): void;
 }

@@ -109,6 +109,36 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   });
 
   app.get('/api/watchdog', async () => manager.watchdog.view());
+  app.get('/api/native-events', async request => {
+    const query = request.query as { sessionId?: string; after?: string; limit?: string };
+    const after = Number(query.after ?? 0); const limit = Number(query.limit ?? 50);
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw badRequest('记录分页参数无效');
+    const records = store.nativeEvents.list(query.sessionId, after, limit);
+    return { records, next: records.at(-1)?.id ?? after, projectionVersion: 1 };
+  });
+  app.get('/api/native-events/:id', async request => {
+    const id = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(id) || id < 1) throw badRequest('原生记录 ID 无效');
+    const record = store.nativeEvents.get(id);
+    if (record === undefined) throw Object.assign(new Error('原生记录不存在'), { statusCode: 404 });
+    return record;
+  });
+  app.get('/api/sessions/:id/events/:seq/evidence', async request => {
+    const { id, seq: value } = request.params as { id: string; seq: string };
+    const seq = Number(value);
+    if (!Number.isSafeInteger(seq) || seq < 1) throw badRequest('Web 事件序号无效');
+    manager.requireSession(id);
+    const event = store.listEvents(id, { after: seq - 1, limit: 1 })[0];
+    if (event === undefined || event.seq !== seq) throw Object.assign(new Error('Web 事件不存在'), { statusCode: 404 });
+    return { event: { ...event, data: store.nativeEvents.diagnosticValue(event.data),
+      ...(event.native === undefined ? {} : { native: store.nativeEvents.diagnosticValue(event.native) }) },
+      envelope: event.nativeEnvelopeId === undefined ? null : store.nativeEvents.get(event.nativeEnvelopeId) ?? null };
+  });
+  app.get('/api/sessions/:id/runtime', async request => {
+    const { id } = request.params as { id: string };
+    manager.requireSession(id);
+    return { owner: store.nativeOwners.get(id) ?? null };
+  });
   app.patch('/api/watchdog', async (request) => {
     try { return manager.watchdog.configure(request.body); }
     catch (error) { throw badRequest(error instanceof Error ? error.message : '无效 Watchdog 设置'); }

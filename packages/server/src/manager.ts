@@ -11,7 +11,9 @@ import type {
   StoredEvent,
   UserInput,
   AnswerSubmission,
+  RuntimeIdentity,
 } from '@webdcc/protocol';
+import { randomUUID } from 'node:crypto';
 import { initialPermissions, nativeAccessMode, observePermissions, ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
@@ -32,6 +34,7 @@ export interface HotItem {
 }
 
 export interface Runtime {
+  identity: RuntimeIdentity;
   sessionId: string;
   adapter: AgentAdapter;
   workspacePath: string;
@@ -46,6 +49,7 @@ export interface Runtime {
   finishAction: (() => void) | null;
   queued: { turnId: string; input: UserInput; clientCommandId?: string }[];
   disposing: boolean;
+  ownershipTimer: NodeJS.Timeout | null;
 }
 
 export interface ManagerHooks {
@@ -65,6 +69,7 @@ export class SessionManager {
   private readonly activationStops = new Set<string>();
   private readonly controls = new Map<string, Promise<unknown>>();
   private readonly uncertainSessions = new Set<string>();
+  private readonly ownerId = randomUUID();
   private hooks: ManagerHooks = {
     onFeed: () => undefined,
     onEvent: () => undefined,
@@ -85,11 +90,13 @@ export class SessionManager {
       modelRecording?: ModelRecording;
     },
   ) {
-    this.store.journal.recover();
-    for (const row of this.store.interactions.recover()) this.persistInteractionSubmission(row, 'uncertain');
+    const recoverable = new Set(this.store.nativeOwners.recoverableSessions());
+    this.store.journal.recover([...recoverable]);
+    for (const row of this.store.interactions.recover([...recoverable])) this.persistInteractionSubmission(row, 'uncertain');
     // An unfinished legacy turn has no verifiable native outcome. Preserve it
     // and prevent new sends until native reconciliation establishes ownership.
     for (const session of this.store.listSessions(true)) {
+      if (!recoverable.has(session.id)) continue;
       if (session.permissions !== undefined && session.permissions.phase !== 'failed') {
         const permissions = { ...session.permissions, phase: 'unknown' as const, revision: session.permissions.revision + 1 };
         this.store.updateSessionAndFeed(session.id, { permissions, touch: false }, { permissions });
@@ -111,6 +118,8 @@ export class SessionManager {
     }
     this.watchdog = new CodexWatchdog(store, {
       isActive: (id) => {
+        const owner = this.store.nativeOwners.get(id);
+        if (owner !== undefined && owner.ownerId !== this.ownerId && (owner.state === 'opening' || owner.state === 'active')) return true;
         const runtime = this.runtimes.get(id);
         const unanswered = this.store.allEvents(id).filter((event) => event.kind === 'question');
         const lastQuestions = new Map(unanswered.map((event) => [(event.data as EventData['question']).questionId, event.data as EventData['question']]));
@@ -134,11 +143,28 @@ export class SessionManager {
 
   registerAdapter(adapter: AgentAdapter): void {
     this.adapters.set(adapter.id, adapter);
-    adapter.onEvent((sessionId, event) => this.handleAdapterEvent(sessionId, event));
+    adapter.onEvent((sessionId, event) => this.handleAdapterEvent(sessionId, event, adapter));
     if (adapter.id === 'codex') this.watchdog.start();
   }
 
   private async prepareLaunch<T extends CreateOpts>(session: SessionDto, opts: T): Promise<T> {
+    const runtime = this.runtimes.get(session.id);
+    if (runtime === undefined) throw new Error('原生实例尚未绑定运行身份');
+    this.store.nativeEvents.addSecret(opts.provider?.apiKey);
+    opts = { ...opts, runtime: runtime.identity, nativeEvents: { record: frame => {
+      try {
+        const accepted = !runtime.disposing && this.runtimes.get(session.id) === runtime && this.store.nativeOwners.current(session.id, runtime.identity);
+        const envelopeId = this.store.nativeEvents.frame({ sessionId: session.id, agent: session.agent, nativeId: runtime.nativeId, identity: runtime.identity }, frame, accepted);
+        if (accepted && frame.dir === 'in') {
+          const record = this.store.nativeEvents.get(envelopeId);
+          this.store.nativeOwners.observe(session.id, runtime.identity, this.store.nativeOwners.get(session.id)?.activeNativeTurnId ?? null, record?.nativeSeq ?? undefined);
+        }
+        return { envelopeId, accepted };
+      } catch {
+        this.fenceRuntime(runtime);
+        return { envelopeId: 0, accepted: false };
+      }
+    } } };
     if (opts.accessMode === 'inherit') { const { accessMode: _accessMode, ...rest } = opts; void _accessMode; opts = rest as T; }
     const recorder = this.options.recorder;
     if (recorder === undefined) return opts;
@@ -221,18 +247,26 @@ export class SessionManager {
     });
 
     const provider = this.options.resolveProvider?.(input.providerId ?? null) ?? null;
-    this.ensureRuntime(session, adapter, workspace.path, '');
-    let created: { nativeId: string };
+    const opening = this.ensureRuntime(session, adapter, workspace.path, '');
+    let created: { nativeId: string } | undefined;
     try {
-      created = await adapter.create(await this.prepareLaunch(session, {
-        sessionId: session.id,
-        cwd: workspace.path,
-        providerId: input.providerId ?? null,
-        provider,
-        ...(input.model === undefined ? {} : { model: input.model }),
-        ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
-        ...(accessMode === undefined ? {} : { accessMode }),
-      }));
+      const activation = (async () => {
+        created = await adapter.create(await this.prepareLaunch(session, {
+          sessionId: session.id,
+          cwd: workspace.path,
+          providerId: input.providerId ?? null,
+          provider,
+          ...(input.model === undefined ? {} : { model: input.model }),
+          ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
+          ...(accessMode === undefined ? {} : { accessMode }),
+        }));
+        if (typeof created?.nativeId !== 'string') throw new Error('原生会话返回缺少有效身份');
+        this.assertOwner(opening);
+        this.store.nativeOwners.activate(session.id, opening.identity, created.nativeId || opening.nativeId);
+        return opening;
+      })();
+      this.activations.set(session.id, activation);
+      try { await activation; } finally { if (this.activations.get(session.id) === activation) this.activations.delete(session.id); }
     } catch (error) {
       await this.dispose(session.id);
       await this.options.modelRecording?.close(session.id);
@@ -241,12 +275,14 @@ export class SessionManager {
       throw error;
     }
 
+    if (created === undefined) throw new Error('原生会话初始化未完成');
+    const createdNativeId = created.nativeId || opening.nativeId;
     const updated =
-      created.nativeId === ''
-        ? session
-        : this.store.updateSession(session.id, { nativeId: created.nativeId });
-    if (created.nativeId !== '') this.options.recorder?.nativeId(session.id, created.nativeId);
-    const runtime = this.ensureRuntime(updated as SessionDto, adapter, workspace.path, created.nativeId);
+      createdNativeId === ''
+        ? this.requireSession(session.id)
+        : this.store.updateSession(session.id, { nativeId: createdNativeId });
+    if (createdNativeId !== '') this.options.recorder?.nativeId(session.id, createdNativeId);
+    const runtime = this.ensureRuntime(updated as SessionDto, adapter, workspace.path, createdNativeId);
     this.touchIdle(runtime);
     const createPatch: FeedPatch = {
       created: true,
@@ -270,9 +306,12 @@ export class SessionManager {
 
   private ensureRuntime(session: SessionDto, adapter: AgentAdapter, workspacePath: string, nativeId: string): Runtime {
     const existing = this.runtimes.get(session.id);
-    if (existing !== undefined) { if (nativeId !== '') existing.nativeId = nativeId; return existing; }
+    if (existing !== undefined) { this.assertOwner(existing); if (nativeId !== '') existing.nativeId = nativeId; return existing; }
+    const identity = this.store.nativeOwners.acquire(this.ownerId, session.id, session.agent as AgentId, nativeId);
+    adapter.bindRuntime?.(session.id, identity);
     const journal = this.store.journal;
     const runtime: Runtime = {
+      identity,
       sessionId: session.id,
       adapter,
       workspacePath,
@@ -286,8 +325,14 @@ export class SessionManager {
       finishAction: null,
       get queued() { return journal.queue(session.id).filter(row => row.state === 'queued').map(row => ({ turnId: row.turnId, input: row.input, clientCommandId: row.commandId })); },
       disposing: false,
+      ownershipTimer: null,
     };
     this.runtimes.set(session.id, runtime);
+    runtime.ownershipTimer = setInterval(() => {
+      try { if (this.runtimes.get(session.id) === runtime && !this.store.nativeOwners.renew(session.id, identity)) this.fenceRuntime(runtime); }
+      catch { this.fenceRuntime(runtime); }
+    }, 10_000);
+    runtime.ownershipTimer.unref();
     return runtime;
   }
 
@@ -297,7 +342,7 @@ export class SessionManager {
     if (existing !== undefined) return existing;
     const pending = this.activate(session, workspacePath);
     this.activations.set(session.id, pending);
-    try { return await pending; } finally { this.activations.delete(session.id); this.activationStops.delete(session.id); }
+    try { const ready = await pending; this.assertOwner(ready); return ready; } finally { if (this.activations.get(session.id) === pending) this.activations.delete(session.id); this.activationStops.delete(session.id); }
   }
 
   private async activate(session: SessionDto, workspacePath: string): Promise<Runtime> {
@@ -319,6 +364,8 @@ export class SessionManager {
       ...(accessMode === undefined ? {} : { accessMode }),
       nativeId: session.nativeId,
     })); } catch (error) { await this.dispose(session.id); throw error; }
+    this.assertOwner(runtime);
+    this.store.nativeOwners.activate(session.id, runtime.identity, session.nativeId);
     if (this.activationStops.delete(session.id)) {
       await runtime.adapter.interrupt(session.id);
       await runtime.adapter.cancelPending?.(session.id);
@@ -358,6 +405,7 @@ export class SessionManager {
   }
 
   private async startTurn(runtime: Runtime, turnId: string, input: UserInput, clientCommandId?: string): Promise<void> {
+    this.assertOwner(runtime);
     const sessionId = runtime.sessionId;
     const session = this.store.getSession(sessionId);
     if (session === undefined) throw new Error('会话不存在');
@@ -405,11 +453,13 @@ export class SessionManager {
 
     try {
       await runtime.adapter.send(sessionId, { ...input, nativeRequestId: clientCommandId ?? turnId });
+      this.assertOwner(runtime);
       if (this.store.journal.queue(sessionId).some(row => row.turnId === turnId)) this.store.journal.inputState(turnId, 'native-accepted');
       this.queueChanged(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.finishTurn(runtime, 'failed', `native-outcome-uncertain: ${message}`);
+      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing) this.finishTurn(runtime, 'failed', `native-outcome-uncertain: ${message}`);
+      else this.store.journal.inputState(turnId, 'uncertain');
       throw error;
     }
     if (runtime.turnId === turnId) this.refreshInteractionStatus(runtime);
@@ -425,7 +475,7 @@ export class SessionManager {
     if (!(JSON.parse(pending.request) as Pick<EventData['approval.request'], 'options'>).options.some(option => option.id === decision.optionId)) throw Object.assign(new Error('审批选项无效'), { statusCode: 400 });
     const claim = this.store.interactions.claim(sessionId, 'approve', decision.approvalId, commandId);
     let confirmed: boolean;
-    try { const result = await runtime.adapter.respond(sessionId, decision); confirmed = result?.confirmed !== false; } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
+    try { const result = await runtime.adapter.respond(sessionId, decision); this.assertOwner(runtime); confirmed = result?.confirmed !== false; } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
     if (!confirmed) { if (this.store.interactions.finish(claim, false, false)) this.persistInteractionSubmission(claim, 'sent'); this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return; }
     if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return; }
     const resolvedTurn = runtime.turnId;
@@ -448,7 +498,7 @@ export class SessionManager {
     if (runtime.adapter.answer === undefined) throw Object.assign(new Error('该 Agent 不支持回答问题'), { statusCode: 400 });
     const claim = this.store.interactions.claim(sessionId, 'answer', questionId, commandId);
     let result: void | AnswerSubmission;
-    try { result = await runtime.adapter.answer(sessionId, questionId, answer); } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
+    try { result = await runtime.adapter.answer(sessionId, questionId, answer); this.assertOwner(runtime); } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
     if (result?.submitted === false) { if (this.store.interactions.finish(claim, true)) this.persistInteractionSubmission(claim, 'collected'); return result; }
     if (result?.confirmed === false) { if (this.store.interactions.finish(claim, false, false)) for (const row of this.store.interactions.group(claim)) this.persistInteractionSubmission(row, 'sent'); this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result; }
     if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result ?? { submitted: true, questionIds: [questionId] }; }
@@ -503,6 +553,7 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.interrupt(sessionId);
+    this.assertOwner(runtime);
     // 打断时把本会话挂起的审批标成已取消（只处理自己的会话，AG-*-09）
     await runtime.adapter.cancelPending?.(sessionId);
     for (const approvalId of this.pendingApprovalIds(sessionId)) {
@@ -550,6 +601,7 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.setModel !== undefined) await runtime.adapter.setModel(sessionId, model);
+    this.assertOwner(runtime);
     // 推给所有客户端：否则输入框里的模型胶囊要等刷新才变
     this.updateSessionAndFeed(sessionId, { model }, { model });
   }
@@ -567,6 +619,7 @@ export class SessionManager {
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.sendSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持继续子 Agent'), { statusCode: 400 });
     await runtime.adapter.sendSubagent(sessionId, childSessionId, text);
+    this.assertOwner(runtime);
   }
 
   async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
@@ -575,6 +628,7 @@ export class SessionManager {
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.interruptSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持打断子 Agent'), { statusCode: 400 });
     await runtime.adapter.interruptSubagent(sessionId, childSessionId);
+    this.assertOwner(runtime);
   }
 
   async setReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
@@ -586,6 +640,7 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await runtime.adapter.setReasoningEffort?.(sessionId, reasoningEffort);
+    this.assertOwner(runtime);
     this.updateSessionAndFeed(sessionId, { reasoningEffort }, { reasoningEffort });
   }
 
@@ -599,6 +654,7 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     await this.assertAccessMode(runtime.adapter, mode);
+    this.assertOwner(runtime);
     const previous = this.requireSession(sessionId).permissions ?? initialPermissions(session.accessMode);
     const requested = { ...previous, requested: nativeAccessMode(mode) ?? null, phase: 'pending' as const, error: undefined, revision: previous.revision + 1 };
     this.updateSessionAndFeed(sessionId, { accessMode: mode, permissions: requested }, { accessMode: mode, permissions: requested });
@@ -606,8 +662,10 @@ export class SessionManager {
     try {
     if (runtime.adapter.setAccessMode === undefined) throw Object.assign(new Error('该 Agent 不支持权限切换'), { statusCode: 400 });
       const result = await runtime.adapter.setAccessMode(sessionId, mode);
+      this.assertOwner(runtime);
       if (result !== undefined && typeof result.accessMode === 'string') applied = result.accessMode;
     } catch (error) {
+      if (!this.store.nativeOwners.current(sessionId, runtime.identity)) throw error;
       const current = this.requireSession(sessionId).permissions ?? requested;
       if (current.requested === requested.requested) {
         const failed = { ...current, phase: 'failed' as const, error: error instanceof Error ? error.message : String(error), revision: current.revision + 1 };
@@ -648,16 +706,37 @@ export class SessionManager {
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
     runtime.disposing = true;
+    if (runtime.ownershipTimer !== null) clearInterval(runtime.ownershipTimer);
     if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
     if (runtime.finishTimer !== null) clearTimeout(runtime.finishTimer);
     runtime.finishTimer = null;
+    const confirmedFinish = runtime.finishAction;
     runtime.finishAction = null;
-    if (runtime.turnId !== null) this.finishTurn(runtime, 'interrupted', 'session-disposed');
-    await runtime.adapter.dispose(sessionId);
-    await this.options.modelRecording?.close(sessionId);
-    this.runtimes.delete(sessionId);
+    confirmedFinish?.();
+    this.store.nativeOwners.close(sessionId, runtime.identity);
+    if (runtime.turnId !== null) {
+      const turnId = runtime.turnId;
+      this.store.journal.inputState(turnId, 'uncertain');
+      this.uncertainSessions.add(sessionId);
+      this.turns.forceClose(sessionId, 'failed');
+      runtime.turnId = null;
+      runtime.hot.clear();
+      const event = this.store.appendEvent({ sessionId, turnId, itemKey: `runtime-unobserved-${turnId}`, kind: 'notice',
+        data: { level: 'warning', text: '运行通道已关闭，原生轮次的结果待核对；已接受输入保留。', nativeType: 'runtime-unobserved' } });
+      this.hooks.onEvent(event);
+    }
+    try {
+      await runtime.adapter.dispose(sessionId);
+      await this.options.modelRecording?.close(sessionId);
+      this.store.nativeOwners.release(sessionId, runtime.identity, true);
+    } catch (error) {
+      this.store.nativeOwners.release(sessionId, runtime.identity, false);
+      this.setStatus(runtime, 'error');
+      throw error;
+    }
+    if (this.runtimes.get(sessionId) === runtime) this.runtimes.delete(sessionId);
     // 回收之后状态回到空闲，否则界面上会一直显示"停止"（AG-*-11）
-    this.setStatus(runtime, this.store.journal.queue(sessionId).some(row => row.state === 'uncertain') ? 'error' : 'idle');
+    this.setStatus(runtime, this.uncertainSessions.has(sessionId) || this.store.journal.queue(sessionId).some(row => row.state === 'uncertain') ? 'error' : 'idle');
   }
 
   async disposeAll(): Promise<void> {
@@ -698,12 +777,35 @@ export class SessionManager {
     return undefined;
   }
 
-  private handleAdapterEvent(sessionId: string, event: AdapterEvent): void {
-    this.options.recorder?.observeFiles(sessionId, event);
+  private handleAdapterEvent(sessionId: string, event: AdapterEvent, source?: AgentAdapter): void {
     this.options.recorder?.record(sessionId, 'mapped', event.type, event, 'in');
-    if (event.type === 'native-id') this.options.recorder?.nativeId(sessionId, event.nativeId);
     const runtime = this.runtimes.get(sessionId);
-    if (runtime === undefined) return;
+    const mismatch = runtime !== undefined && event.runtime !== undefined && (event.runtime.ownerId !== runtime.identity.ownerId || event.runtime.generation !== runtime.identity.generation || event.runtime.hostId !== runtime.identity.hostId);
+    let disposition: string;
+    let envelope: { id: number; duplicate: boolean };
+    try {
+      disposition = runtime === undefined ? 'unowned' : source !== undefined && source !== runtime.adapter ? 'source-mismatch'
+        : runtime.disposing || !this.store.nativeOwners.current(sessionId, runtime.identity) || mismatch ? 'stale-generation' : 'accepted';
+      envelope = this.store.nativeEvents.mapping({ sessionId, agent: source?.id ?? runtime?.adapter.id ?? 'unknown',
+        nativeId: runtime?.nativeId, identity: event.runtime ?? runtime?.identity }, event, disposition);
+    } catch { if (runtime !== undefined) this.fenceRuntime(runtime); return; }
+    if (runtime === undefined || disposition !== 'accepted') return;
+    if (envelope.duplicate) { if (event.type === 'item.complete') runtime.hot.delete(event.itemKey); return; }
+    this.options.recorder?.observeFiles(sessionId, event);
+    if (event.type === 'native-id') this.options.recorder?.nativeId(sessionId, event.nativeId);
+    if (event.type === 'transport.closed') {
+      if (!event.activeWork && (runtime.turnId === null || runtime.finishAction !== null)) { void this.dispose(sessionId).catch(() => undefined); return; }
+      const turnId = runtime.turnId;
+      if (turnId !== null) this.store.journal.inputState(turnId, 'uncertain');
+      this.uncertainSessions.add(sessionId);
+      const notice = this.store.appendEvent({ sessionId, turnId, itemKey: `transport-closed-${envelope.id}`, kind: 'notice', nativeEnvelopeId: envelope.id,
+        data: { level: 'warning', text: '原生运行通道中断，执行结果待核对，已接受输入保留。', nativeType: event.reason } });
+      this.hooks.onEvent(notice);
+      this.updateSessionAndFeed(sessionId, { status: 'error' }, { status: 'error' });
+      this.fenceRuntime(runtime);
+      return;
+    }
+    if (event.type === 'turn.start') this.store.nativeOwners.observe(sessionId, runtime.identity, event.nativeTurnId ?? null);
     if (event.type === 'permissions') {
       const session = this.requireSession(sessionId);
       const permissions = observePermissions(session.permissions ?? initialPermissions(session.accessMode), event.observation);
@@ -803,11 +905,12 @@ export class SessionManager {
         const duplicateStart = event.kind === 'turn.started' && turnId !== null && this.store.allEvents(sessionId).some((candidate) => candidate.turnId === turnId && candidate.kind === 'turn.started');
         const kind = duplicateStart ? 'internal' : event.kind;
         const stored = this.store.appendEvent({
+          nativeEnvelopeId: envelope.id,
           sessionId,
           turnId,
           itemKey: event.itemKey,
           kind,
-          data: (kind === 'internal' ? { nativeType: 'turn.started' } : completeData) as EventData[EventKind],
+          data: (duplicateStart ? { nativeType: 'turn.started' } : completeData) as EventData[EventKind],
           ...(event.native === undefined ? {} : { native: event.native }),
           ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
           ...(assignment.late ? { late: true } : {}),
@@ -835,7 +938,7 @@ export class SessionManager {
         break;
       }
       case 'turn.end': {
-        if (turnId !== null) this.finishTurn(runtime, event.status, undefined, undefined, event.usage, event.native);
+        if (turnId !== null) this.finishTurn(runtime, event.status, undefined, undefined, event.usage, event.native, envelope.id);
         break;
       }
       case 'status': {
@@ -848,6 +951,7 @@ export class SessionManager {
       }
       case 'native-id': {
         runtime.nativeId = event.nativeId;
+        this.store.nativeOwners.activate(sessionId, runtime.identity, event.nativeId);
         this.store.updateSession(sessionId, { nativeId: event.nativeId });
         break;
       }
@@ -862,16 +966,17 @@ export class SessionManager {
     existing?: StoredEvent,
     usage?: EventData['usage'],
     native?: unknown,
+    nativeEnvelopeId?: number,
   ): void {
     // Codex can emit item/diff/status notifications just after turn/end. Keep
     // the public turn active briefly so those frames bind to this turn and a
     // refresh cannot observe a different summary from the live view.
     if (status === 'completed' && reason === undefined && existing === undefined) {
-      runtime.finishAction = () => this.finishTurnNow(runtime, status, reason, existing, usage, native);
+      runtime.finishAction = () => this.finishTurnNow(runtime, status, reason, existing, usage, native, nativeEnvelopeId);
       this.armFinishTimer(runtime);
       return;
     }
-    this.finishTurnNow(runtime, status, reason, existing, usage, native);
+    this.finishTurnNow(runtime, status, reason, existing, usage, native, nativeEnvelopeId);
   }
 
   private finishTurnNow(
@@ -881,6 +986,7 @@ export class SessionManager {
     existing?: StoredEvent,
     usage?: EventData['usage'],
     native?: unknown,
+    nativeEnvelopeId?: number,
   ): void {
     const turnId = runtime.turnId;
     if (turnId === null) return;
@@ -894,6 +1000,7 @@ export class SessionManager {
     if (existing === undefined) {
       const event = this.store.appendEvent({
         sessionId: runtime.sessionId,
+        nativeEnvelopeId,
         turnId,
         itemKey: `turn-end-${turnId}`,
         kind: 'turn.completed',
@@ -912,6 +1019,7 @@ export class SessionManager {
     this.options.recorder?.turn(runtime.sessionId, null);
     this.turns.end(runtime.sessionId, turnId, status);
     runtime.turnId = null;
+    if (this.store.nativeOwners.current(runtime.sessionId, runtime.identity)) this.store.nativeOwners.observe(runtime.sessionId, runtime.identity, null);
     this.store.journal.inputState(turnId, reason === 'session-disposed' || reason?.startsWith('native-outcome-uncertain:') ? 'uncertain' : status === 'failed' ? 'failed' : 'completed');
     this.queueChanged(runtime.sessionId);
     runtime.turnStartedAt = null;
@@ -945,6 +1053,8 @@ export class SessionManager {
   }
 
   private setStatus(runtime: Runtime, status: SessionDto['status']): void {
+    const owner = this.store.nativeOwners.get(runtime.sessionId);
+    if (owner?.ownerId !== runtime.identity.ownerId || owner.generation !== runtime.identity.generation) return;
     if (runtime.status === status) return;
     runtime.status = status;
     const result = this.updateSessionAndFeed(runtime.sessionId, { status }, { status });
@@ -955,6 +1065,7 @@ export class SessionManager {
 
   private touchIdle(runtime: Runtime): void {
     if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
+    if (runtime.disposing || this.runtimes.get(runtime.sessionId) !== runtime) return;
     if (this.options.idleDisposeMin <= 0) return;
     runtime.idleTimer = setTimeout(() => {
       if (runtime.status !== 'idle') return;
@@ -964,6 +1075,18 @@ export class SessionManager {
   }
 
   // ---------- helpers ----------
+  private assertOwner(runtime: Runtime): void {
+    if (runtime.disposing || this.runtimes.get(runtime.sessionId) !== runtime) throw Object.assign(new Error('原生运行实例正在关闭或已替换'), { statusCode: 409, code: 'uncertain' });
+    this.store.nativeOwners.assert(runtime.sessionId, runtime.identity);
+  }
+
+  private fenceRuntime(runtime: Runtime): void {
+    if (runtime.ownershipTimer !== null) clearInterval(runtime.ownershipTimer);
+    try { this.store.nativeOwners.release(runtime.sessionId, runtime.identity, false); } catch { /* storage unavailable */ }
+    runtime.disposing = true;
+    runtime.status = 'error';
+    void runtime.adapter.dispose(runtime.sessionId).catch(() => undefined);
+  }
 
   queueChanged(sessionId: string): void {
     const patch = { queueRevision: Date.now() };

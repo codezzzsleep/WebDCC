@@ -16,6 +16,7 @@ import type {
   AccessModeOption,
   NativePermissionObservation,
   NativeInteractionSubmission,
+  RuntimeIdentity,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -49,6 +50,8 @@ interface PendingApproval {
 }
 
 interface SessionRuntime {
+  identity?: RuntimeIdentity;
+  envelopeId?: number;
   permissions?: NativePermissionObservation;
   nativeId: string;
   pid: number;
@@ -478,7 +481,16 @@ export class CodexAdapter implements AgentAdapter {
     this.listeners.push(cb);
   }
 
+  bindRuntime(sessionId: string, identity: RuntimeIdentity): void {
+    const runtime = this.sessions.get(sessionId);
+    if (runtime !== undefined) runtime.identity = identity;
+  }
+
   private emit(sessionId: string, event: AdapterEvent): void {
+    const current = this.sessions.get(sessionId);
+    const identity = current?.identity;
+    if (identity !== undefined) event = { ...event, runtime: identity };
+    if (current?.envelopeId !== undefined) event = { ...event, nativeEnvelopeId: current.envelopeId };
     if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
       const degraded: AdapterEvent = {
         type: 'item.complete',
@@ -486,6 +498,8 @@ export class CodexAdapter implements AgentAdapter {
         kind: 'unknown',
         data: { nativeType: event.kind },
         native: event.native ?? event.data,
+        runtime: event.runtime,
+        nativeEnvelopeId: event.nativeEnvelopeId,
       };
       for (const listener of this.listeners) listener(sessionId, degraded);
       return;
@@ -601,10 +615,16 @@ export class CodexAdapter implements AgentAdapter {
       args: spec.args ?? [],
       cwd: opts.cwd,
       env: { ...(this.options.env ?? process.env), ...spec.env },
-      onFrame: (direction, frame) => traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++traceIndex, t: this.now() - traceStarted, dir: direction, ch: 'rpc', frame }),
+      onFrame: (direction, frame) => {
+        const observation = { i: ++traceIndex, t: this.now() - traceStarted, dir: direction, ch: 'rpc', frame };
+        const receipt = opts.nativeEvents?.record(observation);
+        if (runtimeRef.current !== undefined) runtimeRef.current.envelopeId = receipt?.envelopeId;
+        traceFrame(this.options.traceSink ?? opts.traceSink, observation);
+        return receipt?.accepted !== false;
+      },
       onExit: () => {
         if (this.sessions.get(sessionId) !== runtimeRef.current) return;
-        if (runtimeRef.current?.turnId !== null && runtimeRef.current?.turnId !== undefined) this.emit(sessionId, { type: 'turn.end', nativeTurnId: runtimeRef.current.turnId, status: 'failed', native: { reason: 'process-exited' } });
+        this.emit(sessionId, { type: 'transport.closed', reason: 'process-exited', activeWork: runtimeRef.current?.turnId != null });
       },
     });
     let markReady: () => void = () => undefined;
@@ -613,6 +633,7 @@ export class CodexAdapter implements AgentAdapter {
     });
     const runtime: SessionRuntime = {
       nativeId: '',
+      identity: opts.runtime,
       pid: rpc.child.pid ?? 0,
       processToken: randomUUID(),
       ready,

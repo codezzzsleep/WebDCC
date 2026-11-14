@@ -19,6 +19,10 @@ import type {
   DshProviderUpdate,
   DshDefaultModelUpdate,
   DshSettingsPreview,
+  NativeEnvelopeSummary,
+  NativeEnvelopeDetail,
+  NativeOwnerDto,
+  StoredEvent,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -47,6 +51,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  nativeEvents: (sessionId?: string, after = 0) => request<{ records: NativeEnvelopeSummary[]; next: number; projectionVersion: number }>(`/api/native-events?after=${after}${sessionId ? `&sessionId=${encodeURIComponent(sessionId)}` : ''}`),
+  nativeEvent: (id: number) => request<NativeEnvelopeDetail>(`/api/native-events/${id}`),
+  eventEvidence: (sessionId: string, seq: number) => request<{ event: StoredEvent; envelope: NativeEnvelopeDetail | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/events/${seq}/evidence`),
+  runtime: (sessionId: string) => request<{ owner: NativeOwnerDto | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/runtime`),
   queue: (sessionId: string) => request<{ inputs: QueuedInput[]; revision: number }>(`/api/sessions/${encodeURIComponent(sessionId)}/queue`),
   cancelQueued: (sessionId: string, commandId: string) => request<void>(`/api/sessions/${encodeURIComponent(sessionId)}/queue/${encodeURIComponent(commandId)}`, { method: 'DELETE' }),
   capabilities: (workspaceId?: string) => request<CapabilitySnapshot>(`/api/capabilities${workspaceId === undefined ? '' : `?workspaceId=${encodeURIComponent(workspaceId)}`}`),

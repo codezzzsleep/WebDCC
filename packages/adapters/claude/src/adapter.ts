@@ -169,6 +169,7 @@ interface PendingInteraction {
 }
 
 interface SessionRuntime {
+  envelopeId?: number;
   turnActive: boolean;
   backgroundTasks: Map<string, string | undefined>;
   hasBackgroundSnapshot: boolean;
@@ -269,7 +270,16 @@ export class ClaudeAdapter implements AgentAdapter {
     this.listeners.push(cb);
   }
 
+  bindRuntime(sessionId: string, identity: NonNullable<CreateOpts['runtime']>): void {
+    const runtime = this.sessions.get(sessionId);
+    if (runtime !== undefined) runtime.launchOpts = { ...runtime.launchOpts, runtime: identity };
+  }
+
   private emit(sessionId: string, event: AdapterEvent): void {
+    const current = this.sessions.get(sessionId);
+    const identity = current?.launchOpts.runtime;
+    if (identity !== undefined) event = { ...event, runtime: identity };
+    if (current?.envelopeId !== undefined) event = { ...event, nativeEnvelopeId: current.envelopeId };
     // 发送前校验：不合格的完成态事件降级为 unknown（F2）
     if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
       const degraded: AdapterEvent = {
@@ -278,11 +288,20 @@ export class ClaudeAdapter implements AgentAdapter {
         kind: 'unknown',
         data: { nativeType: event.kind },
         native: event.native ?? event.data,
+        runtime: event.runtime,
+        nativeEnvelopeId: event.nativeEnvelopeId,
       };
       for (const listener of this.listeners) listener(sessionId, degraded);
       return;
     }
     for (const listener of this.listeners) listener(sessionId, event);
+  }
+
+  private observeNative(runtime: SessionRuntime, opts: CreateOpts, frame: TraceFrame): boolean {
+    const receipt = opts.nativeEvents?.record(frame);
+    runtime.envelopeId = receipt?.envelopeId;
+    traceFrame(this.options.traceSink ?? opts.traceSink, frame);
+    return receipt?.accepted !== false;
   }
 
   async probe(): Promise<ProbeResult> {
@@ -368,7 +387,7 @@ export class ClaudeAdapter implements AgentAdapter {
       if (owner === undefined || this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换' };
       const result = await this.handleCanUseTool(sessionId, toolName, toolInput, options);
       if (this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换' };
-      traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++owner.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, result } });
+      if (!this.observeNative(owner, opts, { i: ++owner.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, result } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
       return result;
     };
 
@@ -402,7 +421,7 @@ export class ClaudeAdapter implements AgentAdapter {
     runtime.pump = (async () => {
       for await (const message of q as AsyncIterable<SDKMessage>) {
         runtime.frameSeq += 1;
-        traceFrame(this.options.traceSink ?? opts.traceSink, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message });
+        if (!this.observeNative(runtime, opts, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message })) return;
         if (this.sessions.get(sessionId) !== runtime) return;
         if (message.type === 'system' && message.subtype === 'init') {
           markReady();
@@ -411,15 +430,17 @@ export class ClaudeAdapter implements AgentAdapter {
       }
     })().catch((error: unknown) => {
       if (this.sessions.get(sessionId) !== runtime) return;
+      const activeWork = runtime.turnActive || runtime.backgroundTasks.size > 0;
       runtime.turnActive = false;
-      traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk-error', frame: { message: error instanceof Error ? error.message : String(error) } });
+      if (!this.observeNative(runtime, opts, { i: ++runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk-error', frame: { message: error instanceof Error ? error.message : String(error) } })) return;
       this.emit(sessionId, {
         type: 'item.complete',
         itemKey: `error-${runtime.frameSeq}`,
         kind: 'error',
         data: { message: error instanceof Error ? error.message : String(error) },
       });
-      this.emit(sessionId, { type: 'turn.end', status: 'failed', native: { reason: 'sdk-stream-error' } });
+      if (activeWork) this.emit(sessionId, { type: 'transport.closed', reason: 'sdk-stream-error', activeWork });
+      else this.emit(sessionId, { type: 'status', status: 'error' });
     });
     return runtime;
   }
@@ -450,7 +471,7 @@ export class ClaudeAdapter implements AgentAdapter {
     });
     const content = images.length === 0 ? input.text : [...images.map(image => ({ type: 'image', source: { type: 'base64', media_type: image.media_type, data: image.data } })), { type: 'text', text: input.text }];
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'input', frame: input });
-    traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'sdk-input', frame: { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null } });
+    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'sdk-input', frame: { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null } })) throw Object.assign(new Error('原生输入未持久化'), { code: 'uncertain' });
     runtime.input.push(input.text, images.length === 0 ? undefined : images);
     runtime.turnActive = true;
   }
@@ -548,7 +569,7 @@ export class ClaudeAdapter implements AgentAdapter {
     if (question === undefined) throw new Error('问题不存在');
     pending.answers ??= Object.create(null) as Record<string, string>;
     pending.answers[String(question['question'] ?? '请回答')] = value.join(', ');
-    traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'control', frame: { questionId, answer } });
+    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'control', frame: { questionId, answer } })) throw Object.assign(new Error('原生回应未持久化'), { code: 'uncertain' });
     if (Object.keys(pending.answers).length < questions.length) return { submitted: false };
     runtime.pending.delete(requestId);
     pending.resolve({ approved: true, optionId: 'answer', answers: pending.answers });
@@ -621,7 +642,7 @@ export class ClaudeAdapter implements AgentAdapter {
     options: { signal: AbortSignal; toolUseID?: string },
   ): Promise<PermissionResult> {
     const runtime = this.require(sessionId);
-    traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID } });
+    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
       const questionId = `${options.toolUseID ?? `q-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;

@@ -146,6 +146,7 @@ export interface StoredEvent<K extends EventKind = EventKind> {
   data: EventData[K];
   native?: unknown;
   nativeSeq?: number;
+  nativeEnvelopeId?: number;
   late?: boolean;
 }
 

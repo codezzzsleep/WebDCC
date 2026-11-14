@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 
 export type Db = Database.Database;
 // v6 adds a durable sent/awaiting-native state; v5 binaries cannot safely replay it.
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -69,6 +69,28 @@ export function openDb(file: string): Db {
   db.pragma('synchronous = FULL');
   db.exec(SCHEMA);
   db.transaction(() => {
+    db.exec(`CREATE TABLE IF NOT EXISTS native_owners (
+      session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+      agent TEXT NOT NULL, host_id TEXT NOT NULL, native_id TEXT,
+      owner_id TEXT NOT NULL, generation INTEGER NOT NULL, state TEXT NOT NULL,
+      active_native_turn_id TEXT, last_observed_seq INTEGER,
+      lease_until INTEGER NOT NULL, observed_at TEXT NOT NULL,
+      server_pid INTEGER NOT NULL, server_boot TEXT NOT NULL, server_start TEXT NOT NULL
+    ); CREATE UNIQUE INDEX IF NOT EXISTS native_owners_identity ON native_owners(host_id, agent, native_id) WHERE native_id IS NOT NULL;`);
+    db.exec(`CREATE TABLE IF NOT EXISTS native_event_envelopes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, agent TEXT NOT NULL, native_id TEXT,
+      owner_id TEXT, generation INTEGER, received_at TEXT NOT NULL,
+      source TEXT NOT NULL, direction TEXT NOT NULL, channel TEXT NOT NULL, disposition TEXT NOT NULL,
+      schema_hash TEXT NOT NULL, raw_envelope_id INTEGER, native_seq INTEGER, native_turn_id TEXT, native_request_id TEXT,
+      actor_id TEXT, parent_tool_use_id TEXT, payload_coverage TEXT NOT NULL, payload TEXT NOT NULL
+    ); CREATE INDEX IF NOT EXISTS native_event_envelopes_session ON native_event_envelopes(session_id, id);
+    CREATE INDEX IF NOT EXISTS native_event_envelopes_request ON native_event_envelopes(session_id, generation, native_request_id);
+    CREATE TABLE IF NOT EXISTS native_event_projections (
+      projection_version INTEGER NOT NULL, event_key TEXT NOT NULL, envelope_id INTEGER NOT NULL, event_seq INTEGER,
+      PRIMARY KEY (projection_version, event_key)
+    );`);
+    const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
+    if (!eventColumns.some(column => column.name === 'native_envelope_id')) db.exec('ALTER TABLE events ADD COLUMN native_envelope_id INTEGER');
     db.exec(`CREATE TABLE IF NOT EXISTS interactions (
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       kind TEXT NOT NULL, id TEXT NOT NULL, group_id TEXT NOT NULL,

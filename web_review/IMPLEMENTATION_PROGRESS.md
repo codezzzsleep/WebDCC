@@ -129,3 +129,16 @@
 - 私有运维记录与登录链接保存在仓库外，未公开凭据、Cookie、完整环境文件或远程运维身份。恢复时先读私有 deployment-state.json 并核实活跃进程、当前 tunnel 地址和安装任务，不重建已完成部署。
 - 原有本机 release 仍为 `97b3c073c5ec67d50df58cf564d33537c109eddc`，原进程 PID 2303523 保持运行；原 worktree 未改变业务源码。
 - 全部 48 项继续：17 项部分推进、31 项待专项实施，0 项全部验收完成。下一步继续 NP-06 uncertain 对账与部分答案恢复，并推进 NP-04 owner/fencing 与 NP-05 原生账本；随后按矩阵补齐 M1–M3。
+
+## 持久运行代际与原生记录阶段（2026-11-14）
+
+- SQLite schema v7 增加 native_owners、native_event_envelopes、native_event_projections 及事件信封关联；新表、关联列和版本变更同事务交付。旧 URL、事件正文、nativeId 与既有结果保留，旧缺失的原生证据不补造。
+- Managed owner/generation 在 native create/resume 前持久占有；同一原生身份不能由两个 Web 会话写入。只约束 WebDCC 管理的连接/进程，不宣称约束外部 CLI/DSH 客户端。租约过期不证明 writer 已退出；跨实例未验证释放保持阻塞。
+- 重启根据 boot ID/进程起始信息识别失联 owner，保留 activeNativeTurn/lastObservedSeq 为 uncertain。第二个 manager 不改写仍存活实例的命令/交互；create/resume single-flight、所有权检查贯穿原生调用前后，三 adapter 事件带接收运行代际。
+- 通道关闭与原生 turn 终态分离：未确认结果保留轮次/输入和待核对提示，不伪造用户中断。收到已确认的终态后可关闭 managed connection；未知副作用不自动重发。
+- 原始 RPC/SDK/已关联 DSH 调用记录在映射前写入，和适配记录分开。旧代际、未关联及未知/内部事件可查；不可访问 JSON 的缺口改为受认证的分页列表、单记录及任意 Web seq 证据接口，并有浏览器原生记录入口。
+- 凭据写前脱敏，声明 secret/writeOnly 的请求及关联响应省略；记录限额明确标 coverage 缺失。Native capture 失败会隔离 writer，不把未持久化输入发给原生。诊断 JSON 展示采用文本，实际 JSON-RPC echo 子进程验证脱敏不修改原生输入/响应。
+- 已确认修复原 manager 把所有 internal data 改成 turn.started 的问题。精确重复的已完成事件只形成一个语义事件；投影去重的完成标记与 event 同事务，恢复不把仅占位的记录误当成已投影。
+- 本阶段首轮六类源码检查通过（66 文件 / 290 单元、6 项 Chromium），之后补了投影落盘窗口回归，目标检查点将重新绑定正式提交。新运行隔离/恢复/捕获局部 11 项单元与 1 项真实 Chromium 已验证；不属于真实模型的完整验收。
+- 仍需 NativeSessionRef 的真实 Host/profile/version 校验、可操作 native 状态对账与 partial answers 恢复、完整全局/设置/错误帧及历史覆盖、持久 gap/版本化重建、完整 actor 关联和真实三家故障验收。NP-04/05/14/47 保持部分推进。
+- 已部署版本和原本本机部署不更新。本批源码提交后推送修复分支，继续 NP-04/06 的原生只读对账与安全恢复。

@@ -276,7 +276,11 @@
           "packages/server/test/turn-tracker.spec.ts",
           "packages/server/test/permissions.spec.ts",
           "packages/adapters/claude/src/system.ts",
-          "packages/adapters/claude/test/lifecycle.spec.ts"
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/runtime.ts",
+          "packages/server/src/native-owners.ts",
+          "packages/server/test/native-owners.spec.ts",
+          "packages/server/test/fixtures/owner-crash.ts"
         ],
         "actualFiles": [
           "packages/server/src/manager.ts",
@@ -286,7 +290,11 @@
           "packages/server/test/turn-tracker.spec.ts",
           "packages/server/test/permissions.spec.ts",
           "packages/adapters/claude/src/system.ts",
-          "packages/adapters/claude/test/lifecycle.spec.ts"
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/runtime.ts",
+          "packages/server/src/native-owners.ts",
+          "packages/server/test/native-owners.spec.ts",
+          "packages/server/test/fixtures/owner-crash.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -297,7 +305,7 @@
           "活动native turn的interrupt总指向当前ID，取消完成由native结果确认。",
           "服务端重启时区分原生仍运行/已退出/未知，不把所有情况都标用户打断。"
         ],
-        "remainingWork": "会话发送、队列执行、权限、模型和 effort 控制共用串行操作队列；失败权限保留 ACK 队列，修正后继续。Claude query 先关闭旧 writer，再等待新实例初始化；失败时用原生身份及此前确认配置回滚，后台任务以完整 native snapshot 管理，迟到 bookend 不复活已结束任务。持久 owner/fencing、完整运行代际与未知执行对账仍待完成。"
+        "remainingWork": "Managed owner/generation 占有、PID/boot 恢复、单 flight、跨 manager 恢复隔离和 callback/call fencing 已实施；租约失效不证明 native writer 已退出。仍需完整 NativeSessionRef/Host/profile 校验、原生仍运行/已退出/未知的权威对账、native 自主 continuation/activeTurn 全闭环、原生释放证据及真实故障验收。"
       },
       "dependencyIds": [
         "NP-02",
@@ -352,7 +360,16 @@
           "packages/server/test/native-history.spec.ts",
           "scripts/l1-replay.ts",
           "packages/protocol/src/turn.ts",
-          "packages/protocol/test/turn.spec.ts"
+          "packages/protocol/test/turn.spec.ts",
+          "packages/protocol/src/native-events.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/web/src/pages/NativeEvents.tsx",
+          "browser-tests/native-events.spec.ts",
+          "packages/server/src/rest.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Sidebar.tsx"
         ],
         "actualFiles": [
           "packages/web/src/lib/store.ts",
@@ -365,7 +382,16 @@
           "packages/server/test/native-history.spec.ts",
           "scripts/l1-replay.ts",
           "packages/protocol/src/turn.ts",
-          "packages/protocol/test/turn.spec.ts"
+          "packages/protocol/test/turn.spec.ts",
+          "packages/protocol/src/native-events.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/web/src/pages/NativeEvents.tsx",
+          "browser-tests/native-events.spec.ts",
+          "packages/server/src/rest.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Sidebar.tsx"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -376,7 +402,7 @@
           "同native事件重放10次只有一个语义投影，空snapshot清除旧hot。",
           "任意seq，包括turnId=null、unknown、内部帧，都能定位查看；live与replay结果一致。"
         ],
-        "remainingWork": "共享 reducer 按原生条目/问题身份呈现最新投影，更新事件不会重复工具计数或重现旧 pending 卡。完整 raw ledger、持久缺口区间、版本化重建和全部生产/回放同步仍待完成。"
+        "remainingWork": "传输与映射记录分开持久化，可分页/单记录/任意 Web seq 查看，旧代际只进证据。internal data 真实保留；精确完成事件去重完成标记与 event 原子提交。仍需全部全局/设置/错误帧和历史覆盖、raw 到版本化投影的完整重建、持久 gap、完整 actor 身份、源身份冲突对账和全部 live/replay/native 验收。"
       },
       "dependencyIds": [
         "NP-02",
@@ -2784,7 +2810,10 @@
           "packages/server/src/store.ts",
           "packages/server/test/permission-migration.spec.ts",
           "packages/server/src/interactions.ts",
-          "packages/server/test/interactions.spec.ts"
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/src/native-owners.ts"
         ],
         "actualFiles": [
           "packages/server/src/db.ts",
@@ -2793,7 +2822,10 @@
           "packages/server/src/store.ts",
           "packages/server/test/permission-migration.spec.ts",
           "packages/server/src/interactions.ts",
-          "packages/server/test/interactions.spec.ts"
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/src/native-owners.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -2804,7 +2836,7 @@
           "迁移中断可恢复，失败不启动不兼容应用；恢复演练包含附件hash和native session关联。",
           "备份/导出不带意外secret；缺外部native备份明确显示无法完整恢复范围。"
         ],
-        "remainingWork": "SQLite schema v5 增加请求/组占用索引，旧事件一次性重建索引并保留 session URL、历史、已解决状态；v4 权限迁移与 v2/v3 命令/原生历史迁移已有局部证据。完整备份、损坏/降级、附件 hash 与真实旧库恢复演练仍待完成。"
+        "remainingWork": "SQLite v7 原生 owner/信封/投影及事件关联与版本更新同事务；v6 升级保留旧会话/事件并标未记录原生证据。原先 v2–v6 队列/历史/权限/交互局部回归继续有效。完整备份、损坏/降级、附件 hash、迁移中断和真实审核基线恢复演练仍待完成。"
       },
       "dependencyIds": [
         "NP-03",

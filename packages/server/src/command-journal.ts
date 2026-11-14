@@ -81,8 +81,15 @@ export class CommandJournal {
     })();
   }
 
-  recover(): void {
+  recover(sessionIds?: string[]): void {
     this.db.transaction(() => {
+      if (sessionIds !== undefined) {
+        for (const id of sessionIds) {
+          this.db.prepare("UPDATE input_queue SET state = 'uncertain' WHERE session_id = ? AND state IN ('dispatching', 'native-accepted')").run(id);
+          this.db.prepare("UPDATE command_journal SET state = 'uncertain' WHERE session_id = ? AND state IN ('dispatching', 'native-accepted')").run(id);
+        }
+        return;
+      }
       this.db.exec("UPDATE input_queue SET state = 'uncertain' WHERE state IN ('dispatching', 'native-accepted')");
       this.db.exec("UPDATE command_journal SET state = 'uncertain' WHERE state IN ('dispatching', 'native-accepted')");
     })();

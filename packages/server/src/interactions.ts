@@ -66,7 +66,9 @@ export class InteractionStore {
     this.db.prepare("UPDATE interactions SET state = ?, error = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ? AND state = 'sending' AND command_id = ?")
       .run(certain ? 'failed' : 'uncertain', certain ? 'native-rejected' : 'native-outcome-uncertain', row.session_id, row.kind, row.id, row.command_id);
   }
-  recover(): InteractionRow[] {
+  recover(sessionIds?: string[]): InteractionRow[] {
+    if (sessionIds !== undefined) return this.db.transaction(() => sessionIds.flatMap(id => this.db.prepare(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
+      WHERE session_id = ? AND (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'sent', 'collected')) AND state NOT IN ('resolved', 'cancelled') RETURNING *`).all(id) as InteractionRow[]))();
     return this.db.prepare(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
       WHERE (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'sent', 'collected')) AND state NOT IN ('resolved', 'cancelled') RETURNING *`).all() as InteractionRow[];
   }

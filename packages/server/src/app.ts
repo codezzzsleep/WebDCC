@@ -49,6 +49,7 @@ function reissueIfLegacy(token: string, request: FastifyRequest, reply: FastifyR
 
 export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const { config, store, files, manager } = options;
+  store.nativeEvents.addSecret(config.token);
   const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024, trustProxy: config.trustProxy ?? false });
   const dispatcher = new CommandDispatcher(store, manager, files, options.recorder);
   const hub = new LiveHub(store, manager, dispatcher, config.token, `${config.host}:${config.port}`);

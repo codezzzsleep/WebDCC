@@ -17,6 +17,8 @@ import type { Db } from './db.js';
 import { CommandJournal } from './command-journal.js';
 import { NativeHistoryStore } from './native-history.js';
 import { InteractionStore } from './interactions.js';
+import { NativeOwnerStore } from './native-owners.js';
+import { NativeEventStore } from './native-events.js';
 
 interface SessionRow {
   id: string;
@@ -41,6 +43,7 @@ interface SessionRow {
 }
 
 interface EventRow {
+  native_envelope_id?: number | null;
   session_id: string;
   seq: number;
   turn_id: string;
@@ -133,6 +136,7 @@ interface UploadRow {
 }
 
 export interface AppendEventInput {
+  nativeEnvelopeId?: number;
   sessionId: string;
   turnId: string | null;
   itemKey: string;
@@ -191,6 +195,7 @@ function toEvent(row: EventRow): StoredEvent {
     ...(row.native === null ? {} : { native: JSON.parse(row.native) as unknown }),
     ...(row.native_seq === null ? {} : { nativeSeq: row.native_seq }),
     ...(row.late === 1 ? { late: true } : {}),
+    ...(row.native_envelope_id == null ? {} : { nativeEnvelopeId: row.native_envelope_id }),
   };
 }
 
@@ -203,7 +208,9 @@ export class Store {
   readonly journal: CommandJournal;
   readonly nativeHistory: NativeHistoryStore;
   readonly interactions: InteractionStore;
-  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db); }
+  readonly nativeOwners: NativeOwnerStore;
+  readonly nativeEvents: NativeEventStore;
+  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db); this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); }
 
   watchdogSettings(): WatchdogSettings | undefined {
     const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;
@@ -456,8 +463,8 @@ export class Store {
       const seq = current.last_seq + 1;
       this.db
         .prepare(
-          `INSERT INTO events (session_id, seq, turn_id, item_key, kind, native_seq, data, native, at, late)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO events (session_id, seq, turn_id, item_key, kind, native_seq, data, native, at, late, native_envelope_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           event.sessionId,
@@ -470,6 +477,7 @@ export class Store {
           event.native === undefined ? null : JSON.stringify(event.native),
           at,
           event.late === true ? 1 : 0,
+          event.nativeEnvelopeId ?? null,
         );
       this.db.prepare('UPDATE sessions SET last_seq = ?, updated_at = ? WHERE id = ?').run(seq, at, event.sessionId);
       const stored: StoredEvent = {
@@ -483,8 +491,10 @@ export class Store {
         ...(event.native === undefined ? {} : { native: event.native }),
         ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
         ...(event.late === true ? { late: true } : {}),
+        ...(event.nativeEnvelopeId === undefined ? {} : { nativeEnvelopeId: event.nativeEnvelopeId }),
       };
       this.interactions.observe(stored);
+      if (event.nativeEnvelopeId !== undefined) this.nativeEvents.projected(event.nativeEnvelopeId, seq);
       return stored;
     });
     return tx(input);

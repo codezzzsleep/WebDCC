@@ -158,6 +158,8 @@ interface PendingInteraction {
 }
 
 interface SessionRuntime {
+  identity?: CreateOpts['runtime'];
+  envelopeId?: number;
   nativeId: string;
   workspaceId: string;
   model?: string;
@@ -224,9 +226,15 @@ export class DshAdapter implements AgentAdapter {
   private booting: Promise<void> | null = null;
   private options: DshAdapterOptions;
   private traceSeq = 0;
+  private readonly nativeSinks = new Map<string, NonNullable<CreateOpts['nativeEvents']>>();
   private readonly traceSinks = new Map<string, TraceSink>();
-  private trace(sessionId: string, dir: 'in' | 'out', ch: string, frame: unknown): void {
-    traceFrame(this.options.traceSink ?? this.traceSinks.get(sessionId) ?? this.options.traceSinkFactory?.(sessionId || 'dsh-host'), { i: ++this.traceSeq, t: 0, dir, ch, frame });
+  private trace(sessionId: string, dir: 'in' | 'out', ch: string, frame: unknown): boolean {
+    const observation = { i: ++this.traceSeq, t: 0, dir, ch, frame };
+    const receipt = this.nativeSinks.get(sessionId)?.record(observation);
+    const runtime = this.sessions.get(sessionId);
+    if (runtime !== undefined) runtime.envelopeId = receipt?.envelopeId;
+    traceFrame(this.options.traceSink ?? this.traceSinks.get(sessionId) ?? this.options.traceSinkFactory?.(sessionId || 'dsh-host'), observation);
+    return receipt?.accepted !== false;
   }
 
   constructor(options: DshAdapterOptions = {}) {
@@ -260,8 +268,15 @@ export class DshAdapter implements AgentAdapter {
     this.listeners.push(cb);
   }
 
+  bindRuntime(sessionId: string, identity: NonNullable<CreateOpts['runtime']>): void {
+    const runtime = this.sessions.get(sessionId);
+    if (runtime !== undefined) runtime.identity = identity;
+  }
+
   private emit(sessionId: string, event: AdapterEvent): void {
     const runtime = this.sessions.get(sessionId);
+    if (runtime?.identity !== undefined) event = { ...event, runtime: runtime.identity };
+    if (runtime?.envelopeId !== undefined) event = { ...event, nativeEnvelopeId: runtime.envelopeId };
     if (runtime?.historyRecord !== undefined && event.type !== 'history') { runtime.historyRecord.events.push(event); return; }
     if (runtime?.nativeTurnId !== undefined && ['item.start', 'item.complete', 'turn.start', 'turn.end'].includes(event.type)) event = { ...event, nativeTurnId: runtime.nativeTurnId } as AdapterEvent;
     for (const listener of this.listeners) listener(sessionId, event);
@@ -478,10 +493,10 @@ export class DshAdapter implements AgentAdapter {
     const nativeId = args['agentId'] ?? args['sessionId'] ?? request['sessionId'];
     const owner = sessionId ?? [...this.sessions].find(([, runtime]) => runtime.nativeId === nativeId)?.[0] ?? '';
     const requestId = ++this.traceSeq;
-    this.trace(owner, 'out', `rpc:${endpoint}`, { requestId, endpoint, args });
+    if (!this.trace(owner, 'out', `rpc:${endpoint}`, { requestId, endpoint, args })) throw Object.assign(new Error('原生请求未持久化或实例已替换'), { code: 'uncertain' });
     try {
       const result = await client.rpc<T>(endpoint, args);
-      this.trace(owner, 'in', `rpc:${endpoint}`, { requestId, endpoint, result });
+      if (!this.trace(owner, 'in', `rpc:${endpoint}`, { requestId, endpoint, result })) throw Object.assign(new Error('原生响应未持久化或实例已替换'), { code: 'uncertain' });
       return result;
     } catch (error) {
       this.trace(owner, 'in', `rpc:${endpoint}`, { requestId, endpoint, error: error instanceof Error ? error.message : String(error) });
@@ -490,6 +505,7 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async create(opts: CreateOpts): Promise<{ nativeId: string }> {
+    if (opts.nativeEvents !== undefined) this.nativeSinks.set(opts.sessionId, opts.nativeEvents);
     if (opts.traceSink !== undefined) this.traceSinks.set(opts.sessionId, opts.traceSink);
     const client = await this.ensureSidecar();
     const workspace = await this.call<{ workspace: { workspaceId: string } }>(client, 'workspace/create', {
@@ -500,6 +516,7 @@ export class DshAdapter implements AgentAdapter {
     }, opts.sessionId);
     const runtime: SessionRuntime = {
       nativeId: created.sessionId,
+      identity: opts.runtime,
       workspaceId: workspace.workspace.workspaceId,
       ...(opts.model === undefined ? {} : { model: opts.model }),
       ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
@@ -530,6 +547,7 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
+    if (opts.nativeEvents !== undefined) this.nativeSinks.set(opts.sessionId, opts.nativeEvents);
     if (opts.traceSink !== undefined) this.traceSinks.set(opts.sessionId, opts.traceSink);
     const client = await this.ensureSidecar();
     const workspace = await this.call<{ workspace: { workspaceId: string } }>(client, 'workspace/create', {
@@ -537,6 +555,7 @@ export class DshAdapter implements AgentAdapter {
     }, opts.sessionId);
     const runtime: SessionRuntime = {
       nativeId: opts.nativeId,
+      identity: opts.runtime,
       workspaceId: workspace.workspace.workspaceId,
       ...(opts.model === undefined ? {} : { model: opts.model }),
       ...(opts.reasoningEffort === undefined ? {} : { reasoningEffort: opts.reasoningEffort }),
@@ -565,7 +584,7 @@ export class DshAdapter implements AgentAdapter {
     const client = this.client;
     if (client === null) return;
     this.setupHistory(sessionId, runtime);
-    this.trace(sessionId, 'out', 'openStream:session/follow', { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } });
+    if (!this.trace(sessionId, 'out', 'openStream:session/follow', { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } })) throw Object.assign(new Error('原生订阅未持久化'), { code: 'uncertain' });
     runtime.followStream = client.openStream(
       'session/follow',
       { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } },
@@ -606,7 +625,7 @@ export class DshAdapter implements AgentAdapter {
   async send(sessionId: string, input: UserInput): Promise<void> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
-    this.trace(sessionId, 'out', 'input', input);
+    if (!this.trace(sessionId, 'out', 'input', input)) throw Object.assign(new Error('原生输入未持久化'), { code: 'uncertain' });
     // 第一行是命令时走 commands/execute，不走 session/prompt（F8 / SL-02）
     const firstLine = input.text.split(/\r?\n/)[0] ?? '';
     if (firstLine.startsWith('/') && isAllowedCommandLine(firstLine.trim(), input.text)) {
@@ -760,6 +779,7 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async dispose(sessionId: string): Promise<void> {
+    this.nativeSinks.delete(sessionId);
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
     this.sessions.delete(sessionId);
@@ -784,7 +804,7 @@ export class DshAdapter implements AgentAdapter {
   private onEventFrame(sessionId: string, frame: StreamFrame): void {
     const value = this.frameValue(frame);
     const owner = sessionId || [...this.sessions].find(([, runtime]) => runtime.nativeId === value?.['agentId'])?.[0] || '';
-    this.trace(owner, 'in', 'mux:$events', frame);
+    if (!this.trace(owner, 'in', 'mux:$events', frame)) return;
     if (value === undefined) return;
 
     if (value['type'] === 'ready') {

@@ -13,7 +13,7 @@ export interface StartOptions {
   env?: NodeJS.ProcessEnv;
   cwd?: string;
   /** 每一帧（收/发）都会回调，用于录制 fixtures */
-  onFrame?: (direction: 'in' | 'out', frame: Frame) => void;
+  onFrame?: (direction: 'in' | 'out', frame: Frame) => void | boolean;
   onStderr?: (line: string) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
   /** Raw diagnostic retention is opt-in and bounded. onFrame remains a stream. */
@@ -111,7 +111,11 @@ export class JsonRpcStdio {
       this.frames.push(frame);
       if (this.frames.length > maxFrames) this.frames.shift();
     }
-    this.options.onFrame?.('in', frame);
+    if (this.options.onFrame?.('in', frame) === false) {
+      this.closePending(new Error('原生事件未持久化或运行代际已关闭'));
+      this.child.kill('SIGTERM');
+      return;
+    }
 
     const id = frame['id'];
     const hasMethod = typeof frame['method'] === 'string';
@@ -160,7 +164,12 @@ export class JsonRpcStdio {
 
   private send(frame: Frame): void {
     if (this.closed) throw new Error('RPC transport is closed');
-    this.options.onFrame?.('out', frame);
+    if (this.options.onFrame?.('out', frame) === false) {
+      const error = Object.assign(new Error('原生事件未持久化或运行代际已关闭'), { code: 'uncertain' });
+      this.closePending(error);
+      this.child.kill('SIGTERM');
+      throw error;
+    }
     this.child.stdin.write(`${JSON.stringify(frame)}\n`);
   }
 

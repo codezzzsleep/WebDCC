@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { FakeAdapter } from '@webdcc/fake-adapter';
 import type { AdapterEvent, AgentAdapter } from '@webdcc/protocol';
-import { openDb } from '../src/db.js';
+import { CURRENT_SCHEMA_VERSION, openDb } from '../src/db.js';
 import { Store } from '../src/store.js';
 import { createTestApp, seedWorkspaceAndSession } from './helpers.js';
 
@@ -99,12 +99,12 @@ it('NP-06/47 submitted but unconfirmed replies reopen as uncertain and reject un
     const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });
     store.appendEvent({ sessionId: session.id, turnId: 'turn', itemKey: 'q', kind: 'question', data: { questionId: 'q', prompt: 'Question' } });
     store.interactions.finish(store.interactions.claim(session.id, 'answer', 'q', 'SENT'), false, false);
-    expect(db.pragma('user_version', { simple: true })).toBe(6);
+    expect(db.pragma('user_version', { simple: true })).toBe(CURRENT_SCHEMA_VERSION);
     db.close(); db = openDb(join(directory, 'db.sqlite')); store = new Store(db);
     store.interactions.recover();
     expect(store.interactions.get(session.id, 'answer', 'q')?.state).toBe('uncertain');
     expect(() => store.interactions.claim(session.id, 'answer', 'q', 'RETRY')).toThrow('待核对');
-    db.pragma('user_version = 7'); db.close();
+    db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION + 1}`); db.close();
     expect(() => openDb(join(directory, 'db.sqlite'))).toThrow('拒绝修改');
     db = openDb(':memory:');
   } finally { db.close(); await rm(directory, { recursive: true, force: true }); }

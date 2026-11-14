@@ -18,5 +18,7 @@ export * from './native-evidence.js';
 export * from './command-validation.js';
 export * from './commands.js';
 export * from './question-answer.js';
+export * from './runtime.js';
+export * from './native-events.js';
 
 export const PROTOCOL_VERSION = 1;
