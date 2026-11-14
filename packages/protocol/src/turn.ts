@@ -70,7 +70,8 @@ function assistantText(event: StoredEvent): string {
 function currentItems(events: readonly StoredEvent[]): StoredEvent[] {
   const items = new Map<string, StoredEvent>();
   for (const event of events) {
-    const key = event.kind === 'question' ? `question:${(event.data as EventData['question']).questionId}` : `${event.kind}:${event.itemKey}`;
+    const key = event.kind === 'question' ? `question:${(event.data as EventData['question']).questionId}`
+      : event.kind === 'goal' ? `goal:${(event.data as EventData['goal']).goalId ?? event.sessionId}` : `${event.kind}:${event.itemKey}`;
     items.set(key, event);
   }
   return [...items.values()];

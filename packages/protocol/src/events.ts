@@ -103,7 +103,10 @@ export interface EventData {
   'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' };
   plan: { items: PlanItem[] };
   /** Codex 的"目标"（thread/goal/updated）：原生界面会显示，WebDCC 也必须显示 */
-  goal: { objective: string; status: 'active' | 'completed' | 'paused' | 'cleared'; tokensUsed?: number };
+  goal: {
+    objective: string; status: 'active' | 'completed' | 'paused' | 'cleared' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'unknown';
+    goalId?: string; nativeStatus?: string; tokensUsed?: number; tokenBudget?: number | null; timeUsedSeconds?: number;
+  };
   /** 原生提示（warning / configWarning / deprecationNotice），例如"使用兜底元数据，可能影响效果" */
   notice: { level: 'info' | 'warning'; text: string; nativeType?: string };
   'approval.request': {

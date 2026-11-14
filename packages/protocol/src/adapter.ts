@@ -96,7 +96,7 @@ type AdapterEventBody =
   /** 原生 id 迟到（Claude Code 要等首条消息才有 session_id）：manager 收到后落库 */
   | { type: 'native-id'; nativeId: string };
 
-export type AdapterEvent = AdapterEventBody & { runtime?: RuntimeIdentity; nativeEnvelopeId?: number };
+export type AdapterEvent = AdapterEventBody & { runtime?: RuntimeIdentity; nativeEnvelopeId?: number; scope?: 'session' };
 
 export interface NativeHistoryRecord {
   nativeSeq: number;

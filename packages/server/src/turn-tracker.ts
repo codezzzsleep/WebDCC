@@ -45,6 +45,7 @@ export class TurnTracker {
   }
 
   assignment(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
+    if (event.scope === 'session') return { turnId: null, late: false };
     const nativeTurnId = 'nativeTurnId' in event ? event.nativeTurnId : 'turnId' in event ? event.turnId : undefined;
     if (nativeTurnId !== undefined) {
       const known = this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));

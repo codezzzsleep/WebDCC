@@ -38,7 +38,7 @@ function nativeFixture() {
   adapter.probe = async () => ({ installed: true, version: '0.167.0', compatible: true, auth: 'unknown' });
   const events: AdapterEvent[] = [];
   adapter.onEvent((_id, event) => events.push(event));
-  return { adapter, policy, request, events };
+  return { adapter, policy, request, events, notify: (frame: Frame) => notification(frame) };
 }
 
 it('NP-07 a successful turn does not turn the requested sandbox into effective permission without native readback', async () => {
@@ -79,4 +79,27 @@ it('NP-07 catalog failures and native disallowed profiles never become selectabl
   expect(await ctx.adapter.listAccessModes()).toMatchObject([{ id: ':workspace', allowed: false }]);
   ctx.request.mockRejectedValue(new Error('offline'));
   expect((await ctx.adapter.listAccessModes()).every(option => option.allowed === false)).toBe(true);
+});
+
+it('NP-08 autonomous starts update the stop target and a delayed response cannot resurrect a completed turn', async () => {
+  const ctx = nativeFixture();
+  try {
+    await ctx.adapter.create({ sessionId: 'local', cwd: '/tmp/fixture', providerId: null });
+    const turn = { id: 'first', rootTurnId: null, items: [], itemsView: 'full', status: 'inProgress', error: null, startedAt: null, completedAt: null, durationMs: null };
+    ctx.request.mockImplementationOnce(async () => {
+      ctx.notify({ method: 'turn/started', params: { turn } });
+      ctx.notify({ method: 'turn/completed', params: { turn: { ...turn, status: 'completed' } } });
+      ctx.notify({ method: 'turn/started', params: { turn: { ...turn, id: 'autonomous' } } });
+      return { turn };
+    });
+    await ctx.adapter.send('local', { text: 'original' });
+    expect(ctx.events.filter(event => event.type === 'turn.start')).toHaveLength(2);
+    ctx.request.mockImplementationOnce(async () => ({}));
+    await ctx.adapter.interrupt('local');
+    expect(ctx.request.mock.calls.at(-1)).toEqual(['turn/interrupt', { threadId: 'native', turnId: 'autonomous' }]);
+    ctx.notify({ method: 'turn/completed', params: { turn: { ...turn, id: 'autonomous', status: 'interrupted' } } });
+    const calls = ctx.request.mock.calls.length;
+    await ctx.adapter.interrupt('local');
+    expect(ctx.request.mock.calls).toHaveLength(calls);
+  } finally { await ctx.adapter.dispose('local'); }
 });

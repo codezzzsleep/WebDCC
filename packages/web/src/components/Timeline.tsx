@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { isValidEventData } from '@webdcc/protocol';
+import { goalLabel, isValidEventData } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -232,7 +232,7 @@ function summaryLabel(turn: ProtocolTurnView): string {
   const { commands, reads, edits, tools } = turn.summary;
   const parts: string[] = [];
   if (turn.plan !== undefined) parts.push('更新了计划');
-  if (turn.goal !== undefined) parts.push('更新了目标');
+  if (turn.goal !== undefined) parts.push(goalLabel(turn.goal));
   if (commands > 0) parts.push(`执行了 ${commands} 条命令`);
   if (reads > 0) parts.push(`读取了 ${reads} 个文件`);
   if (edits > 0) parts.push(`编辑了 ${edits} 个文件`);
@@ -497,7 +497,7 @@ function StepRow({
       const data = event.data as EventData['goal'];
       return (
         <div className={className}>
-          <StepLine icon="target" label="更新了目标" detail={data.objective} />
+          <StepLine icon="target" label={goalLabel(data)} detail={data.objective} />
         </div>
       );
     }

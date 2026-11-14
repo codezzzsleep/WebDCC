@@ -73,6 +73,8 @@ interface SessionRuntime {
   model: string | null;
   reasoningEffort: string | null;
   turnId: string | null;
+  observedTurns?: Set<string>;
+  goalId?: string;
   frameSeq: number;
   turnStartedAt: number;
   /** 模型输出开始时间；用于把 tok/s 的分母限制在生成阶段。 */
@@ -781,10 +783,13 @@ export class CodexAdapter implements AgentAdapter {
     if (input.nativeRequestId !== undefined) params.clientUserMessageId = input.nativeRequestId;
     const response = await nativeRequest(runtime.rpc, 'turn/start', params);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
-    const notified = runtime.turnId === response.turn.id;
-    runtime.turnId = response.turn.id;
-    runtime.turnStartedAt = startedAt;
-    if (!notified) this.emit(sessionId, { type: 'turn.start', nativeTurnId: response.turn.id, native: response });
+    const notified = runtime.observedTurns?.has(response.turn.id) === true;
+    if (!notified) {
+      this.rememberTurn(runtime, response.turn.id);
+      runtime.turnId = response.turn.id;
+      runtime.turnStartedAt = startedAt;
+      this.emit(sessionId, { type: 'turn.start', nativeTurnId: response.turn.id, native: response });
+    }
     // turn/start acknowledges a turn, not its effective policy. Rejoin the
     // loaded thread without overrides to read the native policy; overrides
     // persist for subsequent turns, including when the user selects inherit.
@@ -888,6 +893,12 @@ export class CodexAdapter implements AgentAdapter {
     return fromParams ?? fromTurn ?? fromItem;
   }
 
+  private rememberTurn(runtime: SessionRuntime, nativeTurnId: string): void {
+    const turns = runtime.observedTurns ??= new Set<string>();
+    turns.add(nativeTurnId);
+    if (turns.size > 128) turns.delete(turns.values().next().value!);
+  }
+
   // ---------- 通知 ----------
 
   private onNotification(sessionId: string, frame: Frame): void {
@@ -918,7 +929,13 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'turn/started': {
-        this.emit(sessionId, { type: 'turn.start', nativeTurnId: this.nativeTurnId(params), native: params });
+        const nativeTurnId = this.nativeTurnId(params);
+        if (nativeTurnId !== undefined) {
+          runtime.turnId = nativeTurnId;
+          this.rememberTurn(runtime, nativeTurnId);
+          runtime.turnStartedAt = this.now();
+        }
+        this.emit(sessionId, { type: 'turn.start', nativeTurnId, native: params });
         return;
       }
       case 'turn/completed': {
@@ -1066,16 +1083,24 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'goal/updated': {
-        const goal = (params['goal'] ?? {}) as { objective?: string; status?: string; tokensUsed?: number };
-        const status = goal.status === 'completed' || goal.status === 'paused' ? goal.status : goal.status === 'cleared' ? 'cleared' : 'active';
+        const goal = (params['goal'] ?? {}) as { threadId?: string; createdAt?: number; objective?: string; status?: string; tokensUsed?: number; tokenBudget?: number | null; timeUsedSeconds?: number };
+        const status = goal.status === 'complete' || goal.status === 'completed' ? 'completed'
+          : goal.status === 'active' || goal.status === 'paused' || goal.status === 'blocked' || goal.status === 'usageLimited' || goal.status === 'budgetLimited' ? goal.status : 'unknown';
+        runtime.goalId = `${goal.threadId ?? runtime.nativeId}:${goal.createdAt ?? 'legacy'}`;
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `goal-${frameKey}`,
+          itemKey: `goal-${runtime.nativeId}`,
           kind: 'goal',
+          ...(params['turnId'] === null ? { scope: 'session' as const } : {}),
+          ...(typeof params['turnId'] === 'string' ? { nativeTurnId: params['turnId'] } : {}),
           data: {
             objective: String(goal.objective ?? ''),
             status,
+            goalId: runtime.goalId,
+            ...(goal.status === undefined ? {} : { nativeStatus: goal.status }),
             ...(typeof goal.tokensUsed === 'number' ? { tokensUsed: goal.tokensUsed } : {}),
+            ...(goal.tokenBudget === null || typeof goal.tokenBudget === 'number' ? { tokenBudget: goal.tokenBudget } : {}),
+            ...(typeof goal.timeUsedSeconds === 'number' ? { timeUsedSeconds: goal.timeUsedSeconds } : {}),
           },
           native: params,
         });
@@ -1084,9 +1109,10 @@ export class CodexAdapter implements AgentAdapter {
       case 'goal/cleared': {
         this.emit(sessionId, {
           type: 'item.complete',
-          itemKey: `goal-cleared-${frameKey}`,
+          itemKey: `goal-${runtime.nativeId}`,
           kind: 'goal',
-          data: { objective: '', status: 'cleared' },
+          scope: 'session',
+          data: { objective: '', status: 'cleared', goalId: runtime.goalId ?? `${runtime.nativeId}:legacy` },
           native: params,
         });
         return;

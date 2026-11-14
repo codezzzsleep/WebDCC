@@ -160,3 +160,10 @@
 - 完整源码检查六类通过：70文件/301项单元、6文件/7项真实Chromium；最后展示修订另行通过6项恢复单元及1项Chromium。完整报告为 web_review/evidence/source-checks.json；它不是全48项或真实模型验收。
 - 独立Codex 0.167.0 + scripted model：原生直接RPC完成→SIGKILL writer→重开SQLite→只读核对→明确应用终态→再重开确认，保留队列且核对期间模型请求数不变。证据 web_review/evidence/native-recovery-current.json；不冒充真实付费模型效果验收。
 - 后续继续目标状态/统计投影、全局原生帧、完整能力目录与M0剩余项；三家真实故障与外部writer仲裁、secret及完整原生surface仍待完成。
+
+## 接续实现：目标投影与自主轮次停止（2026-11-14）
+
+- 对应 Issue #40：322条native目标通知保留原始证据，但同实体统计更新在轮次内归约为一个当前目标；显示真实暂停/完成/受阻/用量/预算状态，未知状态不冒充active。兼容旧events，未改黄金文件。
+- 会话任务条从全会话事件读取最新目标，turnId=null的暂停/清除可同步；清除显式session scope，不被归到正在运行或刚结束的轮次。显示原生统计时不声称任务实现进展。
+- Codex autonomous turn/started更新interrupt目标；原生完成或下一轮已启动时，迟到turn/start结果不能复活旧轮或重复发turn.start。新回归模拟第一轮响应迟到而自主下一轮已启动，stop指向当前native turn。
+- 7项目标合同/归约、4项Codex控制、2项TurnTracker及实际Chromium322帧→暂停→刷新→session清除通过。结构化目标控制、目标/任务/子Agent完整验收仍需继续，NP-23/32保持in-progress。

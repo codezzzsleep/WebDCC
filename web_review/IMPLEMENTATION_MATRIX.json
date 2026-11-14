@@ -716,11 +716,23 @@
         "verification": "partial-local",
         "plannedFiles": [
           "packages/adapters/codex/src/adapter.ts",
-          "packages/adapters/codex/src/rpc.ts"
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx"
         ],
         "actualFiles": [
           "packages/adapters/codex/src/adapter.ts",
-          "packages/adapters/codex/src/rpc.ts"
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1695,10 +1707,24 @@
         "F16"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx"
+        ],
         "evidence": [],
         "remainingAcceptance": [
           "原生同一任务更新/删除不会重复，失败创建不产生幽灵任务。",
@@ -2130,10 +2156,24 @@
         "F12"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx"
+        ],
         "evidence": [],
         "remainingAcceptance": [
           "设置/暂停或清除目标按实际native支持读回，续跑turn可单独停止。",
