@@ -23,6 +23,7 @@ describe('NP-02/07 pinned Codex contracts', () => {
     expect(() => validateNativeParams('turn/start', { ...turn, approvalPolicy: 'approved' })).toThrow('Invalid');
     expect(() => validateNativeParams('turn/start', { ...turn, sandboxPolicy: { type: 'workspace-write' } })).toThrow('Invalid');
     expect(() => validateNativeParams('unknown/method', {})).toThrow('Unsupported');
+    expect(() => buildTurnStartParams('t', 'text', 'invalid-mode')).toThrow('不支持');
   });
 
   it('validates initialization from the combined native export and rejects incomplete results', () => {

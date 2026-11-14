@@ -142,6 +142,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const rootBlocked = meta?.runningAsRoot === true && agent === 'claude-code';
   const accessModeId = mode.kind === 'session' ? session?.accessMode : mode.accessMode;
   const currentMode = accessModes.find((item) => item.id === accessModeId) ?? accessModes[0];
+  const permissions = mode.kind === 'session' ? session?.permissions : undefined;
+  const effectiveMode = accessModes.find(item => item.id === permissions?.effective || item.id.replace(/^:/, '') === permissions?.effective?.replace(/^:/, ''));
+  const accessLabel = mode.kind === 'session' && session === undefined ? '正在读取权限' : permissions === undefined ? currentMode?.label ?? '沿用原生权限'
+    : `${effectiveMode?.label ?? permissions.effective ?? '实际权限待确认'}${permissions.phase === 'pending' ? ' · 待生效' : permissions.phase === 'failed' ? ' · 切换失败' : permissions.phase === 'unknown' ? ' · 待确认' : ''}`;
 
   const providerOf = (id: string | null | undefined): ProviderDto | undefined => providers.find((provider) => provider.id === id);
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
@@ -557,9 +561,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                 aria-expanded={menu === 'mode'}
                 onClick={() => setMenu(menu === 'mode' ? null : 'mode')}
                 data-testid="access-mode"
+                disabled={mode.kind === 'session' && session === undefined}
               >
                 <Icon name="shield" size={14} strokeWidth={1.9} />
-                <span className="pill-text">{currentMode?.label ?? '默认访问模式'}</span>
+                <span className="pill-text" title={permissions?.error ?? (permissions?.phase === 'pending' ? `请求：${currentMode?.label ?? '沿用原生权限'}` : undefined)}>{accessLabel}</span>
                 <Icon name="chevronDown" size={12} strokeWidth={2} className="caret" />
               </button>
               {menu === 'mode' ? (
@@ -567,7 +572,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <div className="menu-group-title">{agentText(agent).name} 自己的访问模式</div>
                   {accessModes.map((item) => {
                     // 以 root 运行时 Claude Code 不允许 bypassPermissions（MODE-claude-01）
-                    const blocked = item.id === 'bypassPermissions' && rootBlocked;
+                    const blocked = item.allowed === false || item.implemented === false || item.id === 'bypassPermissions' && rootBlocked;
                     return (
                       <button
                         key={item.id}
@@ -576,7 +581,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                         aria-checked={item.id === currentMode?.id}
                         className="menu-item"
                         disabled={blocked}
-                        title={blocked ? '以 root 运行时 Claude Code 不允许此模式' : undefined}
+                        title={item.reason ?? (blocked ? '以 root 运行时 Claude Code 不允许此模式' : undefined)}
                         data-testid={`access-mode-${item.id}`}
                         onClick={() => {
                           setMenu(null);
@@ -590,7 +595,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                       >
                         <span className="menu-item-body">
                           {item.label}
-                          <span className="menu-item-sub">{blocked ? '以 root 运行时 Claude Code 不允许此模式' : item.id}</span>
+                          <span className="menu-item-sub">{item.reason ?? (blocked ? '以 root 运行时 Claude Code 不允许此模式' : item.id)}</span>
                         </span>
                         {item.id === currentMode?.id ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}
                       </button>

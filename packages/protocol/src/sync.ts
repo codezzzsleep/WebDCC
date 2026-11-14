@@ -1,6 +1,7 @@
 /** 同步协议类型（SPEC 7.2、7.4） */
 import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { SessionDto } from './api.js';
+import type { PermissionState } from './permissions.js';
 
 export interface SubscribeItem {
   sessionId: string;
@@ -134,6 +135,7 @@ export interface CommandMessage {
 export type ClientMessage = HelloMessage | SubscribeMessage | UnsubscribeMessage | CommandMessage | PongMessage;
 
 export interface FeedPatch {
+  permissions?: PermissionState;
   queueRevision?: number;
   title?: string;
   /** 创建事件里带上会话身份，便于新浏览器只靠 feed 重建侧边栏 */

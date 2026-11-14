@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export type Db = Database.Database;
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -68,6 +68,11 @@ export function openDb(file: string): Db {
   db.pragma('synchronous = FULL');
   db.exec(SCHEMA);
   db.transaction(() => {
+    const columns = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+    if (!columns.some(column => column.name === 'permission_state')) db.exec('ALTER TABLE sessions ADD COLUMN permission_state TEXT');
+    db.exec(`UPDATE sessions SET permission_state = json_object(
+      'requested', CASE WHEN access_mode IS NULL OR access_mode = 'inherit' THEN NULL ELSE access_mode END,
+      'effective', NULL, 'phase', 'unknown', 'revision', 1) WHERE permission_state IS NULL`);
     db.exec(`CREATE TABLE IF NOT EXISTS capability_snapshots (
       scope TEXT PRIMARY KEY, revision TEXT NOT NULL, data TEXT NOT NULL, at TEXT NOT NULL
     )`);

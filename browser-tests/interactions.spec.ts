@@ -1,17 +1,10 @@
-import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
 import { expect, it } from 'vitest';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
-import { createTestApp, TEST_TOKEN } from '../packages/server/test/helpers.js';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { createSourceTestApp } from './helpers.js';
 
 it('NP-06 a real browser keeps question input and pending state through submission failure, then resolves from server events', async () => {
-  const webDist = await mkdtemp(join(tmpdir(), 'wdcc-repair-browser-'));
-  await build({ entryPoints: ['packages/web/src/main.tsx'], bundle: true, outfile: join(webDist, 'ui.js'), format: 'esm', platform: 'browser', jsx: 'automatic', external: ['/fonts/*'], define: { 'import.meta.env': JSON.stringify({ DEV: true, MODE: 'test' }) } });
-  await writeFile(join(webDist, 'index.html'), '<html><head><link rel="stylesheet" href="/ui.css"></head><body><div id="root"></div><script type="module" src="/ui.js"></script></body></html>');
-  const ctx = await createTestApp({}, TEST_TOKEN, {}, { webDist });
+  const ctx = await createSourceTestApp();
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     const workspace = ctx.store.createWorkspace('question browser', ctx.dataDir);
@@ -65,5 +58,5 @@ it('NP-06 a real browser keeps question input and pending state through submissi
     await page.reload();
     await expect.poll(() => page.getByTestId('question-card').getAttribute('data-state')).toBe('resolved');
     expect(await page.getByTestId('question-card').getByRole('button').count()).toBe(0);
-  } finally { await browser?.close(); await ctx.close(); await rm(webDist, { recursive: true, force: true }); }
+  } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);

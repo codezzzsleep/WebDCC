@@ -277,6 +277,8 @@ describe('Codex Watchdog', () => {
     const queued = await ctx.manager.send(sessionId, { text: '用户的下一步' });
     expect(queued.queued).toBe(true);
     codex.finish(sessionId, 'failed', '429 token rate limit exceeded');
+    // Queue delivery now shares the session's serialized native controls.
+    await vi.advanceTimersByTimeAsync(0);
     expect(codex.sent.map((item) => item.input.text)).toEqual(['第一轮', '用户的下一步']);
     expect(ctx.store.watchdogJob(sessionId)).toBeUndefined();
     await vi.advanceTimersByTimeAsync(60_000); expect(codex.sent).toHaveLength(2);

@@ -10,8 +10,9 @@ import type {
   WorkspaceDto,
   WatchdogJob,
   WatchdogSettings,
+  PermissionState,
 } from '@webdcc/protocol';
-import { ulid } from '@webdcc/protocol';
+import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { CommandJournal } from './command-journal.js';
 import { NativeHistoryStore } from './native-history.js';
@@ -26,6 +27,7 @@ interface SessionRow {
   model: string | null;
   reasoning_effort: string | null;
   access_mode: string | null;
+  permission_state?: string | null;
   status: string;
   pinned: number;
   archived: number;
@@ -164,6 +166,7 @@ function toSessionDto(row: SessionRow): SessionDto {
     ...(row.model === null ? {} : { model: row.model }),
     ...(row.reasoning_effort === null ? {} : { reasoningEffort: row.reasoning_effort }),
     ...(row.access_mode === null ? {} : { accessMode: row.access_mode }),
+    permissions: row.permission_state == null ? initialPermissions(row.access_mode) : JSON.parse(row.permission_state) as PermissionState,
     ...(row.parent_id === null || row.parent_id === undefined ? {} : { parentId: row.parent_id }),
     ...(row.handoff_kind == null ? {} : { handoffKind: row.handoff_kind }),
     status: row.status as SessionDto['status'],
@@ -279,10 +282,10 @@ export class Store {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, reasoning_effort, access_mode, status, title, parent_id, handoff_kind, last_seq, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, ?, ?)`,
+        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, reasoning_effort, access_mode, permission_state, status, title, parent_id, handoff_kind, last_seq, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, ?, ?)`,
       )
-      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.reasoningEffort ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, input.parentId == null ? null : input.handoffKind ?? 'manual', at, at);
+      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.reasoningEffort ?? null, input.accessMode ?? null, JSON.stringify(initialPermissions(input.accessMode)), input.title ?? null, input.parentId ?? null, input.parentId == null ? null : input.handoffKind ?? 'manual', at, at);
     return this.getSession(id) as SessionDto;
   }
 
@@ -302,6 +305,7 @@ export class Store {
       model?: string | null;
       reasoningEffort?: string | null;
       accessMode?: string | null;
+      permissions?: PermissionState;
       providerId?: string | null;
       pinned?: boolean;
       archived?: boolean;
@@ -321,6 +325,7 @@ export class Store {
     if (patch.model !== undefined) push('model', patch.model);
     if (patch.reasoningEffort !== undefined) push('reasoning_effort', patch.reasoningEffort);
     if (patch.accessMode !== undefined) push('access_mode', patch.accessMode);
+    if (patch.permissions !== undefined) push('permission_state', JSON.stringify(patch.permissions));
     if (patch.providerId !== undefined) push('provider_id', patch.providerId);
     if (patch.pinned !== undefined) push('pinned', patch.pinned ? 1 : 0);
     if (patch.archived !== undefined) push('archived', patch.archived ? 1 : 0);

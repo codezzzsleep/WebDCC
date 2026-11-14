@@ -1,6 +1,7 @@
 /** AgentAdapter 统一接口（SPEC 5.1） */
 import type { EventKind, UsageData } from './events.js';
 import type { TraceSink } from './trace.js';
+import type { AccessModeOption, NativePermissionObservation } from './permissions.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -70,6 +71,7 @@ export interface LaunchSpec {
 }
 
 export type AdapterEvent =
+  | { type: 'permissions'; observation: NativePermissionObservation }
   | { type: 'history'; nativeId: string; records: NativeHistoryRecord[] }
   | { type: 'item.start'; itemKey: string; kind: EventKind; data: unknown; nativeTurnId?: string; /** @deprecated use nativeTurnId */ turnId?: string; native?: unknown }
   | { type: 'item.delta'; itemKey: string; field: 'text' | 'output'; append: string }
@@ -107,9 +109,9 @@ export interface AgentAdapter {
   debugProcesses?(): AgentProcessInfo[];
   probe(): Promise<ProbeResult>;
   listModels(providerId: string | null): Promise<ModelOption[]>;
-  accessModes(): { id: string; label: string }[];
+  accessModes(): AccessModeOption[];
   /** 运行时可用的访问模式（Codex 从 permissionProfile/list 读，MODE-codex-01） */
-  listAccessModes?(): Promise<{ id: string; label: string }[]>;
+  listAccessModes?(): Promise<AccessModeOption[]>;
   buildLaunchSpec(opts: CreateOpts): LaunchSpec;
   create(opts: CreateOpts): Promise<{ nativeId: string }>;
   resume(opts: CreateOpts & { nativeId: string }): Promise<void>;

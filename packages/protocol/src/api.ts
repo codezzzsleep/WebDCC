@@ -2,10 +2,11 @@
 import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { ProbeResult } from './adapter.js';
 import type { BuildManifest } from './build.js';
+import type { AccessModeOption, PermissionState } from './permissions.js';
 
 export interface AgentMeta extends ProbeResult {
   adapterKind?: 'real' | 'fake';
-  accessModes?: { id: string; label: string }[];
+  accessModes?: AccessModeOption[];
   models?: { id: string; label: string }[];
 }
 
@@ -36,6 +37,7 @@ export interface SessionDto {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  permissions?: PermissionState;
   /** 接续会话的上一棒（"在另一个 Agent 中继续"） */
   parentId?: string;
   /** Manual handoffs are children; Watchdog recoveries stay at their source's level. */

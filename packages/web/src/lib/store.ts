@@ -1,5 +1,5 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput } from '@webdcc/protocol';
+import type { Command, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState } from '@webdcc/protocol';
 import { reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
@@ -18,6 +18,7 @@ export interface SessionMeta {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  permissions?: PermissionState;
   createdAt?: string;
   lastSeq?: number;
   /** 接续会话的上一棒 */
@@ -210,6 +211,7 @@ export class AppStore {
           ...(patch['model'] === undefined ? {} : { model: String(patch['model']) }),
           ...(patch['reasoningEffort'] === undefined ? {} : { reasoningEffort: String(patch['reasoningEffort']) }),
           ...(patch['accessMode'] === undefined ? {} : { accessMode: String(patch['accessMode']) }),
+          ...(patch['permissions'] === undefined ? {} : { permissions: patch['permissions'] as PermissionState }),
           ...(patch['providerId'] === undefined ? {} : { providerId: patch['providerId'] === null ? null : String(patch['providerId']) }),
           ...(typeof patch['parentId'] === 'string' ? { parentId: patch['parentId'] } : {}),
           ...(patch['handoffKind'] === 'manual' || patch['handoffKind'] === 'watchdog' ? { handoffKind: patch['handoffKind'] } : {}),

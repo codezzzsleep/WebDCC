@@ -22,11 +22,12 @@ import {
   type EffortLevel,
   type Options,
   type PermissionResult,
+  type PermissionMode,
   type Query,
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, isValidEventData, traceFrame, normalizeQuestionAnswer } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 
 import { ClaudeContentReducer } from './content.js';
 import { claudeSystemEvent } from './system.js';
@@ -168,6 +169,9 @@ interface PendingInteraction {
 }
 
 interface SessionRuntime {
+  turnActive: boolean;
+  backgroundTasks: Map<string, string | undefined>;
+  hasBackgroundSnapshot: boolean;
   nativeId: string;
   /** 当前 query 使用的模型；setModel 会立即更新 SDK query 和此缓存。 */
   model?: string;
@@ -240,7 +244,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const decisions: PermissionResult[] = [];
     const runtime: SessionRuntime = {
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
-      pump: Promise.resolve(), turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
+      pump: Promise.resolve(), turnActive: false, backgroundTasks: new Map(), hasBackgroundSnapshot: false, turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
       pending: new Map(), toolItems: new Map(), tasks: new Map(), taskOrder: [],
       slashCommands: [], content: new ClaudeContentReducer(1), ready: Promise.resolve(), frameSeq: 0,
     };
@@ -333,8 +337,8 @@ export class ClaudeAdapter implements AgentAdapter {
         ...(Object.keys(providerEnv).length === 0 ? {} : { settings: { env: providerEnv } }),
         ...(opts.model === undefined ? {} : { model: opts.model }),
         ...(opts.reasoningEffort === undefined ? {} : { effort: toClaudeEffort(opts.reasoningEffort) }),
-        ...(opts.accessMode === undefined ? {} : { permissionMode: opts.accessMode }),
-        ...(this.options.model === undefined ? {} : { model: this.options.model }),
+        ...(nativeAccessMode(opts.accessMode) === undefined ? {} : { permissionMode: nativeAccessMode(opts.accessMode) }),
+        ...(opts.model === undefined && this.options.model !== undefined ? { model: this.options.model } : {}),
       },
     };
   }
@@ -373,6 +377,9 @@ export class ClaudeAdapter implements AgentAdapter {
     this.generations.set(sessionId, generation);
     const runtime: SessionRuntime = {
       nativeId: resume ?? '',
+      turnActive: false,
+      backgroundTasks: new Map(),
+      hasBackgroundSnapshot: false,
       ...(opts.model === undefined ? {} : { model: opts.model }),
       launchOpts: opts,
       input,
@@ -404,6 +411,7 @@ export class ClaudeAdapter implements AgentAdapter {
       }
     })().catch((error: unknown) => {
       if (this.sessions.get(sessionId) !== runtime) return;
+      runtime.turnActive = false;
       traceFrame(this.options.traceSink ?? opts.traceSink, { i: ++runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk-error', frame: { message: error instanceof Error ? error.message : String(error) } });
       this.emit(sessionId, {
         type: 'item.complete',
@@ -444,35 +452,54 @@ export class ClaudeAdapter implements AgentAdapter {
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'input', frame: input });
     traceFrame(this.options.traceSink ?? runtime.launchOpts.traceSink, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'sdk-input', frame: { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null } });
     runtime.input.push(input.text, images.length === 0 ? undefined : images);
+    runtime.turnActive = true;
   }
 
   /** 切换访问模式（F6）：Claude Code 用 SDK 的 setPermissionMode */
   async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
     const runtime = this.require(sessionId);
-    await runtime.q.setPermissionMode(mode as never);
+    if (mode === 'inherit') { await this.replaceIdleQuery(sessionId, { accessMode: undefined }); return { accessMode: mode }; }
+    if (!ACCESS_MODES.some(option => option.id === mode)) throw Object.assign(new Error('Claude 权限模式无效'), { statusCode: 400 });
+    await runtime.q.setPermissionMode(mode as PermissionMode);
+    if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生运行实例已替换'), { statusCode: 409 });
     runtime.launchOpts = { ...runtime.launchOpts, accessMode: mode };
+    this.emit(sessionId, { type: 'permissions', observation: { effective: mode, source: 'Query.setPermissionMode', scope: 'query', policy: { permissionMode: mode } } });
     return { accessMode: mode };
   }
 
   /** Claude Agent SDK 支持在同一个 query 上切换模型。必须调用控制面，
    * 只更新 WebDCC 会话元数据会让下一轮仍然使用旧模型。 */
   async setModel(sessionId: string, model: string): Promise<void> {
-    const runtime = this.require(sessionId);
-    runtime.model = model;
-    // The pinned SDK exposes setModel, but the bundled CLI keeps honoring the
-    // launch-time ANTHROPIC_MODEL in settings for subsequent prompts. Restart
-    // the query against the same native session so the model is applied to the
-    // next request while preserving conversation history.
-    const previous = runtime;
-    previous.launchOpts = { ...previous.launchOpts, model };
+    await this.replaceIdleQuery(sessionId, { model });
+  }
+
+  private async replaceIdleQuery(sessionId: string, patch: Partial<CreateOpts>): Promise<void> {
+    const previous = this.require(sessionId);
+    if (previous.turnActive || previous.pending.size > 0 || previous.backgroundTasks.size > 0) throw Object.assign(new Error('请等待当前 Claude 轮次和后台任务结束后切换模型或沿用原生权限'), { statusCode: 409 });
+    const launchOpts = { ...previous.launchOpts, ...patch };
     this.sessions.delete(sessionId);
-    // `close()` is synchronous in the SDK and can block while the child
-    // process drains stdin. Schedule it after the replacement query has been
-    // created so the command acknowledgement never waits on process teardown.
-    const close = previous.q.close;
-    if (typeof close === 'function') setImmediate(() => { try { close.call(previous.q); } catch { /* old query is being replaced */ } });
-    const replacement = this.startQuery(sessionId, previous.launchOpts, previous.nativeId);
-    await Promise.race([replacement.ready, new Promise((resolve) => setTimeout(resolve, 3_000))]);
+    previous.input.end();
+    previous.q.close();
+    await previous.pump;
+    this.emit(sessionId, { type: 'permissions', observation: { effective: null, source: 'query:replacing', scope: 'query' } });
+    const resume = previous.nativeId === '' ? undefined : previous.nativeId;
+    try {
+      const replacement = this.startQuery(sessionId, launchOpts, resume);
+      await replacement.q.initializationResult();
+      if (this.sessions.get(sessionId) !== replacement) throw new Error('原生运行实例已替换');
+    } catch (error) {
+      await this.dispose(sessionId);
+      // The failed model/default-permission change must leave the previously
+      // accepted launch configuration resumable, with only one native writer.
+      try {
+        const rollback = this.startQuery(sessionId, previous.launchOpts, resume);
+        await rollback.q.initializationResult();
+      } catch (rollbackError) {
+        await this.dispose(sessionId);
+        throw Object.assign(new Error(`Claude 切换失败且原配置恢复失败：${String(error)}；${String(rollbackError)}`), { code: 'native-runtime-unavailable', statusCode: 503 });
+      }
+      throw error;
+    }
   }
 
   /** Claude Code 的 effort 可通过 SDK 控制面在下一轮生效，并在重连时由 launchOpts 恢复。 */
@@ -480,6 +507,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     const value = toClaudeEffort(effort);
     await runtime.q.applyFlagSettings({ effortLevel: value });
+    if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生运行实例已替换'), { statusCode: 409 });
     runtime.launchOpts = { ...runtime.launchOpts, reasoningEffort: value };
   }
 
@@ -658,11 +686,26 @@ export class ClaudeAdapter implements AgentAdapter {
 
     switch (message.type) {
       case 'system': {
+        // Once the native level signal is available, edges are presentation
+        // only: their ordering relative to snapshots is unspecified.
+        if (message.subtype === 'background_tasks_changed') {
+          runtime.hasBackgroundSnapshot = true;
+          runtime.backgroundTasks = new Map(message.tasks.map(task => [task.task_id, task.run_id]));
+        }
+        if (!runtime.hasBackgroundSnapshot && (message.subtype === 'task_started' || message.subtype === 'task_progress')) {
+          const current = runtime.backgroundTasks.get(message.task_id);
+          if (!runtime.backgroundTasks.has(message.task_id) || message.run_id !== undefined && (current === undefined || message.run_id >= current)) runtime.backgroundTasks.set(message.task_id, message.run_id);
+        }
+        if (!runtime.hasBackgroundSnapshot && message.subtype === 'task_notification') {
+          const current = runtime.backgroundTasks.get(message.task_id);
+          if (message.run_id === current) runtime.backgroundTasks.delete(message.task_id);
+        }
         if (message.subtype === 'init') {
           runtime.nativeId = message.session_id;
           this.emit(sessionId, { type: 'native-id', nativeId: message.session_id });
           runtime.slashCommands = message.slash_commands ?? [];
         }
+        if ((message.subtype === 'init' || message.subtype === 'status') && typeof message.permissionMode === 'string') this.emit(sessionId, { type: 'permissions', observation: { effective: message.permissionMode, source: `system/${message.subtype}`, scope: 'query', policy: { permissionMode: message.permissionMode } } });
         this.emit(sessionId, claudeSystemEvent(message, runtime.frameSeq));
         return;
       }
@@ -771,6 +814,7 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'result': {
+        runtime.turnActive = false;
         for (const event of runtime.content.flush(message.session_id)) this.emit(sessionId, event);
         const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; modelUsage?: Record<string, unknown>; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
         this.finishGeneration(runtime);

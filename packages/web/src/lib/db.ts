@@ -1,6 +1,6 @@
 /** IndexedDB 缓存（SPEC 7.5） */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { SessionDto, StoredEvent } from '@webdcc/protocol';
+import type { PermissionState, SessionDto, StoredEvent } from '@webdcc/protocol';
 
 export interface CachedSession {
   id: string;
@@ -15,6 +15,7 @@ export interface CachedSession {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  permissions?: PermissionState;
   parentId?: string;
   handoffKind?: SessionDto['handoffKind'];
 }

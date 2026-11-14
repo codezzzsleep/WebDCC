@@ -12,7 +12,7 @@ import type {
   UserInput,
   AnswerSubmission,
 } from '@webdcc/protocol';
-import { ulid } from '@webdcc/protocol';
+import { initialPermissions, nativeAccessMode, observePermissions, ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
@@ -60,9 +60,9 @@ export class SessionManager {
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly runtimes = new Map<string, Runtime>();
   private readonly turns = new TurnTracker();
-  private readonly sends = new Map<string, Promise<unknown>>();
   private readonly activations = new Map<string, Promise<Runtime>>();
   private readonly activationStops = new Set<string>();
+  private readonly controls = new Map<string, Promise<unknown>>();
   private readonly uncertainSessions = new Set<string>();
   private hooks: ManagerHooks = {
     onFeed: () => undefined,
@@ -88,6 +88,10 @@ export class SessionManager {
     // An unfinished legacy turn has no verifiable native outcome. Preserve it
     // and prevent new sends until native reconciliation establishes ownership.
     for (const session of this.store.listSessions(true)) {
+      if (session.permissions !== undefined && session.permissions.phase !== 'failed') {
+        const permissions = { ...session.permissions, phase: 'unknown' as const, revision: session.permissions.revision + 1 };
+        this.store.updateSessionAndFeed(session.id, { permissions, touch: false }, { permissions });
+      }
       const events = this.store.allEvents(session.id);
       const started = events.filter((event) => event.kind === 'turn.started');
       for (const begin of started) {
@@ -133,6 +137,7 @@ export class SessionManager {
   }
 
   private async prepareLaunch<T extends CreateOpts>(session: SessionDto, opts: T): Promise<T> {
+    if (opts.accessMode === 'inherit') { const { accessMode: _accessMode, ...rest } = opts; void _accessMode; opts = rest as T; }
     const recorder = this.options.recorder;
     if (recorder === undefined) return opts;
     recorder.bind({ sessionId: session.id, agent: session.agent as AgentId, workspaceId: session.workspaceId, cwd: opts.cwd, nativeId: session.nativeId, model: opts.model, providerId: opts.providerId });
@@ -151,16 +156,17 @@ export class SessionManager {
 
   /** 权限档位是安全边界，不能只依赖前端菜单的可见项。 */
   private defaultAccessMode(adapter: AgentAdapter): string | undefined {
-    return adapter.accessModes()[0]?.id;
+    return adapter.kind === 'fake' ? adapter.accessModes()[0]?.id : undefined;
   }
 
-  private assertAccessMode(adapter: AgentAdapter, mode: string | undefined): void {
-    if (mode === undefined || mode === '') return;
-    const allowed = new Set(adapter.accessModes().map((item) => item.id));
+  private async assertAccessMode(adapter: AgentAdapter, mode: string | undefined): Promise<void> {
+    if (mode === undefined || mode === '' || mode === 'inherit') return;
+    const options = adapter.listAccessModes === undefined ? adapter.accessModes() : await adapter.listAccessModes();
+    const allowed = new Set(options.filter(option => option.allowed !== false && option.implemented !== false).map((item) => item.id));
     // Codex 的原生 permissionProfile/list 返回带冒号的 id，而旧版配置
     // 与下一轮参数仍接受无冒号别名。
     if (adapter.id === 'codex') {
-      for (const id of ['read-only', 'workspace', 'danger-full-access']) allowed.add(`:${id}`);
+      for (const id of ['read-only', 'workspace', 'danger-full-access']) if (allowed.has(id) || allowed.has(`:${id}`)) { allowed.add(id); allowed.add(`:${id}`); }
     }
     if (!allowed.has(mode)) throw Object.assign(new Error(`${adapter.id}: 不支持的访问模式 ${mode}`), { statusCode: 400 });
     if (adapter.id === 'claude-code' && mode === 'bypassPermissions' && typeof process.getuid === 'function' && process.getuid() === 0) {
@@ -196,7 +202,7 @@ export class SessionManager {
     const adapter = this.adapters.get(input.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${input.agent} adapter`), { statusCode: 400 });
     const accessMode = input.accessMode ?? this.defaultAccessMode(adapter);
-    this.assertAccessMode(adapter, accessMode);
+    await this.assertAccessMode(adapter, accessMode);
     const workspace = this.store.getWorkspace(input.workspaceId);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
 
@@ -250,6 +256,7 @@ export class SessionManager {
       ...(updated?.model === undefined ? {} : { model: updated.model }),
       ...(updated?.reasoningEffort === undefined ? {} : { reasoningEffort: updated.reasoningEffort }),
       ...(updated?.accessMode === undefined ? {} : { accessMode: updated.accessMode }),
+      ...(updated?.permissions === undefined ? {} : { permissions: updated.permissions }),
       providerId: updated?.providerId ?? null,
       ...(updated?.parentId === undefined ? {} : { parentId: updated.parentId }),
       ...(updated?.handoffKind === undefined ? {} : { handoffKind: updated.handoffKind }),
@@ -295,7 +302,7 @@ export class SessionManager {
     const adapter = this.adapters.get(session.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${session.agent} adapter`), { statusCode: 400 });
     const accessMode = session.accessMode ?? this.defaultAccessMode(adapter);
-    this.assertAccessMode(adapter, accessMode);
+    await this.assertAccessMode(adapter, accessMode);
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) return existing;
     if (session.nativeId === undefined) throw Object.assign(new Error('会话缺少原生 id，无法恢复'), { statusCode: 500 });
@@ -324,10 +331,7 @@ export class SessionManager {
   // ---------- 发送 / 介入 ----------
 
   async send(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
-    const previous = this.sends.get(sessionId) ?? Promise.resolve();
-    const pending = previous.catch(() => undefined).then(() => this.sendAccepted(sessionId, input, clientCommandId, automatic));
-    this.sends.set(sessionId, pending);
-    try { return await pending; } finally { if (this.sends.get(sessionId) === pending) this.sends.delete(sessionId); }
+    return this.control(sessionId, () => this.sendAccepted(sessionId, input, clientCommandId, automatic));
   }
 
   private async sendAccepted(sessionId: string, input: UserInput, clientCommandId?: string, automatic?: () => boolean): Promise<{ turnId: string; queued: boolean }> {
@@ -338,6 +342,7 @@ export class SessionManager {
     }
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
+    if (this.requireSession(sessionId).permissions?.phase === 'failed') throw Object.assign(new Error('权限切换失败，请先重新选择权限再发送'), { statusCode: 409 });
     if (automatic !== undefined && !automatic()) throw new Error('Watchdog 已取消');
     if (automatic !== undefined && runtime.turnId !== null) throw Object.assign(new Error('会话已有正在运行的轮次'), { statusCode: 409 });
 
@@ -354,6 +359,7 @@ export class SessionManager {
     const sessionId = runtime.sessionId;
     const session = this.store.getSession(sessionId);
     if (session === undefined) throw new Error('会话不存在');
+    if (session.permissions?.phase === 'failed') throw Object.assign(new Error('权限切换失败，已接受的队列保留但暂停执行'), { statusCode: 409 });
     if (runtime.disposing) throw new Error('会话正在回收');
     if (!this.store.journal.beginInput(turnId)) throw Object.assign(new Error('队列输入已被取消或占有'), { statusCode: 409 });
     this.queueChanged(sessionId);
@@ -502,6 +508,21 @@ export class SessionManager {
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
+    return this.control(sessionId, () => this.applyModel(sessionId, model));
+  }
+
+  private async control<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
+    const previous = this.controls.get(sessionId) ?? Promise.resolve();
+    const pending = previous.catch(() => undefined).then(run);
+    this.controls.set(sessionId, pending);
+    try { return await pending; }
+    catch (error) {
+      if ((error as { code?: string } | null)?.code === 'native-runtime-unavailable') await this.dispose(sessionId);
+      throw error;
+    } finally { if (this.controls.get(sessionId) === pending) this.controls.delete(sessionId); }
+  }
+
+  private async applyModel(sessionId: string, model: string): Promise<void> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
@@ -534,6 +555,10 @@ export class SessionManager {
   }
 
   async setReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
+    return this.control(sessionId, () => this.applyReasoningEffort(sessionId, reasoningEffort));
+  }
+
+  private async applyReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
@@ -543,16 +568,30 @@ export class SessionManager {
 
   /** 切换访问模式（F6）：记一个事件，轨迹里可见；实际生效的模式由 adapter 回报 */
   async setAccessMode(sessionId: string, mode: string): Promise<string> {
+    return this.control(sessionId, () => this.applyAccessMode(sessionId, mode));
+  }
+
+  private async applyAccessMode(sessionId: string, mode: string): Promise<string> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
-    this.assertAccessMode(runtime.adapter, mode);
+    await this.assertAccessMode(runtime.adapter, mode);
+    const previous = this.requireSession(sessionId).permissions ?? initialPermissions(session.accessMode);
+    const requested = { ...previous, requested: nativeAccessMode(mode) ?? null, phase: 'pending' as const, error: undefined, revision: previous.revision + 1 };
+    this.updateSessionAndFeed(sessionId, { accessMode: mode, permissions: requested }, { accessMode: mode, permissions: requested });
     let applied = mode;
-    if (runtime.adapter.setAccessMode !== undefined) {
+    try {
+    if (runtime.adapter.setAccessMode === undefined) throw Object.assign(new Error('该 Agent 不支持权限切换'), { statusCode: 400 });
       const result = await runtime.adapter.setAccessMode(sessionId, mode);
       if (result !== undefined && typeof result.accessMode === 'string') applied = result.accessMode;
+    } catch (error) {
+      const current = this.requireSession(sessionId).permissions ?? requested;
+      if (current.requested === requested.requested) {
+        const failed = { ...current, phase: 'failed' as const, error: error instanceof Error ? error.message : String(error), revision: current.revision + 1 };
+        this.updateSessionAndFeed(sessionId, { permissions: failed }, { permissions: failed });
+      }
+      throw error;
     }
-    this.updateSessionAndFeed(sessionId, { accessMode: applied }, { accessMode: applied });
     const event = this.store.appendEvent({
       sessionId,
       turnId: runtime.turnId,
@@ -561,7 +600,15 @@ export class SessionManager {
       data: { nativeType: 'access-mode', accessMode: applied } as unknown as EventData[EventKind],
     });
     this.hooks.onEvent(event);
+    if (runtime.turnId === null) await this.drainQueue(runtime);
     return applied;
+  }
+
+  private async drainQueue(runtime: Runtime): Promise<void> {
+    if (runtime.disposing || this.runtimes.get(runtime.sessionId) !== runtime || runtime.turnId !== null) return;
+    const next = this.store.journal.next(runtime.sessionId);
+    if (next === undefined || this.requireSession(runtime.sessionId).permissions?.phase === 'failed') return;
+    await this.startTurn(runtime, next.turnId, next.input, next.commandId);
   }
 
   async rename(sessionId: string, title: string): Promise<void> {
@@ -634,6 +681,12 @@ export class SessionManager {
     if (event.type === 'native-id') this.options.recorder?.nativeId(sessionId, event.nativeId);
     const runtime = this.runtimes.get(sessionId);
     if (runtime === undefined) return;
+    if (event.type === 'permissions') {
+      const session = this.requireSession(sessionId);
+      const permissions = observePermissions(session.permissions ?? initialPermissions(session.accessMode), event.observation);
+      this.updateSessionAndFeed(sessionId, { permissions }, { permissions });
+      return;
+    }
     if (event.type === 'history') {
       const imported = this.store.nativeHistory.import(sessionId, event.nativeId, event.records);
       for (const stored of imported) this.hooks.onEvent(stored);
@@ -844,7 +897,7 @@ export class SessionManager {
     if (next !== undefined) {
       // A queued user message takes precedence over automatic recovery.
       this.watchdog.userInput(runtime.sessionId);
-      void this.startTurn(runtime, next.turnId, next.input, next.commandId).catch((error: unknown) => {
+      void this.control(runtime.sessionId, () => this.drainQueue(runtime)).catch((error: unknown) => {
         // startTurn persists the failed turn; keep the manager available for
         // later queued messages even when one queued input fails immediately.
         if (process.env['WDCC_DEBUG_QUEUE'] === '1') console.error('[queue] failed', error);

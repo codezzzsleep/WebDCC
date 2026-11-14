@@ -270,14 +270,20 @@
           "packages/adapters/codex/src/adapter.ts",
           "packages/adapters/claude/src/adapter.ts",
           "packages/server/src/turn-tracker.ts",
-          "packages/server/test/turn-tracker.spec.ts"
+          "packages/server/test/turn-tracker.spec.ts",
+          "packages/server/test/permissions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/manager.ts",
           "packages/adapters/codex/src/adapter.ts",
           "packages/adapters/claude/src/adapter.ts",
           "packages/server/src/turn-tracker.ts",
-          "packages/server/test/turn-tracker.spec.ts"
+          "packages/server/test/turn-tracker.spec.ts",
+          "packages/server/test/permissions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -287,7 +293,7 @@
           "活动native turn的interrupt总指向当前ID，取消完成由native结果确认。",
           "服务端重启时区分原生仍运行/已退出/未知，不把所有情况都标用户打断。"
         ],
-        "remainingWork": "原生轮次 ID 按会话隔离；resume 回调在返回前也可持久化，恢复期间停止可延迟执行。持久 owner/fencing、完整运行代际与未知执行对账仍待完成。"
+        "remainingWork": "会话发送、队列执行、权限、模型和 effort 控制共用串行操作队列；失败权限保留 ACK 队列，修正后继续。Claude query 先关闭旧 writer，再等待新实例初始化；失败时用原生身份及此前确认配置回滚，后台任务以完整 native snapshot 管理，迟到 bookend 不复活已结束任务。持久 owner/fencing、完整运行代际与未知执行对账仍待完成。"
       },
       "dependencyIds": [
         "NP-02",
@@ -495,11 +501,69 @@
         "verification": "partial-local",
         "plannedFiles": [
           "packages/adapters/codex/src/adapter.ts",
-          "packages/adapters/claude/src/adapter.ts"
+          "packages/adapters/claude/src/adapter.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/codex/test/contracts.spec.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/test/native.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/index.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/testing/fake-adapter/src/index.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/pages/NewSession.tsx",
+          "browser-tests/helpers.ts",
+          "browser-tests/permissions.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/adapters/codex/src/permissions.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/adapters/dsh/test/permissions.spec.ts",
+          "packages/protocol/src/permissions.ts",
+          "packages/protocol/test/permissions.spec.ts",
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/test/permissions.spec.ts"
         ],
         "actualFiles": [
           "packages/adapters/codex/src/adapter.ts",
-          "packages/adapters/claude/src/adapter.ts"
+          "packages/adapters/claude/src/adapter.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/codex/test/contracts.spec.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/test/native.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/index.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/testing/fake-adapter/src/index.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/pages/NewSession.tsx",
+          "browser-tests/helpers.ts",
+          "browser-tests/permissions.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/adapters/codex/src/permissions.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/adapters/dsh/test/permissions.spec.ts",
+          "packages/protocol/src/permissions.ts",
+          "packages/protocol/test/permissions.spec.ts",
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/test/permissions.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -509,7 +573,7 @@
           "workspace-write→read-only在下一native执行前可证实生效；失败不显示成功。",
           "换模型、resume、服务重启后权限一致；不可应用的profile和managed限制不可选。"
         ],
-        "remainingWork": "Native inherit/requested/pending/effective state and live policy proof remain incomplete."
+        "remainingWork": "已建立 inherit/requested/pending/observed/failed/unknown 权限状态与 SQLite v4 迁移。新建原生会话不自动选第一档，不复用上次新建的选择；真实 UI 依据原生观察显示实际权限，禁止原生 disallowed/未接入 profile。Codex turn/start 后无覆盖 thread/resume 回读权限，不从请求参数生成 effective；回读失败保持未确认。DSH 使用原生 catalog、权限投影与命令业务结果，Claude 切换保持确认配置并隔离旧实例。仍需锁定版本真实执行、managed 限制、DSH catalog 变更通知及跨连接配置代际的完整验收。"
       },
       "dependencyIds": [
         "NP-01",
@@ -618,13 +682,15 @@
           "packages/adapters/claude/src/adapter.ts",
           "packages/adapters/claude/src/content.ts",
           "packages/adapters/claude/src/system.ts",
-          "packages/adapters/claude/src/content.spec.ts"
+          "packages/adapters/claude/src/content.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts"
         ],
         "actualFiles": [
           "packages/adapters/claude/src/adapter.ts",
           "packages/adapters/claude/src/content.ts",
           "packages/adapters/claude/src/system.ts",
-          "packages/adapters/claude/src/content.spec.ts"
+          "packages/adapters/claude/src/content.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -634,7 +700,7 @@
           "compact/task/status生产listener与replay具有相同保留策略。",
           "权限切换后换模型保持effective权限；工具失败不产生成功任务或用户中断假象。"
         ],
-        "remainingWork": "已分离块级 reducer，以 actor/message/index/generation 保留身份；多文本块、thinking/text、单块 SDK 完成、子 Agent 交错和主结果不关闭后台子块有回归。压缩、任务和未知系统消息保留；失败按 terminal_reason 区分中断。完整 SDK query 生命周期、全部内容类型/任务实体、换模型故障和真实 native 验收仍待完成。"
+        "remainingWork": "已完成块级 reducer/系统消息保留与局部 query 控制：权限和 effort 写入下一实例启动配置，完整后台任务快照阻止错误替换，失败初始化关闭新实例并恢复旧配置。仍需完整 SDK 输出/任务实体、全部初始化和退出故障、真实原生模型与权限结果验证。"
       },
       "dependencyIds": [
         "NP-02",
@@ -2613,12 +2679,16 @@
         "plannedFiles": [
           "packages/server/src/db.ts",
           "packages/server/src/native-history.ts",
-          "packages/server/test/native-history.spec.ts"
+          "packages/server/test/native-history.spec.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/permission-migration.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/db.ts",
           "packages/server/src/native-history.ts",
-          "packages/server/test/native-history.spec.ts"
+          "packages/server/test/native-history.spec.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/permission-migration.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -2628,7 +2698,7 @@
           "迁移中断可恢复，失败不启动不兼容应用；恢复演练包含附件hash和native session关联。",
           "备份/导出不带意外secret；缺外部native备份明确显示无法完整恢复范围。"
         ],
-        "remainingWork": "新增 schema v3 原生轮次与恢复记录随功能交付，在临时 SQLite 关闭/重开后去重和身份关联保留；完整旧库迁移故障窗口、备份/恢复及外部 native/secret 边界验收仍待完成。"
+        "remainingWork": "SQLite schema v4 增加独立权限状态；旧权限选择迁移为 unknown 意图并保留原生会话 URL、事件和输入原文。命令/原生历史迁移已有局部证据；完整备份、损坏/降级、附件 hash 与真实旧库恢复演练仍待完成。"
       },
       "dependencyIds": [
         "NP-03",

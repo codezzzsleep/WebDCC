@@ -17,8 +17,9 @@ import type {
   TraceFrame,
   NativeHistoryRecord,
   AnswerSubmission,
+  AccessModeOption,
 } from '@webdcc/protocol';
-import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, startSidecar, type Sidecar, type StreamFrame } from './host.js';
 import type { DshHistoryRecord, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
 import { DshHistoryBridge, type DshOpening } from './history.js';
@@ -68,12 +69,14 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'session/create',
   'session/list',
   'session/follow',
+  'session/observeProjections',
   'session/page',
   'session/prompt',
   'session/cancel',
   'session/modelCatalog',
   'session/selectModel',
   'settings/describe',
+  'permissionPresets/catalog',
   'settings/update',
   'credentials/set',
   'commands/execute',
@@ -160,6 +163,7 @@ interface SessionRuntime {
   modelProvider?: string;
   reasoningEffort?: string;
   followStream: string | null;
+  permissionStream?: string;
   lastSeq: number;
   turnStartedAt: number;
   pending: Map<string, PendingInteraction>;
@@ -197,6 +201,8 @@ interface DshModelCatalog {
   models?: DshCatalogModel[];
   groups?: DshCatalogGroup[];
 }
+
+interface DshPermissionCatalog { options: { value: string; name: string; description?: string }[]; defaultOptions: { value: string; name: string; description?: string }[]; defaultPreset: string }
 
 /** Return the provider required by DSH's session/selectModel RPC. */
 export function providerForModel(catalog: DshModelCatalog, model: string): string | undefined {
@@ -326,6 +332,12 @@ export class DshAdapter implements AgentAdapter {
     return ACCESS_MODES;
   }
 
+  async listAccessModes(): Promise<AccessModeOption[]> {
+    const client = await this.ensureSidecar();
+    const catalog = await this.call<DshPermissionCatalog>(client, 'permissionPresets/catalog');
+    return catalog.options.map(option => ({ id: option.value, label: option.name, allowed: true, implemented: /^[\w.:-]+$/.test(option.value), reason: option.description, source: 'permissionPresets/catalog', scope: 'session' }));
+  }
+
   /** 3.3 的机器检查入口：只启动一个只监听 127.0.0.1 的侧车 */
   buildLaunchSpec(): LaunchSpec {
     const port = String(this.options.port ?? process.env['WDCC_DSH_PORT'] ?? 3091);
@@ -442,15 +454,20 @@ export class DshAdapter implements AgentAdapter {
   async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
     const runtime = this.require(sessionId);
     const client = await this.ensureSidecar();
-    await this.permission(client, runtime.nativeId, mode);
+    const catalog = mode === 'inherit' ? await this.call<DshPermissionCatalog>(client, 'permissionPresets/catalog') : undefined;
+    if (catalog !== undefined && catalog.defaultPreset === '') throw Object.assign(new Error('DSH 原生默认权限无效'), { statusCode: 409 });
+    await this.permission(client, runtime.nativeId, catalog?.defaultPreset ?? mode);
     return { accessMode: mode };
   }
 
   private async permission(client: DshHostClient, nativeId: string, accessMode: string | undefined): Promise<void> {
+    accessMode = nativeAccessMode(accessMode);
     if (accessMode === undefined) return;
+    const catalog = await this.call<DshPermissionCatalog>(client, 'permissionPresets/catalog');
+    if (!catalog.options.some(option => option.value === accessMode) || !/^[\w.:-]+$/.test(accessMode)) throw Object.assign(new Error('DSH 当前权限目录不允许此模式'), { statusCode: 400 });
     const line = `/permission ${accessMode}`;
-    if (!isAllowedCommandLine(line)) throw new Error(`dsh: 不允许的 commands/execute line: ${line}`);
-    await this.call(client, 'commands/execute', { agentId: nativeId, line, submittedAttachments: [] });
+    const execution = await this.call<{ commandId: string; result: { kind: 'success' | 'error'; text?: string } } | undefined>(client, 'commands/execute', { agentId: nativeId, line, submittedAttachments: [] });
+    if (typeof execution?.commandId !== 'string' || execution.commandId === '' || execution.result?.kind !== 'success') throw Object.assign(new Error(execution?.result?.text ?? 'DSH 权限命令未成功执行'), { statusCode: 409 });
   }
 
   /** 所有 RPC 都经过白名单检查 */
@@ -553,6 +570,7 @@ export class DshAdapter implements AgentAdapter {
       { request: { address: { kind: 'session', sessionId: runtime.nativeId }, activate: true, assistantStream: true } },
       (frame) => { if (this.client === client && this.sessions.get(sessionId) === runtime) this.onEventFrame(sessionId, frame); },
     );
+    runtime.permissionStream = client.openStream('session/observeProjections', { request: { sessionId: runtime.nativeId } }, frame => { if (this.client === client && this.sessions.get(sessionId) === runtime) this.onEventFrame(sessionId, frame); });
   }
 
   private setupHistory(sessionId: string, runtime: SessionRuntime): void {
@@ -574,6 +592,8 @@ export class DshAdapter implements AgentAdapter {
         runtime.historyRecords = [];
         this.emit(sessionId, { type: 'history', nativeId: runtime.nativeId, records });
         const values = opening.projections?.values ?? {};
+        const permission = values['permissions'] as { currentValue?: unknown } | undefined;
+        if (typeof permission?.currentValue === 'string') this.emit(sessionId, { type: 'permissions', observation: { effective: permission.currentValue, source: 'session/follow', scope: 'session', nativeSeq: opening.projections?.asOfSeq } });
         if (Array.isArray(values['subagentCatalog'])) for (const entry of values['subagentCatalog'] as Record<string, unknown>[]) {
           if (typeof entry['id'] === 'string' && typeof entry['mode'] === 'string') runtime.children.set(entry['id'], entry['mode']);
         }
@@ -744,6 +764,7 @@ export class DshAdapter implements AgentAdapter {
     this.sessions.delete(sessionId);
     runtime.history?.invalidate();
     if (runtime.followStream !== null) this.client?.closeStream(runtime.followStream);
+    if (runtime.permissionStream !== undefined) this.client?.closeStream(runtime.permissionStream);
   }
 
   private require(sessionId: string): SessionRuntime {
@@ -766,7 +787,11 @@ export class DshAdapter implements AgentAdapter {
     if (value === undefined) return;
 
     if (value['type'] === 'ready') {
-      this.clientId = String(value['clientId'] ?? '');
+      if (typeof value['clientId'] === 'string') this.clientId = value['clientId'];
+      return;
+    }
+    if (value['type'] === 'projection' && Array.isArray(value['changes'])) {
+      for (const change of value['changes'] as { key: string; val?: { currentValue?: unknown } }[]) if (change.key === 'permissions' && typeof change.val?.currentValue === 'string') this.emit(sessionId, { type: 'permissions', observation: { effective: change.val.currentValue, source: 'session/observeProjections', scope: 'session', nativeSeq: typeof value['seq'] === 'number' ? value['seq'] : undefined } });
       return;
     }
     if (value['type'] === 'waterfall') {

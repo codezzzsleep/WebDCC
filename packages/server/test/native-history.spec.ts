@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 import type { AdapterEvent, NativeHistoryRecord, TraceFrame } from '@webdcc/protocol';
 import { FakeAdapter, ReplayAdapter } from '@webdcc/fake-adapter';
 import { DshAdapter } from '@webdcc/adapter-dsh';
-import { openDb } from '../src/db.js';
+import { CURRENT_SCHEMA_VERSION, openDb } from '../src/db.js';
 import { Store } from '../src/store.js';
 import { SessionManager } from '../src/manager.js';
 import { createTestApp, seedWorkspaceAndSession } from './helpers.js';
@@ -38,7 +38,7 @@ it('NP-05/10 durably joins native echoes to local prewrites and imports each sou
     expect(store.nativeHistory.import(session.id, 'native', turn('original\r\n'))).toEqual([]);
     expect(store.nativeHistory.turn(session.id, 'native:1')).toBe('local-turn');
     expect(store.allEvents(session.id)).toHaveLength(4);
-    expect(db.pragma('user_version', { simple: true })).toBe(3);
+    expect(db.pragma('user_version', { simple: true })).toBe(CURRENT_SCHEMA_VERSION);
     store.deleteSession(session.id);
     expect(db.prepare('SELECT COUNT(*) AS count FROM native_history_records').get()).toEqual({ count: 0 });
   } finally { db.close(); await rm(directory, { recursive: true, force: true }); }

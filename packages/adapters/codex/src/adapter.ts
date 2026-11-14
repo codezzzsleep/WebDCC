@@ -13,10 +13,14 @@ import type {
   UserInput,
   TraceSink,
   TraceFrame,
+  AccessModeOption,
+  NativePermissionObservation,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
 import { normalizeQuestionAnswer } from '@webdcc/protocol';
+import { nativeAccessMode } from '@webdcc/protocol';
+import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 import { nativeRequest } from './controls.js';
 import type { ThreadStartParams } from './schema/v2/ThreadStartParams.js';
@@ -41,6 +45,7 @@ interface PendingApproval {
 }
 
 interface SessionRuntime {
+  permissions?: NativePermissionObservation;
   nativeId: string;
   pid: number;
   /** 每个 app-server 进程一个 token：JSON-RPC 的 request id 在每个进程里从 0/1 开始，
@@ -90,7 +95,8 @@ function accessParams(mode: string | undefined): Pick<ThreadStartParams, 'approv
     case ':danger-full-access':
       return { approvalPolicy: 'never', sandbox: 'danger-full-access', approvalsReviewer: 'user' };
     default:
-      return {};
+      if (mode == null || mode === '' || mode === 'inherit') return {};
+      throw Object.assign(new Error(`Codex 权限模式不支持: ${mode}`), { statusCode: 400 });
   }
 }
 
@@ -510,24 +516,25 @@ export class CodexAdapter implements AgentAdapter {
 
   /** 换模型（AG-*-12）：下一次 turn/start 带上新模型 */
   /** 访问模式来自 app-server 的 permissionProfile/list（MODE-codex-01） */
-  async listAccessModes(): Promise<{ id: string; label: string }[]> {
-    if ((await this.probe()).compatible === false) return ACCESS_MODES;
+  async listAccessModes(): Promise<AccessModeOption[]> {
+    const unavailable = (reason: string): AccessModeOption[] => ACCESS_MODES.map(option => ({ ...option, allowed: false, reason, source: 'permissionProfile/list' }));
+    if ((await this.probe()).compatible === false) return unavailable('原生版本不兼容，权限目录未确认');
     const labels: Record<string, string> = {
       ':read-only': '只读',
       ':workspace': '工作区可写',
       ':danger-full-access': '完全访问',
     };
-    const rpc = JsonRpcStdio.start({ command: 'codex', args: ['app-server'], env: { ...(this.options.env ?? process.env) } });
+    const rpc = JsonRpcStdio.start({ command: this.options.command ?? 'codex', args: ['app-server', ...(this.options.configOverrides ?? []).flatMap(override => ['-c', override])], env: { ...(this.options.env ?? process.env) } });
     try {
       await nativeRequest(rpc, 'initialize', { clientInfo: { name: 'webdcc', title: 'WebDCC', version: '0.1.0' }, capabilities: null });
       rpc.notify('initialized');
       const result = await nativeRequest(rpc, 'permissionProfile/list', {});
       const modes = (result.data ?? [])
         .filter((entry) => typeof entry.id === 'string')
-        .map((entry) => ({ id: String(entry.id), label: labels[String(entry.id)] ?? String(entry.id) }));
-      return modes.length === 0 ? ACCESS_MODES : modes;
+        .map((entry) => ({ id: entry.id, label: labels[entry.id] ?? entry.id, allowed: entry.allowed, implemented: entry.id in labels, reason: entry.id in labels ? entry.description ?? undefined : '此基线尚无经过验证的 profile 切换协议', source: 'permissionProfile/list', scope: 'thread' as const }));
+      return modes.length === 0 ? unavailable('原生权限目录为空，请刷新后重试') : modes;
     } catch {
-      return ACCESS_MODES;
+      return unavailable('原生权限目录读取失败，请刷新后重试');
     } finally {
       await rpc.kill().catch(() => undefined);
     }
@@ -546,7 +553,9 @@ export class CodexAdapter implements AgentAdapter {
   /** Codex：下一次 turn/start 带上 approvalPolicy / sandboxPolicy（F6） */
   async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
     const runtime = this.require(sessionId);
-    runtime.accessMode = mode;
+    accessParams(mode);
+    if (nativeAccessMode(mode) === undefined) await this.readPermissions(sessionId, runtime);
+    runtime.accessMode = nativeAccessMode(mode) ?? null;
     return { accessMode: mode };
   }
 
@@ -643,6 +652,8 @@ export class CodexAdapter implements AgentAdapter {
     await this.handshake(runtime.rpc);
     const response = await nativeRequest(runtime.rpc, 'thread/start', buildThreadStartParams(opts));
     runtime.nativeId = response.thread.id;
+    runtime.permissions = codexPermissionObservation(response, 'thread/start');
+    this.emit(opts.sessionId, { type: 'permissions', observation: runtime.permissions });
     return { nativeId: runtime.nativeId };
     } catch (error) { await this.dispose(opts.sessionId); throw error; }
   }
@@ -661,6 +672,8 @@ export class CodexAdapter implements AgentAdapter {
       ...accessParams(opts.accessMode),
     });
     runtime.nativeId = response.thread.id;
+    runtime.permissions = codexPermissionObservation(response, 'thread/resume');
+    this.emit(opts.sessionId, { type: 'permissions', observation: runtime.permissions });
     // thread/resume 返回后线程可能还没挂上；等 thread/started 或最多 2 秒
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resumed', runtime.nativeId);
@@ -679,13 +692,26 @@ export class CodexAdapter implements AgentAdapter {
     const startedAt = this.now();
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
-    const response = await nativeRequest(runtime.rpc,
-      'turn/start',
-      buildTurnStartParams(runtime.nativeId, input.text, runtime.accessMode, runtime.model, runtime.reasoningEffort, input.images, runtime.cwd),
-    );
+    const mode = runtime.accessMode;
+    const params = buildTurnStartParams(runtime.nativeId, input.text, mode, runtime.model, runtime.reasoningEffort, input.images, runtime.cwd);
+    const response = await nativeRequest(runtime.rpc, 'turn/start', params);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
     runtime.turnId = response.turn.id;
     runtime.turnStartedAt = startedAt;
+    // turn/start acknowledges a turn, not its effective policy. Rejoin the
+    // loaded thread without overrides to read the native policy; overrides
+    // persist for subsequent turns, including when the user selects inherit.
+    try { await this.readPermissions(sessionId, runtime); }
+    catch {
+      if (this.sessions.get(sessionId) === runtime) this.emit(sessionId, { type: 'permissions', observation: { effective: null, source: 'turn/start:policy-unconfirmed', scope: 'turn' } });
+    }
+  }
+
+  private async readPermissions(sessionId: string, runtime: SessionRuntime): Promise<void> {
+    const response = await nativeRequest(runtime.rpc, 'thread/resume', { threadId: runtime.nativeId, excludeTurns: true });
+    if (this.sessions.get(sessionId) !== runtime || response.thread.id !== runtime.nativeId) throw Object.assign(new Error('原生权限读取属于旧运行实例或其他会话'), { statusCode: 409 });
+    runtime.permissions = codexPermissionObservation(response, 'thread/resume:policy-readback');
+    this.emit(sessionId, { type: 'permissions', observation: runtime.permissions });
   }
 
   async interrupt(sessionId: string): Promise<void> {

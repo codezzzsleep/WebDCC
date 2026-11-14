@@ -200,10 +200,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         auth: 'unknown' as const,
         notes: ['probe 失败'],
       }));
+      const modes = adapter.listAccessModes === undefined ? adapter.accessModes() : await adapter.listAccessModes().catch(() => adapter.accessModes().map(option => ({ ...option, allowed: false, reason: '原生权限目录暂时不可用' })));
       agents[adapter.id] = {
         ...probe,
         adapterKind: adapter.kind ?? 'real',
-        accessModes: adapter.listAccessModes === undefined ? adapter.accessModes() : await adapter.listAccessModes().catch(() => adapter.accessModes()),
+        accessModes: adapter.kind === 'fake' ? modes : [{ id: 'inherit', label: '沿用原生权限', allowed: true, implemented: true, reason: '新建或恢复时不覆盖原生权限' }, ...modes],
         models: await adapter.listModels(null).catch(() => []),
       };
     }
