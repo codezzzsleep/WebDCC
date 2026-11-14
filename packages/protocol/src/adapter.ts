@@ -133,7 +133,7 @@ export interface AgentAdapter {
   interrupt(sessionId: string): Promise<void>;
   respond(sessionId: string, d: ApprovalDecision): Promise<void | NativeInteractionSubmission>;
   /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
-  cancelPending?(sessionId: string): Promise<void>;
+  cancelPending?(sessionId: string): Promise<void | NativeInteractionSubmission>;
   answer?(sessionId: string, questionId: string, answer: unknown): Promise<void | AnswerSubmission>;
   setModel?(sessionId: string, model: string): Promise<void>;
   setReasoningEffort?(sessionId: string, effort: string): Promise<void>;

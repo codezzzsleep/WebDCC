@@ -529,7 +529,10 @@ export class SessionManager {
   protectAnswer(sessionId: string, questionId: string, answer: unknown): void {
     const row = this.store.interactions.get(sessionId, 'answer', questionId);
     if (row === undefined || (JSON.parse(row.request) as { isSecret?: boolean }).isSecret !== true) return;
-    for (const value of normalizeQuestionAnswer(answer).values) {
+    const form = this.store.allEvents(sessionId).findLast(event => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId)?.data as EventData['question'] | undefined;
+    const strings = (value: unknown): string[] => typeof value === 'string' ? [value] : value !== null && typeof value === 'object' ? Object.values(value).flatMap(strings) : [];
+    const values = form?.elicitation !== undefined ? strings((answer as { content?: unknown } | null)?.content) : normalizeQuestionAnswer(answer).values;
+    for (const value of values) {
       this.store.nativeEvents.addSecret(value); this.options.recorder?.addSecret(value);
     }
   }
@@ -579,7 +582,7 @@ export class SessionManager {
     const questions = new Map<string, EventData['question']>();
     const approvals = new Set<string>();
     for (const event of this.store.allEvents(runtime.sessionId)) {
-      if (runtime.turnId !== null && event.turnId !== runtime.turnId) continue;
+      if (runtime.turnId !== null && event.turnId !== null && event.turnId !== runtime.turnId) continue;
       if (event.kind === 'question') { const question = event.data as EventData['question']; questions.set(question.questionId, question); }
       if (event.kind === 'approval.request') approvals.add((event.data as EventData['approval.request']).approvalId);
       if (event.kind === 'approval.resolved') approvals.delete((event.data as EventData['approval.resolved']).approvalId);
@@ -599,7 +602,8 @@ export class SessionManager {
     await runtime.adapter.interrupt(sessionId);
     this.assertOwner(runtime);
     // 打断时把本会话挂起的审批标成已取消（只处理自己的会话，AG-*-09）
-    await runtime.adapter.cancelPending?.(sessionId);
+    const cancelled = await runtime.adapter.cancelPending?.(sessionId);
+    if (cancelled?.confirmed === false) { this.touchIdle(runtime); return; }
     for (const approvalId of this.pendingApprovalIds(sessionId)) {
       const event = this.store.appendEvent({
         sessionId,

@@ -20,7 +20,7 @@ function privateSchema(value: unknown, depth = 0): boolean {
   if (depth > 32) return true;
   if (value === null || typeof value !== 'object') return false;
   const record = object(value);
-  if (record['isSecret'] === true || record['writeOnly'] === true) return true;
+  if (record['isSecret'] === true || record['writeOnly'] === true || record['format'] === 'password') return true;
   return Object.values(value).some(child => privateSchema(child, depth + 1));
 }
 function summary(row: Row): NativeEnvelopeSummary {

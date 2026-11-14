@@ -10,6 +10,7 @@ import { duration, shortNumber } from '../lib/format.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Icon, Spinner, type IconName } from './Icon.js';
 import { Markdown, MarkdownWorkspace } from './Markdown.js';
+import { ElicitationForm } from './ElicitationForm.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -28,6 +29,12 @@ interface TimelineProps {
 export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compact = false }: TimelineProps): React.ReactElement {
   const turns = useTurns(sessionId);
   const hotCount = store.getHot(sessionId).length;
+  const standalone = new Map<string, StoredEvent>();
+  for (const event of store.getEvents(sessionId)) {
+    if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
+    if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
+    if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
+  }
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [stickToBottom, setStickToBottom] = useState(true);
@@ -62,6 +69,9 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   return (
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      {[...standalone.values()].filter(event => event.turnId === null).map(event => <div key={event.itemKey} className="timeline-inner">
+        {event.kind === 'question' ? <QuestionCard event={event} data={event.data as EventData['question']} /> : <ApprovalCard event={event} data={event.data as EventData['approval.request']} />}
+      </div>)}
       <div className="timeline-inner" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
         {virtualizer.getVirtualItems().map((item) => {
           const turn = turns[item.index];
@@ -582,6 +592,9 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
     const resolved = resolution.data as EventData['approval.resolved'];
     if (resolved.optionId === 'outcome-unknown') return '原生轮次已结束，审批结果未确认';
     const option = resolved.optionId.toLowerCase();
+    if (option === 'grant-turn') return '已允许本轮额外权限';
+    if (option === 'grant-session') return '已允许本会话额外权限';
+    if (option === 'deny-permissions') return '已拒绝额外权限';
     const result = ['allow', 'accept', 'acceptforsession', 'allowed-once', 'approved', 'approved_for_session', 'approve', 'allow-always', 'allowed-always'].includes(option)
       ? '已允许一次'
       : ['reject', 'rejected', 'deny', 'decline', 'declined', 'denied'].includes(option)
@@ -665,11 +678,17 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
     return (
       <div className="approval-card resolved" data-testid="question-card" data-state="resolved">
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? '已由原生结束' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
+        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? '已由原生结束' : data.outcome === 'decline' ? '已拒绝' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
       </div>
     );
   }
+  if (data.elicitation !== undefined) return <div className="question-card" data-testid="question-card" data-state="pending">
+    <div className="approval-title">{data.header ?? '原生交互'}</div><p>{data.prompt}</p>
+    {data.isSecret ? <p>敏感表单内容只在本页面保留，刷新后需要重新输入。</p> : null}
+    <InteractionStatus submission={submission} />
+    <ElicitationForm form={data.elicitation} busy={busy} submit={answer => store.answer(event.sessionId, data.questionId, answer)} />
+  </div>;
   return (
     <div className="question-card" data-testid="question-card" data-state="pending">
       <div className="approval-title">

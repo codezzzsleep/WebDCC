@@ -24,10 +24,14 @@ import type {
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
 import { normalizeQuestionAnswer } from '@webdcc/protocol';
-import { nativeAccessMode } from '@webdcc/protocol';
+import { nativeAccessMode, schemaHasSecrets } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
-import { nativeRequest } from './controls.js';
+import { nativeRequest, validateNativeServerParams } from './controls.js';
+import { elicitationResponse } from './elicitation.js';
+import type { McpServerElicitationRequestParams } from './schema/v2/McpServerElicitationRequestParams.js';
+import type { PermissionsRequestApprovalParams } from './schema/v2/PermissionsRequestApprovalParams.js';
+import type { PermissionsRequestApprovalResponse } from './schema/v2/PermissionsRequestApprovalResponse.js';
 import type { ThreadStartParams } from './schema/v2/ThreadStartParams.js';
 import type { TurnStartParams } from './schema/v2/TurnStartParams.js';
 import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListResponse.js';
@@ -46,7 +50,11 @@ export interface CodexAdapterOptions {
 
 interface PendingApproval {
   requestId: string | number;
-  kind: 'commandExecution' | 'fileChange' | 'legacyExec' | 'legacyPatch' | 'userInput';
+  kind: 'commandExecution' | 'fileChange' | 'legacyExec' | 'legacyPatch' | 'userInput' | 'elicitation' | 'permissions';
+  elicitation?: McpServerElicitationRequestParams;
+  permissions?: PermissionsRequestApprovalParams['permissions'];
+  outcome?: 'accept' | 'decline' | 'cancel';
+  sessionScoped?: boolean;
   questionIds?: string[];
   answers?: Record<string, { answers: string[] }>;
   questions?: EventData['question'][];
@@ -817,6 +825,17 @@ export class CodexAdapter implements AgentAdapter {
     const pending = runtime?.approvals.get(decision.approvalId);
     if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Codex 审批已结束或不存在'), { statusCode: 409 });
     if (pending.submitted) throw Object.assign(new Error('回应已提交，等待原生确认'), { statusCode: 409 });
+    if (pending.kind === 'permissions') {
+      if (!['grant-turn', 'grant-session', 'deny-permissions'].includes(decision.optionId)) throw Object.assign(new Error('额外权限选项无效'), { statusCode: 400 });
+      const response: PermissionsRequestApprovalResponse = { scope: decision.optionId === 'grant-session' ? 'session' : 'turn', permissions: decision.optionId === 'deny-permissions' ? {} : {
+        ...(pending.permissions?.network == null ? {} : { network: pending.permissions.network }),
+        ...(pending.permissions?.fileSystem == null ? {} : { fileSystem: pending.permissions.fileSystem }),
+      } };
+      pending.submitted = true; pending.decision = decision.optionId;
+      try { runtime.rpc.respond(pending.requestId, response); } catch (error) { pending.submitted = false; pending.decision = undefined; throw error; }
+      return { confirmed: false };
+    }
+    if (pending.kind === 'elicitation') throw Object.assign(new Error('请使用原生表单回应此请求'), { statusCode: 400 });
     if (!['accept', 'acceptForSession', 'decline', 'cancel'].includes(decision.optionId)) throw Object.assign(new Error('审批选项无效'), { statusCode: 400 });
     const runtimeRpc = runtime.rpc;
     const decisionValue = pending.kind === 'legacyExec' || pending.kind === 'legacyPatch'
@@ -831,11 +850,17 @@ export class CodexAdapter implements AgentAdapter {
 
   async answer(sessionId: string, questionId: string, answer: unknown): Promise<{ submitted: boolean; questionIds?: string[]; confirmed?: boolean }> {
     const runtime = this.sessions.get(sessionId);
-    const candidates = [...(runtime?.approvals ?? [])].filter(([id, pending]) => pending.kind === 'userInput' && pending.questionIds?.some(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId));
+    const candidates = [...(runtime?.approvals ?? [])].filter(([id, pending]) => (pending.kind === 'userInput' || pending.kind === 'elicitation') && pending.questionIds?.some(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId));
     const entry = candidates.length === 1 ? candidates[0] : undefined;
     if (runtime === undefined || entry === undefined) throw Object.assign(new Error('Codex 问题已结束或不存在'), { statusCode: 409 });
     const [id, pending] = entry;
     if (pending.submitted) throw Object.assign(new Error('答案已提交，等待原生确认'), { statusCode: 409 });
+    if (pending.kind === 'elicitation') {
+      const response = elicitationResponse(pending.elicitation!, answer);
+      pending.submitted = true; pending.outcome = response.action;
+      try { runtime.rpc.respond(pending.requestId, response); } catch (error) { pending.submitted = false; pending.outcome = undefined; throw error; }
+      return { submitted: true, confirmed: false, questionIds: pending.questions!.map(question => question.questionId) };
+    }
     const nativeId = pending.questionIds?.find(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId);
     if (nativeId === undefined) throw new Error('原生问题身份不一致');
     const value = normalizeQuestionAnswer(answer).values;
@@ -849,15 +874,19 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   /** 打断时把挂起的审批回 decline，避免 JSON-RPC 请求悬空 */
-  async cancelPending(sessionId: string): Promise<void> {
+  async cancelPending(sessionId: string): Promise<NativeInteractionSubmission> {
     const runtime = this.sessions.get(sessionId);
-    if (runtime === undefined) return;
+    if (runtime === undefined) return { confirmed: true };
     for (const [approvalId, pending] of [...runtime.approvals]) {
-      runtime.approvals.delete(approvalId);
+      void approvalId;
       if (pending.submitted) continue;
       const decisionValue = pending.kind === 'legacyExec' || pending.kind === 'legacyPatch' ? 'denied' : 'decline';
-      runtime.rpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
+      pending.submitted = true; pending.outcome = 'cancel'; pending.decision = 'cancel';
+      try { runtime.rpc.respond(pending.requestId, pending.kind === 'elicitation' ? { action: 'cancel', content: null, _meta: null }
+        : pending.kind === 'permissions' ? { permissions: {}, scope: 'turn' } : pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
+      } catch (error) { pending.submitted = false; pending.outcome = undefined; pending.decision = undefined; throw error; }
     }
+    return { confirmed: false };
   }
 
   debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
@@ -917,10 +946,12 @@ export class CodexAdapter implements AgentAdapter {
         if (entry === undefined) return;
         const [approvalId, pending] = entry;
         runtime.approvals.delete(approvalId);
-        if (pending.kind === 'userInput') {
+        if (pending.kind === 'userInput' || pending.kind === 'elicitation') {
           for (const question of pending.questions ?? []) this.emit(sessionId, {
             type: 'item.complete', itemKey: `question-resolved-${question.questionId}`, kind: 'question',
-            data: { ...question, status: pending.submitted ? 'answered' : 'skipped', resolution: pending.submitted ? 'native-acknowledged' : 'external' }, native: frame,
+            ...(pending.sessionScoped ? { scope: 'session' as const } : {}),
+            data: { ...question, status: pending.submitted && pending.outcome !== 'cancel' && pending.outcome !== 'decline' ? 'answered' : 'skipped',
+              resolution: pending.submitted ? 'native-acknowledged' : 'external', ...(pending.outcome === undefined ? {} : { outcome: pending.outcome }) }, native: frame,
           });
         } else this.emit(sessionId, {
           type: 'item.complete', itemKey: `approval-${approvalId}`, kind: 'approval.resolved',
@@ -1196,6 +1227,31 @@ export class CodexAdapter implements AgentAdapter {
     const method = String(frame['method'] ?? '');
     const id = frame['id'];
     if (typeof id !== 'string' && typeof id !== 'number') throw Object.assign(new Error('Invalid native request ID'), { code: -32600 });
+    if (runtime !== undefined && (method === 'mcpServer/elicitation/request' || method === 'item/permissions/requestApproval')) {
+      validateNativeServerParams(method, frame['params']);
+      const params = frame['params'] as McpServerElicitationRequestParams | PermissionsRequestApprovalParams;
+      if (params.threadId !== runtime.nativeId) throw Object.assign(new Error('Reverse request belongs to another native thread'), { code: -32602 });
+      const approvalId = `${runtime.processToken}:${typeof id}:${id}`;
+      if (runtime.approvals.has(approvalId)) return undefined;
+      if (method === 'item/permissions/requestApproval') {
+        const permission = params as PermissionsRequestApprovalParams;
+        runtime.approvals.set(approvalId, { requestId: id, kind: 'permissions', permissions: permission.permissions });
+        this.emit(sessionId, { type: 'item.complete', itemKey: `approval-${approvalId}`, kind: 'approval.request', nativeTurnId: permission.turnId, native: frame,
+          data: { approvalId, title: '原生额外权限', tool: 'request_permissions', reason: permission.reason ?? undefined,
+            detail: JSON.stringify({ cwd: permission.cwd, environmentId: permission.environmentId, permissions: permission.permissions }, null, 2),
+            options: [{ id: 'grant-turn', label: '仅本轮允许' }, { id: 'grant-session', label: '本会话允许' }, { id: 'deny-permissions', label: '拒绝额外权限' }] } });
+      } else {
+        const elicitation = params as McpServerElicitationRequestParams;
+        const question: EventData['question'] = { questionId: `${approvalId}:elicitation`, groupId: approvalId, prompt: elicitation.message,
+          header: `MCP · ${elicitation.serverName}`, allowsFreeText: false, isSecret: elicitation.mode !== 'url' && schemaHasSecrets(elicitation.requestedSchema),
+          elicitation: elicitation.mode === 'url' ? { kind: 'url', serverName: elicitation.serverName, url: elicitation.url, elicitationId: elicitation.elicitationId }
+            : { kind: 'form', serverName: elicitation.serverName, schema: elicitation.requestedSchema as Record<string, unknown> } };
+        runtime.approvals.set(approvalId, { requestId: id, kind: 'elicitation', elicitation, questionIds: ['elicitation'], questions: [question], sessionScoped: elicitation.turnId === null });
+        this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}`, kind: 'question', data: question, native: frame,
+          ...(elicitation.turnId === null ? { scope: 'session' as const } : { nativeTurnId: elicitation.turnId }) });
+      }
+      return undefined;
+    }
     if (!['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'execCommandApproval', 'applyPatchApproval', 'item/tool/requestUserInput'].includes(method)) {
       this.emit(sessionId, { type: 'item.complete', itemKey: `unsupported-${String(id)}`, kind: 'unknown', data: { nativeType: method }, native: frame });
       throw Object.assign(new Error(`Unsupported native request: ${method}`), { code: -32601 });

@@ -1,4 +1,5 @@
 /** 统一事件模型（SPEC 第 6 节） */
+import type { ElicitationForm, ElicitationAction } from './elicitation.js';
 
 export type EventKind =
   | 'user.message'
@@ -66,6 +67,8 @@ export interface QuestionItem {
   multiSelect?: boolean;
   allowsFreeText?: boolean;
   isSecret?: boolean;
+  elicitation?: ElicitationForm;
+  outcome?: ElicitationAction;
   toolCallId?: string;
   status?: 'pending' | 'answered' | 'skipped';
   resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';

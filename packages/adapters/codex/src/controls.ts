@@ -29,6 +29,7 @@ for (const [name, minimum, maximum] of [
   ['uint', 0, Number.MAX_SAFE_INTEGER], ['uint16', 0, 65535], ['uint32', 0, 4294967295], ['uint64', 0, Number.MAX_SAFE_INTEGER],
   ['int32', -2147483648, 2147483647], ['int64', Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
 ] as const) ajv.addFormat(name, { type: 'number', validate: value => Number.isSafeInteger(value) && value >= minimum && value <= maximum });
+ajv.addFormat('double', { type: 'number', validate: Number.isFinite });
 const requestValidators = new Map<string, ValidateFunction>();
 const responseRefs = {
   initialize: '#/definitions/InitializeResponse',
@@ -37,6 +38,18 @@ const responseRefs = {
   'thread/read': '#/definitions/v2/ThreadReadResponse', 'thread/turns/list': '#/definitions/v2/ThreadTurnsListResponse',
 };
 const responseValidators = new Map<string, ValidateFunction>();
+const serverValidators = new Map<string, ValidateFunction>();
+
+export function validateNativeServerParams(method: string, params: unknown): void {
+  let validate = serverValidators.get(method);
+  if (validate === undefined) {
+    const branch = protocolSchema.definitions.ServerRequest.oneOf.find(branch => branch.properties.method.enum[0] === method);
+    if (branch === undefined) throw Object.assign(new Error('Unknown native reverse request'), { code: -32601 });
+    validate = ajv.compile({ $ref: branch.properties.params.$ref, definitions: protocolSchema.definitions });
+    serverValidators.set(method, validate);
+  }
+  if (!validate(params)) throw Object.assign(new Error(`Invalid ${method} native request: ${ajv.errorsText(validate.errors)}`), { code: -32602 });
+}
 
 export function validateNativeParams(method: string, params: unknown): void {
   let validate = requestValidators.get(method);

@@ -120,7 +120,15 @@
           "packages/adapters/codex/test/rpc.spec.ts",
           "packages/adapters/dsh/src/contracts.ts",
           "packages/adapters/dsh/src/host.ts",
-          "packages/adapters/dsh/test/contracts.spec.ts"
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "actualFiles": [
           "packages/adapters/codex/src/controls.ts",
@@ -134,11 +142,20 @@
           "packages/adapters/codex/test/rpc.spec.ts",
           "packages/adapters/dsh/src/contracts.ts",
           "packages/adapters/dsh/src/host.ts",
-          "packages/adapters/dsh/test/contracts.spec.ts"
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json"
         ],
         "remainingAcceptance": [
           "所有已用native方法的请求与响应通过合同测试，错误字段和错误枚举必失败。",
@@ -507,7 +524,15 @@
           "packages/adapters/claude/src/managed-process.ts",
           "packages/adapters/claude/test/managed-process.spec.ts",
           "packages/server/test/sensitive-answers.spec.ts",
-          "browser-tests/sensitive-answers.spec.ts"
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -544,13 +569,22 @@
           "packages/adapters/claude/src/managed-process.ts",
           "packages/adapters/claude/test/managed-process.spec.ts",
           "packages/server/test/sensitive-answers.spec.ts",
-          "browser-tests/sensitive-answers.spec.ts"
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-64cf89e.json",
           "web_review/evidence/l1-e493ec4.json",
-          "web_review/evidence/native-recovery-current.json"
+          "web_review/evidence/native-recovery-current.json",
+          "web_review/evidence/native-elicitation.json"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
@@ -728,7 +762,15 @@
           "browser-tests/goals.spec.ts",
           "packages/adapters/codex/test/permissions.spec.ts",
           "packages/server/src/turn-tracker.ts",
-          "packages/web/src/components/TaskPanel.tsx"
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "actualFiles": [
           "packages/adapters/codex/src/adapter.ts",
@@ -738,11 +780,20 @@
           "browser-tests/goals.spec.ts",
           "packages/adapters/codex/test/permissions.spec.ts",
           "packages/server/src/turn-tracker.ts",
-          "packages/web/src/components/TaskPanel.tsx"
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json"
         ],
         "remainingAcceptance": [
           "summary=[a,b]与plan.text均完整显示且只出现一次。",
@@ -1116,7 +1167,15 @@
           "packages/server/test/security.spec.ts",
           "browser-tests/security.spec.ts",
           "packages/server/test/helpers.ts",
-          "packages/server/test/uploads.spec.ts"
+          "packages/server/test/uploads.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "actualFiles": [
           "packages/server/src/auth.ts",
@@ -1129,11 +1188,20 @@
           "packages/server/test/security.spec.ts",
           "browser-tests/security.spec.ts",
           "packages/server/test/helpers.ts",
-          "packages/server/test/uploads.spec.ts"
+          "packages/server/test/uploads.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json"
         ],
         "remainingAcceptance": [
           "认证用户打开不可信HTML/SVG不能以WebDCC origin调用命令；附件头与预览隔离均测。",
@@ -1311,7 +1379,15 @@
           "packages/protocol/src/user-echo.ts",
           "packages/server/test/native-history.spec.ts",
           "browser-tests/interactions.spec.ts",
-          "packages/server/test/helpers.ts"
+          "packages/server/test/helpers.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "actualFiles": [
           "scripts/lib/gate-report.ts",
@@ -1327,14 +1403,23 @@
           "packages/protocol/src/user-echo.ts",
           "packages/server/test/native-history.spec.ts",
           "browser-tests/interactions.spec.ts",
-          "packages/server/test/helpers.ts"
+          "packages/server/test/helpers.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/dsh-recovery-l1.json",
           "web_review/evidence/claude-block-l1.json",
           "web_review/evidence/l1-64cf89e.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json"
         ],
         "remainingAcceptance": [
           "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",
@@ -1832,11 +1917,31 @@
         "F07"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
-        "evidence": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-elicitation.json"
+        ],
         "remainingAcceptance": [
           "原生加载集合与Web列表一致；认证失败/过期可恢复。",
           "表单按native schema校验，URL流程完成后原请求得到正确结果。",

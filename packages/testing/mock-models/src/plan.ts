@@ -23,6 +23,8 @@ export interface PlanToolCall {
   kind: ToolKind;
   /** 直接指定原生工具名；缺省时按 kind 在同请求的 tools 里匹配 */
   name?: string;
+  /** Responses API namespace identity, distinct from the function name. */
+  namespace?: string;
   input?: Record<string, unknown>;
   /** 覆盖默认的 tool_use / function_call id，便于断言 */
   callId?: string;
@@ -137,6 +139,7 @@ export function isPlan(value: unknown): value is Plan {
 
 export interface ResolvedTool {
   name: string;
+  namespace?: string;
   input: Record<string, unknown>;
   callId?: string;
   /** 命中的语义 kind，便于日志 */
@@ -154,10 +157,13 @@ export function resolveTool(
   if (!call) return undefined;
   const candidates: PlanToolCall[] = [call, ...(call.alternatives ?? [])];
   for (const candidate of candidates) {
+    if (candidate.namespace !== undefined && !tools?.some(namespace => namespace.name === candidate.namespace && Array.isArray(namespace['tools']) &&
+      namespace['tools'].some((tool: { name?: string }) => tool.name === candidate.name))) continue;
     const name = candidate.name ?? pickToolName(candidate.kind, tools);
     if (name === undefined) continue;
     return {
       name,
+      ...(candidate.namespace === undefined ? {} : { namespace: candidate.namespace }),
       input: candidate.inputByName?.[name] ?? candidate.input ?? {},
       ...(candidate.callId === undefined ? {} : { callId: candidate.callId }),
       kind: candidate.kind,
@@ -168,13 +174,13 @@ export function resolveTool(
 
 
 /** 找到第一个可用的步骤：可选步骤的工具缺失时继续往后找 */
-export function resolveStep(plan: Plan, index: number, tools: readonly ToolDescriptor[] | undefined): { step: PlanStep; toolName?: string; toolInput?: Record<string, unknown>; kind?: ToolKind } {
+export function resolveStep(plan: Plan, index: number, tools: readonly ToolDescriptor[] | undefined): { step: PlanStep; toolName?: string; toolNamespace?: string; toolInput?: Record<string, unknown>; kind?: ToolKind } {
   for (let i = index; i < plan.length; i += 1) {
     const step = plan[i];
     if (step === undefined) break;
     if (step.tool === undefined) return { step };
     const resolved = resolveTool(step.tool, tools);
-    if (resolved !== undefined) return { step, toolName: resolved.name, toolInput: { ...(resolved.input ?? {}) }, kind: resolved.kind };
+    if (resolved !== undefined) return { step, toolName: resolved.name, ...(resolved.namespace === undefined ? {} : { toolNamespace: resolved.namespace }), toolInput: { ...(resolved.input ?? {}) }, kind: resolved.kind };
     if (step.optional === true) continue;
     return { step };
   }

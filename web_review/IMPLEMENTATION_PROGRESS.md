@@ -181,3 +181,13 @@
 - 浏览器IndexedDB只写敏感命令身份/状态和omitted标记；刷新将该receipt恢复为待重新输入或uncertain，不能把脱敏标记当答案重发。
 - 服务端依照权威question metadata判敏感，正文hash仍支持同ID冲突检测，但command journal不保存secret原文。原生收到的字节不改写；动态secret在提交前登记到诊断脱敏器，错误与持久语义事件也写前脱敏。
 - 41项相关单元、typecheck/lint、敏感问答HTTP→原生值断言和真实Chromium“密码框→IndexedDBreceipt→刷新不重放→native确认”通过。跨帧secret碎片、重启后无法识别的原生回显与历史诊断清理仍需NP-14继续补齐，不声称完整secret验收。
+
+## 接续实现：原生权限与MCP交互（2026-11-14）
+
+- Codex额外权限请求与MCP form/openai-form/url按锁定ServerRequest schema校验，保留string/number request ID和native thread身份；权限回应只授权请求中的权限及用户选择的turn/session范围，拒绝为空授权。
+- MCP按原生schema渲染字段，验证类型/required/枚举/范围/格式，兼容draft7/2019/2020；拒绝/取消不夹带content。password/writeOnly受敏感receipt策略保护，URL限定HTTP(S)、拒绝凭据及主动协议、不传referrer。
+- turnId=null的请求有独立可操作卡片，原生确认仍回同scope；提交、停止及取消不先假resolved，等待serverRequest/resolved或原生终态。权限卡显示真实作用域。
+- 8项协议/拒绝/取消/身份测试、真实Chromium失败→修改重试→secret原样native→确认→刷新→恶意链接阻止通过。完整源码门禁该检查点：73文件/322项单元，9文件/10项Chromium及typecheck/lint/库存/build全部通过；后续脚本修订需再绑定当前SHA/fingerprint。
+- 实际Codex0.167.0 +本地MCP stdio服务 +脚本化Responses模型 +真实Chromium完整通过：MCP工具实际调用→elicitation/create→原生反向请求→Web表单→MCP服务收到精确content→native resolution→最终回复→刷新状态一致。证据 web_review/evidence/native-elicitation.json，paidModel=false。不是仅注入AdapterEvent的证明。
+- 真实验证发现旧mock把namespaced MCP工具当扁平名，native返回unsupported call；另一个隔离policy=never场景被native拒绝MCP调用。新mock保留namespace/name并检查实际工具目录，未触发即NOT_TRIGGERED，不用轮次完成冒充目标动作完成。测试MCP明确标只读并在隔离原生配置采用on-request，未修改真实用户配置。
+- Claude/DSH完整elicitation、Native账号/Host目录与全三家付费模型/故障矩阵仍待实施和验收；NP-06/25不标整体完成。
