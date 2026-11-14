@@ -15,6 +15,9 @@ import { registerRoutes, sendJsonError } from './rest.js';
 import type { Store } from './store.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { isImagePath, workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
+import { registerNativeSurfaces } from './native-surfaces-integration.js';
+import { createDshNativeSurface } from './dsh-native-surface.js';
+import { payloadHash } from './command-journal.js';
 
 export interface BuildAppOptions {
   config: Config;
@@ -55,6 +58,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const hub = new LiveHub(store, manager, dispatcher, config.token, `${config.host}:${config.port}`);
 
   await app.register(websocket);
+  const mainHost = config.host === '0.0.0.0' || config.host === '::' ? '127.0.0.1' : config.host.includes(':') ? `[${config.host}]` : config.host;
+  const dshSurface = await createDshNativeSurface({ publicOrigin: config.nativeDshPublicOrigin,
+    applicationOrigins: config.publicOrigins?.length ? config.publicOrigins : [`http://${mainHost}:${config.port}`],
+    connection: () => options.dsh.connection,
+    authRevision: () => payloadHash(config.token),
+  });
+  if (config.nativeDshPublicOrigin) await dshSurface.start({ host: config.nativeDshListenHost ?? '127.0.0.1', port: config.nativeDshListenPort ?? 8788 });
+  app.addHook('onClose', () => dshSurface.close());
 
   app.addHook('onRequest', async (request, reply) => {
     const path = (request.url.split('?')[0] ?? '/').replace(/\/+$/, '') || '/';
@@ -113,6 +124,15 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     dsh: options.dsh,
     recorder: options.recorder,
     recordFileOperation: options.recorder === undefined ? undefined : event => options.recorder?.file(event),
+  });
+  registerNativeSurfaces(app, store, manager, config, event => hub.broadcastEvent(event));
+  app.get('/api/dsh/native-surface', () => dshSurface.status());
+  app.post('/api/dsh/native-surface/open', { bodyLimit: 1024 }, async request => {
+    const body = request.body as { sessionId?: unknown };
+    if (!body || typeof body !== 'object' || Object.keys(body).some(key => key !== 'sessionId') || typeof body.sessionId !== 'string') throw Object.assign(new Error('需要目标 DSH 会话'), { statusCode: 400 });
+    const session = manager.requireSession(body.sessionId);
+    if (session.agent !== 'dsh' || !session.nativeId) throw Object.assign(new Error('此会话没有可读的 DSH 原生身份'), { statusCode: 409 });
+    return dshSurface.issueTicket({ nativeId: session.nativeId });
   });
   hub.attach(app);
 

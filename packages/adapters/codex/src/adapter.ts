@@ -20,6 +20,9 @@ import type {
   NativeInteractionSubmission,
   RuntimeIdentity,
   NativeObservation,
+  NativeProcessDelta,
+  NativeProcessCompletion,
+  NativeProcessStart,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -27,7 +30,7 @@ import { normalizeQuestionAnswer } from '@webdcc/protocol';
 import { nativeAccessMode, schemaHasSecrets } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
-import { nativeRequest, validateNativeServerParams } from './controls.js';
+import { nativeRequest, validateNativeServerParams, type NativeParams } from './controls.js';
 import { elicitationResponse } from './elicitation.js';
 import type { McpServerElicitationRequestParams } from './schema/v2/McpServerElicitationRequestParams.js';
 import type { PermissionsRequestApprovalParams } from './schema/v2/PermissionsRequestApprovalParams.js';
@@ -36,6 +39,7 @@ import type { ThreadStartParams } from './schema/v2/ThreadStartParams.js';
 import type { TurnStartParams } from './schema/v2/TurnStartParams.js';
 import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListResponse.js';
 import type { InitializeResponse } from './schema/InitializeResponse.js';
+import { codexNativeCatalog, codexNativeState, executeCodexNativeControl, parseCodexNativeAction } from './native.js';
 
 export const PINNED_VERSION = '0.167.0';
 
@@ -539,7 +543,26 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async listModels(): Promise<ModelOption[]> {
-    return [{ id: 'gpt-5', label: 'GPT-5' }];
+    await this.requirePinnedVersion();
+    const spec = this.buildLaunchSpec({ sessionId: 'model-catalog', cwd: process.cwd(), providerId: null });
+    let frameIndex = 0;
+    const rpc = JsonRpcStdio.start({ command: spec.command!, args: spec.args, env: { ...(this.options.env ?? process.env), ...spec.env },
+      onFrame: (dir, frame) => traceFrame(this.options.traceSink, { i: ++frameIndex, t: 0, dir, ch: 'rpc-catalog', frame }) });
+    try {
+      await this.handshake(rpc);
+      const models: ModelOption[] = []; let cursor: string | undefined;
+      const seen = new Set<string>();
+      for (let page = 0; page < 5; page++) {
+        const result = await nativeRequest(rpc, 'model/list', { limit: 100, ...(cursor === undefined ? {} : { cursor }), includeHidden: false });
+        for (const model of result.data) models.push({ id: model.model, label: model.displayName,
+          reasoningEfforts: model.supportedReasoningEfforts.map(option => option.reasoningEffort), defaultReasoningEffort: model.defaultReasoningEffort,
+          inputModalities: model.inputModalities, isDefault: model.isDefault, source: `codex:${PINNED_VERSION}:model/list` });
+        if (result.nextCursor === null) return models;
+        if (seen.has(result.nextCursor)) throw new Error('原生模型目录分页游标循环');
+        cursor = result.nextCursor; seen.add(cursor);
+      }
+      throw new Error('原生模型目录超过本次500项读取范围，请缩小目录');
+    } finally { await rpc.kill(); }
   }
 
   /** Codex app-server does not expose a command catalog; /model is the
@@ -606,16 +629,17 @@ export class CodexAdapter implements AgentAdapter {
     const provider = opts.provider;
     if (provider !== null && provider !== undefined) {
       const key = `wdcc_${provider.id}`;
-      args.push('-c', `model_provider=${key}`);
-      args.push('-c', `model_providers.${key}.name="${provider.name}"`);
+      if (!/^[A-Za-z0-9_-]+$/.test(key)) throw Object.assign(new Error('Provider身份不符合原生配置键要求'), { statusCode: 400 });
+      args.push('-c', `model_provider=${JSON.stringify(key)}`);
+      args.push('-c', `model_providers.${key}.name=${JSON.stringify(provider.name)}`);
       const baseUrl = provider.endpoints?.['openai-responses'] ?? provider.baseUrl;
-      args.push('-c', `model_providers.${key}.base_url="${baseUrl}"`);
+      args.push('-c', `model_providers.${key}.base_url=${JSON.stringify(baseUrl)}`);
       args.push('-c', `model_providers.${key}.wire_api="responses"`);
       args.push('-c', `model_providers.${key}.env_key="WDCC_PROVIDER_KEY"`);
-      if (provider.codexCatalogPath !== undefined) args.push('-c', `model_catalog_json="${provider.codexCatalogPath}"`);
+      if (provider.codexCatalogPath !== undefined) args.push('-c', `model_catalog_json=${JSON.stringify(provider.codexCatalogPath)}`);
       if (provider.apiKey !== undefined) env['WDCC_PROVIDER_KEY'] = provider.apiKey;
     }
-    if (opts.model !== undefined) args.push('-c', `model="${opts.model}"`);
+    if (opts.model !== undefined) args.push('-c', `model=${JSON.stringify(opts.model)}`);
     if (opts.recordingEndpoint?.codexProvider !== undefined) args.push('-c', `model_providers.${opts.recordingEndpoint.codexProvider}.base_url=${JSON.stringify(opts.recordingEndpoint.url)}`);
     return { command: this.options.command ?? 'codex', args, env };
   }
@@ -905,6 +929,69 @@ export class CodexAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     this.sessions.delete(sessionId);
     await runtime.rpc.kill().catch(() => undefined);
+  }
+
+  async nativeState(sessionId: string) {
+    const runtime = this.require(sessionId);
+    await runtime.ready;
+    const current = (): void => { if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已更换或断开'), { statusCode: 409 }); };
+    const state = await codexNativeState(runtime.rpc, runtime.nativeId, current);
+    return { ...state, model: runtime.model, effort: runtime.reasoningEffort, permissions: runtime.permissions,
+      transport: 'live', turnActive: runtime.turnId !== null, activeTurnId: runtime.turnId,
+      interactions: [...runtime.approvals].map(([id, pending]) => ({ id, kind: pending.kind, submitted: pending.submitted === true })) };
+  }
+  nativeTerminalEnvironment(): Record<string, string | undefined> { return { ...(this.options.env ?? process.env) }; }
+
+  async nativeCatalog(sessionId: string) {
+    const runtime = this.require(sessionId);
+    await runtime.ready;
+    const current = (): void => { if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已更换或断开'), { statusCode: 409 }); };
+    return { nativeId: runtime.nativeId, version: PINNED_VERSION, ...(await codexNativeCatalog(runtime.rpc, runtime.nativeId, runtime.cwd, current)) };
+  }
+
+  async executeNativeControl(sessionId: string, value: unknown): Promise<unknown> {
+    const action = parseCodexNativeAction(value);
+    const runtime = this.require(sessionId);
+    await runtime.ready;
+    if (['compact', 'archive', 'unarchive', 'fork', 'review'].includes(action.type) && (runtime.turnId !== null || runtime.approvals.size > 0)) throw Object.assign(new Error('请等待原生轮次和交互结束后操作'), { statusCode: 409, code: 'native-control-rejected' });
+    if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生实例已断开'), { statusCode: 409, code: 'native-control-rejected' });
+    const result = await executeCodexNativeControl(runtime.rpc, runtime.nativeId, runtime.cwd, action);
+    if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生运行实例已变化，结果需核对'), { statusCode: 409 });
+    return result;
+  }
+
+  async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }) {
+    const runtime = this.require(sessionId);
+    await runtime.ready;
+    if (options.offset !== undefined && options.offset !== 0) throw Object.assign(new Error('Codex 历史使用不透明游标，请勿使用 offset'), { statusCode: 400 });
+    const result = await nativeRequest(runtime.rpc, 'thread/turns/list', { threadId: runtime.nativeId, limit: options.limit,
+      ...(options.cursor === undefined ? {} : { cursor: options.cursor }), sortDirection: 'desc', itemsView: 'full' });
+    if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生运行实例已变化'), { statusCode: 409 });
+    return result;
+  }
+
+  async nativeProcessStart(sessionId: string, params: NativeProcessStart, onOutput: (delta: NativeProcessDelta) => void): Promise<NativeProcessCompletion> {
+    const runtime = this.require(sessionId); await runtime.ready;
+    const policy = runtime.permissions?.policy as { sandbox?: NativeParams<'command/exec'>['sandboxPolicy'] } | undefined;
+    if (policy?.sandbox == null) throw Object.assign(new Error('尚未读回原生沙箱，不能启动原生命令'), { statusCode: 409, code: 'native-control-rejected' });
+    const detach = runtime.rpc.onNotification(frame => {
+      if (this.sessions.get(sessionId) !== runtime || frame['method'] !== 'command/exec/outputDelta') return;
+      const delta = frame['params'] as { processId?: string } & NativeProcessDelta;
+      if (delta.processId === params.processId && ['stdout', 'stderr'].includes(delta.stream) && typeof delta.deltaBase64 === 'string' && typeof delta.capReached === 'boolean') onOutput(delta);
+    });
+    try {
+      return await nativeRequest(runtime.rpc, 'command/exec', { ...params, cwd: runtime.cwd, sandboxPolicy: policy.sandbox,
+        tty: true, streamStdin: true, streamStdoutStderr: true, disableTimeout: true }, 0);
+    } finally { detach(); }
+  }
+  async nativeProcessWrite(sessionId: string, params: { processId: string; deltaBase64?: string; closeStdin?: boolean }): Promise<void> {
+    await nativeRequest(this.require(sessionId).rpc, 'command/exec/write', params);
+  }
+  async nativeProcessResize(sessionId: string, params: { processId: string; size: { rows: number; cols: number } }): Promise<void> {
+    await nativeRequest(this.require(sessionId).rpc, 'command/exec/resize', params);
+  }
+  async nativeProcessTerminate(sessionId: string, params: { processId: string }): Promise<void> {
+    await nativeRequest(this.require(sessionId).rpc, 'command/exec/terminate', params);
   }
 
   private require(sessionId: string): SessionRuntime {

@@ -1,4 +1,4 @@
-/** DSH 连接设置（attach 模式）：只保存 operator Cookie，不保存启动 token（SPEC-M8 2.3） */
+/** DSH attach 保存原生 operator/browser Cookie，绝不保存启动 token。 */
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -7,6 +7,8 @@ import { dshBaseUrl } from '@webdcc/adapter-dsh';
 export interface DshConnection {
   url: string;
   cookie: string;
+  /** Native v1 browser peer survives a physical WS reconnect; server-only. */
+  browserCookie?: string;
   connectedAt: string;
   version?: string;
 }
@@ -15,8 +17,9 @@ function parseConnection(value: unknown): DshConnection | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const candidate = value as Partial<DshConnection>;
   if (typeof candidate.url !== 'string' || typeof candidate.cookie !== 'string' || candidate.cookie.length === 0 || candidate.cookie.length > 16384 || [...candidate.cookie].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) > 126)) return null;
+  if (candidate.browserCookie !== undefined && (typeof candidate.browserCookie !== 'string' || !/^dsh-auth-[^=;]+=v1\./.test(candidate.browserCookie) || candidate.browserCookie.length > 16384 || [...candidate.browserCookie].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) > 126))) return null;
   if (typeof candidate.connectedAt !== 'string' || !Number.isFinite(Date.parse(candidate.connectedAt)) || candidate.version !== undefined && typeof candidate.version !== 'string') return null;
-  try { return { url: dshBaseUrl(candidate.url), cookie: candidate.cookie, connectedAt: candidate.connectedAt, ...(candidate.version === undefined ? {} : { version: candidate.version }) }; } catch { return null; }
+  try { return { url: dshBaseUrl(candidate.url), cookie: candidate.cookie, connectedAt: candidate.connectedAt, ...(candidate.browserCookie === undefined ? {} : { browserCookie: candidate.browserCookie }), ...(candidate.version === undefined ? {} : { version: candidate.version }) }; } catch { return null; }
 }
 
 export class DshConnectionStore {

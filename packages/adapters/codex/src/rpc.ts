@@ -23,7 +23,7 @@ export interface StartOptions {
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timer: NodeJS.Timeout;
+  timer: NodeJS.Timeout | undefined;
   method: string;
 }
 
@@ -189,7 +189,7 @@ export class JsonRpcStdio {
     const id = this.nextId++;
     const frame: Frame = params === undefined ? { method, id } : { method, id, params };
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = timeoutMs === 0 ? undefined : setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`${method} 超时（${timeoutMs}ms）`));
       }, timeoutMs);

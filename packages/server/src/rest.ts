@@ -20,7 +20,7 @@ import type {
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
 import { parseDshLink, type DshConnectionStore } from './dsh-connection.js';
-import { attachToDsh, DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
+import { attachToDshCredentials, DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
 import { DshSettingsService } from './native-settings.js';
 import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
@@ -34,6 +34,7 @@ import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
+import { registerNativeControlRoutes } from './native-control-routes.js';
 
 export interface RouteDeps {
   store: Store;
@@ -94,6 +95,7 @@ async function resolveNewInsideWorkspace(workspacePath: string, requested: strin
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { store, files, manager, dispatcher } = deps;
+  registerNativeControlRoutes(app, manager, store);
   const metrics = new SystemMetricsReader(deps.dataDir);
   const workspaceFiles = new WorkspaceFiles(deps.recordFileOperation);
   app.get('/api/sessions/:id/trace', async (request, reply) => {
@@ -529,13 +531,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const body = request.body as { link?: string };
     if (typeof body?.link !== 'string') throw badRequest('需要 link（DSH 的访问链接）');
     const { url, token } = parseDshLink(body.link);
-    const cookie = await attachToDsh(url, token);
-    const persist = (): Promise<void> => deps.dsh.save({ url, cookie, connectedAt: new Date().toISOString() });
+    const credentials = await attachToDshCredentials(url, token);
+    const persist = (): Promise<void> => deps.dsh.save({ url, ...credentials, connectedAt: new Date().toISOString() });
     let attached = false;
     for (const adapter of manager.adaptersList()) {
       if (adapter.id === 'dsh') {
-        const dshAdapter = adapter as unknown as { setAttach?: (u: string, c: string, persist: () => Promise<void>) => Promise<void> };
-        if (dshAdapter.setAttach !== undefined) { await dshAdapter.setAttach(url, cookie, persist); attached = true; }
+        const dshAdapter = adapter as unknown as { setAttach?: (u: string, c: string, persist: () => Promise<void>, browserCookie?: string) => Promise<void> };
+        if (dshAdapter.setAttach !== undefined) { await dshAdapter.setAttach(url, credentials.cookie, persist, credentials.browserCookie); attached = true; }
       }
     }
     if (!attached) await persist();
@@ -611,7 +613,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       // 原生登录 / DSH 自己的设置：模型列表来自 adapter（DSH 用 session/modelCatalog）
       const adapter = manager.adaptersList().find((item) => item.id === agent);
       const models = adapter === undefined ? [] : await adapter.listModels(null).catch(() => []);
-      return { models: models.map((model) => model.id) };
+      return { models: models.map((model) => model.id), options: models };
     }
     return { models: deps.providers.modelsFor(agent, providerId) };
   });

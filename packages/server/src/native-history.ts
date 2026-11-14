@@ -27,7 +27,8 @@ export class NativeHistoryStore {
       let admittedTurn: string | undefined;
       for (const record of records) {
         for (const input of record.admittedInputs ?? []) {
-          const local = findUserEcho(existing, { text: input.text, clientCommandId: input.nativeRequestId });
+          const commandId = this.store.journal.nativeInput(sessionId, input.nativeRequestId)?.commandId ?? input.nativeRequestId;
+          const local = findUserEcho(existing, { text: input.text, clientCommandId: commandId });
           if (local?.turnId != null) admittedTurn = local.turnId;
         }
         if (record.nativeTurnId !== undefined && record.events.some(event => event.type === 'turn.start') && admittedTurn !== undefined) {
@@ -41,7 +42,8 @@ export class NativeHistoryStore {
         if (event.type !== 'item.complete' || event.kind !== 'user.message') continue;
         const data = event.data as EventData['user.message'];
         if (data.clientCommandId === undefined) continue;
-        const local = findUserEcho(existing, data);
+        const commandId = this.store.journal.nativeInput(sessionId, data.clientCommandId)?.commandId ?? data.clientCommandId;
+        const local = findUserEcho(existing, { ...data, clientCommandId: commandId });
         if (local === undefined || local.turnId === null) continue;
         if (record.nativeTurnId !== undefined) this.bind(sessionId, record.nativeTurnId, local.turnId);
         echoes.add(event.itemKey);

@@ -26,7 +26,8 @@ it('NP-47 v7 ownership and old URL, events, queue and result survive the repeata
     expect(store.journal.get('queued')).toMatchObject({ state: 'queued', result: { queued: true, turnId: 'queue-turn' } });
     expect(store.journal.queue(session.id)[0]?.input.text).toBe('preserve queue');
     expect(store.reconciliations.get(session.id)).toBeNull(); db.close();
-    db = openDb(file); expect(CURRENT_SCHEMA_VERSION).toBe(9);
+    db = openDb(file); expect(CURRENT_SCHEMA_VERSION).toBe(11);
+    expect((db.prepare('PRAGMA table_info(native_actions)').all() as { name: string }[]).map(column => column.name)).toContain('target_key');
     expect(new Store(db).allEvents(session.id)).toHaveLength(1);
   } finally { if (db.open) db.close(); await rm(directory, { recursive: true, force: true }); }
 });

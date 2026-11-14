@@ -27,7 +27,7 @@ export class CapabilityRegistry {
       const probe: ProbeResult = await adapter.probe().catch(() => ({ installed: false, pinnedVersion: nativeInventory.baseline[adapter.id], auth: 'unknown' as const, notes: ['原生探测失败'] }));
       const kind = adapter.kind ?? 'real';
       const expected = nativeInventory.baseline[adapter.id];
-      const compatibility = kind === 'fake' ? 'test-only' : probe.version === undefined ? 'unknown' : probe.version === expected ? 'compatible' : 'incompatible';
+      const compatibility = kind === 'fake' ? 'test-only' : probe.compatible === false ? 'incompatible' : probe.version === undefined ? 'unknown' : probe.version === expected ? 'compatible' : 'incompatible';
       const source = nativeInventory.sources[adapter.id === 'claude-code' ? 'claude' : adapter.id];
       runtimes.push({ agent: adapter.id, hostId: fingerprint({ hostname: hostname(), agent: adapter.id }).slice(0, 24), os: platform(), profile: 'native-default', probe, adapterKind: kind, compatibility, schemaHash: source.sha256, configurationFingerprint: fingerprint({ providers, workspaceId }), pluginStatus: 'unverified' });
       const groups = new Map<string, NativeMethodInventoryEntry[]>();

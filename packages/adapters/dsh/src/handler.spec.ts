@@ -22,6 +22,16 @@ it('concurrent model discovery shares an owned pending boot', async () => {
   const first = adapter.listModels(); const second = adapter.listModels(); finish();
   expect(await first).toEqual([{ id: 'model', label: 'model' }]); expect(await second).toEqual(await first);
 });
+it('slash command submissions preserve the complete original text and accompanying image bytes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-dsh-command-'));
+  try {
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]); await writeFile(join(root, 'a.png'), bytes);
+    const replay = DshAdapter.replay('s'); let request: unknown;
+    Object.assign(replay.adapter, { client: { connect: async () => undefined, rpc: async (_endpoint: string, args: unknown) => { request = args; return { commandId: 'command', result: { kind: 'success' } }; } } });
+    await replay.adapter.send('s', { text: '/command exact  \r\nbody remains ', images: [{ fileId: 'f', path: join(root, 'a.png'), mime: 'image/png' }] });
+    expect(request).toMatchObject({ line: '/command exact  \r\nbody remains ', submittedAttachments: [{ type: 'image', mediaType: 'image/png', data: bytes.toString('base64') }] });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 it('native question controls preserve every question ID in one waterfall response', async () => {
   const replay = DshAdapter.replay('s');
   replay.feed({ i: 0, t: 0, dir: 'in', ch: 'mux:$events', frame: { value: { type: 'ready', clientId: 'client' } } });

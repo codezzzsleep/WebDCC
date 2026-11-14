@@ -5,7 +5,7 @@ import type { AgentAdapter, TraceSink } from '@webdcc/protocol';
  * M1 尚未接入真实 Agent，返回空列表；M3–M5 依次在这里加入 Codex / Claude / DSH adapter。
  */
 export interface AdapterSettings {
-  dsh?: { mode: 'attach' | 'spawn'; url?: string; cookie?: string };
+  dsh?: { mode: 'attach' | 'spawn'; url?: string; cookie?: string; browserCookie?: string };
   traceSink?: (sessionId: string) => TraceSink;
   nativeRecorder?: { directory: string; module: string; env?: Record<string, string> };
 }
@@ -30,6 +30,7 @@ export async function adapters(settings: AdapterSettings = {}): Promise<AgentAda
         mode,
         ...(settings.dsh?.url === undefined ? {} : { attachUrl: settings.dsh.url }),
         ...(settings.dsh?.cookie === undefined ? {} : { attachCookie: settings.dsh.cookie }),
+        ...(settings.dsh?.browserCookie === undefined ? {} : { attachBrowserCookie: settings.dsh.browserCookie }),
         ...(process.env['WDCC_DSH_PORT'] === undefined ? {} : { port: Number(process.env['WDCC_DSH_PORT']) }),
       }),
     );

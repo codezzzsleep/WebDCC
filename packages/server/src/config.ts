@@ -16,6 +16,9 @@ export interface Config {
   diagnosticLimits?: DiagnosticWriteLimits & { retentionMs: number; maxCaptureBytes: number; maxCaptureChunks: number };
   publicOrigins?: string[];
   trustProxy?: boolean | string[];
+  nativeDshPublicOrigin?: string;
+  nativeDshListenHost?: string;
+  nativeDshListenPort?: number;
 }
 
 function envInt(value: string | undefined, fallback: number): number {
@@ -44,6 +47,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     version: env['WDCC_VERSION'] ?? '0.1.0',
     publicOrigins: parsePublicOrigins(env['WDCC_PUBLIC_ORIGINS']),
     trustProxy: (env['WDCC_TRUST_PROXY'] ?? '').split(',').map(value => value.trim()).filter(Boolean),
+    ...(env['WDCC_NATIVE_DSH_PUBLIC_ORIGIN'] ? {
+      nativeDshPublicOrigin: env['WDCC_NATIVE_DSH_PUBLIC_ORIGIN'],
+      nativeDshListenHost: env['WDCC_NATIVE_DSH_LISTEN_HOST'] ?? '127.0.0.1',
+      nativeDshListenPort: limit('WDCC_NATIVE_DSH_LISTEN_PORT', 8788, 1),
+    } : {}),
     recordInteractions,
     ...(recordInteractions ? { diagnosticLimits: {
       maxCaptureBytes: limit('WDCC_TRACE_MAX_CAPTURE_BYTES', 8 * 1024 * 1024),

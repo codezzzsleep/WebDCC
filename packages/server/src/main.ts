@@ -10,7 +10,7 @@ import { DshConnectionStore } from './dsh-connection.js';
 import { Store } from './store.js';
 import { assertTestIsolation } from './test-isolation.js';
 import { discoverRunningDsh } from './dsh-discovery.js';
-import { attachToDsh } from '@webdcc/adapter-dsh';
+import { attachToDshCredentials } from '@webdcc/adapter-dsh';
 import { InteractionRecorder } from './interaction-recorder.js';
 import { ModelRecording } from './model-recording.js';
 import { dirname } from 'node:path';
@@ -73,10 +73,10 @@ export async function start(config: Config = loadConfig(), options: ServerOption
       const discovered = await discoverRunningDsh({ service: process.env['WDCC_DSH_SERVICE'] }).catch(() => null);
       if (discovered !== null) {
         try {
-          const cookie = await attachToDsh(discovered.origin, discovered.token);
+          const credentials = await attachToDshCredentials(discovered.origin, discovered.token);
           connection = {
             url: discovered.origin,
-            cookie,
+            ...credentials,
             connectedAt: new Date().toISOString(),
           };
           await dshStore.save(connection);
@@ -96,7 +96,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
       } } }),
       dsh: {
         mode: dshMode,
-        ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie }),
+        ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie, browserCookie: connection.browserCookie }),
       },
     });
   }

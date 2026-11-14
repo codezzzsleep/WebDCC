@@ -65,6 +65,8 @@ export class NativeReconciliationStore {
     const outcomes: ReconciliationView['outcomes'] = [];
     for (const turnId of unfinished) {
       const matches = observation.turns.filter(turn => this.store.nativeHistory.turn(sessionId, turn.nativeTurnId) === turnId || turn.clientCommandIds.some(id => {
+        const native = this.store.journal.nativeInput(sessionId, id);
+        if (native !== undefined) return native.turnId === turnId;
         const command = this.store.journal.get(id); return command?.sessionId === sessionId && command.turnId === turnId;
       }));
       if (matches.length !== 1) { reasons.push(`轮次 ${turnId} 没有唯一的原生身份和终态证据。`); continue; }

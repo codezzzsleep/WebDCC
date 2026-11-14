@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildThreadStartParams, buildTurnStartParams } from '../src/adapter.js';
+import { CodexAdapter, buildThreadStartParams, buildTurnStartParams } from '../src/adapter.js';
 import { validateNativeParams, validateNativeResult } from '../src/controls.js';
 
 describe('NP-02/07 pinned Codex contracts', () => {
@@ -31,5 +31,15 @@ describe('NP-02/07 pinned Codex contracts', () => {
     expect(() => validateNativeResult('initialize', initialized)).not.toThrow();
     expect(() => validateNativeResult('initialize', { userAgent: 'codex' })).toThrow('Invalid');
     expect(() => validateNativeResult('turn/start', { turn: { id: 't' } })).toThrow('Invalid');
+  });
+
+  it('NP-12 provider names, model IDs and catalog paths cannot escape their quoted native values', () => {
+    const name = 'Provider "one"\nmodel = "unexpected"'; const model = 'quoted "model"'; const path = '/tmp/with "quotes"/catalog.json';
+    const spec = new CodexAdapter().buildLaunchSpec({ sessionId: 's', cwd: '/tmp', providerId: 'provider', model,
+      provider: { id: 'provider', name, protocols: ['openai-responses'], baseUrl: 'https://example.com/v1', codexCatalogPath: path } });
+    const value = (prefix: string): unknown => JSON.parse(spec.args.find(argument => argument.startsWith(prefix))!.slice(prefix.length));
+    expect(value('model_providers.wdcc_provider.name=')).toBe(name);
+    expect(value('model_catalog_json=')).toBe(path); expect(value('model=')).toBe(model);
+    expect(() => new CodexAdapter().buildLaunchSpec({ sessionId: 's', cwd: '/tmp', providerId: 'unsafe', provider: { id: 'nested.unsafe', name: 'name', protocols: ['openai-responses'], baseUrl: 'https://example.com' } })).toThrow('配置键');
   });
 });

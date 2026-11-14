@@ -14,6 +14,9 @@ import type {
   RuntimeIdentity,
   ReconciliationView,
   NativeObservation,
+  NativeControlSnapshot,
+  NativeActionRequest,
+  NativeActionResponse,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, nativeAccessMode, normalizeQuestionAnswer, observePermissions, ulid } from '@webdcc/protocol';
@@ -25,6 +28,7 @@ import type { InteractionRecorder } from './interaction-recorder.js';
 import type { ModelRecording } from './model-recording.js';
 import type { CreateOpts } from '@webdcc/protocol';
 import type { InteractionRow } from './interactions.js';
+import { payloadHash } from './command-journal.js';
 
 const TURN_SETTLE_MS = 1_500;
 
@@ -46,6 +50,7 @@ export interface Runtime {
   turnStartedAt: number | null;
   hot: Map<string, HotItem>;
   idleTimer: NodeJS.Timeout | null;
+  nativeActivity?: number;
   /** Codex 等 adapter 可能在 turn/end 后补发 item/diff；在终止前给它们一个收敛窗口。 */
   finishTimer: NodeJS.Timeout | null;
   finishAction: (() => void) | null;
@@ -145,6 +150,14 @@ export class SessionManager {
 
   registerAdapter(adapter: AgentAdapter): void {
     this.adapters.set(adapter.id, adapter);
+    adapter.bindGlobalNativeEvents?.({ record: frame => {
+      const value = frame.frame !== null && typeof frame.frame === 'object' ? frame.frame as { dshTransport?: { verifiedHostFingerprint?: unknown } } : {};
+      const fingerprint = value.dshTransport?.verifiedHostFingerprint;
+      const host = typeof fingerprint === 'string' && /^[0-9a-f]{64}$/.test(fingerprint) ? fingerprint : 'unverified';
+      const sessionId = `@native-host:${adapter.id}:${this.store.nativeOwners.hostId}:${host}`;
+      try { return { envelopeId: this.store.nativeEvents.frame({ sessionId, agent: adapter.id }, frame, true), accepted: true }; }
+      catch { return { envelopeId: 0, accepted: false }; }
+    } });
     adapter.onEvent((sessionId, event) => this.handleAdapterEvent(sessionId, event, adapter));
     if (adapter.id === 'codex') this.watchdog.start();
   }
@@ -181,6 +194,22 @@ export class SessionManager {
   adapter(id: AgentId): AgentAdapter | undefined {
     return this.adapters.get(id);
   }
+  optionsProvider(id: string): ProviderRuntimeConfig | null { return this.options.resolveProvider?.(id) ?? null; }
+  holdNativeActivity(sessionId: string): () => void {
+    const runtime = this.runtimes.get(sessionId);
+    if (!runtime) throw this.nativeControlRejected('原生连接尚未激活');
+    this.assertOwner(runtime);
+    runtime.nativeActivity = (runtime.nativeActivity ?? 0) + 1;
+    if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
+    runtime.idleTimer = null;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      runtime.nativeActivity = Math.max(0, (runtime.nativeActivity ?? 1) - 1);
+      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing) this.touchIdle(runtime);
+    };
+  }
 
   adaptersList(): AgentAdapter[] {
     return [...this.adapters.values()];
@@ -212,6 +241,84 @@ export class SessionManager {
 
   getRuntime(sessionId: string): Runtime | undefined {
     return this.runtimes.get(sessionId);
+  }
+
+  /** Opening native controls is an explicit user operation. Reading a page
+   * never creates/resumes a native writer or drains the input queue. */
+  async connectNativeControls(sessionId: string, request: NativeActionRequest): Promise<NativeActionResponse> {
+    this.requireSession(sessionId);
+    return this.store.nativeActions.execute(sessionId, request, () => this.control(sessionId, async () => {
+      if (request.action.type !== 'connect' || Object.keys(request.action).length !== 1) throw this.nativeControlRejected('无效的连接操作', 400);
+      const session = this.requireSession(sessionId);
+      const adapter = this.adapters.get(session.agent);
+      if (adapter?.nativeState === undefined) throw this.nativeControlRejected('此 Agent 没有原生控制入口', 501);
+      const workspace = this.requireWorkspace(session.workspaceId);
+      if (session.nativeId === undefined && this.runtimes.get(sessionId) === undefined) throw this.nativeControlRejected('此会话尚未建立原生身份，请新建会话或核对失败的创建');
+      await this.ensureReady(session, workspace.path);
+      return this.nativeControls(sessionId);
+    }));
+  }
+
+  private nativeControlRejected(message: string, statusCode = 409): Error {
+    return Object.assign(new Error(message), { statusCode, code: 'native-control-rejected' });
+  }
+
+  async nativeControls(sessionId: string, includeCatalog = false): Promise<NativeControlSnapshot> {
+    const session = this.requireSession(sessionId);
+    const runtime = this.runtimes.get(sessionId);
+    if (runtime?.adapter.nativeState === undefined) throw this.nativeControlRejected('原生控制尚未连接，请显式连接或核对恢复');
+    this.assertOwner(runtime);
+    const state = await runtime.adapter.nativeState(sessionId);
+    const catalog = await runtime.adapter.nativeCatalog?.(sessionId);
+    this.assertOwner(runtime);
+    return { sessionId, agent: session.agent as AgentId, nativeId: session.nativeId ?? null, runtime: runtime.identity,
+      revision: payloadHash({ runtime: runtime.identity, state, catalog }), state, ...(!includeCatalog || catalog === undefined ? {} : { catalog }) };
+  }
+
+  async executeNativeControl(sessionId: string, request: NativeActionRequest): Promise<NativeActionResponse> {
+    this.requireSession(sessionId);
+    return this.store.nativeActions.execute(sessionId, request, () => this.control(sessionId, async () => {
+      if (!request.revision) throw this.nativeControlRejected('缺少已读取的原生状态版本', 400);
+      const snapshot = await this.nativeControls(sessionId);
+      if (snapshot.revision !== request.revision) throw this.nativeControlRejected('原生状态已变化，请刷新核对后重新操作');
+      const runtime = this.runtimes.get(sessionId)!;
+      if (runtime.adapter.executeNativeControl === undefined) throw this.nativeControlRejected('此 Agent 未公开该控制', 501);
+      const state = snapshot.state as { revision?: string };
+      const action = runtime.adapter.id === 'dsh' ? { ...request.action, revision: state.revision } : request.action;
+      this.store.nativeActions.bind(request.commandId, runtime.identity, snapshot.nativeId ?? runtime.nativeId);
+      // Interactive reply bodies stay ephemeral; disable native body capture
+      // before resolving an SDK/Host callback that can echo a split secret.
+      if (['elicitation', 'dialog'].includes(action.type)) this.store.nativeEvents.restrictSession(sessionId);
+      if (['elicitation', 'dialog'].includes(action.type)) {
+        const secrets = (value: unknown): void => {
+          if (typeof value === 'string' && value) this.store.nativeEvents.addSecret(value);
+          else if (Array.isArray(value)) value.forEach(secrets);
+          else if (value !== null && typeof value === 'object') Object.values(value).forEach(secrets);
+        };
+        secrets(action['content'] ?? action['result']);
+      }
+      const result = await runtime.adapter.executeNativeControl(sessionId, action);
+      // Native delete may intentionally dispose the runtime. Other operations
+      // must still belong to the same writer after the awaited native result.
+      if (action.type !== 'delete' && action.type !== 'archive') this.assertOwner(runtime);
+      if (action.type === 'delete' || action.type === 'archive') {
+        await this.dispose(sessionId);
+        this.updateSessionAndFeed(sessionId, { archived: true }, { archived: true });
+      }
+      if (action.type === 'model' && typeof action['model'] === 'string') this.updateSessionAndFeed(sessionId, { model: action['model'] }, { model: action['model'] });
+      if (action.type === 'effort' && typeof action['effort'] === 'string') this.updateSessionAndFeed(sessionId, { reasoningEffort: action['effort'] }, { reasoningEffort: action['effort'] });
+      return result;
+    }));
+  }
+
+  async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown> {
+    this.requireSession(sessionId);
+    const runtime = this.runtimes.get(sessionId);
+    if (runtime?.adapter.readNativeHistory === undefined) throw this.nativeControlRejected('原生历史入口尚不可用', 501);
+    this.assertOwner(runtime);
+    const result = await runtime.adapter.readNativeHistory(sessionId, options);
+    this.assertOwner(runtime);
+    return result;
   }
 
   private async observeNative(sessionId: string): Promise<NativeObservation> {
@@ -487,7 +594,7 @@ export class SessionManager {
     }
 
     try {
-      await runtime.adapter.send(sessionId, { ...input, nativeRequestId: clientCommandId ?? turnId });
+      await runtime.adapter.send(sessionId, { ...input, nativeRequestId: this.store.journal.nativeRequestId(turnId) });
       this.assertOwner(runtime);
       if (this.store.journal.queue(sessionId).some(row => row.turnId === turnId)) this.store.journal.inputState(turnId, 'native-accepted');
       this.queueChanged(sessionId);
@@ -838,6 +945,19 @@ export class SessionManager {
         nativeId: runtime?.nativeId, identity: event.runtime ?? runtime?.identity }, event, disposition);
     } catch { if (runtime !== undefined) this.fenceRuntime(runtime); return; }
     if (runtime === undefined || disposition !== 'accepted') return;
+    if ('native' in event && event.native !== null && typeof event.native === 'object') {
+      const native = event.native as Record<string, unknown>;
+      const params = native['params'] !== null && typeof native['params'] === 'object' ? native['params'] as Record<string, unknown> : {};
+      const item = params['item'] !== null && typeof params['item'] === 'object' ? params['item'] as Record<string, unknown> : {};
+      if (runtime.adapter.id === 'codex' && params['threadId'] === runtime.nativeId
+        && (native['method'] === 'thread/compacted' || native['method'] === 'item/completed' && item['type'] === 'contextCompaction')) {
+        this.store.nativeActions.confirm(sessionId, runtime.identity, runtime.nativeId, { type: 'compact' });
+      }
+      if (runtime.adapter.id === 'claude-code' && native['type'] === 'system' && native['subtype'] === 'task_notification'
+        && native['status'] === 'stopped' && typeof native['task_id'] === 'string') {
+        this.store.nativeActions.confirm(sessionId, runtime.identity, runtime.nativeId, { type: 'stop-task', taskId: native['task_id'], runId: native['run_id'] ?? null });
+      }
+    }
     if (envelope.duplicate) { if (event.type === 'item.complete') runtime.hot.delete(event.itemKey); return; }
     this.options.recorder?.observeFiles(sessionId, event);
     if (event.type === 'native-id') this.options.recorder?.nativeId(sessionId, event.nativeId);
@@ -869,7 +989,8 @@ export class SessionManager {
     }
     if (event.type === 'item.complete' && event.kind === 'user.message') {
       const data = event.data as EventData['user.message'];
-      const local = findUserEcho(this.store.allEvents(sessionId), data);
+      const commandId = data.clientCommandId === undefined ? undefined : this.store.journal.nativeInput(sessionId, data.clientCommandId)?.commandId ?? data.clientCommandId;
+      const local = findUserEcho(this.store.allEvents(sessionId), { ...data, clientCommandId: commandId });
       if (local !== undefined) {
         return;
       }
@@ -1113,6 +1234,7 @@ export class SessionManager {
 
   private touchIdle(runtime: Runtime): void {
     if (runtime.idleTimer !== null) clearTimeout(runtime.idleTimer);
+    if ((runtime.nativeActivity ?? 0) > 0) { runtime.idleTimer = null; return; }
     if (runtime.disposing || this.runtimes.get(runtime.sessionId) !== runtime) return;
     if (this.options.idleDisposeMin <= 0) return;
     runtime.idleTimer = setTimeout(() => {
@@ -1131,6 +1253,7 @@ export class SessionManager {
   private fenceRuntime(runtime: Runtime): void {
     if (runtime.ownershipTimer !== null) clearInterval(runtime.ownershipTimer);
     try { this.store.nativeOwners.release(runtime.sessionId, runtime.identity, false); } catch { /* storage unavailable */ }
+    try { this.store.nativeActions.disconnect(runtime.sessionId, runtime.identity); } catch { /* storage unavailable */ }
     runtime.disposing = true;
     runtime.status = 'error';
     void runtime.adapter.dispose(runtime.sessionId).catch(() => undefined);

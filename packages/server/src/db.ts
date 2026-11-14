@@ -3,9 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export type Db = Database.Database;
-// v9 persists sensitive-session capture policy and separates accepted replies
-// from native-confirmed completion. Older readers cannot honor that contract.
-export const CURRENT_SCHEMA_VERSION = 9;
+// v11 keeps native input UUIDs separate from browser/internal command IDs.
+export const CURRENT_SCHEMA_VERSION = 11;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -136,6 +135,16 @@ export function openDb(file: string): Db {
     CREATE INDEX IF NOT EXISTS input_queue_session ON input_queue(session_id, state, ordinal);
     INSERT OR IGNORE INTO command_journal (command_id, op, state, result, updated_at)
       SELECT client_command_id, op, 'uncertain', result, at FROM commands;`);
+    db.exec(`CREATE TABLE IF NOT EXISTS native_actions (
+      command_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id),
+      type TEXT NOT NULL, payload_hash TEXT NOT NULL, state TEXT NOT NULL,
+      target_key TEXT NOT NULL, runtime_key TEXT, native_id TEXT, server_process TEXT NOT NULL, reference TEXT, error TEXT, updated_at TEXT NOT NULL
+    ); CREATE INDEX IF NOT EXISTS native_actions_session ON native_actions(session_id, updated_at);`);
+    db.exec(`CREATE TABLE IF NOT EXISTS native_input_ids (
+      command_id TEXT PRIMARY KEY REFERENCES input_queue(command_id),
+      session_id TEXT NOT NULL REFERENCES sessions(id), turn_id TEXT NOT NULL UNIQUE,
+      native_request_id TEXT NOT NULL UNIQUE
+    )`);
     db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
   })();
   // M8 F16：Provider 增加来源与按协议的多端点

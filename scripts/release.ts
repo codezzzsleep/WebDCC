@@ -79,6 +79,7 @@ try {
     join(target, 'node_modules/better-sqlite3'),
     { recursive: true, dereference: true },
   );
+  await cp(join(checkout, 'packages/server/node_modules/node-pty'), join(target, 'node_modules/node-pty'), { recursive: true, dereference: true });
   await cp(join(checkout, 'package.json'), join(target, 'package.json'));
   await cp(join(checkout, 'pnpm-lock.yaml'), join(target, 'pnpm-lock.yaml'));
   await writeFile(join(target, 'release.env'), `WDCC_COMMIT=${commit}\nWDCC_BUILT_AT=${builtAt}\n`);

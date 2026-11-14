@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Command, CommandRecord, CommandState, QueuedInput, UserInput } from '@webdcc/protocol';
 import type { Db } from './db.js';
 
@@ -73,9 +73,22 @@ export class CommandJournal {
   beginInput(turnId: string): boolean {
     return this.db.transaction(() => {
       const changed = this.db.prepare("UPDATE input_queue SET state = 'dispatching' WHERE turn_id = ? AND state = 'queued'").run(turnId).changes === 1;
-      if (changed) this.db.prepare("UPDATE command_journal SET state = 'dispatching' WHERE turn_id = ?").run(turnId);
+      if (changed) {
+        this.db.prepare("UPDATE command_journal SET state = 'dispatching' WHERE turn_id = ?").run(turnId);
+        this.db.prepare('INSERT OR IGNORE INTO native_input_ids (command_id, session_id, turn_id, native_request_id) SELECT command_id, session_id, turn_id, ? FROM input_queue WHERE turn_id = ?')
+          .run(randomUUID(), turnId);
+      }
       return changed;
     })();
+  }
+  nativeRequestId(turnId: string): string {
+    const row = this.db.prepare('SELECT native_request_id FROM native_input_ids WHERE turn_id = ?').get(turnId) as { native_request_id: string } | undefined;
+    if (!row) throw new Error('原生输入身份尚未持久化');
+    return row.native_request_id;
+  }
+  nativeInput(sessionId: string, nativeRequestId: string): { commandId: string; turnId: string } | undefined {
+    const row = this.db.prepare('SELECT command_id, turn_id FROM native_input_ids WHERE session_id = ? AND native_request_id = ?').get(sessionId, nativeRequestId) as { command_id: string; turn_id: string } | undefined;
+    return row === undefined ? undefined : { commandId: row.command_id, turnId: row.turn_id };
   }
 
   cancel(sessionId: string, commandId: string): void {

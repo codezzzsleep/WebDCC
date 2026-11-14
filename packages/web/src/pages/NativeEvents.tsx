@@ -70,7 +70,7 @@ export function NativeEventsPage({ initialSessionId = '' }: { initialSessionId?:
     {records.length === 0 && !busy ? <p>没有记录。旧版本的事件可能没有原始接口证据。</p> : null}
     <button className="btn" disabled={busy || records.length === 0} onClick={() => { void more(); }}>下一页</button>
     {detail === undefined ? null : <section aria-label="记录详情"><h2>记录 {detail.id}</h2>
-      {detail.payloadCoverage === 'restricted' ? <p>敏感内容已省略。</p> : detail.payloadCoverage === 'oversize' ? <p>内容超过记录限额，原始接口证据不完整。</p> : null}
+      {detail.payloadCoverage === 'restricted' ? <p>敏感内容已省略。</p> : detail.payloadCoverage === 'oversize' ? <p>内容超过记录限额，原始接口证据不完整。</p> : detail.payloadCoverage === 'unavailable' ? <p>原始正文不可用，保留安全元数据与覆盖缺失标记。</p> : null}
       {detail.rawEnvelopeId === null ? detail.source === 'mapping' ? <p>没有关联的原始接口记录。</p> : null : <button className="btn" onClick={() => { void show(detail.rawEnvelopeId!); }}>查看原始接口记录</button>}
       <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(detail, null, 2)}</pre>
     </section>}

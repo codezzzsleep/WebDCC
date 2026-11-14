@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AdapterEvent, NativeEnvelopeDetail, NativeEnvelopeSummary, RuntimeIdentity, TraceFrame } from '@webdcc/protocol';
+import type { AdapterEvent, NativeDshRpcCaptureMetadata, NativeEnvelopeDetail, NativeEnvelopeSummary, NativeStdioCaptureMetadata, RuntimeIdentity, TraceFrame } from '@webdcc/protocol';
 import { redactDiagnosticValue } from '@webdcc/model-proxy';
 import type { Db } from './db.js';
 import inventory from './native-inventory.json' with { type: 'json' };
@@ -16,6 +16,27 @@ interface Row {
 interface Context { sessionId: string; agent: string; nativeId?: string; identity?: RuntimeIdentity }
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown): string | null => typeof value === 'string' ? value : null;
+function stdioMetadata(value: unknown): NativeStdioCaptureMetadata | undefined {
+  const data = object(value);
+  if (!['stdin', 'stdout', 'stderr'].includes(String(data['stream'])) || !Number.isSafeInteger(data['line']) || Number(data['line']) < 0
+    || !Number.isSafeInteger(data['byteLength']) || Number(data['byteLength']) < 0 || typeof data['terminated'] !== 'boolean'
+    || !['complete', 'oversize', 'invalid-json', 'invalid-utf8', 'non-object', 'incomplete', 'unstructured'].includes(String(data['coverage']))) return undefined;
+  return { stream: data['stream'] as NativeStdioCaptureMetadata['stream'], line: Number(data['line']), byteLength: Number(data['byteLength']),
+    terminated: data['terminated'], coverage: data['coverage'] as NativeStdioCaptureMetadata['coverage'] };
+}
+function dshMetadata(value: unknown): NativeDshRpcCaptureMetadata | undefined {
+  const data = object(value);
+  if (typeof data['endpoint'] !== 'string' || data['endpoint'].length > 128 || typeof data['rpcId'] !== 'string' || data['rpcId'].length > 256
+    || !['complete', 'oversize', 'invalid-json', 'transport-error', 'http-auth-rejected'].includes(String(data['coverage']))
+    || !Number.isSafeInteger(data['hostEpoch']) || Number(data['hostEpoch']) < 0 || !Number.isSafeInteger(data['muxGeneration']) || Number(data['muxGeneration']) < 0) return undefined;
+  const host = data['verifiedHostFingerprint']; const status = data['httpStatus']; const bytes = data['jsonBytes']; const requestBytes = data['byteLength'];
+  return { endpoint: data['endpoint'], rpcId: data['rpcId'], coverage: data['coverage'] as NativeDshRpcCaptureMetadata['coverage'],
+    hostEpoch: Number(data['hostEpoch']), muxGeneration: Number(data['muxGeneration']),
+    ...(typeof host === 'string' && /^[0-9a-f]{64}$/.test(host) ? { verifiedHostFingerprint: host } : {}),
+    ...(Number.isSafeInteger(status) && Number(status) >= 100 && Number(status) <= 599 ? { httpStatus: Number(status) } : {}),
+    ...(Number.isSafeInteger(bytes) && Number(bytes) >= 0 ? { jsonBytes: Number(bytes) } : {}),
+    ...(Number.isSafeInteger(requestBytes) && Number(requestBytes) >= 0 ? { byteLength: Number(requestBytes) } : {}) };
+}
 function privateSchema(value: unknown, depth = 0): boolean {
   if (depth > 32) return true;
   if (value === null || typeof value !== 'object') return false;
@@ -40,6 +61,7 @@ export class NativeEventStore {
   constructor(private readonly db: Db) {}
   addSecret(value: string | undefined): void { if (value) this.secrets.add(value); }
   restricted(sessionId: string): boolean { return this.db.prepare('SELECT 1 FROM app_settings WHERE key = ?').get(`native-sensitive:${sessionId}`) !== undefined; }
+  restrictSession(sessionId: string): void { this.db.prepare('INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)').run(`native-sensitive:${sessionId}`, 'restricted'); }
   policyValue(sessionId: string, value: unknown): unknown { return this.restricted(sessionId) ? { omitted: 'sensitive-session-native-payload' } : this.diagnosticValue(value); }
   redact(value: unknown): unknown { return redactDiagnosticValue(value, [...this.secrets]); }
   diagnosticValue(value: unknown): unknown { return privateSchema(value) ? { omitted: 'sensitive-native-request' } : redactDiagnosticValue(value, [...this.secrets]); }
@@ -47,7 +69,7 @@ export class NativeEventStore {
     const root = object(value); const native = object(root['native'] ?? root['frame'] ?? value);
     const params = object(native['params']); const event = object(object(native['value'])['event']);
     const observedNativeId = text(native['session_id'] ?? params['threadId'] ?? object(object(native['result'])['thread'])['id'] ?? object(native['result'])['sessionId']);
-    const request = native['id'] ?? params['requestId'] ?? native['toolUseID'];
+    const request = native['request_id'] ?? object(native['response'])['request_id'] ?? native['rpcId'] ?? native['id'] ?? params['requestId'] ?? native['toolUseID'] ?? (native['type'] === 'user' ? native['uuid'] : undefined) ?? dshMetadata(root['dshTransport'])?.rpcId;
     const requestId = typeof request === 'string' || typeof request === 'number' ? request : null;
     const restricted = privateSchema(value) || /^account\/|oauth|authentication/i.test(String(native['method'] ?? channel));
     if (privateSchema(value)) this.db.prepare('INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)').run(`native-sensitive:${context.sessionId}`, 'restricted');
@@ -56,7 +78,14 @@ export class NativeEventStore {
       .get(context.sessionId, context.identity?.generation ?? null, JSON.stringify(requestId)) !== undefined;
     const sessionRestricted = this.restricted(context.sessionId);
     let coverage: Row['payload_coverage'] = restricted || knownRestricted || sessionRestricted ? 'restricted' : 'redacted';
-    let payload = coverage === 'restricted' ? JSON.stringify({ omitted: !restricted && !knownRestricted && sessionRestricted ? 'sensitive-session-native-payload' : 'sensitive-native-request' }) : JSON.stringify(redactDiagnosticValue(value, [...this.secrets]));
+    const stdio = stdioMetadata(root['stdio']);
+    const stdioCoverage = stdio?.coverage;
+    if (coverage !== 'restricted' && stdioCoverage !== undefined && stdioCoverage !== 'complete') coverage = stdioCoverage === 'oversize' ? 'oversize' : 'unavailable';
+    const dshTransport = dshMetadata(root['dshTransport']);
+    const rpcCoverage = dshTransport?.coverage;
+    if (coverage !== 'restricted' && ['oversize', 'invalid-json', 'transport-error', 'http-auth-rejected'].includes(String(rpcCoverage))) coverage = rpcCoverage === 'oversize' ? 'oversize' : 'unavailable';
+    let payload = coverage === 'restricted' ? JSON.stringify({ omitted: !restricted && !knownRestricted && sessionRestricted ? 'sensitive-session-native-payload' : 'sensitive-native-request',
+      ...(stdio === undefined ? {} : { stdio }), ...(dshTransport === undefined ? {} : { dshTransport }) }) : JSON.stringify(redactDiagnosticValue(value, [...this.secrets]));
     if (Buffer.byteLength(payload) > 1024 * 1024) { coverage = 'oversize'; payload = JSON.stringify({ omitted: 'native-envelope-size-limit', bytes: Buffer.byteLength(payload) }); }
     const seq = root['nativeSeq'] ?? event['seq'] ?? object(native['value'])['seq'] ?? native['seq'];
     const turnId = root['nativeTurnId'] ?? params['turnId'] ?? object(params['turn'])['id'] ?? event['turnId'];

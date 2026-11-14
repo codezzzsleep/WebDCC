@@ -11,10 +11,11 @@ export function claudeSystemEvent(message: Extract<SDKMessage, { type: 'system' 
     case 'task_started':
     case 'task_progress':
     case 'task_notification': {
-      const status = message.subtype === 'task_notification' ? message.status === 'failed' ? 'failed' : 'completed' : 'running';
+      const status = message.subtype === 'task_notification' ? message.status === 'completed' ? 'completed' : 'failed' : 'running';
       const label = 'description' in message ? message.description : message.summary;
       return { type: 'item.complete', itemKey: `claude-task-${message.task_id}-${message.run_id ?? 'legacy'}`, kind: 'tool.call', data: { name: 'claude-task', label, status, input: { taskId: message.task_id, runId: message.run_id, toolUseId: message.tool_use_id, ...(message.subtype === 'task_notification' ? { nativeStatus: message.status, outputFile: message.output_file } : {}) }, ...(message.subtype === 'task_notification' ? { output: message.summary } : {}) }, native: message };
     }
+    case 'task_updated': return { type: 'item.complete', itemKey: `claude-task-${message.task_id}-${message.run_id ?? 'legacy'}-update-${sequence}`, kind: 'internal', data: { nativeType: 'system/task_updated' }, native: message };
     default: return { type: 'item.complete', itemKey: key, kind: 'unknown', data: { nativeType: `system/${message.subtype}` }, native: message };
   }
 }

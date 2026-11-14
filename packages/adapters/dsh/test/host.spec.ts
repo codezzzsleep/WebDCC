@@ -2,9 +2,18 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { attachToDsh, dshBaseUrl, DshHostClient, startSidecar } from '../src/host.js';
+import { attachToDsh, attachToDshCredentials, dshBaseUrl, DshHostClient, startSidecar } from '../src/host.js';
 
 afterEach(() => vi.unstubAllGlobals());
+it('current attach exchanges distinct native browser/operator credentials while the legacy API stays compatible', async () => {
+  const urls: string[] = [];
+  vi.stubGlobal('fetch', async (url: string | URL) => {
+    urls.push(String(url)); const operator = new URL(url).pathname.endsWith('/connect');
+    return new Response(null, { status: 303, headers: { 'set-cookie': operator ? 'dsh-auth-test=v2.operator.signature; HttpOnly' : 'dsh-auth-test=v1.browser.signature; HttpOnly' } });
+  });
+  expect(await attachToDshCredentials('https://host.test/prefix/', 'fake-launch-token')).toEqual({ cookie: 'dsh-auth-test=v2.operator.signature', browserCookie: 'dsh-auth-test=v1.browser.signature' });
+  expect(urls).toEqual(['https://host.test/prefix/?token=fake-launch-token', 'https://host.test/prefix/connect?token=fake-launch-token&interactions=answer']);
+});
 it('NP-10 keeps deployment prefixes in authentication and RPC and rejects mismatched responses', async () => {
   expect(dshBaseUrl('https://host.example/dsh/?token=secret')).toBe('https://host.example/dsh/');
   const urls: string[] = [];

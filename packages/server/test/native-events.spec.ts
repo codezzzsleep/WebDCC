@@ -4,11 +4,56 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { FakeAdapter } from '@webdcc/fake-adapter';
-import type { AdapterEvent, CreateOpts } from '@webdcc/protocol';
+import type { AdapterEvent, AgentAdapter, CreateOpts, NativeFrameSink } from '@webdcc/protocol';
 import { JsonRpcStdio } from '../../adapters/codex/src/rpc.js';
 import { openDb, CURRENT_SCHEMA_VERSION } from '../src/db.js';
 import { Store } from '../src/store.js';
 import { createTestApp, seedWorkspaceAndSession } from './helpers.js';
+
+it('NP-05 host-wide RPC records keep verified Host and transport identity without impersonating a Web session', async () => {
+  const ctx = await createTestApp();
+  let sink: NativeFrameSink | undefined;
+  const adapter: AgentAdapter = new FakeAdapter({ id: 'dsh' }); adapter.bindGlobalNativeEvents = value => { sink = value; };
+  ctx.manager.registerAdapter(adapter);
+  try {
+    const receipt = sink!.record({ i: 1, t: 0, dir: 'in', ch: 'rpc:settings/describe', frame: {
+      frame: { type: 'server-response', rpcId: 'transport-request', result: { ok: true, value: { namespaces: [] } } },
+      dshTransport: { endpoint: 'settings/describe', rpcId: 'transport-request', coverage: 'complete', httpStatus: 200,
+        hostEpoch: 1, muxGeneration: 1, verifiedHostFingerprint: 'a'.repeat(64) },
+    } });
+    const record = ctx.store.nativeEvents.get(receipt.envelopeId)!;
+    expect(record).toMatchObject({ nativeRequestId: 'transport-request', ownerId: null, generation: null });
+    expect(record.sessionId).toMatch(/^@native-host:dsh:/); expect(ctx.store.getSession(record.sessionId)).toBeUndefined();
+    const failure = sink!.record({ i: 2, t: 0, dir: 'in', ch: 'rpc:settings/describe', frame: {
+      frame: { omitted: 'authentication-response' }, dshTransport: { endpoint: 'settings/describe', rpcId: 'auth-failure',
+        coverage: 'http-auth-rejected', httpStatus: 401, hostEpoch: 1, muxGeneration: 1 },
+    } });
+    expect(ctx.store.nativeEvents.get(failure.envelopeId)).toMatchObject({ nativeRequestId: 'auth-failure', payloadCoverage: 'unavailable' });
+  } finally { await ctx.close(); }
+});
+
+it('NP-05 SDK stdio associates native control request IDs and declares undecodable payload coverage', () => {
+  const db = openDb(':memory:'); const store = new Store(db);
+  const context = { sessionId: 'sdk', agent: 'claude-code', identity: { ownerId: 'owner', generation: 2, hostId: 'host' } };
+  try {
+    const request = store.nativeEvents.frame(context, { i: 1, t: 0, dir: 'in', ch: 'claude-stdio:stdout', frame: {
+      frame: { type: 'control_request', request_id: 'sdk-request', request: { subtype: 'elicitation', requested_schema: { properties: { password: { writeOnly: true } } } } },
+      stdio: { stream: 'stdout', line: 1, byteLength: 128, coverage: 'complete', terminated: true },
+    } }, true);
+    expect(store.nativeEvents.get(request)).toMatchObject({ nativeRequestId: 'sdk-request', payloadCoverage: 'restricted' });
+    expect(store.nativeEvents.get(request)?.payload).toMatchObject({ stdio: { byteLength: 128, coverage: 'complete' } });
+    const response = store.nativeEvents.frame(context, { i: 2, t: 0, dir: 'out', ch: 'claude-stdio:stdin', frame: {
+      frame: { type: 'control_response', response: { request_id: 'sdk-request', subtype: 'success', response: { content: 'never-store-secret' } } },
+      stdio: { stream: 'stdin', line: 2, byteLength: 128, coverage: 'complete', terminated: true },
+    } }, true);
+    expect(store.nativeEvents.get(response)).toMatchObject({ nativeRequestId: 'sdk-request', payloadCoverage: 'restricted' });
+    expect(JSON.stringify(store.nativeEvents.get(response))).not.toContain('never-store-secret');
+    const malformed = store.nativeEvents.frame({ ...context, sessionId: 'ordinary-sdk' }, { i: 3, t: 0, dir: 'in', ch: 'claude-stdio:stderr', frame: {
+      frame: { omitted: 'undecodable-line' }, stdio: { stream: 'stderr', line: 1, byteLength: 80, coverage: 'invalid-json', terminated: true },
+    } }, true);
+    expect(store.nativeEvents.get(malformed)?.payloadCoverage).toBe('unavailable');
+  } finally { db.close(); }
+});
 
 it('NP-05 native request identity retains string/number types and sensitive response policy survives reopening', () => {
   const db = openDb(':memory:');

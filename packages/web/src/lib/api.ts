@@ -24,6 +24,10 @@ import type {
   NativeOwnerDto,
   StoredEvent,
   ReconciliationView,
+  NativeControlSnapshot,
+  NativeActionRequest,
+  NativeActionResponse,
+  NativeActionReceipt,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -52,6 +56,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  nativeDshSurface: () => request<{ status: string; writable: boolean }>('/api/dsh/native-surface'),
+  openNativeDshSurface: (sessionId: string) => request<{ actionUrl: string; ticket: string; expiresAt: string }>('/api/dsh/native-surface/open', { method: 'POST', body: JSON.stringify({ sessionId }) }),
+  nativeControls: (sessionId: string, catalog = false) => request<NativeControlSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/native${catalog ? '?catalog=1' : ''}`),
+  connectNativeControls: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/connect`, { method: 'POST', body: JSON.stringify({ commandId, action: { type: 'connect' } }) }),
+  nativeAction: (sessionId: string, value: NativeActionRequest) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions`, { method: 'POST', body: JSON.stringify(value) }),
+  nativeActionReceipt: (sessionId: string, commandId: string) => request<NativeActionReceipt>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions/${encodeURIComponent(commandId)}`),
+  nativeHistory: (sessionId: string) => request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/native/history?limit=50`),
   nativeEvents: (sessionId?: string, after = 0) => request<{ records: NativeEnvelopeSummary[]; next: number; projectionVersion: number }>(`/api/native-events?after=${after}${sessionId ? `&sessionId=${encodeURIComponent(sessionId)}` : ''}`),
   nativeEvent: (id: number) => request<NativeEnvelopeDetail>(`/api/native-events/${id}`),
   eventEvidence: (sessionId: string, seq: number) => request<{ event: StoredEvent; envelope: NativeEnvelopeDetail | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/events/${seq}/evidence`),

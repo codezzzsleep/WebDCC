@@ -13,6 +13,24 @@ import { SessionManager } from '../src/manager.js';
 import { CommandDispatcher } from '../src/dispatcher.js';
 import { createTestApp, seedWorkspaceAndSession } from './helpers.js';
 
+it('NP-03 persists a native UUID independently of internal/watchdog command identifiers', async () => {
+  const ctx = await createTestApp({ delayMs: 10 });
+  try {
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'claude-code');
+    const adapter = ctx.manager.adapter('claude-code')!; const send = adapter.send.bind(adapter);
+    let receivedId: string | undefined;
+    adapter.send = async (id, input) => { receivedId = input.nativeRequestId; await send(id, input); };
+    const commandId = 'watchdog:session:failed-turn:1';
+    const sent = await ctx.manager.send(sessionId, { text: '  preserved text  ' }, commandId);
+    expect(receivedId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(receivedId).not.toBe(commandId);
+    expect(ctx.store.journal.nativeRequestId(sent.turnId)).toBe(receivedId);
+    expect(ctx.store.journal.nativeInput(sessionId, receivedId!)).toEqual({ commandId, turnId: sent.turnId });
+    expect(ctx.store.journal.nativeInput('different-session', receivedId!)).toBeUndefined();
+    expect(ctx.store.allEvents(sessionId).find(event => event.kind === 'user.message')?.data).toMatchObject({ clientCommandId: commandId, text: '  preserved text  ' });
+  } finally { await ctx.close(); }
+});
+
 it('NP-03 concurrently accepts one command ID exactly once and returns 409 for a changed payload', async () => {
   const ctx = await createTestApp({ delayMs: 500 });
   try {

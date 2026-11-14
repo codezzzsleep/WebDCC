@@ -31,7 +31,7 @@ await build({
   sourcemap: true,
   define: { __WDCC_BUILD_MANIFEST__: JSON.stringify(manifest) },
   // SDK 用 createRequire(import.meta.url) 找平台子包，打包后找不到（SPEC-M8 F1）
-  external: ['better-sqlite3', '@anthropic-ai/claude-agent-sdk'],
+  external: ['better-sqlite3', 'node-pty', '@anthropic-ai/claude-agent-sdk'],
   banner: {
     js: "import { createRequire as __wdccCreateRequire } from 'node:module'; const require = __wdccCreateRequire(import.meta.url);",
   },

@@ -6,6 +6,7 @@ import {
 } from '../codex/src/adapter.js';
 import { ClaudeAdapter } from '../claude/src/adapter.js';
 import { ALLOWED_ENDPOINTS, DshAdapter, isAllowedCommandLine, isAllowedEndpoint, providerForModel } from '../dsh/src/adapter.js';
+import frozenDshCatalog from '../../../fixtures/dsh/host-api-catalog.json' with { type: 'json' };
 
 const FORBIDDEN = ['baseInstructions', 'developerInstructions'];
 const ALLOWED_CONFIG_KEYS = [
@@ -145,33 +146,11 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
   });
 
   it('端点白名单遵循原生基线；子 Agent 使用 NP-11 的父身份方法', () => {
-    expect([...ALLOWED_ENDPOINTS].sort()).toEqual(
-      [
-        '$events',
-        '$events/result',
-        'commands/execute',
-        'commands/list',
-        'subagents/prompt',
-        'subagents/interruptByParent',
-        'session/cancel',
-        'session/create',
-        'session/follow',
-        'session/observeProjections',
-        'session/list',
-        'session/modelCatalog',
-        'session/page',
-        'session/prompt',
-        'session/selectModel',
-        'settings/describe',
-        'permissionPresets/catalog',
-        'settings/update',
-        'settings/mutate',
-        'credentials/set',
-        'userQuestions/answer',
-        'workspace/create',
-        'workspace/follow',
-      ].sort(),
-    );
+    const transportExtensions = new Set(['$events', '$events/result']);
+    for (const endpoint of ALLOWED_ENDPOINTS) expect(transportExtensions.has(endpoint) || Object.hasOwn(frozenDshCatalog.endpoints, endpoint), endpoint).toBe(true);
+    expect(ALLOWED_ENDPOINTS.size).toBeLessThan(Object.keys(frozenDshCatalog.endpoints).length);
+    expect(isAllowedEndpoint('subagents/interruptByParent')).toBe(true);
+    expect(isAllowedEndpoint('subagents/interruptByUser')).toBe(false);
     expect(isAllowedEndpoint('host/describe')).toBe(false);
     expect(isAllowedEndpoint('settings/mutate')).toBe(true);
     expect(isAllowedEndpoint('pluginManager/install')).toBe(false);

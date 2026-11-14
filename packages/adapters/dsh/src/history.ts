@@ -24,6 +24,7 @@ export class DshHistoryBridge {
   private syncing = false;
   private blocked = false;
   private buffered: DshHistoryRecord[] = [];
+  get isReady(): boolean { return !this.syncing && !this.blocked && this.lastSeq >= -1; }
 
   constructor(
     private readonly nativeId: string,

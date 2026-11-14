@@ -1,5 +1,20 @@
 # WebDCC 修复进度
 
+## 并行原生控制集成（2026-11-14，接续任务）
+
+- 用户明确选择多个 Agent 并行实现，由主 Agent 统一审查和验收；仍继续全部 NP-01–48，不创建持续目标。当前服务器与 121 保持原部署版本，未运行 release、重启或部署数据库迁移。
+- Claude/DSH/Codex 已接有限 typed 原生目录、状态、控制与历史接口；公共网页控制入口读取不会激活 writer，连接由显式操作创建，所有控制以 runtime + 原生状态/目录 revision 比对。原生配置与 Metadata 的 revision 分开处理。已补 Claude 原始 stdio 控制/错误帧与 DSH 真 RPC 信封，而非只记录 SDK 公共消息与业务 value；安全覆盖元数据、typed transport request ID、Host-wide 非 Web 会话 scope 均可查。
+- SQLite v11 保留 v10 native action 持久化，新增独立 native input UUID 与 Web/internal/watchdog commandId 的持久关联；native action 身份、hash、状态、运行绑定及短资源引用，正文和回答不重复落库。不同 ID 竞争未确认的相同对象被拒；明确副作用前校验允许修正，断线/真实 SIGKILL 保持 uncertain，迟到返回不能降级 uncertain。原生进程确认按资源 ID 精确匹配，不能用旧进程退出确认新启动。
+- DSH 真 Host 探测发现 v2 operator Cookie 在 WS 关闭时失效；实际使用可重连的 v1 native browser peer，并将 credential pair 贯穿连接存储、自动发现、手动连接与 adapter 创建。共享 browser peer 不构成原生全局独占证据。空会话改名、pin、Preset、归档与物理 WS 重连/原生历史回读均已在隔离 Host 验证，无模型调用。
+- Codex 0.167.0 的 native model/list 与 adapter 目录一致；实际 command/exec 进程收到中文 stdin、resize 后读取 110×42 并 exit 0，全程没有 model turn。命令显式采用原生回读 sandbox，未知沙箱阻止启动，活跃进程持有 idle activity。
+- Chromium 已验证真实 Codex TUI 的 keymap/theme/vim 三个命令（零模型请求）与 Claude 2.1.322 首次 theme/login 菜单；这些是隔离 source + terminal routes 证明，不冒充生产接管或 Claude 登录后全功能。真实 PTY 的 Unicode、刷新同 PID、XSS 文本、输出上限、日志下载与关闭 FD/进程回基线已有证据。
+- 真实 Provider 的 Claude Sonnet 最小输出与读取临时随机 fixture 已通过：82 native frames / 64 adapter events，真实 Read 输入/成功输出、stream、native completed 与生产 Handler 回放投影一致。DSH DeepSeek 的十项真实输入/读取/用量/终态谓词通过，Codex GPT 的原生 shell-wrapped cat/聚合 stdout 与结果已捕获并离线复核；极速命令没有 stdout delta 明确为观察限制。三家全部使用隔离配置，未访问部署数据。`native-live-claude.json` 明确 paidModel=true、原执行源码指纹、事后仅脚本参数化/类型修改；没有用新版指纹冒充旧付费验证。
+- 审查已修复空 DELETE 被误设 JSON、旧网页异步状态污染、枚举表单类型、来源与目录 CAS、敏感回答凭据落盘、CLI Provider flag 优先级以及 node-pty 原生构建 external/发布包复制。仅本 worktree 的临时构建启动已验证；没有发布运行版本。
+- DSH 独立 origin 原生页面载体已接主站，主接线目前明确只读；未配置独立 origin 时 unavailable。ticket 用 POST body 一次性交换，不把主 Cookie 送给 native Host。原生写必须有所有权/持久 dispatcher，WS 写与同会话接管仍受阻；CLI 原生身份持续监测与漂移停止已完成，但监测不构成检测前无副作用或外部仲裁证明。完整 Forge/日程/插件等原生工作流未验收。
+- 最新全量源码报告曾因旧静态端点/旧 schema 常量、超时默认参数以及实际 TUI 谓词失败而失败，问题逐项修正，完整门禁正在刷新；失败报告保留。48 项均未整体验收完成，L1 原 golden/NOT_TRIGGERED 未改，三家真实模型已各完成两轮基础交互/随机 fixture 读取；完整账号、各家故障与多模态、备份恢复和性能矩阵仍需继续。
+
+证据：`web_review/evidence/native-live-claude.json`、`native-models-current.json`、`native-process-current.json`；`.artifacts/dsh-native-smoke.json`、`.artifacts/native-terminal-validation/*-validation.json`。这些私有本地验收文件忽略提交；源码和本进度说明提交修复分支。
+
 用户授权：持续推进全部 NP-01–48，仅修复项目；暂不更新本地已部署版本。
 2026-11-14 用户再次明确：未完成48项不能以阶段检查点为停止点。继续实施；只有真正完成或实际外部依赖阻断才说明限制。
 

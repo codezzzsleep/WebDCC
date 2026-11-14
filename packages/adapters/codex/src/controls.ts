@@ -8,12 +8,15 @@ import type { TurnInterruptResponse } from './schema/v2/TurnInterruptResponse.js
 import type { PermissionProfileListResponse } from './schema/v2/PermissionProfileListResponse.js';
 import type { ThreadReadResponse } from './schema/v2/ThreadReadResponse.js';
 import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListResponse.js';
+import type { ModelListResponse } from './schema/v2/ModelListResponse.js';
+import type { ConfigReadResponse } from './schema/v2/ConfigReadResponse.js';
 import protocolSchema from './json-schema/codex_app_server_protocol.schemas.json' with { type: 'json' };
 import type { JsonRpcStdio } from './rpc.js';
+import { nativeControlResultRefs, type NativeControlResults } from './native-results.js';
 
 type Method = ClientRequest['method'];
 export type NativeParams<M extends Method> = Extract<ClientRequest, { method: M }>['params'];
-interface Results {
+interface Results extends NativeControlResults {
   initialize: InitializeResponse;
   'thread/start': ThreadStartResponse;
   'thread/resume': ThreadResumeResponse;
@@ -22,6 +25,8 @@ interface Results {
   'permissionProfile/list': PermissionProfileListResponse;
   'thread/read': ThreadReadResponse;
   'thread/turns/list': ThreadTurnsListResponse;
+  'model/list': ModelListResponse;
+  'config/read': ConfigReadResponse;
 }
 
 const ajv = new Ajv({ strict: false, allErrors: true, allowUnionTypes: true });
@@ -32,10 +37,13 @@ for (const [name, minimum, maximum] of [
 ajv.addFormat('double', { type: 'number', validate: Number.isFinite });
 const requestValidators = new Map<string, ValidateFunction>();
 const responseRefs = {
+  ...nativeControlResultRefs,
   initialize: '#/definitions/InitializeResponse',
   'thread/start': '#/definitions/v2/ThreadStartResponse', 'thread/resume': '#/definitions/v2/ThreadResumeResponse',
   'turn/start': '#/definitions/v2/TurnStartResponse', 'turn/interrupt': '#/definitions/v2/TurnInterruptResponse', 'permissionProfile/list': '#/definitions/v2/PermissionProfileListResponse',
   'thread/read': '#/definitions/v2/ThreadReadResponse', 'thread/turns/list': '#/definitions/v2/ThreadTurnsListResponse',
+  'model/list': '#/definitions/v2/ModelListResponse',
+  'config/read': '#/definitions/v2/ConfigReadResponse',
 };
 const responseValidators = new Map<string, ValidateFunction>();
 const serverValidators = new Map<string, ValidateFunction>();
@@ -81,9 +89,9 @@ export function validateNativeResult(method: keyof Results, result: unknown): vo
   if (!validate(result)) throw new Error(`Invalid ${method} result: ${ajv.errorsText(validate.errors)}`);
 }
 
-export async function nativeRequest<M extends keyof Results>(rpc: JsonRpcStdio, method: M, params: NativeParams<M>): Promise<Results[M]> {
+export async function nativeRequest<M extends keyof Results>(rpc: JsonRpcStdio, method: M, params: NativeParams<M>, timeoutMs?: number): Promise<Results[M]> {
   validateNativeParams(method, params);
-  const result = await rpc.request(method, params);
+  const result = timeoutMs === undefined ? await rpc.request(method, params) : await rpc.request(method, params, timeoutMs);
   validateNativeResult(method, result);
   return result as Results[M];
 }

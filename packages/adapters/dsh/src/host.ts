@@ -142,13 +142,57 @@ export async function attachToDsh(endpoint: string | number, token: string): Pro
   return first.split(';')[0] ?? '';
 }
 
+/** Persistable credentials for current Host attach. Each cookie is returned
+ * by its native exchange; the launch token is never retained or derived. */
+export async function attachToDshCredentials(endpoint: string | number, token: string): Promise<{ cookie: string; browserCookie: string }> {
+  const { attachDshBrowser } = await import('./identity.js');
+  const browserCookie = await attachDshBrowser(endpoint, token);
+  const cookie = await attachToDsh(endpoint, token);
+  if (!/^dsh-auth-[^=]+=v2\./.test(cookie)) throw Object.assign(new Error('DSH operator authentication did not return a native v2 credential'), { statusCode: 401 });
+  return { cookie, browserCookie };
+}
+
 export interface DshHostOptions {
   reconnectDelayMs?: number;
   maxReconnectDelayMs?: number;
   connectTimeoutMs?: number;
   rpcTimeoutMs?: number;
   maxFrames?: number;
+  /** Capture is bounded independently of the native HTTP response handling. */
+  maxRpcCaptureBytes?: number;
+  onRpcFrame?: DshRpcFrameObserver;
+  /** Explicit synchronous persistence admission, separate from observation. */
+  admitRpc?: DshRpcAdmission;
   onState?: (state: 'online' | 'reconnecting' | 'auth-required' | 'closed') => void;
+}
+
+export type DshRpcJson = null | boolean | number | string | readonly DshRpcJson[] | { readonly [key: string]: DshRpcJson };
+export type DshRpcCaptureCoverage = 'complete' | 'oversize' | 'invalid-json' | 'transport-error' | 'http-auth-rejected';
+/** A detached, deeply frozen JSON observation. Headers, credentials, invalid
+ * bytes and hashes of omitted content are never part of this interface. */
+export interface DshRpcObservation {
+  readonly dir: 'in' | 'out';
+  readonly endpoint: string;
+  /** The actual transport request id, including on malformed responses. */
+  readonly rpcId: string;
+  readonly httpStatus?: number;
+  readonly capture: Readonly<{ coverage: DshRpcCaptureCoverage; maxBytes: number; jsonBytes?: number }>;
+  /** Complete native JSON or a safe capture marker, never the business value alone. */
+  readonly frame: DshRpcJson;
+}
+export type DshRpcFrameObserver = (observation: DshRpcObservation) => void | Promise<void>;
+export type DshRpcAdmission = (request: DshRpcObservation) => boolean;
+
+function freezeRpcJson(value: DshRpcJson): DshRpcJson {
+  const pending: DshRpcJson[] = [value];
+  while (pending.length > 0) {
+    const item = pending.pop();
+    if (item !== null && typeof item === 'object') {
+      for (const child of Object.values(item)) pending.push(child);
+      Object.freeze(item);
+    }
+  }
+  return value;
 }
 
 interface StreamSubscription {
@@ -193,27 +237,93 @@ export class DshHostClient {
   get cookieHeader(): string { return this.cookie; }
   get isConnected(): boolean { return this.ws?.readyState === WebSocket.OPEN; }
 
-  async rpc<T = unknown>(endpoint: string, args: Record<string, unknown> = {}): Promise<T> {
+  private rpcObservation(dir: 'in' | 'out', endpoint: string, rpcId: string,
+    payload: { json: unknown } | { serialized: string } | { coverage: Exclude<DshRpcCaptureCoverage, 'complete' | 'oversize'> }, httpStatus?: number): DshRpcObservation {
+    const configured = this.options.maxRpcCaptureBytes ?? 1024 * 1024;
+    const maxBytes = Number.isSafeInteger(configured) ? Math.max(0, Math.min(configured, 4 * 1024 * 1024)) : 1024 * 1024;
+    let coverage: DshRpcCaptureCoverage;
+    let jsonBytes: number | undefined;
+    let frame: DshRpcJson;
+    if ('coverage' in payload) coverage = payload.coverage;
+    else {
+      try {
+        const serialized = 'serialized' in payload ? payload.serialized : JSON.stringify(payload.json);
+        jsonBytes = Buffer.byteLength(serialized);
+        coverage = jsonBytes > maxBytes ? 'oversize' : 'complete';
+        if (coverage === 'complete') frame = freezeRpcJson(JSON.parse(serialized) as DshRpcJson);
+      } catch { coverage = 'oversize'; }
+    }
+    if (coverage !== 'complete') frame = Object.freeze({ type: 'dsh-rpc-capture', rpcId, method: endpoint, coverage });
+    return Object.freeze({ dir, endpoint, rpcId, ...(httpStatus === undefined ? {} : { httpStatus }),
+      capture: Object.freeze({ coverage, maxBytes, ...(jsonBytes === undefined ? {} : { jsonBytes }) }), frame: frame! });
+  }
+
+  private observeRpc(observation: DshRpcObservation, observer?: DshRpcFrameObserver): void {
+    for (const sink of [this.options.onRpcFrame, observer]) {
+      if (sink === undefined) continue;
+      try { const pending = sink(observation); if (pending !== undefined) void pending.catch(() => undefined); }
+      catch { /* Capture observers do not change dispatch, retries or HTTP errors. */ }
+    }
+  }
+
+  async rpc<T = unknown>(endpoint: string, args: Record<string, unknown> = {}, observer?: DshRpcFrameObserver, admitRpc?: DshRpcAdmission): Promise<T> {
     if (!/^(?:[\w-]+\/[\w-]+|\$events\/result)$/.test(endpoint)) throw new Error('Invalid DSH RPC endpoint');
     validateDshArgs(endpoint, args);
     const rpcId = randomUUID();
-    const response = await fetch(`${this.base}api/${endpoint}`, {
+    const body = JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args } });
+    const capture = observer !== undefined || this.options.onRpcFrame !== undefined || admitRpc !== undefined || this.options.admitRpc !== undefined;
+    if (capture) {
+      const request = this.rpcObservation('out', endpoint, rpcId, { serialized: body });
+      this.observeRpc(request, observer);
+      for (const admit of [this.options.admitRpc, admitRpc]) {
+        if (admit === undefined) continue;
+        let accepted = false;
+        try { accepted = admit(request); } catch { /* Failure precedes the HTTP dispatch. */ }
+        if (!accepted) throw Object.assign(new Error('DSH native RPC request was not durably admitted; no HTTP request was dispatched'), { code: 'uncertain' });
+      }
+    }
+    let response: Response;
+    try { response = await fetch(`${this.base}api/${endpoint}`, {
       method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(this.options.rpcTimeoutMs ?? 30_000),
       headers: { 'content-type': 'application/json', cookie: this.cookie },
-      body: JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args } }),
-    });
+      body,
+    }); } catch (error) {
+      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'transport-error' }), observer);
+      throw error;
+    }
     if ([401, 403].includes(response.status)) {
+      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'http-auth-rejected' }, response.status), observer);
       this.authenticationLost();
       throw Object.assign(new Error('DSH 认证已失效，请重新连接目标 Host'), { code: 'dsh-needs-link', statusCode: 401 });
     }
     let value: unknown;
-    try { value = await response.json(); } catch { throw new Error(`${endpoint} 返回非 JSON（HTTP ${response.status}）`); }
+    try { value = await response.json(); } catch {
+      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'invalid-json' }, response.status), observer);
+      throw new Error(`${endpoint} 返回非 JSON（HTTP ${response.status}）`);
+    }
+    if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { json: value }, response.status), observer);
     const envelope = value as { type?: string; rpcId?: string; result?: { ok?: boolean; value?: unknown; error?: RpcError } } | null;
     if (envelope?.type !== 'server-response' || envelope.rpcId !== rpcId || envelope.result === undefined || envelope.result === null || typeof envelope.result.ok !== 'boolean') throw new Error(`${endpoint} 响应身份或信封不匹配`);
     if (!response.ok && envelope.result.ok) throw new Error(`${endpoint} HTTP ${response.status} 未成功`);
     if (envelope.result.ok !== true) throw new DshRpcError(envelope.result.error ?? { code: 'unknown', message: 'Native request failed' });
     validateDshResult(endpoint, envelope.result.value);
     return envelope.result.value as T;
+  }
+
+  /** Read one authoritative opening from a native snapshot stream, then
+   * release only this subscription. Never mistake a streaming RPC for unary. */
+  async snapshot<T = unknown>(endpoint: string, args: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<T> {
+    await this.connect();
+    return new Promise<T>((resolve, reject) => {
+      const streamId = this.openStream(endpoint, args, frame => {
+        if (!['item', 'error', 'end'].includes(frame.type)) return;
+        clearTimeout(timer);
+        this.closeStream(streamId);
+        if (frame.type !== 'item') { reject(new Error(`DSH ${endpoint} snapshot ended before its baseline`)); return; }
+        try { validateDshResult(endpoint, frame.value); resolve(frame.value as T); } catch (error) { reject(error); }
+      });
+      const timer = setTimeout(() => { this.closeStream(streamId); reject(new Error(`DSH ${endpoint} snapshot timed out`)); }, timeoutMs);
+    });
   }
 
   connect(): Promise<void> {

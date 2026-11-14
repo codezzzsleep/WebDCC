@@ -12,6 +12,25 @@ it('NP-11 pairs native durable approval IDs with waterfall IDs and preserves the
   expect(replay.feed(frame({ type: 'event', event: { type: 'approval/decided', seq: 2, data: { id: 'durable', outcome: 'rejected' } } }))).toContainEqual(expect.objectContaining({ kind: 'approval.resolved', data: { approvalId: 'waterfall', optionId: 'rejected', by: 'other' } }));
 });
 
+it('NP-11 a submitted approval remains unresolved until the matching durable native decision', async () => {
+  const replay = DshAdapter.replay('session');
+  replay.feed(frame({ type: 'ready', clientId: 'client' }));
+  replay.feed(frame({ type: 'event', event: { type: 'approval/asked', seq: 1, data: { id: 'durable', callId: 'tool', toolName: 'bash' } } }));
+  replay.feed(frame({ type: 'waterfall', event: 'approval/request', eventId: 'waterfall', request: { callId: 'tool', toolName: 'bash' } }));
+  expect(await replay.adapter.respond('session', { approvalId: 'waterfall', optionId: 'rejected' })).toEqual({ confirmed: false });
+  await expect(replay.adapter.respond('session', { approvalId: 'waterfall', optionId: 'allowed-once' })).rejects.toMatchObject({ statusCode: 409 });
+  expect(replay.feed(frame({ type: 'cancel', eventId: 'waterfall' })).filter(event => event.type === 'item.complete' && event.kind === 'approval.resolved')).toHaveLength(0);
+  expect(replay.feed(frame({ type: 'event', event: { type: 'approval/decided', seq: 2, data: { id: 'durable', outcome: 'rejected' } } }))).toContainEqual(expect.objectContaining({ kind: 'approval.resolved', data: { approvalId: 'waterfall', optionId: 'rejected', by: 'user' } }));
+});
+
+it('unknown native reverse requests delegate safely without inventing an approval result', async () => {
+  const replay = DshAdapter.replay('session');
+  replay.feed(frame({ type: 'ready', clientId: 'client' }));
+  replay.feed(frame({ type: 'waterfall', event: 'plugin/unknown-request', eventId: 'unhandled', request: { malicious: true } }));
+  await Promise.resolve();
+  expect(replay.replies.at(-1)).toEqual({ endpoint: '$events/result', args: { clientId: 'client', eventId: 'unhandled', outcome: { kind: 'next' } } });
+});
+
 it('NP-11 keeps questions after failed replies and closes each card on a native cancellation', async () => {
   const replay = DshAdapter.replay('session');
   replay.feed(frame({ type: 'ready', clientId: 'client' }));
@@ -44,4 +63,16 @@ it('NP-11 limits child controls to the exact direct parent and continuable catal
   await expect(replay.adapter.sendSubagent('session', 'other-parent-child', 'text')).rejects.toMatchObject({ statusCode: 409 });
   replay.feed(frame({ type: 'event', event: { type: 'subagent/catalog', seq: 1, time: 1001, data: { childId: 'one-shot', mode: 'one-shot' } } }));
   await expect(replay.adapter.interruptSubagent('session', 'one-shot')).rejects.toMatchObject({ statusCode: 409 });
+});
+
+it('NP-11 continued timed questions use the native late-answer RPC and wait for projection admission', async () => {
+  const replay = DshAdapter.replay('session');
+  replay.feed(frame({ type: 'snapshot', header: { id: 'native-parent' }, cursor: -1, records: [], hasMore: false,
+    projections: { asOfSeq: -1, values: { userQuestions: { active: [{ callId: 'timed-call', state: 'continued', questions: [{ id: 'one', question: 'answer later' }] }], settled: [] } } } }));
+  const client = (replay.adapter as unknown as { client: DshHostClient }).client;
+  client.rpc = async <T>(endpoint: string, args: Record<string, unknown>) => { replay.replies.push({ endpoint, args }); return true as T; };
+  expect(await replay.adapter.answer('session', 'dsh-continued:timed-call:one', { custom: '  late original\r\n  ' })).toEqual({ submitted: true, confirmed: false, questionIds: ['dsh-continued:timed-call:one'] });
+  expect(replay.replies.at(-1)).toMatchObject({ endpoint: 'userQuestions/answer', args: { agentId: 'native-parent', callId: 'timed-call', answer: { answers: [{ id: 'one', selected: [], custom: '  late original\r\n  ' }] } } });
+  await expect(replay.adapter.answer('session', 'dsh-continued:timed-call:one', 'duplicate')).rejects.toMatchObject({ statusCode: 409 });
+  expect(replay.feed(frame({ type: 'projection', seq: 1, changes: [{ key: 'userQuestions', val: { active: [], settled: [{ callId: 'timed-call', answers: [{ id: 'one', selected: [], custom: '  late original\r\n  ' }] }] } }] }))).toContainEqual(expect.objectContaining({ kind: 'question', data: { questionId: 'dsh-continued:timed-call:one', prompt: '', status: 'answered', resolution: 'native-acknowledged', toolCallId: 'timed-call' } }));
 });

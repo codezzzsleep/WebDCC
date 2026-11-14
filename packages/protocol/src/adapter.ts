@@ -5,6 +5,7 @@ import type { AccessModeOption, NativePermissionObservation } from './permission
 import type { RuntimeIdentity } from './runtime.js';
 import type { NativeFrameSink } from './native-events.js';
 import type { NativeObservation } from './native-observation.js';
+import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } from './native-controls.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -20,6 +21,11 @@ export interface ProbeResult {
 export interface ModelOption {
   id: string;
   label: string;
+  reasoningEfforts?: string[];
+  defaultReasoningEffort?: string;
+  inputModalities?: ('text' | 'image' | 'audio')[];
+  isDefault?: boolean;
+  source?: string;
 }
 
 export interface ProviderRuntimeConfig {
@@ -148,4 +154,16 @@ export interface AgentAdapter {
   /** Bind transport-free handlers and adapter lifecycle callbacks before activation. */
   bindRuntime?(sessionId: string, identity: RuntimeIdentity): void;
   observe?(opts: CreateOpts & { nativeId: string }): Promise<NativeObservation>;
+  nativeCatalog?(sessionId: string): Promise<unknown>;
+  nativeState?(sessionId: string): unknown | Promise<unknown>;
+  executeNativeControl?(sessionId: string, action: unknown): Promise<unknown>;
+  readNativeHistory?(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown>;
+  nativeProcessStart?(sessionId: string, params: NativeProcessStart, onOutput: (delta: NativeProcessDelta) => void): Promise<NativeProcessCompletion>;
+  nativeProcessWrite?(sessionId: string, params: { processId: string; deltaBase64?: string; closeStdin?: boolean }): Promise<void>;
+  nativeProcessResize?(sessionId: string, params: { processId: string; size: { rows: number; cols: number } }): Promise<void>;
+  nativeProcessTerminate?(sessionId: string, params: { processId: string }): Promise<void>;
+  /** Server-only launch environment, never part of a public catalog. */
+  nativeTerminalEnvironment?(): Record<string, string | undefined>;
+  /** Host-wide transport records have an explicit non-session diagnostic scope. */
+  bindGlobalNativeEvents?(sink: NativeFrameSink): void;
 }
