@@ -142,3 +142,11 @@
 - 本阶段首轮六类源码检查通过（66 文件 / 290 单元、6 项 Chromium），之后补了投影落盘窗口回归，目标检查点将重新绑定正式提交。新运行隔离/恢复/捕获局部 11 项单元与 1 项真实 Chromium 已验证；不属于真实模型的完整验收。
 - 仍需 NativeSessionRef 的真实 Host/profile/version 校验、可操作 native 状态对账与 partial answers 恢复、完整全局/设置/错误帧及历史覆盖、持久 gap/版本化重建、完整 actor 关联和真实三家故障验收。NP-04/05/14/47 保持部分推进。
 - 已部署版本和原本本机部署不更新。本批源码提交后推送修复分支，继续 NP-04/06 的原生只读对账与安全恢复。
+
+## 本批源码验证检查点（2026-11-14）
+
+- 修复提交 `20701b2d356ebd68711f36f53d9201d68b065334` 已推送到修复分支与 PR #39。共 29 个触及文件，1,037 新增/76 删除（包含测试和工程文档）；不代表 48 项全部完成。
+- 精确提交源码门禁六类全部通过：66 个单元文件 / 291 项测试、5 个 Chromium 文件 / 6 项真实浏览器测试。报告 source-checks.json 绑定上述提交，source fingerprint `f28db751cb2a24941fe0f603c4a97a3efdaca73a0809cd3c4b1bde0fd5ca0441`。
+- 同提交 L1 33 轨迹 / 3,681 帧：I1–I8 没有失败；22 GOLDEN、16 NOT_TRIGGERED，8/33 场景通过，门禁仍失败。evidence/l1-20701b2.json 绑定当前检查点，未改 golden。
+- 下一可执行路径：扩展 Codex typed thread/read + thread/turns/list 只读观察（notLoaded 不代表其他进程空闲），通过 SDK 公共 spawnClaudeCodeProcess 记录可验证的 managed child identity，再接原生状态对账和交互恢复。SDK prewarm().claim 是绑定备用进程，不是原生全局所有权证据；不要将其用于声称安全接管。
+- 原生 Sidecar/Host 全局帧、坏 JSON/错误帧、版本化投影重建、准确 Host/profile 以及可操作 uncertain 恢复仍未完成。继续实现并补证，不将局部源码绿灯换成 native 完成。原本本机部署不变；当前远程部署仍为上轮的 e493ec4。

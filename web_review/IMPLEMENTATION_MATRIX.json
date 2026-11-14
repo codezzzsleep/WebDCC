@@ -298,7 +298,8 @@
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json"
         ],
         "remainingAcceptance": [
           "并发resume只创建一个owner，旧query晚到不能污染新会话。",
@@ -395,7 +396,8 @@
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json"
         ],
         "remainingAcceptance": [
           "历史API首次失败后下一次能补齐缺口，afterSeq不越过未接收区间。",
@@ -1136,7 +1138,8 @@
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json"
         ],
         "remainingAcceptance": [
           "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
@@ -2829,7 +2832,8 @@
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json"
         ],
         "remainingAcceptance": [
           "从审核基线数据库升级保留sessionId/URL/events/files及已有命令结果。",
