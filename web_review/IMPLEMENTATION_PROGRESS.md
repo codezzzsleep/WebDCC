@@ -103,3 +103,10 @@
 - 真实 Codex 0.167.0 / 真实模型及账号、真实 DSH 双界面断线、CLI/PTY、secret/URL/form 等验收仍待准备/实施；不能以本机 0.168.0 或 fixture 通过代替固定基线证据。
 
 运行入口：所有命令在 `/root/WebDCC-repair` 执行。`pnpm check:source` 构建只写 `.artifacts/<runId>/`；不要执行 release 或重启服务。真实 Codex 0.167.0 与付费模型对照尚未准备，不能拿 0.168.0 当基线通过证据。
+
+## GitHub 发布与 CI 权限（2026-11-14）
+
+- 用户要求修复代码在 GitHub 可见；修复分支正在发布，草稿 PR 不表示 48 项完成。
+- GitHub OAuth 凭据缺少 workflow scope，拒绝上传新增 `.github/workflows/source-checks.yml`；现有 SSH 也未授权。源码及检查命令照常保留，CI 定义暂存于 `docs/ci/source-checks.yml` 供审查；它不是已启用的 GitHub Actions。
+- 恢复自动 CI 需要有 workflow scope 的发布凭据或仓库维护者将该文件放回 `.github/workflows/`。NP-15/46 的 CI 验收保持未完成，不以模板替代实际执行。
+- 后续部署仅限用户新增授权的独立远程环境，原有本机部署边界继续有效。
