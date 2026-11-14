@@ -190,7 +190,7 @@ export class LiveHub {
       data: item.data,
       turnId: item.turnId,
     }));
-    const snapshot: SnapshotMessage = { op: 'snapshot', sessionId, items };
+    const snapshot: SnapshotMessage = { op: 'snapshot', sessionId, items, throughSeq: cursor };
     this.flushClientDeltas(client, pending => pending.sessionId === sessionId);
     this.send(client, snapshot);
   }

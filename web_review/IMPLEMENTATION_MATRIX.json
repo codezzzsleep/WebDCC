@@ -552,7 +552,10 @@
           "packages/server/test/hub-stream-identity.spec.ts",
           "packages/web/src/lib/store-stream-identity.spec.ts",
           "browser-tests/stream-identity.spec.ts",
-          "scripts/verify-native-reasoning.ts"
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -567,7 +570,10 @@
           "packages/server/test/hub-stream-identity.spec.ts",
           "packages/web/src/lib/store-stream-identity.spec.ts",
           "browser-tests/stream-identity.spec.ts",
-          "scripts/verify-native-reasoning.ts"
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
         ],
         "remainingAcceptance": [
           "历史API首次失败后下一次能补齐缺口，afterSeq不越过未接收区间。",
@@ -719,7 +725,10 @@
           "browser-tests/native-controls.spec.ts",
           "packages/server/test/question-blocking.spec.ts",
           "browser-tests/question-blocking.spec.ts",
-          "docs/question-blocking-semantics.md"
+          "docs/question-blocking-semantics.md",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -729,14 +738,17 @@
           "web_review/evidence/native-elicitation.json",
           "packages/server/test/question-blocking.spec.ts",
           "browser-tests/question-blocking.spec.ts",
-          "docs/question-blocking-semantics.md"
+          "docs/question-blocking-semantics.md",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
           "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
           "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
         ],
-        "remainingWork": "Native isBlocking and owned native thread waiting flags are retained, with current/session interaction scope and real Chromium mechanism regression. Actual pinned direct RPC proved Plan blocking and explicitly configured Default nonblocking requests/confirmation; Plan mode UI and negotiated experimental contract, ordinary real-Web native question closure, three-provider full cancellation/secret/restart matrix remain incomplete. Issue41 stays open.",
+        "remainingWork": "Native blocking/actual thread waiting retained. Cached cards and durable interaction replay wait verified HTTP/WS boundaries; per-ID real stored native results reconcile history gaps without inventing completion. Controlled Chromium and deterministic before/after regressions passed. Ordinary Plan-mode UI/experimental negotiation and full actual native-Web multi-provider cancellation/secret/restart acceptance remain incomplete; Issue41 stays open.",
         "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
       },
       "dependencyIds": [
@@ -1636,7 +1648,10 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1644,7 +1659,10 @@
           "web_review/evidence/claude-block-l1.json",
           "web_review/evidence/l1-64cf89e.json",
           "web_review/evidence/l1-e493ec4.json",
-          "web_review/evidence/native-elicitation.json"
+          "web_review/evidence/native-elicitation.json",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
         ],
         "remainingAcceptance": [
           "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",

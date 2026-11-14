@@ -12,6 +12,8 @@ import type {
   WatchdogSettings,
   PermissionState,
   InputContent,
+  InteractionKind,
+  InteractionEventResponse,
 } from '@webdcc/protocol';
 import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
@@ -551,6 +553,17 @@ export class Store {
     return (this.db.prepare('SELECT * FROM events WHERE session_id = ? ORDER BY seq ASC').all(sessionId) as EventRow[]).map(
       toEvent,
     );
+  }
+
+  latestInteractionEvent(sessionId: string, kind: InteractionKind, interactionId: string): InteractionEventResponse {
+    return this.db.transaction(() => {
+      const session = this.getSession(sessionId);
+      if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+      const row = kind === 'answer'
+        ? this.db.prepare("SELECT * FROM events WHERE session_id = ? AND kind = 'question' AND json_extract(data, '$.questionId') = ? ORDER BY seq DESC LIMIT 1").get(sessionId, interactionId)
+        : this.db.prepare("SELECT * FROM events WHERE session_id = ? AND kind IN ('approval.request', 'approval.resolved') AND json_extract(data, '$.approvalId') = ? ORDER BY seq DESC LIMIT 1").get(sessionId, interactionId);
+      return { event: row === undefined ? null : toEvent(row as EventRow), throughSeq: session.lastSeq };
+    })();
   }
 
   // ---------- feed ----------

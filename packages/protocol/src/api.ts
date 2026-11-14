@@ -67,6 +67,10 @@ export interface EventsPageResponse {
   hasMore: boolean;
 }
 
+export type InteractionKind = 'answer' | 'approve';
+/** An actual persisted interaction event and its same-read-window event boundary. */
+export interface InteractionEventResponse { event: StoredEvent | null; throughSeq: number }
+
 export interface FileDto {
   id: string;
   sha256: string;

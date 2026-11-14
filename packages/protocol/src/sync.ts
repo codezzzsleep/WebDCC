@@ -187,6 +187,8 @@ export interface SnapshotMessage {
   op: 'snapshot';
   sessionId: string;
   items: SnapshotItem[];
+  /** Last stored event actually replayed to this subscriber; not a cursor instruction. */
+  throughSeq?: number;
 }
 
 export interface DeltaMessage {

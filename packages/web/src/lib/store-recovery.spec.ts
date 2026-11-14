@@ -19,6 +19,11 @@ afterEach(() => { vi.useRealTimers(); });
 describe('NP-03 browser queue recovery', () => {
   it('NP-06 distinguishes collected answers, failed submissions and newer retries', async () => {
     const store = new AppStore();
+    store.applyEvent({ sessionId: 's', seq: 1, turnId: null, itemKey: 'question-q', kind: 'question', data: { questionId: 'q', prompt: 'Question' }, at: '2026-01-01T00:00:00Z' });
+    mocks.session.mockResolvedValueOnce({ id: 's', lastSeq: 1 });
+    await store.ensureSession('s');
+    mocks.options[0]?.onState('online', 0);
+    mocks.options[0]?.onMessage({ op: 'snapshot', sessionId: 's', throughSeq: 1, items: [] });
     store.answer('s', 'q', { custom: 'first' });
     const first = store.getInteractionSubmission('s', 'answer', 'q')!;
     store.answer('s', 'q', { custom: 'duplicate click' });

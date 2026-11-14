@@ -9,6 +9,8 @@ import type {
   FsReadResponse,
   MetaResponse,
   SessionDetailResponse,
+  InteractionKind,
+  InteractionEventResponse,
   WorkspaceDto,
   WorkspaceFileSaveRequest,
   WatchdogSettings,
@@ -96,6 +98,7 @@ export const api = {
     `/api/workspaces/${workspaceId}/raw?path=${encodeURIComponent(path)}`,
   feed: (after: number) => request<{ entries: { feedSeq: number; sessionId: string; patch: Record<string, unknown> }[] }>(`/api/feed?after=${after}`),
   session: (id: string) => request<SessionDetailResponse>(`/api/sessions/${id}`),
+  interaction: (sessionId: string, kind: InteractionKind, id: string) => request<InteractionEventResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/interactions/${kind}?${new URLSearchParams({ interactionId: id })}`),
   events: (id: string, params: { before?: number; after?: number; limit?: number }) => {
     const search = new URLSearchParams();
     if (params.before !== undefined) search.set('before', String(params.before));

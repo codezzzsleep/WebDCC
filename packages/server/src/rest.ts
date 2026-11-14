@@ -17,6 +17,7 @@ import type {
   UploadStatusResponse,
   WorkspaceDto,
   InputContent,
+  InteractionEventResponse,
 } from '@webdcc/protocol';
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
@@ -406,6 +407,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const { id } = request.params as { id: string };
     if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
     return store.getDraft(id);
+  });
+
+  app.get('/api/sessions/:id/interactions/:kind', async (request): Promise<InteractionEventResponse> => {
+    const { id, kind } = request.params as { id: string; kind: string };
+    const interactionId = (request.query as { interactionId?: unknown }).interactionId;
+    if (kind !== 'answer' && kind !== 'approve') throw badRequest('交互类型必须是 answer 或 approve');
+    if (typeof interactionId !== 'string' || !interactionId || interactionId.length > 2048) throw badRequest('交互身份无效');
+    return store.latestInteractionEvent(id, kind, interactionId);
   });
 
   app.put('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {

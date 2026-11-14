@@ -1,7 +1,7 @@
 import { chromium } from '@playwright/test';
 import { expect, it } from 'vitest';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
-import { createSourceTestApp } from './helpers.js';
+import { createSourceTestApp, observeSessionSnapshots } from './helpers.js';
 
 it('NP-06 a real browser keeps question input and pending state through submission failure, then resolves from server events', async () => {
   const ctx = await createSourceTestApp();
@@ -27,6 +27,7 @@ it('NP-06 a real browser keeps question input and pending state through submissi
     const base = `http://127.0.0.1:${address.port}`;
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    const snapshotThrough = observeSessionSnapshots(page, session.id);
     const socketFrames: string[] = [];
     page.on('console', message => { if (message.type() === 'error') socketFrames.push(`console:${message.text()}`); });
     page.on('websocket', socket => {
@@ -37,11 +38,13 @@ it('NP-06 a real browser keeps question input and pending state through submissi
     await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
     await page.goto(`${base}/s/${session.id}`);
     const card = page.getByTestId('question-card');
-    await card.waitFor();
+    await card.and(page.locator('[data-sync="ready"]')).waitFor();
+    expect(snapshotThrough()).toBeGreaterThanOrEqual(ctx.store.getSession(session.id)!.lastSeq);
+    expect(await card.getAttribute('data-sync')).toBe('ready');
     const input = card.getByRole('textbox', { name: '其他回答' });
     const text = '  原样保留的答案  ';
     await input.fill(text);
-    const button = card.getByRole('button');
+    const button = card.getByRole('button', { name: '提交', exact: true });
     await button.click();
     try { await expect.poll(() => attempted, { timeout: 5000 }).toBe(1); }
     catch (error) { throw new Error(`${String(error)}; card=${await card.textContent()}; sockets=${socketFrames.join(',')}`, { cause: error }); }
@@ -57,14 +60,17 @@ it('NP-06 a real browser keeps question input and pending state through submissi
     expect(await card.getAttribute('data-state')).toBe('pending');
     await expect.poll(() => card.getByRole('status').textContent()).toContain('等待原生结果');
     await page.reload();
-    await card.waitFor();
-    expect(await card.getByRole('button').isDisabled()).toBe(true);
+    await card.and(page.locator('[data-sync="ready"]')).waitFor();
+    expect(snapshotThrough()).toBeGreaterThanOrEqual(ctx.store.getSession(session.id)!.lastSeq);
+    expect(await card.getByRole('button', { name: '提交', exact: true }).isDisabled()).toBe(true);
     await expect.poll(() => card.getByRole('status').textContent()).toContain('等待原生结果');
     native.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: '', requestId: 'native-request' } } });
     await expect.poll(() => card.getAttribute('data-state')).toBe('resolved');
     expect(native.replies).toEqual([{ id: 'native-request', result: { answers: { one: { answers: [text] } } } }]);
     await page.reload();
-    await expect.poll(() => page.getByTestId('question-card').getAttribute('data-state')).toBe('resolved');
+    await card.and(page.locator('[data-sync="ready"]')).waitFor();
+    expect(snapshotThrough()).toBeGreaterThanOrEqual(ctx.store.getSession(session.id)!.lastSeq);
+    expect(await card.getAttribute('data-state')).toBe('resolved');
     expect(await page.getByTestId('question-card').getByRole('button').count()).toBe(0);
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
@@ -93,16 +99,18 @@ it('NP-06 two browser contexts cannot submit the same native question twice', as
     browser = await chromium.launch({ headless: true });
     const pages = await Promise.all([browser.newPage(), browser.newPage()]);
     for (const page of pages) {
+      const snapshotThrough = observeSessionSnapshots(page, session.id);
       await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
       await page.goto(`${base}/s/${session.id}`);
-      await page.getByTestId('question-card').waitFor();
+      await page.getByTestId('question-card').and(page.locator('[data-sync="ready"]')).waitFor();
+      expect(snapshotThrough()).toBeGreaterThanOrEqual(ctx.store.getSession(session.id)!.lastSeq);
     }
     const first = pages[0]!.getByTestId('question-card'); const second = pages[1]!.getByTestId('question-card');
     await first.getByRole('textbox', { name: '其他回答' }).fill('first answer');
-    await first.getByRole('button').click();
+    await first.getByRole('button', { name: '提交', exact: true }).click();
     await expect.poll(() => attempts).toBe(1);
     await second.getByRole('textbox', { name: '其他回答' }).fill('competing answer');
-    await second.getByRole('button').click();
+    await second.getByRole('button', { name: '提交', exact: true }).click();
     await expect.poll(() => second.getByRole('alert').textContent()).toContain('另一个客户端');
     expect(attempts).toBe(1);
     release();

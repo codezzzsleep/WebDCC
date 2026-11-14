@@ -246,3 +246,11 @@
 - 真实Codex0.167.0当前Web形状（capabilities=null、省略mode）默认工具会返回request_user_input unavailable in Default mode。实验协议+显式Plan可真实提问；Default只在用户显式开启underDevelopment feature时可发false标记的提问。该配置未在生产开启；Plan模式入口与正式experimental合同仍待Issue#41完整接入。
 - 历史L1当前32 GOLDEN/16 NOT_TRIGGERED：新增10处fixture差异仅是34个cacheCreationInputTokens:0字段，无原有正文/答案/身份/时序/计数丢失，未改golden或把未触发记通过。报告与独立审计保存在本机。
 - 本阶段局部故障回归通过；提交后重跑完整门禁并绑定正式SHA。两台原部署不变，修复PR保持草稿，不发布或合并main。
+
+## 故障回归收尾：交互同步边界（2026-11-14）
+
+- 同提交87af完整Browser报告保留了两处问答pending超时；独立重跑与诊断全量运行通过，精确触发原因未完全证明。另以13ms确定性场景证实旧缓存卡在新历史未到时即可持久化/发送旧答案，before失败、after通过，不能只靠延长timeout遮蔽。
+- WS snapshot增加实际已回放throughSeq。会话与单个交互分别核对HTTP/WS及连续覆盖；加载、掉线、真实历史回退或请求状态未知时不允许提交，已持久回答/审批也在重连对账后再考虑发送，已结束请求不会重新发送。
+- 最新200条窗口不能证明更早缓存卡仍有效：新增按原始交互ID查询最新真实StoredEvent与同一SQLite读事务throughSeq的受认证只读接口，返回null保持未知，旧GET不能覆盖较新的WS或跨重连结果。长opaque ID经路径遇到真实HTTP414后改为query编码，未扩大全局路由限制。历史分页从最新连续后缀补缺口，保留已缓存旧记录。
+- 新真实Browser固定旧缓存、延迟历史及单ID对账、把原生完成记录置于225条后的最新窗口之外；验证按钮在未知期禁用、真实结果到达后关闭旧卡。既有Browser以真实WS snapshot边界和DOM ready为前提，再独立断言原生回包、服务端及刷新状态，30s场景timeout不变。
+- 定向unit/Browser、类型和lint已过；提交后完整门禁仍须绑定最终SHA。未部署或发布，Issue#41的Plan入口/实验协议协商以及NP-01–48整体验收仍未完成。

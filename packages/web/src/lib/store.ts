@@ -87,6 +87,18 @@ export class AppStore {
   private drafts = new Map<string, { text: string; fileIds: string[] }>();
   private outbox = new Map<string, { command: Command; status: PendingMessage['status']; durable?: boolean; createdAt?: number; error?: string }>();
   private interactionSubmissions = new Map<string, InteractionSubmission>();
+  private dispatchedInteractions = new Set<string>();
+  private sessionHydrations = new Map<string, Promise<void>>();
+  private sessionServerEnds = new Map<string, number>();
+  private sessionSnapshotEnds = new Map<string, number>();
+  private sessionStreamEnds = new Map<string, number>();
+  private sessionRollbacks = new Set<string>();
+  private connectionEpoch = 0;
+  private interactionAuthorities = new Map<string, { found: boolean; throughSeq: number }>();
+  private interactionLookups = new Map<string, Promise<void>>();
+  private interactionLookupAttempts = new Map<string, string>();
+  private interactionRefreshSessions = new Set<string>();
+  private interactionRefreshScheduled = false;
   private listeners = new Set<() => void>();
   private derived = new Map<string, { version: number; turns: TurnModel[] }>();
   /** 每个会话的订阅游标：新浏览器打开大会话时从服务端最新 seq 开始，不整段重拉 */
@@ -119,6 +131,14 @@ export class AppStore {
       getFeedAfter: () => this.feedSeq,
       onMessage: (message) => this.handleMessage(message),
       onState: (state, attempt) => {
+        if (state !== this.connectionState || state !== 'online') {
+          this.connectionEpoch++;
+          this.sessionSnapshotEnds.clear();
+          this.sessionStreamEnds.clear();
+          this.interactionAuthorities.clear();
+          this.interactionLookupAttempts.clear();
+          this.dispatchedInteractions.clear();
+        }
         this.connectionState = state;
         this.connectionAttempt = attempt;
         if (state === 'online') this.lastReconnectAt = Date.now();
@@ -249,7 +269,11 @@ export class AppStore {
         break;
       }
       case 'event': {
+        const beforeStream = this.sessionStreamEnds.get(message.event.sessionId) ?? 0;
+        const requiredEnd = this.sessionServerEnds.get(message.event.sessionId) ?? 0;
+        this.sessionStreamEnds.set(message.event.sessionId, Math.max(this.sessionStreamEnds.get(message.event.sessionId) ?? 0, message.event.seq));
         this.applyEvent(message.event, message.history === true);
+        if (beforeStream < requiredEnd && message.event.seq >= requiredEnd) this.refreshInteractionAuthorities(message.event.sessionId);
         break;
       }
       case 'snapshot': {
@@ -258,6 +282,13 @@ export class AppStore {
           map.set(hotKey(item.turnId, item.itemKey), { itemKey: item.itemKey, kind: item.kind, data: item.data, ...(item.turnId === undefined ? {} : { turnId: item.turnId }) });
         }
         this.hot.set(message.sessionId, map);
+        if (Number.isSafeInteger(message.throughSeq) && message.throughSeq! >= 0) {
+          this.sessionSnapshotEnds.set(message.sessionId, message.throughSeq!);
+          this.sessionStreamEnds.set(message.sessionId, Math.max(this.sessionStreamEnds.get(message.sessionId) ?? 0, message.throughSeq!));
+        }
+        else this.sessionSnapshotEnds.delete(message.sessionId);
+        this.replayInteractionOutbox(message.sessionId);
+        this.refreshInteractionAuthorities(message.sessionId);
         this.notify();
         break;
       }
@@ -298,6 +329,7 @@ export class AppStore {
         break;
       }
       case 'ack': {
+        this.dispatchedInteractions.delete(message.clientCommandId);
         const entry = this.outbox.get(message.clientCommandId);
         if (entry !== undefined && (entry.command.op === 'answer' || entry.command.op === 'approve')) {
           const command = entry.command;
@@ -407,6 +439,8 @@ export class AppStore {
       }
     }
     this.queueCache(event);
+    this.replayInteractionOutbox(event.sessionId);
+    if (event.kind === 'question' || event.kind === 'approval.request' || event.kind === 'approval.resolved') this.refreshInteractionAuthorities(event.sessionId);
     this.notify();
   }
 
@@ -414,8 +448,49 @@ export class AppStore {
 
   trace: Record<string, number> = {};
 
-  async ensureSession(sessionId: string): Promise<void> {
+  getSessionSync(sessionId: string): { phase: 'loading' | 'replaying' | 'ready'; throughSeq?: number; cursor: number } {
+    const snapshot = this.sessionSnapshotEnds.get(sessionId);
+    const target = snapshot === undefined ? this.sessionServerEnds.get(sessionId) : Math.max(snapshot, this.maxSeq(sessionId), this.sessionServerEnds.get(sessionId) ?? 0, this.sessionStreamEnds.get(sessionId) ?? 0);
+    const cursor = this.cursors.get(sessionId) ?? 0;
+    const ready = this.connectionState === 'online' && this.subscribed.has(sessionId) && !this.sessionHydrations.has(sessionId) && !this.sessionRollbacks.has(sessionId) &&
+      snapshot !== undefined && cursor >= target! && (this.sessionStreamEnds.get(sessionId) ?? 0) >= target!;
+    return { phase: ready ? 'ready' : this.sessionHydrations.has(sessionId) ? 'loading' : 'replaying', ...(target === undefined ? {} : { throughSeq: target }), cursor };
+  }
+
+  isSessionSynced(sessionId: string): boolean {
+    return this.getSessionSync(sessionId).phase === 'ready';
+  }
+
+  isInteractionSynced(sessionId: string, op: 'answer' | 'approve', id: string): boolean {
+    if (!this.isSessionSynced(sessionId)) return false;
+    const event = this.latestInteractionEvent(sessionId, op, id);
+    const throughSeq = this.getSessionSync(sessionId).throughSeq;
+    // A verified recent window cannot prove the state of an older cached
+    // request if its resolution may be hidden in the intervening gap.
+    if (event === undefined || throughSeq === undefined) return false;
+    const authority = this.interactionAuthorities.get(JSON.stringify([sessionId, op, id]));
+    if (authority?.found === false && event.seq <= authority.throughSeq) return false;
+    return this.contiguousSeq(sessionId, event.seq) >= throughSeq || authority?.found === true &&
+      (this.sessionStreamEnds.get(sessionId) ?? 0) >= authority.throughSeq && this.contiguousSeq(sessionId, authority.throughSeq) >= throughSeq;
+  }
+
+  ensureSession(sessionId: string): Promise<void> {
     this.interests.add(sessionId);
+    const existing = this.sessionHydrations.get(sessionId);
+    if (existing !== undefined) return existing;
+    for (const key of this.interactionLookupAttempts.keys()) if ((JSON.parse(key) as string[])[0] === sessionId) this.interactionLookupAttempts.delete(key);
+    const loading = this.hydrateSession(sessionId).finally(() => {
+      this.sessionHydrations.delete(sessionId);
+      this.replayInteractionOutbox(sessionId);
+      this.refreshInteractionAuthorities(sessionId);
+      this.notify();
+    });
+    this.sessionHydrations.set(sessionId, loading);
+    this.notify();
+    return loading;
+  }
+
+  private async hydrateSession(sessionId: string): Promise<void> {
     void this.refreshQueue(sessionId);
     const t0 = performance.now();
     this.trace['ensureStart'] = t0;
@@ -435,12 +510,17 @@ export class AppStore {
     // Read the current end even with a partial cache. Joining from zero while
     // showing cached state otherwise replays every old goal/tool update first.
     const beforeDetail = this.sessions.get(sessionId);
+    const beforeDetailEnd = Math.max(this.maxSeq(sessionId), this.sessionServerEnds.get(sessionId) ?? 0);
     try {
       const detail = await api.session(sessionId);
       const live = this.sessions.get(sessionId);
       const next = live !== beforeDetail && live !== undefined ? { ...detail, ...live } : detail;
       this.sessions.set(sessionId, next as SessionMeta);
       serverLastSeq = detail.lastSeq;
+      if (Number.isSafeInteger(serverLastSeq) && serverLastSeq! >= 0) {
+        if (serverLastSeq! < beforeDetailEnd) this.sessionRollbacks.add(sessionId);
+        this.sessionServerEnds.set(sessionId, Math.max(serverLastSeq!, this.sessionServerEnds.get(sessionId) ?? 0));
+      }
       void cache.putSession(next as CachedSession);
     } catch {
       // 会话可能已删除；保持现状
@@ -476,12 +556,15 @@ export class AppStore {
   async loadOlder(sessionId: string): Promise<boolean> {
     const map = this.events.get(sessionId);
     if (map === undefined) return false;
-    const first = [...map.keys()].sort((a, b) => a - b)[0];
-    if (first === undefined || first <= 1) return false;
+    let first = this.maxSeq(sessionId);
+    while (first > 1 && map.has(first - 1)) first--;
+    if (first <= 1) return false;
     const page = await api.events(sessionId, { before: first, limit: 200 }).catch(() => undefined);
     if (page === undefined || page.events.length === 0) return false;
     for (const event of page.events) map.set(event.seq, event);
     void cache.putEvents(page.events);
+    this.replayInteractionOutbox(sessionId);
+    this.refreshInteractionAuthorities(sessionId);
     this.notify();
     return true;
   }
@@ -634,7 +717,9 @@ export class AppStore {
     }
     return cache.putOutbox({ clientCommandId: command.clientCommandId, command: this.cachedCommand(command), status: 'pending', createdAt, ...(sensitive ? { sensitive: true } : {}) }).then(() => {
       const entry = this.outbox.get(command.clientCommandId); if (entry !== undefined) entry.durable = true;
-      this.connection.sendCommand(command); return true;
+      if (command.op === 'answer' || command.op === 'approve') this.dispatchInteraction(command);
+      else this.connection.sendCommand(command);
+      return true;
     }).catch(() => {
       const entry = this.outbox.get(command.clientCommandId);
       if (entry !== undefined) entry.status = 'failed';
@@ -651,8 +736,117 @@ export class AppStore {
   private replayOutbox(): void {
     for (const entry of this.outbox.values()) {
       if (entry.status !== 'pending' || entry.durable !== true) continue;
-      this.connection.sendCommand(entry.command);
+      if (entry.command.op === 'answer' || entry.command.op === 'approve') this.dispatchInteraction(entry.command);
+      else this.connection.sendCommand(entry.command);
     }
+  }
+
+  private latestInteractionEvent(sessionId: string, op: 'answer' | 'approve', id: string): StoredEvent | undefined {
+    return this.getEvents(sessionId).findLast(event => op === 'answer'
+      ? event.kind === 'question' && (event.data as EventData['question']).questionId === id
+      : (event.kind === 'approval.request' || event.kind === 'approval.resolved') && (event.data as { approvalId: string }).approvalId === id);
+  }
+
+  private interactionState(command: Extract<Command, { op: 'answer' | 'approve' }>): 'pending' | 'awaiting' | 'resolved' | 'unknown' {
+    const event = this.latestInteractionEvent(command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId);
+    if (event === undefined) return 'unknown';
+    const data = event.data as EventData['question'] | EventData['approval.request'];
+    if (event.kind === 'approval.resolved' || 'status' in data && (data.status === 'answered' || data.status === 'skipped')) return 'resolved';
+    return data.submission === 'sent' || data.submission === 'uncertain' ? 'awaiting' : 'pending';
+  }
+
+  private dispatchInteraction(command: Extract<Command, { op: 'answer' | 'approve' }>): void {
+    if (!this.isInteractionSynced(command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId)) return;
+    const state = this.interactionState(command);
+    if (state === 'resolved') {
+      this.outbox.delete(command.clientCommandId);
+      this.dispatchedInteractions.delete(command.clientCommandId);
+      void cache.deleteOutbox(command.clientCommandId);
+      return;
+    }
+    if (state !== 'pending' || this.dispatchedInteractions.has(command.clientCommandId)) return;
+    this.dispatchedInteractions.add(command.clientCommandId);
+    this.connection.sendCommand(command);
+  }
+
+  private replayInteractionOutbox(sessionId: string): void {
+    for (const entry of this.outbox.values()) if (entry.status === 'pending' && entry.durable === true &&
+      (entry.command.op === 'answer' || entry.command.op === 'approve') && entry.command.sessionId === sessionId) this.dispatchInteraction(entry.command);
+  }
+
+  private refreshInteractionAuthorities(sessionId: string): void {
+    this.interactionRefreshSessions.add(sessionId);
+    if (this.interactionRefreshScheduled) return;
+    this.interactionRefreshScheduled = true;
+    queueMicrotask(() => {
+      this.interactionRefreshScheduled = false;
+      const sessions = [...this.interactionRefreshSessions];
+      this.interactionRefreshSessions.clear();
+      for (const id of sessions) this.readInteractionAuthorities(id);
+    });
+  }
+
+  private readInteractionAuthorities(sessionId: string): void {
+    if (!this.isSessionSynced(sessionId) || typeof api.interaction !== 'function') return;
+    const candidates = new Map<string, { op: 'answer' | 'approve'; id: string; seq: number; durable: boolean }>();
+    for (const event of this.getEvents(sessionId)) {
+      if (event.kind !== 'question' && event.kind !== 'approval.request' && event.kind !== 'approval.resolved') continue;
+      const op = event.kind === 'question' ? 'answer' : 'approve';
+      const data = event.data as EventData['question'] | EventData['approval.request'];
+      const id = op === 'answer' ? (data as EventData['question']).questionId : (data as EventData['approval.request']).approvalId;
+      const key = JSON.stringify([sessionId, op, id]);
+      if (event.kind === 'approval.resolved' || 'status' in data && (data.status === 'answered' || data.status === 'skipped')) candidates.delete(key);
+      else candidates.set(key, { op, id, seq: event.seq, durable: false });
+    }
+    for (const entry of this.outbox.values()) if (entry.durable === true && entry.status === 'pending' &&
+      (entry.command.op === 'answer' || entry.command.op === 'approve') && entry.command.sessionId === sessionId) {
+      const op = entry.command.op;
+      const id = op === 'answer' ? (entry.command as Extract<Command, { op: 'answer' }>).questionId : (entry.command as Extract<Command, { op: 'approve' }>).approvalId;
+      candidates.set(JSON.stringify([sessionId, op, id]), { op, id, seq: 0, durable: true });
+    }
+    const watermark = Math.max(this.maxSeq(sessionId), this.sessionServerEnds.get(sessionId) ?? 0, this.sessionStreamEnds.get(sessionId) ?? 0);
+    const attempt = `${this.connectionEpoch}:${watermark}`;
+    for (const [key, candidate] of [...candidates].sort(([, a], [, b]) => Number(b.durable) - Number(a.durable) || b.seq - a.seq)) {
+      if (this.interactionLookups.size >= 4) break;
+      if (this.isInteractionSynced(sessionId, candidate.op, candidate.id) || this.interactionLookups.has(key) || this.interactionLookupAttempts.get(key) === attempt) continue;
+      void this.refreshInteraction(sessionId, candidate.op, candidate.id).catch(() => undefined);
+    }
+  }
+
+  async refreshInteraction(sessionId: string, op: 'answer' | 'approve', id: string): Promise<void> {
+    const key = JSON.stringify([sessionId, op, id]);
+    const running = this.interactionLookups.get(key);
+    if (running !== undefined) return running;
+    if (this.interactionLookups.size >= 4) {
+      await Promise.race([...this.interactionLookups.values()].map(lookup => lookup.catch(() => undefined)));
+      return this.refreshInteraction(sessionId, op, id);
+    }
+    const watermark = Math.max(this.maxSeq(sessionId), this.sessionServerEnds.get(sessionId) ?? 0, this.sessionStreamEnds.get(sessionId) ?? 0);
+    this.interactionLookupAttempts.set(key, `${this.connectionEpoch}:${watermark}`);
+    const epoch = this.connectionEpoch;
+    const lookup = api.interaction(sessionId, op, id).then(result => {
+      if (epoch !== this.connectionEpoch) return;
+      if (!Number.isSafeInteger(result.throughSeq) || result.throughSeq < watermark) {
+        this.sessionRollbacks.add(sessionId);
+        return;
+      }
+      this.sessionServerEnds.set(sessionId, Math.max(result.throughSeq, this.sessionServerEnds.get(sessionId) ?? 0));
+      const event = result.event;
+      if (event !== null && (event.sessionId !== sessionId || !Number.isSafeInteger(event.seq) || event.seq < 1 || event.seq > result.throughSeq ||
+        (op === 'answer' ? event.kind !== 'question' || (event.data as EventData['question']).questionId !== id
+          : (event.kind !== 'approval.request' && event.kind !== 'approval.resolved') || (event.data as { approvalId: string }).approvalId !== id))) return;
+      this.interactionAuthorities.set(key, { found: event !== null, throughSeq: result.throughSeq });
+      // The endpoint returns immutable real journal rows. An older GET may
+      // add a missing row, but cannot replace a row already delivered by WS.
+      if (event !== null && !this.events.get(sessionId)?.has(event.seq)) this.applyEvent(event, true);
+    }).finally(() => {
+      if (this.interactionLookups.get(key) === lookup) this.interactionLookups.delete(key);
+      this.replayInteractionOutbox(sessionId);
+      for (const subscribed of this.subscribed) this.refreshInteractionAuthorities(subscribed);
+      this.notify();
+    });
+    this.interactionLookups.set(key, lookup);
+    return lookup;
   }
 
   async restoreOutbox(): Promise<void> {
@@ -717,6 +911,7 @@ export class AppStore {
   }
 
   approve(sessionId: string, approvalId: string, optionId: string): void {
+    if (!this.isInteractionSynced(sessionId, 'approve', approvalId) || this.interactionState({ op: 'approve', clientCommandId: '', sessionId, approvalId, optionId }) !== 'pending') return;
     if (['pending', 'sent', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'approve', approvalId)?.status ?? '')) return;
     this.enqueue({ op: 'approve', clientCommandId: ulid(), sessionId, approvalId, optionId });
   }
@@ -726,6 +921,7 @@ export class AppStore {
   }
 
   answer(sessionId: string, questionId: string, answer: unknown): void {
+    if (!this.isInteractionSynced(sessionId, 'answer', questionId) || this.interactionState({ op: 'answer', clientCommandId: '', sessionId, questionId, answer }) !== 'pending') return;
     if (['pending', 'sent', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'answer', questionId)?.status ?? '')) return;
     const question = this.getEvents(sessionId).findLast(event => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId);
     this.enqueue({ op: 'answer', clientCommandId: ulid(), sessionId, questionId, answer }, (question?.data as EventData['question'] | undefined)?.isSecret === true);
