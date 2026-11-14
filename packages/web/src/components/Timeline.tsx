@@ -567,7 +567,9 @@ function approvalWhat(data: EventData['approval.request']): string {
 
 function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['approval.request'] }): React.ReactElement {
   useStoreVersion();
-  const submission = store.getInteractionSubmission(event.sessionId, 'approve', data.approvalId);
+  const submission = data.submission === 'sent' || data.submission === 'uncertain'
+    ? { commandId: '', status: data.submission } : store.getInteractionSubmission(event.sessionId, 'approve', data.approvalId)
+      ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission });
   const busy = submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
   // 处理过的审批要显示结果、不再显示按钮（F11 / F17）；结果也可能来自其他界面
   const resolution = [...store.getEvents(event.sessionId)]
@@ -652,13 +654,15 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState('');
   useStoreVersion();
-  const submission = store.getInteractionSubmission(event.sessionId, 'answer', data.questionId);
+  const submission = data.submission === 'sent' || data.submission === 'uncertain'
+    ? { commandId: '', status: data.submission } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
+      ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission });
   const busy = submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
   if (data.status === 'answered' || data.status === 'skipped') {
     return (
       <div className="approval-card resolved" data-testid="question-card" data-state="resolved">
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>{data.status === 'skipped' ? '已取消' : '已回答'}</span>
+        <span>{data.resolution === 'external' ? '已由原生结束' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
       </div>
     );

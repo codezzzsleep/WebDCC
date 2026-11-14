@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { CodexAdapter } from './adapter.js';
+import type { EventData } from '@webdcc/protocol';
 it('native multiquestion control replies use native IDs and wait for all answers', async () => {
   const replay = CodexAdapter.replay('s');
   const events = replay.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 12, method: 'item/tool/requestUserInput', params: { questions: [{ id: 'language', question: '语言' }, { id: 'version', question: '版本' }] } } });
@@ -36,4 +37,32 @@ it('NP-02 string and number request IDs with the same printed value remain disti
   await replay.adapter.answer('s', questions[0] ?? '', { custom: 'numeric' });
   await replay.adapter.answer('s', questions[1] ?? '', { custom: 'string' });
   expect(replay.replies).toMatchObject([{ id: 12 }, { id: '12' }]);
+});
+
+it('NP-06 native confirmation uses the exact thread and typed request ID and is idempotent', async () => {
+  const replay = CodexAdapter.replay('s', 'thread');
+  const ids: string[] = [];
+  for (const id of [0, '0']) {
+    const events = replay.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id, method: 'item/tool/requestUserInput', params: { questions: [{ id: 'q', question: 'preserved prompt' }] } } });
+    ids.push((events.find(event => event.type === 'item.complete' && event.kind === 'question') as { data: EventData['question'] }).data.questionId);
+  }
+  expect(await replay.adapter.answer('s', ids[0]!, 'answer')).toMatchObject({ confirmed: false });
+  await expect(replay.adapter.answer('s', ids[0]!, 'duplicate')).rejects.toMatchObject({ statusCode: 409 });
+  const resolve = (threadId: string, requestId: string | number) => replay.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId, requestId } } });
+  expect(resolve('wrong-thread', 0).some(event => event.type === 'item.complete' && event.kind === 'question')).toBe(false);
+  expect(resolve('thread', 0)).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: ids[0], prompt: 'preserved prompt', status: 'answered', resolution: 'native-acknowledged' }) }));
+  expect(resolve('thread', 0).some(event => event.type === 'item.complete' && event.kind === 'question')).toBe(false);
+  expect(resolve('thread', '0')).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: ids[1], status: 'skipped', resolution: 'external' }) }));
+  expect(replay.replies).toHaveLength(1);
+});
+
+it('NP-06 approvals wait for native resolution and submitted responses are not sent again during cancellation', async () => {
+  const replay = CodexAdapter.replay('s', 'thread');
+  const events = replay.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 'approval', method: 'item/commandExecution/requestApproval', params: { command: 'ls' } } });
+  const approvalId = (events.find(event => event.type === 'item.complete' && event.kind === 'approval.request') as { data: EventData['approval.request'] }).data.approvalId;
+  expect(await replay.adapter.respond('s', { approvalId, optionId: 'decline' })).toEqual({ confirmed: false });
+  const resolved = replay.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: 'thread', requestId: 'approval' } } });
+  expect(resolved).toContainEqual(expect.objectContaining({ kind: 'approval.resolved', data: { approvalId, optionId: 'decline', by: 'user' } }));
+  await replay.adapter.cancelPending('s');
+  expect(replay.replies).toHaveLength(1);
 });

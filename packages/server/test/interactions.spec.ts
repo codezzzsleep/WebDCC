@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { FakeAdapter } from '@webdcc/fake-adapter';
-import type { AdapterEvent } from '@webdcc/protocol';
+import type { AdapterEvent, AgentAdapter } from '@webdcc/protocol';
 import { openDb } from '../src/db.js';
 import { Store } from '../src/store.js';
 import { createTestApp, seedWorkspaceAndSession } from './helpers.js';
@@ -66,6 +66,48 @@ it('NP-06 unknown native reply failures block new commands', async () => {
     expect(count).toBe(1);
     expect(ctx.store.interactions.get(sessionId, 'answer', 'q')?.state).toBe('uncertain');
   } finally { await ctx.close(); }
+});
+
+it('NP-06 a transport-only approval remains pending and native resolution closes its durable claim', async () => {
+  const ctx = await createTestApp();
+  const adapter = new FakeAdapter({ id: 'codex' });
+  let callback!: (id: string, event: AdapterEvent) => void;
+  adapter.onEvent = cb => { callback = cb; };
+  // A transport-only response explicitly waits for a later native notification.
+  const nativeAdapter: AgentAdapter = adapter;
+  nativeAdapter.respond = async () => ({ confirmed: false });
+  ctx.manager.registerAdapter(nativeAdapter);
+  try {
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    callback(sessionId, { type: 'item.complete', itemKey: 'a', kind: 'approval.request', data: { approvalId: 'a', title: 'Native', detail: '', options: [{ id: 'decline', label: 'Reject' }] } });
+    await ctx.manager.approve(sessionId, { approvalId: 'a', optionId: 'decline' });
+    expect(ctx.store.interactions.get(sessionId, 'approve', 'a')?.state).toBe('sent');
+    expect(ctx.store.allEvents(sessionId).filter(event => event.kind === 'approval.resolved')).toHaveLength(0);
+    expect(ctx.store.getSession(sessionId)?.status).toBe('waiting');
+    await expect(ctx.manager.approve(sessionId, { approvalId: 'a', optionId: 'decline' })).rejects.toMatchObject({ statusCode: 409 });
+    callback(sessionId, { type: 'item.complete', itemKey: 'a', kind: 'approval.resolved', data: { approvalId: 'a', optionId: 'decline', by: 'user' } });
+    expect(ctx.store.interactions.get(sessionId, 'approve', 'a')?.state).toBe('resolved');
+  } finally { await ctx.close(); }
+});
+
+it('NP-06/47 submitted but unconfirmed replies reopen as uncertain and reject unsupported schema versions', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-native-confirmation-'));
+  let db = openDb(join(directory, 'db.sqlite'));
+  try {
+    let store = new Store(db);
+    const workspace = store.createWorkspace('fixture', directory);
+    const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+    store.appendEvent({ sessionId: session.id, turnId: 'turn', itemKey: 'q', kind: 'question', data: { questionId: 'q', prompt: 'Question' } });
+    store.interactions.finish(store.interactions.claim(session.id, 'answer', 'q', 'SENT'), false, false);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
+    db.close(); db = openDb(join(directory, 'db.sqlite')); store = new Store(db);
+    store.interactions.recover();
+    expect(store.interactions.get(session.id, 'answer', 'q')?.state).toBe('uncertain');
+    expect(() => store.interactions.claim(session.id, 'answer', 'q', 'RETRY')).toThrow('待核对');
+    db.pragma('user_version = 7'); db.close();
+    expect(() => openDb(join(directory, 'db.sqlite'))).toThrow('拒绝修改');
+    db = openDb(':memory:');
+  } finally { db.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
 it('NP-06 SIGKILL retains request claims and recovery blocks blind native reply replay', async () => {

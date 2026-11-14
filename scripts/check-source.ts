@@ -26,5 +26,5 @@ for (const [name, args] of checks) {
   process.stdout.write(`${name}: ${report.steps.at(-1)?.status}\n`);
 }
 report.issues = gateIssues(report, createRunIdentity(identity.runId), report.expectedIds);
-writeFileSync(join(out, 'source-checks.json'), JSON.stringify({ ...report, passed: report.issues.length === 0, nativeAcceptance: 'not-run', deployment: 'not-requested', buildRoot: build }, null, 2) + '\n');
+writeFileSync(join(out, 'source-checks.json'), JSON.stringify({ ...report, passed: report.issues.length === 0, nativeAcceptance: 'not-run', deployment: 'not-performed-by-source-checks', buildRoot: build }, null, 2) + '\n');
 if (report.issues.length > 0) process.exitCode = 1;

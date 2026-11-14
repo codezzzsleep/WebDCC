@@ -3,7 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export type Db = Database.Database;
-export const CURRENT_SCHEMA_VERSION = 5;
+// v6 adds a durable sent/awaiting-native state; v5 binaries cannot safely replay it.
+export const CURRENT_SCHEMA_VERSION = 6;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `

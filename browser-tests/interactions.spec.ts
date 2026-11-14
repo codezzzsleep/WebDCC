@@ -53,6 +53,14 @@ it('NP-06 a real browser keeps question input and pending state through submissi
     expect(await input.inputValue()).toBe(text);
     expect(await button.isEnabled()).toBe(true);
     await button.click();
+    await expect.poll(() => native.replies.length).toBe(1);
+    expect(await card.getAttribute('data-state')).toBe('pending');
+    await expect.poll(() => card.getByRole('status').textContent()).toContain('等待原生结果');
+    await page.reload();
+    await card.waitFor();
+    expect(await card.getByRole('button').isDisabled()).toBe(true);
+    await expect.poll(() => card.getByRole('status').textContent()).toContain('等待原生结果');
+    native.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: '', requestId: 'native-request' } } });
     await expect.poll(() => card.getAttribute('data-state')).toBe('resolved');
     expect(native.replies).toEqual([{ id: 'native-request', result: { answers: { one: { answers: [text] } } } }]);
     await page.reload();
@@ -98,6 +106,8 @@ it('NP-06 two browser contexts cannot submit the same native question twice', as
     await expect.poll(() => second.getByRole('alert').textContent()).toContain('另一个客户端');
     expect(attempts).toBe(1);
     release();
+    await expect.poll(() => native.replies.length).toBe(1);
+    native.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: '', requestId: 'native-request' } } });
     await expect.poll(() => first.getAttribute('data-state')).toBe('resolved');
     await expect.poll(() => second.getAttribute('data-state')).toBe('resolved');
     expect(native.replies).toEqual([{ id: 'native-request', result: { answers: { one: { answers: ['first answer'] } } } }]);

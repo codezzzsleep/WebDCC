@@ -20,6 +20,7 @@ import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import type { ModelRecording } from './model-recording.js';
 import type { CreateOpts } from '@webdcc/protocol';
+import type { InteractionRow } from './interactions.js';
 
 const TURN_SETTLE_MS = 1_500;
 
@@ -85,7 +86,7 @@ export class SessionManager {
     },
   ) {
     this.store.journal.recover();
-    this.store.interactions.recover();
+    for (const row of this.store.interactions.recover()) this.persistInteractionSubmission(row, 'uncertain');
     // An unfinished legacy turn has no verifiable native outcome. Preserve it
     // and prevent new sends until native reconciliation establishes ownership.
     for (const session of this.store.listSessions(true)) {
@@ -423,7 +424,9 @@ export class SessionManager {
     if (pending === undefined) throw Object.assign(new Error('审批已结束或不存在'), { statusCode: 409 });
     if (!(JSON.parse(pending.request) as Pick<EventData['approval.request'], 'options'>).options.some(option => option.id === decision.optionId)) throw Object.assign(new Error('审批选项无效'), { statusCode: 400 });
     const claim = this.store.interactions.claim(sessionId, 'approve', decision.approvalId, commandId);
-    try { await runtime.adapter.respond(sessionId, decision); } catch (error) { this.store.interactions.fail(claim, error); throw error; }
+    let confirmed: boolean;
+    try { const result = await runtime.adapter.respond(sessionId, decision); confirmed = result?.confirmed !== false; } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
+    if (!confirmed) { if (this.store.interactions.finish(claim, false, false)) this.persistInteractionSubmission(claim, 'sent'); this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return; }
     if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return; }
     const resolvedTurn = runtime.turnId;
     const event = this.store.appendEvent({
@@ -445,8 +448,9 @@ export class SessionManager {
     if (runtime.adapter.answer === undefined) throw Object.assign(new Error('该 Agent 不支持回答问题'), { statusCode: 400 });
     const claim = this.store.interactions.claim(sessionId, 'answer', questionId, commandId);
     let result: void | AnswerSubmission;
-    try { result = await runtime.adapter.answer(sessionId, questionId, answer); } catch (error) { this.store.interactions.fail(claim, error); throw error; }
-    if (result?.submitted === false) { this.store.interactions.finish(claim, true); return result; }
+    try { result = await runtime.adapter.answer(sessionId, questionId, answer); } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
+    if (result?.submitted === false) { if (this.store.interactions.finish(claim, true)) this.persistInteractionSubmission(claim, 'collected'); return result; }
+    if (result?.confirmed === false) { if (this.store.interactions.finish(claim, false, false)) for (const row of this.store.interactions.group(claim)) this.persistInteractionSubmission(row, 'sent'); this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result; }
     if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result ?? { submitted: true, questionIds: [questionId] }; }
     for (const id of result?.questionIds ?? [questionId]) {
       const question = this.store.allEvents(sessionId).find((event) => event.kind === 'question' && (event.data as EventData['question']).questionId === id);
@@ -464,6 +468,17 @@ export class SessionManager {
     this.refreshInteractionStatus(runtime);
     this.touchIdle(runtime);
     return result ?? { submitted: true, questionIds: [questionId] };
+  }
+
+  private persistInteractionSubmission(row: InteractionRow, submission: 'sent' | 'uncertain' | 'collected'): void {
+    if (this.store.interactions.get(row.session_id, row.kind, row.id)?.state !== submission) return;
+    const request = this.store.allEvents(row.session_id).findLast(event => row.kind === 'answer'
+      ? event.kind === 'question' && (event.data as EventData['question']).questionId === row.id
+      : event.kind === 'approval.request' && (event.data as EventData['approval.request']).approvalId === row.id);
+    if (request === undefined) return;
+    const event = this.store.appendEvent({ sessionId: row.session_id, turnId: request.turnId, itemKey: request.itemKey, kind: request.kind,
+      data: { ...(request.data as EventData['question'] | EventData['approval.request']), submission } });
+    this.hooks.onEvent(event);
   }
 
   private refreshInteractionStatus(runtime: Runtime): void {
@@ -509,9 +524,9 @@ export class SessionManager {
     const resolved = new Set(
       events.filter((event) => event.kind === 'approval.resolved').map((event) => (event.data as { approvalId: string }).approvalId),
     );
-    return events
+    return [...new Set(events
       .filter((event) => event.kind === 'approval.request')
-      .map((event) => (event.data as { approvalId: string }).approvalId)
+      .map((event) => (event.data as { approvalId: string }).approvalId))]
       .filter((approvalId) => !resolved.has(approvalId));
   }
 

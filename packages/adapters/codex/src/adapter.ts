@@ -15,6 +15,7 @@ import type {
   TraceFrame,
   AccessModeOption,
   NativePermissionObservation,
+  NativeInteractionSubmission,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -42,6 +43,9 @@ interface PendingApproval {
   kind: 'commandExecution' | 'fileChange' | 'legacyExec' | 'legacyPatch' | 'userInput';
   questionIds?: string[];
   answers?: Record<string, { answers: string[] }>;
+  questions?: EventData['question'][];
+  submitted?: boolean;
+  decision?: string;
 }
 
 interface SessionRuntime {
@@ -148,6 +152,7 @@ export type CodexRoute =
   | 'plan/updated'
   | 'plan/item'
   | 'diff/updated'
+  | 'serverRequest/resolved'
   | 'notice'
   | 'internal'
   | 'unknown';
@@ -184,6 +189,8 @@ export function routeNotification(method: string): CodexRoute {
       return 'plan/updated';
     case 'turn/diff/updated':
       return 'diff/updated';
+    case 'serverRequest/resolved':
+      return 'serverRequest/resolved';
     case 'warning':
     case 'configWarning':
     case 'deprecationNotice':
@@ -201,7 +208,6 @@ export function routeNotification(method: string): CodexRoute {
       return 'plan/item';
     case 'thread/started':
     case 'thread/status/changed':
-    case 'serverRequest/resolved':
     case 'account/rateLimits/updated':
     case 'remoteControl/status/changed':
     case 'item/commandExecution/terminalInteraction':
@@ -438,11 +444,11 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   /** Transport-free replay through the production notification/request handlers. */
-  static replay(sessionId = 'replay'): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: CodexAdapter; replies: unknown[] } {
+  static replay(sessionId = 'replay', nativeId = ''): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: CodexAdapter; replies: unknown[] } {
     const adapter = new CodexAdapter();
     const replies: unknown[] = [];
     const runtime: SessionRuntime = {
-      nativeId: '', pid: 0, processToken: 'replay', ready: Promise.resolve(),
+      nativeId, pid: 0, processToken: 'replay', ready: Promise.resolve(),
       rpc: { respond: (id: string | number, result: unknown) => replies.push({ id, result }) } as unknown as JsonRpcStdio,
       cwd: '.', accessMode: null, model: null, reasoningEffort: null, turnId: null,
       frameSeq: 0, turnStartedAt: 0, generationStartedAt: null, approvals: new Map(), lastAssistantText: '', started: new Set(),
@@ -720,34 +726,40 @@ export class CodexAdapter implements AgentAdapter {
     await nativeRequest(runtime.rpc, 'turn/interrupt', { threadId: runtime.nativeId, turnId: runtime.turnId });
   }
 
-  async respond(sessionId: string, decision: ApprovalDecision): Promise<void> {
+  async respond(sessionId: string, decision: ApprovalDecision): Promise<NativeInteractionSubmission> {
     const runtime = this.sessions.get(sessionId);
     const pending = runtime?.approvals.get(decision.approvalId);
     if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Codex 审批已结束或不存在'), { statusCode: 409 });
+    if (pending.submitted) throw Object.assign(new Error('回应已提交，等待原生确认'), { statusCode: 409 });
     if (!['accept', 'acceptForSession', 'decline', 'cancel'].includes(decision.optionId)) throw Object.assign(new Error('审批选项无效'), { statusCode: 400 });
     const runtimeRpc = runtime.rpc;
     const decisionValue = pending.kind === 'legacyExec' || pending.kind === 'legacyPatch'
       ? (decision.optionId === 'accept' ? 'approved' : decision.optionId === 'acceptForSession' ? 'approved_for_session' : 'denied')
       : decision.optionId;
-    runtimeRpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
-    runtime.approvals.delete(decision.approvalId);
+    pending.submitted = true;
+    pending.decision = decision.optionId;
+    try { runtimeRpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue }); }
+    catch (error) { pending.submitted = false; pending.decision = undefined; throw error; }
+    return { confirmed: false };
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<{ submitted: boolean; questionIds?: string[] }> {
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<{ submitted: boolean; questionIds?: string[]; confirmed?: boolean }> {
     const runtime = this.sessions.get(sessionId);
     const candidates = [...(runtime?.approvals ?? [])].filter(([id, pending]) => pending.kind === 'userInput' && pending.questionIds?.some(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId));
     const entry = candidates.length === 1 ? candidates[0] : undefined;
-    if (runtime === undefined || entry === undefined) throw new Error('Codex 问题已结束或不存在');
+    if (runtime === undefined || entry === undefined) throw Object.assign(new Error('Codex 问题已结束或不存在'), { statusCode: 409 });
     const [id, pending] = entry;
+    if (pending.submitted) throw Object.assign(new Error('答案已提交，等待原生确认'), { statusCode: 409 });
     const nativeId = pending.questionIds?.find(nativeId => nativeId === questionId || `${id}:${nativeId}` === questionId);
     if (nativeId === undefined) throw new Error('原生问题身份不一致');
     const value = normalizeQuestionAnswer(answer).values;
     pending.answers ??= Object.create(null) as Record<string, { answers: string[] }>;
     pending.answers[nativeId] = { answers: value };
     if (Object.keys(pending.answers).length < (pending.questionIds?.length ?? 0)) return { submitted: false };
-    runtime.rpc.respond(pending.requestId, { answers: pending.answers });
-    runtime.approvals.delete(id);
-    return { submitted: true, questionIds: (pending.questionIds ?? []).map(question => `${id}:${question}`) };
+    pending.submitted = true;
+    try { runtime.rpc.respond(pending.requestId, { answers: pending.answers }); }
+    catch (error) { pending.submitted = false; throw error; }
+    return { submitted: true, confirmed: false, questionIds: (pending.questionIds ?? []).map(question => `${id}:${question}`) };
   }
 
   /** 打断时把挂起的审批回 decline，避免 JSON-RPC 请求悬空 */
@@ -756,6 +768,7 @@ export class CodexAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     for (const [approvalId, pending] of [...runtime.approvals]) {
       runtime.approvals.delete(approvalId);
+      if (pending.submitted) continue;
       const decisionValue = pending.kind === 'legacyExec' || pending.kind === 'legacyPatch' ? 'denied' : 'decline';
       runtime.rpc.respond(pending.requestId, pending.kind === 'userInput' ? { answers: {} } : { decision: decisionValue });
     }
@@ -806,6 +819,23 @@ export class CodexAdapter implements AgentAdapter {
     const frameKey = `${method.replace(/[^a-zA-Z0-9]+/g, '-')}-${runtime.frameSeq}`;
 
     switch (route) {
+      case 'serverRequest/resolved': {
+        if (params['threadId'] !== runtime.nativeId || (typeof params['requestId'] !== 'string' && typeof params['requestId'] !== 'number')) return;
+        const entry = [...runtime.approvals].find(([, pending]) => pending.requestId === params['requestId']);
+        if (entry === undefined) return;
+        const [approvalId, pending] = entry;
+        runtime.approvals.delete(approvalId);
+        if (pending.kind === 'userInput') {
+          for (const question of pending.questions ?? []) this.emit(sessionId, {
+            type: 'item.complete', itemKey: `question-resolved-${question.questionId}`, kind: 'question',
+            data: { ...question, status: pending.submitted ? 'answered' : 'skipped', resolution: pending.submitted ? 'native-acknowledged' : 'external' }, native: frame,
+          });
+        } else this.emit(sessionId, {
+          type: 'item.complete', itemKey: `approval-${approvalId}`, kind: 'approval.resolved',
+          data: { approvalId, optionId: pending.decision ?? 'resolved-externally', by: pending.submitted ? 'user' : 'other' }, native: frame,
+        });
+        return;
+      }
       case 'turn/started': {
         this.emit(sessionId, { type: 'turn.start', nativeTurnId: this.nativeTurnId(params), native: params });
         return;
@@ -1100,11 +1130,13 @@ export class CodexAdapter implements AgentAdapter {
               : 'userInput';
 
     const approvalId = `${runtime?.processToken ?? 'p'}:${typeof id}:${id}`;
+    if (runtime?.approvals.has(approvalId)) return undefined;
     runtime?.approvals.set(approvalId, { requestId: id, kind });
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
       const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[]; isOther?: boolean }[];
-      runtime?.approvals.set(approvalId, { requestId: id, kind, questionIds: questions.map(question => question.id) });
-      for (const question of questions) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.id}`, kind: 'question', data: { questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }, native: frame });
+      const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }));
+      runtime?.approvals.set(approvalId, { requestId: id, kind, questionIds: questions.map(question => question.id), questions: items });
+      for (const question of items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.questionId.slice(approvalId.length + 1)}`, kind: 'question', data: question, native: frame });
       return undefined;
     }
 

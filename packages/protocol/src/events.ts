@@ -67,6 +67,8 @@ export interface QuestionItem {
   allowsFreeText?: boolean;
   toolCallId?: string;
   status?: 'pending' | 'answered' | 'skipped';
+  resolution?: 'native-acknowledged' | 'external';
+  submission?: 'sent' | 'uncertain' | 'collected';
 }
 
 export interface PlanItem {
@@ -115,6 +117,7 @@ export interface EventData {
     reason?: string;
     /** 计划模式下提交的计划（Markdown） */
     planMarkdown?: string;
+    submission?: 'sent' | 'uncertain' | 'collected';
   };
   'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' | 'other' };
   question: QuestionItem;

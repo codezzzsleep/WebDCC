@@ -24,13 +24,13 @@ it('NP-06 browser-shaped free text passes through HTTP, manager and the Codex na
   } finally { await ctx.close(); }
 });
 
-it('NP-06 keeps all cards pending while collecting a batch and resolves every question after submission', async () => {
+it('NP-06 keeps a submitted batch pending until the native request resolution arrives', async () => {
   const ctx = await createTestApp();
   try {
     const workspace = ctx.store.createWorkspace('batch', ctx.dataDir);
     const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });
     ctx.store.updateSession(session.id, { nativeId: 'native' });
-    const native = CodexAdapter.replay(session.id);
+    const native = CodexAdapter.replay(session.id, 'native');
     native.adapter.resume = async () => undefined;
     native.adapter.send = async () => { native.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 'batch', method: 'item/tool/requestUserInput', params: { questions: [{ id: 'first', question: 'first' }, { id: 'second', question: 'second' }] } } }); };
     native.adapter.dispose = async () => undefined;
@@ -41,6 +41,10 @@ it('NP-06 keeps all cards pending while collecting a batch and resolves every qu
     expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'question' && (event.data as EventData['question']).status === 'answered')).toHaveLength(0);
     expect(ctx.manager.getRuntime(session.id)?.status).toBe('waiting');
     await ctx.manager.answer(session.id, ids[1]!, { custom: 'second' });
+    expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'question' && (event.data as EventData['question']).status === 'answered')).toHaveLength(0);
+    expect(ctx.store.interactions.get(session.id, 'answer', ids[0]!)?.state).toBe('sent');
+    await expect(ctx.manager.answer(session.id, ids[0]!, { custom: 'duplicate' })).rejects.toMatchObject({ statusCode: 409 });
+    native.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: 'native', requestId: 'batch' } } });
     expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'question' && (event.data as EventData['question']).status === 'answered')).toHaveLength(2);
     expect(native.replies).toHaveLength(1);
   } finally { await ctx.close(); }

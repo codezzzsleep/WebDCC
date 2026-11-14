@@ -1,4 +1,4 @@
-import type { AdapterEvent, AgentAdapter, AgentId, ApprovalDecision, CreateOpts, LaunchSpec, ModelOption, ProbeResult, TraceFrame, UserInput } from '@webdcc/protocol';
+import type { AdapterEvent, AgentAdapter, AgentId, ApprovalDecision, AnswerSubmission, NativeInteractionSubmission, CreateOpts, LaunchSpec, ModelOption, ProbeResult, TraceFrame, UserInput } from '@webdcc/protocol';
 import { traceInputIdentity } from '@webdcc/protocol';
 
 export interface ReplayAdapterOptions {
@@ -13,8 +13,8 @@ export interface ReplayAdapterOptions {
 
 interface ReplayHandler {
   feed: (frame: TraceFrame) => AdapterEvent[];
-  respond?: (decision: ApprovalDecision) => Promise<void>;
-  answer?: (questionId: string, answer: unknown) => Promise<void | { submitted: boolean }>;
+  respond?: (decision: ApprovalDecision) => Promise<void | NativeInteractionSubmission>;
+  answer?: (questionId: string, answer: unknown) => Promise<void | AnswerSubmission>;
 }
 export interface ReplayScript {
   createHandler?: (sessionId: string) => ReplayHandler;
@@ -99,7 +99,7 @@ export class ReplayAdapter implements AgentAdapter {
     return 'nativeTurnId' in event ? { ...event, nativeTurnId: nativeTurn(event.nativeTurnId) } : event;
   }
   async interrupt(sessionId: string): Promise<void> { const session = this.sessions.get(sessionId); if (session !== undefined) session.cancelled = true; }
-  async respond(sessionId: string, decision: ApprovalDecision): Promise<void> { await this.sessions.get(sessionId)?.handler?.respond?.(decision); }
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void | { submitted: boolean }> { return this.sessions.get(sessionId)?.handler?.answer?.(questionId, answer); }
+  async respond(sessionId: string, decision: ApprovalDecision): Promise<void | NativeInteractionSubmission> { return this.sessions.get(sessionId)?.handler?.respond?.(decision); }
+  async answer(sessionId: string, questionId: string, answer: unknown): Promise<void | AnswerSubmission> { return this.sessions.get(sessionId)?.handler?.answer?.(questionId, answer); }
   async dispose(sessionId: string): Promise<void> { this.sessions.delete(sessionId); }
 }

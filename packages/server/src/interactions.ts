@@ -2,7 +2,7 @@ import type { EventData, StoredEvent } from '@webdcc/protocol';
 import type { Db } from './db.js';
 
 type Kind = 'approve' | 'answer';
-type State = 'pending' | 'sending' | 'collected' | 'resolved' | 'cancelled' | 'failed' | 'uncertain';
+type State = 'pending' | 'sending' | 'sent' | 'collected' | 'resolved' | 'cancelled' | 'failed' | 'uncertain';
 export interface InteractionRow {
   session_id: string; kind: Kind; id: string; group_id: string; state: State;
   revision: number; command_id: string | null; request: string; error: string | null;
@@ -32,7 +32,7 @@ export class InteractionStore {
     const question = event.data as EventData['question'];
     const id = kind === 'answer' ? question.questionId : (event.data as EventData['approval.request']).approvalId;
     const groupId = kind === 'answer' ? question.groupId ?? id : id;
-    const state = kind === 'answer' && question.status === 'answered' ? 'resolved' : kind === 'answer' && question.status === 'skipped' ? 'cancelled' : 'pending';
+    const state = kind === 'answer' && question.status === 'answered' ? 'resolved' : kind === 'answer' && question.status === 'skipped' ? 'cancelled' : question.submission ?? 'pending';
     const request = kind === 'approve' ? { options: (event.data as EventData['approval.request']).options.map(option => ({ id: option.id })) } : {};
     this.db.prepare('INSERT OR IGNORE INTO interactions (session_id, kind, id, group_id, state, revision, request) VALUES (?, ?, ?, ?, ?, 1, ?)').run(event.sessionId, kind, id, groupId, state, JSON.stringify(request));
     if (state === 'resolved' || state === 'cancelled') this.db.prepare('UPDATE interactions SET state = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?').run(state, event.sessionId, kind, id);
@@ -45,17 +45,18 @@ export class InteractionStore {
       const group = this.group(row);
       if (group.some(item => item.state === 'uncertain')) throw conflict('上次交互提交结果待核对，不能重新发送', 'uncertain');
       if (group.some(item => item.state === 'sending')) throw conflict('另一个客户端正在回应此原生请求');
+      if (group.some(item => item.state === 'sent')) throw conflict('回应已提交，等待原生确认，不能再次发送');
       if (row.state === 'resolved' || row.state === 'cancelled') throw conflict('原生交互已经结束');
       this.db.prepare("UPDATE interactions SET state = 'sending', command_id = ?, error = NULL, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?").run(commandId, sessionId, kind, id);
       return this.get(sessionId, kind, id)!;
     })();
   }
-  finish(row: InteractionRow, collected = false): boolean {
+  finish(row: InteractionRow, collected = false, confirmed = true): boolean {
     return this.db.transaction(() => {
       const current = this.get(row.session_id, row.kind, row.id);
       if (current?.command_id !== row.command_id || current.state !== 'sending') return false;
       if (collected) this.db.prepare("UPDATE interactions SET state = 'collected', revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?").run(row.session_id, row.kind, row.id);
-      else this.db.prepare("UPDATE interactions SET state = 'resolved', revision = revision + 1 WHERE session_id = ? AND kind = ? AND group_id = ? AND state NOT IN ('resolved', 'cancelled')").run(row.session_id, row.kind, row.group_id);
+      else this.db.prepare("UPDATE interactions SET state = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND group_id = ? AND state NOT IN ('resolved', 'cancelled')").run(confirmed ? 'resolved' : 'sent', row.session_id, row.kind, row.group_id);
       return true;
     })();
   }
@@ -65,8 +66,8 @@ export class InteractionStore {
     this.db.prepare("UPDATE interactions SET state = ?, error = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ? AND state = 'sending' AND command_id = ?")
       .run(certain ? 'failed' : 'uncertain', certain ? 'native-rejected' : 'native-outcome-uncertain', row.session_id, row.kind, row.id, row.command_id);
   }
-  recover(): void {
-    this.db.exec(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
-      WHERE (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'collected')) AND state NOT IN ('resolved', 'cancelled');`);
+  recover(): InteractionRow[] {
+    return this.db.prepare(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
+      WHERE (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'sent', 'collected')) AND state NOT IN ('resolved', 'cancelled') RETURNING *`).all() as InteractionRow[];
   }
 }

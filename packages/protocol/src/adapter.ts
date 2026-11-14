@@ -60,7 +60,11 @@ export interface ApprovalDecision {
 export interface AnswerSubmission {
   submitted: boolean;
   questionIds?: string[];
+  /** false means transport submission still awaits native request resolution. */
+  confirmed?: boolean;
 }
+
+export interface NativeInteractionSubmission { confirmed: boolean }
 
 export interface LaunchSpec {
   command?: string;
@@ -118,7 +122,7 @@ export interface AgentAdapter {
   send(sessionId: string, input: UserInput): Promise<void>;
   steer?(sessionId: string, input: UserInput): Promise<void>;
   interrupt(sessionId: string): Promise<void>;
-  respond(sessionId: string, d: ApprovalDecision): Promise<void>;
+  respond(sessionId: string, d: ApprovalDecision): Promise<void | NativeInteractionSubmission>;
   /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
   cancelPending?(sessionId: string): Promise<void>;
   answer?(sessionId: string, questionId: string, answer: unknown): Promise<void | AnswerSubmission>;

@@ -110,3 +110,12 @@
 - GitHub OAuth 凭据缺少 workflow scope，拒绝上传新增 `.github/workflows/source-checks.yml`；现有 SSH 也未授权。源码及检查命令照常保留，CI 定义暂存于 `docs/ci/source-checks.yml` 供审查；它不是已启用的 GitHub Actions。
 - 恢复自动 CI 需要有 workflow scope 的发布凭据或仓库维护者将该文件放回 `.github/workflows/`。NP-15/46 的 CI 验收保持未完成，不以模板替代实际执行。
 - 后续部署仅限用户新增授权的独立远程环境，原有本机部署边界继续有效。
+
+## Codex 原生交互确认阶段（2026-11-14）
+
+- 修复分支已公开推送，草稿 PR： https://github.com/codezzzsleep/WebDCC/pull/39 。主分支未合并，原有部署未更新。
+- Codex 回复传输后返回 confirmed=false；manager 保留 sent 占用和待解决投影，直到收到 threadId 与类型化 requestId 完全匹配的 serverRequest/resolved。数字 0 与字符串 "0" 独立，其他线程、重复或未知通知不能结束请求。
+- 原生确认关闭整组问题/审批；外部结束保留不同展示，不伪称收到本地答案。已提交请求在等待确认或停止清理时不重复回复；回放 adapter 也保留确认状态。
+- 持久事件记录 sent/collected/uncertain 展示，刷新仍禁用等待确认的按钮。重启后 sending/sent/collected 整组变为 uncertain 并持久化投影。SQLite schema v6 阻止不理解 sent 语义的 v5 二进制直接回退使用数据库。
+- 局部 16 项协议/服务测试及 2 项真实 Chromium 测试通过；完整源码门禁首轮 280 单元/64 文件与 5 项 Chromium 通过，lint 的无用初始化已修正，正在重跑六类门禁。仍无真实模型/native 验收，NP-06 未完整完成。
+- 新远程环境采用独立目录/运行用户/数据/工具链；安装与传输进行中。原服务器的其他服务不变。具体运维检查点保存在仓库外私有目录，不提交凭据或环境文件。
