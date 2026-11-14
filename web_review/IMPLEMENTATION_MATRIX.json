@@ -60,7 +60,8 @@
           "packages/web/src/lib/agents.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "每个原生方法和每个用户功能都映射到 capabilityId、内部辅助或明确排除理由，未分类数量为0。",
@@ -136,7 +137,8 @@
           "packages/adapters/dsh/test/contracts.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "所有已用native方法的请求与响应通过合同测试，错误字段和错误枚举必失败。",
@@ -215,7 +217,8 @@
           "packages/web/src/lib/store-recovery.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "同一命令100个并发HTTP/WS请求只进入一次执行；同ID异内容被拒。",
@@ -286,7 +289,8 @@
           "packages/adapters/claude/test/lifecycle.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "并发resume只创建一个owner，旧query晚到不能污染新会话。",
@@ -364,7 +368,8 @@
           "packages/protocol/test/turn.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "历史API首次失败后下一次能补齐缺口，afterSeq不越过未接收区间。",
@@ -464,7 +469,8 @@
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-64cf89e.json"
+          "web_review/evidence/l1-64cf89e.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
@@ -581,7 +587,8 @@
           "packages/server/test/permissions.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "用户配置为非默认模式时，无选择新建会话保持该配置。",
@@ -642,7 +649,8 @@
           "packages/adapters/codex/src/rpc.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "summary=[a,b]与plan.text均完整显示且只出现一次。",
@@ -708,7 +716,8 @@
           "packages/adapters/claude/test/lifecycle.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "两个text block完成态保持各自内容，主子输出交错不串线。",
@@ -787,7 +796,8 @@
           "packages/server/test/native-history.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "只切断native WS保持HTTP后恢复，旧会话继续收流并补全期间事件。",
@@ -851,7 +861,8 @@
           "packages/web/src/components/Timeline.tsx"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "所有调用通过锁定catalog参数校验，父身份不匹配返回拒绝。",
@@ -930,7 +941,8 @@
           "packages/adapters/test/native.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "编辑B不改A、不重复ID、不清除未提交字段。",
@@ -1005,7 +1017,8 @@
           "packages/server/test/uploads.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "认证用户打开不可信HTML/SVG不能以WebDCC origin调用命令；附件头与预览隔离均测。",
@@ -1096,7 +1109,8 @@
           "packages/server/test/fixtures/native-recorder.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
@@ -1199,7 +1213,8 @@
           "web_review/evidence/source-checks.json",
           "web_review/evidence/dsh-recovery-l1.json",
           "web_review/evidence/claude-block-l1.json",
-          "web_review/evidence/l1-64cf89e.json"
+          "web_review/evidence/l1-64cf89e.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",
@@ -2715,7 +2730,8 @@
           "README.md"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "全新容器按README五个命令可复现，工作树不被包管理器写入占位配置。",
@@ -2780,7 +2796,8 @@
           "packages/server/test/interactions.spec.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
         ],
         "remainingAcceptance": [
           "从审核基线数据库升级保留sessionId/URL/events/files及已有命令结果。",

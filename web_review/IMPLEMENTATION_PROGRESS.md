@@ -117,5 +117,15 @@
 - Codex 回复传输后返回 confirmed=false；manager 保留 sent 占用和待解决投影，直到收到 threadId 与类型化 requestId 完全匹配的 serverRequest/resolved。数字 0 与字符串 "0" 独立，其他线程、重复或未知通知不能结束请求。
 - 原生确认关闭整组问题/审批；外部结束保留不同展示，不伪称收到本地答案。已提交请求在等待确认或停止清理时不重复回复；回放 adapter 也保留确认状态。
 - 持久事件记录 sent/collected/uncertain 展示，刷新仍禁用等待确认的按钮。重启后 sending/sent/collected 整组变为 uncertain 并持久化投影。SQLite schema v6 阻止不理解 sent 语义的 v5 二进制直接回退使用数据库。
-- 局部 16 项协议/服务测试及 2 项真实 Chromium 测试通过；完整源码门禁首轮 280 单元/64 文件与 5 项 Chromium 通过，lint 的无用初始化已修正，正在重跑六类门禁。仍无真实模型/native 验收，NP-06 未完整完成。
+- 局部 16 项协议/服务测试及 2 项真实 Chromium 测试通过；完整源码门禁在提交 `e493ec4` 全部通过：64 文件 / 280 项单元、5 项 Chromium、typecheck/lint/库存/构建通过，源码 fingerprint 为 `39339fb5d905ecf246c343480e086f67762cdfad2246c4b1e23f90f699c51d2d`。仍无真实模型/native 验收，NP-06 未完整完成。
 - 新远程环境采用独立目录/运行用户/数据/工具链；安装与传输进行中。原服务器的其他服务不变。具体运维检查点保存在仓库外私有目录，不提交凭据或环境文件。
+
+## GitHub 与独立远程部署检查点（2026-11-14）
+
+- 已推送修复源码 `e493ec49cd6bab75382598ce552b180ee1b6a874` 到 `fix/native-parity-repair`，草稿 PR #39 可见。没有合并 main。新增 CI 定义仍在 docs/ci/source-checks.yml；GitHub Actions 未启用，缺少 workflow 凭据权限。
+- 本轮源码报告绑定 `e493ec4`；L1 同提交检查 33 轨迹 / 3,681 帧，I1–I8 没有失败，22 GOLDEN、16 NOT_TRIGGERED，8/33 场景通过，门禁保持失败。报告位于忽略的 evidence/source-checks.json 与 evidence/l1-e493ec4.json。
+- 用户另行授权的远程环境已部署该源码：独立 release、Node 26.13.0、非 root 用户、数据库和两个 systemd 单元。真实浏览器经独立临时 HTTPS 入口验证登录、Secure/HttpOnly Cookie、地址去 token、页面渲染、刷新、版本/fingerprint 和双向 WebSocket；构建字节 SHA 与本机构建一致。
+- 该 HTTPS 入口由 quick tunnel 提供，进程重建时地址可能改变，须重新登记 origin。部署证明网页与传输可用，不代表 48 项或真实 Agent 验收完成。原生账号未配置；远程既有 DSH CLI 版本 0.2.1-rc.2 与锁定基线不同，既有 DSH 服务未升级。隔离 Codex/Claude CLI 安装仍在进行。
+- 私有运维记录与登录链接保存在仓库外，未公开凭据、Cookie、完整环境文件或远程运维身份。恢复时先读私有 deployment-state.json 并核实活跃进程、当前 tunnel 地址和安装任务，不重建已完成部署。
+- 原有本机 release 仍为 `97b3c073c5ec67d50df58cf564d33537c109eddc`，原进程 PID 2303523 保持运行；原 worktree 未改变业务源码。
+- 全部 48 项继续：17 项部分推进、31 项待专项实施，0 项全部验收完成。下一步核实隔离 CLI 安装结果，继续 NP-06 uncertain 对账与部分答案恢复，并推进 NP-04 owner/fencing 与 NP-05 原生账本；随后按矩阵补齐 M1–M3。
