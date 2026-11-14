@@ -44,8 +44,9 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   await providers.init();
   const dshStore = new DshConnectionStore(config.dataDir);
   await dshStore.init();
-  const recorder = config.recordInteractions !== true || config.dataDir === ':memory:' || process.env['WDCC_TEST_HOOKS'] === '1' ? undefined : new InteractionRecorder(config.dataDir);
-  await recorder?.init();
+  let candidateRecorder = config.recordInteractions !== true || config.dataDir === ':memory:' || process.env['WDCC_TEST_HOOKS'] === '1' ? undefined : new InteractionRecorder(config.dataDir, config.diagnosticLimits);
+  try { await candidateRecorder?.init(); } catch { candidateRecorder = undefined; process.stderr.write('webdcc: 诊断目录不可用，继续使用原生运行配置\n'); }
+  const recorder = candidateRecorder;
   recorder?.addSecret(config.token);
   const modelRecording = recorder === undefined ? undefined : new ModelRecording(recorder);
   const manager = new SessionManager(store, {
@@ -87,7 +88,12 @@ export async function start(config: Config = loadConfig(), options: ServerOption
       }
     }
     adapters = await build({
-      ...(recorder === undefined ? {} : { traceSink: (sessionId: string) => recorder.sink(sessionId), nativeRecorder: { directory: recorder.directory, module: process.env['WDCC_NATIVE_RECORDER_MODULE'] ?? join(dirname(fileURLToPath(import.meta.url)), 'native-http-recorder.cjs') } }),
+      ...(recorder === undefined ? {} : { traceSink: (sessionId: string) => recorder.sink(sessionId), nativeRecorder: { directory: recorder.directory, module: process.env['WDCC_NATIVE_RECORDER_MODULE'] ?? join(dirname(fileURLToPath(import.meta.url)), 'native-http-recorder.cjs'), env: {
+        WDCC_TRACE_MAX_CAPTURE_BYTES: String(config.diagnosticLimits?.maxCaptureBytes ?? 8 * 1024 * 1024),
+        WDCC_TRACE_MAX_CAPTURE_CHUNKS: String(config.diagnosticLimits?.maxCaptureChunks ?? 4096),
+        WDCC_TRACE_MAX_FILE_BYTES: String(config.diagnosticLimits?.maxFileBytes ?? 64 * 1024 * 1024),
+        WDCC_TRACE_MAX_QUEUED_BYTES: String(config.diagnosticLimits?.maxQueuedBytes ?? 32 * 1024 * 1024),
+      } } }),
       dsh: {
         mode: dshMode,
         ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie }),

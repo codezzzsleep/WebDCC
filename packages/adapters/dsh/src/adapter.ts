@@ -37,7 +37,7 @@ export interface DshAdapterOptions {
   attachCookie?: string;
   traceSink?: TraceSink;
   traceSinkFactory?: (sessionId: string) => TraceSink;
-  nativeRecorder?: { directory: string; module: string };
+  nativeRecorder?: { directory: string; module: string; env?: Record<string, string> };
 }
 
 /** 扫描 /proc，找同一 DSH_HOME 上已在运行的 dsh 进程（spawn 模式的冲突检查） */
@@ -348,7 +348,7 @@ export class DshAdapter implements AgentAdapter {
     return {
       command: this.options.command ?? 'dsh',
       args: ['web', ...(patch === undefined ? [] : ['--patch', patch]), '--no-open', '--port', port, '--host', '127.0.0.1'],
-      env: { ...(this.options.env ?? {}), ...(recorder === undefined ? {} : { WDCC_TRACE_DIR: recorder.directory, NODE_OPTIONS: `${this.options.env?.['NODE_OPTIONS'] ?? process.env['NODE_OPTIONS'] ?? ''} --require ${recorder.module}`.trim() }) },
+      env: { ...(this.options.env ?? {}), ...(recorder === undefined ? {} : { ...recorder.env, WDCC_TRACE_DIR: recorder.directory, NODE_OPTIONS: `${this.options.env?.['NODE_OPTIONS'] ?? process.env['NODE_OPTIONS'] ?? ''} --require ${recorder.module}`.trim() }) },
     };
   }
 

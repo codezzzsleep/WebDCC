@@ -13,6 +13,14 @@ export class ModelRecording {
   private readonly addresses = new Map<string, string>();
   constructor(private readonly recorder: InteractionRecorder) {}
   async prepare(opts: CreateOpts, agent: AgentId): Promise<CreateOpts> {
+    this.recorder.addSecret(opts.provider?.apiKey);
+    try { return await this.prepareRecording(opts, agent); }
+    catch (error) {
+      this.recorder.record(opts.sessionId, 'recording', 'error', { message: error instanceof Error ? error.message : String(error), mode: 'native-only' });
+      return { ...opts, traceSink: this.recorder.sink(opts.sessionId) };
+    }
+  }
+  private async prepareRecording(opts: CreateOpts, agent: AgentId): Promise<CreateOpts> {
     const traced = { ...opts, traceSink: this.recorder.sink(opts.sessionId) };
     if (agent === 'dsh') return traced;
     const protocol = agent === 'codex' ? 'openai-responses' : 'anthropic-messages';
@@ -41,12 +49,13 @@ export class ModelRecording {
     let proxy = this.proxies.get(opts.sessionId);
     if (proxy === undefined) {
       const owners = new Map<string, InteractionContext | undefined>();
-      proxy = new ModelProxy({ target, secrets: opts.provider?.apiKey === undefined ? [] : [opts.provider.apiKey], onEvent: event => {
+      proxy = new ModelProxy({ target, ...this.recorder.captureLimits, secrets: opts.provider?.apiKey === undefined ? [] : [opts.provider.apiKey], onEvent: event => {
         if (event.phase === 'request') owners.set(event.requestId, this.recorder.context(opts.sessionId));
-        this.recorder.record(opts.sessionId, 'model-http', event.phase, event, event.phase === 'request' ? 'out' : 'in', owners.get(event.requestId));
+        this.recorder.recordModel(opts.sessionId, event, owners.get(event.requestId));
         if (event.phase === 'complete') owners.delete(event.requestId);
       } });
-      const address = await proxy.listen();
+      let address: Awaited<ReturnType<ModelProxy['listen']>>;
+      try { address = await proxy.listen(); } catch (error) { await proxy.close().catch(() => undefined); throw error; }
       this.proxies.set(opts.sessionId, proxy);
       this.addresses.set(opts.sessionId, address.url);
       this.recorder.record(opts.sessionId, 'recording', 'model-route', { protocol, target });

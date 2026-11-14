@@ -7,7 +7,7 @@ import type { AgentAdapter, TraceSink } from '@webdcc/protocol';
 export interface AdapterSettings {
   dsh?: { mode: 'attach' | 'spawn'; url?: string; cookie?: string };
   traceSink?: (sessionId: string) => TraceSink;
-  nativeRecorder?: { directory: string; module: string };
+  nativeRecorder?: { directory: string; module: string; env?: Record<string, string> };
 }
 
 export async function adapters(settings: AdapterSettings = {}): Promise<AgentAdapter[]> {

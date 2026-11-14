@@ -1042,13 +1042,43 @@
           "packages/server/src/config.ts",
           "packages/server/src/main.ts",
           "packages/server/test/config.spec.ts",
-          "docs/diagnostics.md"
+          "docs/diagnostics.md",
+          "packages/testing/model-proxy/src/redaction.ts",
+          "packages/testing/model-proxy/src/redaction.spec.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.spec.ts",
+          "packages/testing/model-proxy/src/index.ts",
+          "packages/testing/model-proxy/src/index.spec.ts",
+          "packages/server/src/interaction-recorder.ts",
+          "packages/server/src/native-http-recorder.ts",
+          "packages/server/src/model-recording.ts",
+          "packages/server/src/adapters.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/server/test/interaction-recorder.spec.ts",
+          "packages/server/test/model-recording.spec.ts",
+          "packages/server/test/native-http-recorder.spec.ts",
+          "packages/server/test/fixtures/native-recorder.ts"
         ],
         "actualFiles": [
           "packages/server/src/config.ts",
           "packages/server/src/main.ts",
           "packages/server/test/config.spec.ts",
-          "docs/diagnostics.md"
+          "docs/diagnostics.md",
+          "packages/testing/model-proxy/src/redaction.ts",
+          "packages/testing/model-proxy/src/redaction.spec.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.spec.ts",
+          "packages/testing/model-proxy/src/index.ts",
+          "packages/testing/model-proxy/src/index.spec.ts",
+          "packages/server/src/interaction-recorder.ts",
+          "packages/server/src/native-http-recorder.ts",
+          "packages/server/src/model-recording.ts",
+          "packages/server/src/adapters.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/server/test/interaction-recorder.spec.ts",
+          "packages/server/test/model-recording.spec.ts",
+          "packages/server/test/native-http-recorder.spec.ts",
+          "packages/server/test/fixtures/native-recorder.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -1058,7 +1088,8 @@
           "凭据跨chunk和nested字段不会出现在DB/trace/导出；脱敏hash语义有说明。",
           "大输出和长期会话内存/磁盘有界，录制失败不阻断原生运行且coverage告警可见。"
         ],
-        "remainingWork": "Secret-aware storage, pre-write redaction, quotas/retention and complete launch comparison remain incomplete; diagnostics now opt-in."
+        "remainingWork": "已统一诊断写前 field/JSON/known-secret/Cookie/URL 脱敏，HTTP 跨分片拼接后脱敏；保留原始 request/response 流式转发与背压，录制正文/分片/排队字节/单文件有界，超限完整丢弃正文并标 coverage；诊断 hash 改为 redacted bytes。启动或路由录制失败保持原生配置；周期按活动触发的过期清理、跨重启缺失标记和真实 Node preload 故障回归已做。SQLite/command/queue/IndexedDB 的 secret-aware 存储、原生 SDK/RPC 跨帧连续脱敏、所有 credential/provider 来源、跨进程全局配额、旧录制导出与完整 native launch/config 对照仍待完成。",
+        "budgetNote": "共用诊断 redactor/writer 覆盖 model proxy、native preload 与主 recorder，文件范围超过初始 NP-14 规划；其中新增测试/fixture 与公共边界提取单列。仍为分阶段实施，未下调完整验收。"
       },
       "dependencyIds": [
         "NP-02",

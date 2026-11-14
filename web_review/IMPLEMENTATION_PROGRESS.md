@@ -75,8 +75,17 @@
 - Chromium 真实 UI→HTTP→本地 Host 合同 fixture 验证 Host/变更预览、取消无写、冲突保留草稿、刷新重新核对、独立默认选择与刷新；新增 8 项服务回归。真实 DSH 服务/文档/重启验收尚未运行。
 - 本阶段六类源码门禁通过：59 个测试文件 / 256 项单元测试、4 项 Chromium 测试；报告绑定 `fdcf1dc` 及实际源码 fingerprint。旧 home patch helper 无生产调用，显式本地 YAML 编辑仍属待实施；不要因原生写失败恢复它。
 
+## 诊断写前脱敏与保留阶段（2026-11-14）
+
+- DSH 配置阶段已提交 `c46f5e8`；59 文件 / 256 项单元、4 项 Chromium 回归与六类源码门禁通过。
+- HTTP/model/native preload 和主 recorder 共用写前脱敏：nested/escaped JSON、Cookie 片段、known secrets、URL 和 sensitive fields；HTTP 跨分片凭据在有限拼接范围内脱敏。模型诊断 SHA 描述 redacted bytes，独立原生字节对照仍由测试负责。
+- 请求流式转发与背压，响应持续原文转发；录制按 body bytes/chunks、writer queued bytes 和 JSONL 文件设置上限。正文超限整份丢弃并标 coverage，文件/排队写失败留下小型覆盖缺失标记，错误列表与重复 stderr 有界。
+- 主 recorder 在启动和每小时有记录活动时清理过期的诊断文件；无计时器，无部署数据迁移。启动目录或 proxy listen 失败继续原生配置，不把诊断失败变成用户命令失败。
+- 已用真实 Node 子进程加载 native preload，验证正常/正文超限/文件超限均保持 request/response 原文；测试只访问临时目录和本地 HTTP fixture，没有真实模型调用。
+- 本阶段六类源码门禁通过：63 个测试文件 / 269 项单元测试、4 项 Chromium 测试；报告绑定 `c46f5e8` 及源码 fingerprint。仍需 SQLite/queue/command/outbox 的 secret-aware 存储、SDK/RPC 跨帧连续脱敏、全局跨进程配额、旧录制导出以及完整 native 对照；NP-14 保持未完整完成。
+
 ## 下一步
 
-完成本阶段源码门禁与提交；继续 NP-14 诊断写前脱敏与有界保留，再推进持久 owner/reconciliation、完整 raw ledger、权威 interaction/secret 存储。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据；全部 M1–M3 按矩阵依赖持续实施。
+完成本阶段源码门禁并提交；优先继续 NP-06 的持久权威交互状态/跨浏览器竞争和 secret 答案，再推进 NP-04 owner/reconciliation 与 NP-05 raw ledger。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据；全部 M1–M3 按矩阵依赖持续实施。
 
 运行入口：所有命令在 `/root/WebDCC-repair` 执行。`pnpm check:source` 构建只写 `.artifacts/<runId>/`；不要执行 release 或重启服务。真实 Codex 0.167.0 与付费模型对照尚未准备，不能拿 0.168.0 当基线通过证据。
