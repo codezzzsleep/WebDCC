@@ -39,6 +39,8 @@ export class NativeEventStore {
   private readonly secrets = new Set<string>();
   constructor(private readonly db: Db) {}
   addSecret(value: string | undefined): void { if (value) this.secrets.add(value); }
+  restricted(sessionId: string): boolean { return this.db.prepare('SELECT 1 FROM app_settings WHERE key = ?').get(`native-sensitive:${sessionId}`) !== undefined; }
+  policyValue(sessionId: string, value: unknown): unknown { return this.restricted(sessionId) ? { omitted: 'sensitive-session-native-payload' } : this.diagnosticValue(value); }
   redact(value: unknown): unknown { return redactDiagnosticValue(value, [...this.secrets]); }
   diagnosticValue(value: unknown): unknown { return privateSchema(value) ? { omitted: 'sensitive-native-request' } : redactDiagnosticValue(value, [...this.secrets]); }
   private insert(context: Context, source: Row['source'], direction: 'in' | 'out', channel: string, value: unknown, disposition: string, rawEnvelopeId?: number): number {
@@ -48,11 +50,13 @@ export class NativeEventStore {
     const request = native['id'] ?? params['requestId'] ?? native['toolUseID'];
     const requestId = typeof request === 'string' || typeof request === 'number' ? request : null;
     const restricted = privateSchema(value) || /^account\/|oauth|authentication/i.test(String(native['method'] ?? channel));
+    if (privateSchema(value)) this.db.prepare('INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)').run(`native-sensitive:${context.sessionId}`, 'restricted');
     // Persist the policy as well: a response after restart must remain restricted.
     const knownRestricted = requestId !== null && this.db.prepare("SELECT 1 FROM native_event_envelopes WHERE session_id = ? AND generation IS ? AND native_request_id = ? AND payload_coverage = 'restricted' LIMIT 1")
       .get(context.sessionId, context.identity?.generation ?? null, JSON.stringify(requestId)) !== undefined;
-    let coverage: Row['payload_coverage'] = restricted || knownRestricted ? 'restricted' : 'redacted';
-    let payload = coverage === 'restricted' ? JSON.stringify({ omitted: 'sensitive-native-request' }) : JSON.stringify(redactDiagnosticValue(value, [...this.secrets]));
+    const sessionRestricted = this.restricted(context.sessionId);
+    let coverage: Row['payload_coverage'] = restricted || knownRestricted || sessionRestricted ? 'restricted' : 'redacted';
+    let payload = coverage === 'restricted' ? JSON.stringify({ omitted: !restricted && !knownRestricted && sessionRestricted ? 'sensitive-session-native-payload' : 'sensitive-native-request' }) : JSON.stringify(redactDiagnosticValue(value, [...this.secrets]));
     if (Buffer.byteLength(payload) > 1024 * 1024) { coverage = 'oversize'; payload = JSON.stringify({ omitted: 'native-envelope-size-limit', bytes: Buffer.byteLength(payload) }); }
     const seq = root['nativeSeq'] ?? event['seq'] ?? object(native['value'])['seq'] ?? native['seq'];
     const turnId = root['nativeTurnId'] ?? params['turnId'] ?? object(params['turn'])['id'] ?? event['turnId'];

@@ -1,4 +1,4 @@
-import type { EventData, StoredEvent } from '@webdcc/protocol';
+import type { CommandState, EventData, StoredEvent } from '@webdcc/protocol';
 import type { Db } from './db.js';
 
 type Kind = 'approve' | 'answer';
@@ -21,9 +21,14 @@ export class InteractionStore {
   }
   get(sessionId: string, kind: Kind, id: string): InteractionRow | undefined { return this.db.prepare('SELECT * FROM interactions WHERE session_id = ? AND kind = ? AND id = ?').get(sessionId, kind, id) as InteractionRow | undefined; }
   group(row: InteractionRow): InteractionRow[] { return this.db.prepare('SELECT * FROM interactions WHERE session_id = ? AND kind = ? AND group_id = ?').all(row.session_id, row.kind, row.group_id) as InteractionRow[]; }
+  private commandState(row: InteractionRow, state: CommandState): void {
+    if (row.command_id !== null) this.db.prepare('UPDATE command_journal SET state = ?, updated_at = ? WHERE command_id = ?').run(state, new Date().toISOString(), row.command_id);
+  }
   observe(event: ObservedEvent): void {
     if (event.kind === 'approval.resolved') {
       const data = event.data as EventData['approval.resolved'];
+      const row = this.get(event.sessionId, 'approve', data.approvalId);
+      if (row !== undefined) this.commandState(row, data.by === 'user' && data.optionId !== 'outcome-unknown' ? 'completed' : row.command_id === null ? 'cancelled' : 'uncertain');
       this.db.prepare("UPDATE interactions SET state = 'resolved', revision = revision + 1 WHERE session_id = ? AND kind = 'approve' AND id = ?").run(event.sessionId, data.approvalId);
       return;
     }
@@ -34,6 +39,8 @@ export class InteractionStore {
     const groupId = kind === 'answer' ? question.groupId ?? id : id;
     const state = kind === 'answer' && question.status === 'answered' ? 'resolved' : kind === 'answer' && question.status === 'skipped' ? 'cancelled' : question.submission ?? 'pending';
     const request = kind === 'approve' ? { options: (event.data as EventData['approval.request']).options.map(option => ({ id: option.id })) } : { isSecret: question.isSecret === true };
+    const previous = this.get(event.sessionId, kind, id);
+    if (previous !== undefined && (state === 'resolved' || state === 'cancelled')) this.commandState(previous, question.resolution === 'external' || question.resolution === 'outcome-unknown' ? 'uncertain' : 'completed');
     this.db.prepare('INSERT OR IGNORE INTO interactions (session_id, kind, id, group_id, state, revision, request) VALUES (?, ?, ?, ?, ?, 1, ?)').run(event.sessionId, kind, id, groupId, state, JSON.stringify(request));
     if (state === 'resolved' || state === 'cancelled') this.db.prepare('UPDATE interactions SET state = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?').run(state, event.sessionId, kind, id);
     else if (question.groupId !== undefined && kind === 'answer') this.db.prepare("UPDATE interactions SET group_id = ? WHERE session_id = ? AND kind = ? AND id = ? AND state IN ('pending', 'failed')").run(groupId, event.sessionId, kind, id);
@@ -57,6 +64,7 @@ export class InteractionStore {
       if (current?.command_id !== row.command_id || current.state !== 'sending') return false;
       if (collected) this.db.prepare("UPDATE interactions SET state = 'collected', revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?").run(row.session_id, row.kind, row.id);
       else this.db.prepare("UPDATE interactions SET state = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND group_id = ? AND state NOT IN ('resolved', 'cancelled')").run(confirmed ? 'resolved' : 'sent', row.session_id, row.kind, row.group_id);
+      for (const item of collected ? [current] : this.group(current)) this.commandState(item, collected ? 'queued' : confirmed ? 'completed' : 'dispatching');
       return true;
     })();
   }
@@ -67,9 +75,13 @@ export class InteractionStore {
       .run(certain ? 'failed' : 'uncertain', certain ? 'native-rejected' : 'native-outcome-uncertain', row.session_id, row.kind, row.id, row.command_id);
   }
   recover(sessionIds?: string[]): InteractionRow[] {
-    if (sessionIds !== undefined) return this.db.transaction(() => sessionIds.flatMap(id => this.db.prepare(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
-      WHERE session_id = ? AND (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'sent', 'collected')) AND state NOT IN ('resolved', 'cancelled') RETURNING *`).all(id) as InteractionRow[]))();
-    return this.db.prepare(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
-      WHERE (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'sent', 'collected')) AND state NOT IN ('resolved', 'cancelled') RETURNING *`).all() as InteractionRow[];
+    return this.db.transaction(() => {
+      const rows = sessionIds !== undefined ? sessionIds.flatMap(id => this.db.prepare(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
+        WHERE session_id = ? AND (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'sent', 'collected')) AND state NOT IN ('resolved', 'cancelled') RETURNING *`).all(id) as InteractionRow[])
+        : this.db.prepare(`UPDATE interactions SET state = 'uncertain', revision = revision + 1
+          WHERE (session_id, kind, group_id) IN (SELECT session_id, kind, group_id FROM interactions WHERE state IN ('sending', 'sent', 'collected')) AND state NOT IN ('resolved', 'cancelled') RETURNING *`).all() as InteractionRow[];
+      for (const row of rows) this.commandState(row, 'uncertain');
+      return rows;
+    })();
   }
 }

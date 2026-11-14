@@ -24,7 +24,28 @@ it('NP-05 native request identity retains string/number types and sensitive resp
     expect(store.nativeEvents.get(response)?.payloadCoverage).toBe('restricted');
     expect(JSON.stringify(store.nativeEvents.get(response))).not.toContain('never-persist');
     expect(store.nativeEvents.get(other)?.nativeRequestId).toBe('0');
-    expect(store.nativeEvents.get(other)?.payloadCoverage).toBe('redacted');
+    // Once the session declares secret input, unrelated frame fragments in
+    // that session remain restricted too; the typed request ID is still exact.
+    expect(store.nativeEvents.get(other)?.payloadCoverage).toBe('restricted');
+    const ordinary = store.nativeEvents.frame({ ...context, sessionId: 'ordinary' }, { i: 4, t: 0, dir: 'out', ch: 'rpc', frame: { id: '0', result: { text: 'ordinary visible content' } } }, true);
+    expect(store.nativeEvents.get(ordinary)).toMatchObject({ nativeRequestId: '0', payloadCoverage: 'redacted', payload: { result: { text: 'ordinary visible content' } } });
+  } finally { db.close(); }
+});
+
+it('NP-14 declared secret sessions restrict split raw fragments and retain that policy after reopening', () => {
+  const db = openDb(':memory:'); let store = new Store(db);
+  const context = { sessionId: 'sensitive', agent: 'codex' };
+  try {
+    store.nativeEvents.frame(context, { i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 0, method: 'item/tool/requestUserInput', params: { questions: [{ isSecret: true }] } } }, true);
+    store.nativeEvents.addSecret('secret-joined-value');
+    for (const [index, delta] of ['secret-joined-', 'value'].entries()) {
+      const id = store.nativeEvents.frame(context, { i: index + 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'item/agentMessage/delta', params: { delta } } }, true);
+      expect(store.nativeEvents.get(id)).toMatchObject({ payloadCoverage: 'restricted', payload: { omitted: 'sensitive-session-native-payload' } });
+    }
+    store = new Store(db);
+    const id = store.nativeEvents.frame(context, { i: 4, t: 0, dir: 'in', ch: 'sdk', frame: { type: 'delta', text: 'new arbitrary prefix' } }, true);
+    expect(store.nativeEvents.get(id)?.payloadCoverage).toBe('restricted');
+    expect(JSON.stringify(store.nativeEvents.list(context.sessionId).map(record => store.nativeEvents.get(record.id)))).not.toContain('secret-joined-');
   } finally { db.close(); }
 });
 

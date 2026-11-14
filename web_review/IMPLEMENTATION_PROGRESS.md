@@ -191,3 +191,10 @@
 - 实际Codex0.167.0 +本地MCP stdio服务 +脚本化Responses模型 +真实Chromium完整通过：MCP工具实际调用→elicitation/create→原生反向请求→Web表单→MCP服务收到精确content→native resolution→最终回复→刷新状态一致。证据 web_review/evidence/native-elicitation.json，paidModel=false。不是仅注入AdapterEvent的证明。
 - 真实验证发现旧mock把namespaced MCP工具当扁平名，native返回unsupported call；另一个隔离policy=never场景被native拒绝MCP调用。新mock保留namespace/name并检查实际工具目录，未触发即NOT_TRIGGERED，不用轮次完成冒充目标动作完成。测试MCP明确标只读并在隔离原生配置采用on-request，未修改真实用户配置。
 - Claude/DSH完整elicitation、Native账号/Host目录与全三家付费模型/故障矩阵仍待实施和验收；NP-06/25不标整体完成。
+
+## 接续实现：交互命令确认与秘密碎片（2026-11-14）
+
+- 命令ACK表示持久接受；问答/审批处于sending/sent时，journal保持dispatching，部分组答案为queued。原生确认与interaction投影同事务更新journal，重启时未确认的组及其命令一起变uncertain。不会以成功ACK冒充native副作用已完成。
+- 原生声明secret/writeOnly/password后，该会话的原生正文持续受限，保留信封身份/方向/时间/覆盖原因，避免把秘密拆成多个不匹配全文的碎片落库；政策跨Store重建保留，普通会话不受影响。事件native副本也遵守政策。
+- SQLite v9防止不理解此政策和命令确认语义的旧binary打开新库；v7旧URL、events、queue、owner迁移测试通过。19项相关合同/故障/敏感回归、typecheck/lint通过。
+- 仍需完整SDK/Host原生确认、秘密在重启后无法识别的语义回显与模型HTTP诊断跨进程政策，以及全面备份恢复。NP-03/06/14/47均保持部分完成，不把本批保护扩大为全部原生功能完成。

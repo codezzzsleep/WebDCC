@@ -42,7 +42,11 @@ export class CommandDispatcher {
     const pending = this.execute(command).then(nativeResult => {
       const result = this.store.nativeEvents.redact(nativeResult) as DispatchResult;
       const state = this.store.journal.get(command.clientCommandId)?.state;
-      this.store.journal.state(command.clientCommandId, result.ok ? command.op === 'send' && state !== undefined ? state : 'completed' : result.code === 'uncertain' ? 'uncertain' : 'failed', result);
+      const interaction = command.op === 'answer' ? this.store.interactions.get(command.sessionId, 'answer', command.questionId)
+        : command.op === 'approve' ? this.store.interactions.get(command.sessionId, 'approve', command.approvalId) : undefined;
+      const acceptedState = interaction === undefined ? 'completed' : interaction.state === 'collected' ? 'queued'
+        : interaction.state === 'resolved' || interaction.state === 'cancelled' ? 'completed' : interaction.state === 'uncertain' ? 'uncertain' : 'dispatching';
+      this.store.journal.state(command.clientCommandId, result.ok ? command.op === 'send' && state !== undefined ? state : acceptedState : result.code === 'uncertain' ? 'uncertain' : 'failed', result);
       this.recorder?.record(owner, 'web', 'ack', result, 'in');
       return result;
     });

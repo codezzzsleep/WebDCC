@@ -216,7 +216,11 @@
           "packages/web/src/components/Timeline.tsx",
           "packages/server/test/journal.spec.ts",
           "packages/server/test/fixtures/queue-crash.ts",
-          "packages/web/src/lib/store-recovery.spec.ts"
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/command-journal.ts",
@@ -231,7 +235,11 @@
           "packages/web/src/components/Timeline.tsx",
           "packages/server/test/journal.spec.ts",
           "packages/server/test/fixtures/queue-crash.ts",
-          "packages/web/src/lib/store-recovery.spec.ts"
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -532,7 +540,8 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/test/native-events.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -577,7 +586,8 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/test/native-events.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1270,7 +1280,12 @@
           "packages/server/test/native-http-recorder.spec.ts",
           "packages/server/test/fixtures/native-recorder.ts",
           "packages/server/test/sensitive-answers.spec.ts",
-          "browser-tests/sensitive-answers.spec.ts"
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/config.ts",
@@ -1293,7 +1308,12 @@
           "packages/server/test/native-http-recorder.spec.ts",
           "packages/server/test/fixtures/native-recorder.ts",
           "packages/server/test/sensitive-answers.spec.ts",
-          "browser-tests/sensitive-answers.spec.ts"
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -3061,7 +3081,9 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/db.ts",
@@ -3084,7 +3106,9 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",

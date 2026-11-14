@@ -20,7 +20,10 @@ it('NP-06 browser-shaped free text passes through HTTP, manager and the Codex na
     const custom = '自由答案\r\n字节保留';
     const result = await ctx.app.inject({ method: 'POST', url: '/api/commands', headers: { cookie: ctx.cookie }, payload: { command: { op: 'answer', clientCommandId: 'ANSWER', sessionId: session.id, questionId, answer: { selected: [], custom } } } });
     expect(result.json()).toMatchObject({ ok: true });
+    expect(ctx.store.journal.get('ANSWER')?.state).toBe('dispatching');
     expect(native.replies).toEqual([{ id: 'opaque:request', result: { answers: { language: { answers: [custom] } } } }]);
+    native.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: '', requestId: 'opaque:request' } } });
+    expect(ctx.store.journal.get('ANSWER')?.state).toBe('completed');
   } finally { await ctx.close(); }
 });
 

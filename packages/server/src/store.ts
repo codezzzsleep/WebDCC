@@ -457,7 +457,7 @@ export class Store {
   /** seq 分配与事件写入在同一事务（SPEC 11.2） */
   appendEvent(input: AppendEventInput): StoredEvent {
     input = { ...input, data: this.nativeEvents.redact(input.data) as StoredEvent['data'],
-      ...(input.native === undefined ? {} : { native: this.nativeEvents.diagnosticValue(input.native) }) };
+      ...(input.native === undefined ? {} : { native: this.nativeEvents.policyValue(input.sessionId, input.native) }) };
     const at = input.at ?? new Date().toISOString();
     const tx = this.db.transaction((event: AppendEventInput): StoredEvent => {
       const current = this.db.prepare('SELECT last_seq FROM sessions WHERE id = ?').get(event.sessionId) as

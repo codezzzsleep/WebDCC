@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 import { CURRENT_SCHEMA_VERSION, openDb } from '../src/db.js';
 import { Store } from '../src/store.js';
 
-it('NP-47 v7 ownership and old URL, events, queue and result survive the repeatable v8 recovery migration', async () => {
+it('NP-47 v7 ownership and old URL, events, queue and result survive the repeatable recovery migration', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-recovery-migrate-')); const file = join(directory, 'old.sqlite');
   let db = openDb(file);
   try {
@@ -26,7 +26,7 @@ it('NP-47 v7 ownership and old URL, events, queue and result survive the repeata
     expect(store.journal.get('queued')).toMatchObject({ state: 'queued', result: { queued: true, turnId: 'queue-turn' } });
     expect(store.journal.queue(session.id)[0]?.input.text).toBe('preserve queue');
     expect(store.reconciliations.get(session.id)).toBeNull(); db.close();
-    db = openDb(file); expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    db = openDb(file); expect(CURRENT_SCHEMA_VERSION).toBe(9);
     expect(new Store(db).allEvents(session.id)).toHaveLength(1);
   } finally { if (db.open) db.close(); await rm(directory, { recursive: true, force: true }); }
 });
