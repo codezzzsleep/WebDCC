@@ -461,7 +461,8 @@
           "packages/server/test/fixtures/interaction-crash.ts"
         ],
         "evidence": [
-          "web_review/evidence/source-checks.json"
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-64cf89e.json"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
@@ -1195,7 +1196,8 @@
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/dsh-recovery-l1.json",
-          "web_review/evidence/claude-block-l1.json"
+          "web_review/evidence/claude-block-l1.json",
+          "web_review/evidence/l1-64cf89e.json"
         ],
         "remainingAcceptance": [
           "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",

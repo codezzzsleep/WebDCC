@@ -93,8 +93,12 @@
 - 20 个不同命令竞争审批只一次 native submission；多题最后提交期间不能重发前题；真实 SIGKILL 保留占用并恢复 uncertain；真实双 Chromium context 竞争只提交首个答案。均为本地隔离/adapter 合同 fixture，不是付费真实模型证据。
 - 本阶段六类源码门禁通过：64 个测试文件 / 276 项单元测试、5 项 Chromium 测试；报告绑定 `ecdc138` 及实际源码 fingerprint。真正 native 接收确认、deadline/revision、secret/URL/form、可操作 uncertain 对账与恢复、完整三家验收仍待推进，NP-06 保持未完整完成。
 
-## 下一步
+## 当前源码检查点与下一步（2026-11-14）
 
-完成当前源码门禁、源码检查点和 L1 语义回归；继续 NP-06 的恢复对账/secret，NP-04 持久 owner/fencing 与 NP-05 raw ledger。DSH activeAttempt/workspace 基线、计时问题和真实双界面恢复仍待证据；全部 48 项继续按矩阵依赖推进，没有改为只做当前几批。
+- 当前源码检查点 `64cf89e`（本轮四个修复提交：`fdcf1dc`、`c46f5e8`、`ecdc138`、`64cf89e`）。`evidence/source-checks.json` 保存六类源码通过证据：64 文件 / 276 项单元及 5 项 Chromium；验证按实际源码 fingerprint 绑定，提交元数据为测试时的父提交 `ecdc138`。
+- `evidence/l1-64cf89e.json` 绑定实际源码 `64cf89e`：33 轨迹 / 3,681 帧，未出现 I1–I8 语义不变量失败；22 项 GOLDEN 和 16 项 NOT_TRIGGERED 使门禁继续失败。没有修改 golden/原录制，也没有宣称 native 验收已完成。
+- 原工作区仍 `878c8c9`；部署进程 PID `2303523` 和 `/opt/webdcc/current` 指向的 release `97b3c073c5ec67d50df58cf564d33537c109eddc` 未变。仅修复 worktree 源码与本地测试/构建产物。
+- 下一可执行项：NP-06 的 uncertain 对账、部分答案安全恢复与 secret；然后 NP-04 持久 owner/fencing、NP-05 raw ledger 与 DSH activeAttempt/workspace 基线。全部 48 项继续按矩阵依赖推进，scope 没有缩成当前几批。
+- 真实 Codex 0.167.0 / 真实模型及账号、真实 DSH 双界面断线、CLI/PTY、secret/URL/form 等验收仍待准备/实施；不能以本机 0.168.0 或 fixture 通过代替固定基线证据。
 
 运行入口：所有命令在 `/root/WebDCC-repair` 执行。`pnpm check:source` 构建只写 `.artifacts/<runId>/`；不要执行 release 或重启服务。真实 Codex 0.167.0 与付费模型对照尚未准备，不能拿 0.168.0 当基线通过证据。
