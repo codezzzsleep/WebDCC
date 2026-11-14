@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ProviderDto } from '@webdcc/protocol';
+import type { ProviderDto, DshSettingsView, DshSettingsPreview, DshProviderUpdate, DshDefaultModelUpdate } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { AGENT_IDS, agentText, isCompatible, sourceLabel, type AgentKey } from '../lib/agents.js';
 import { refreshDsh, refreshProviders, useAppData } from '../lib/appData.js';
@@ -14,17 +14,7 @@ const PROTOCOLS = [
 
 type ModelDetail = { id: string; name: string; reasoningEfforts?: string[] };
 const REASONING_OPTIONS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
-type DshProviderView = {
-  writable: boolean;
-  providerKey: string;
-  provider: Record<string, unknown>;
-  defaultModel: { provider: string; model: string; reasoningEffort?: string };
-  official: boolean;
-  reasoningEfforts: string[];
-  defaultReasoning?: string;
-  contextWindow?: number;
-  maxTokens?: number;
-};
+type DshProviderView = DshSettingsView;
 
 function modelDetails(provider: ProviderDto): ModelDetail[] {
   return provider.models.map((id) => provider.modelDetails?.find((model) => model.id === id) ?? { id, name: id });
@@ -142,15 +132,15 @@ function ModelForm({ draft, saving, onChange, onCancel, onSave }: { draft: Model
   return <div className="model-form"><div className="form-grid"><label className="field"><span>模型 ID / slug</span><input className="text-input" value={draft.id} onChange={(event) => onChange({ ...draft, id: event.target.value })} placeholder="例如 deepseek-v4.1-flash" /></label><label className="field"><span>显示名称</span><input className="text-input" value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="例如 DeepSeek V4.1 Flash" /></label></div><ReasoningEffortPicker values={draft.reasoningEfforts ?? []} onChange={(reasoningEfforts) => onChange({ ...draft, reasoningEfforts })} /><div className="row-actions"><button type="button" className="btn primary" disabled={saving || draft.id.trim() === ''} onClick={() => onSave(draft)}>保存 Model</button><button type="button" className="btn" onClick={onCancel}>取消</button></div></div>;
 }
 
-function ReasoningEffortPicker({ values, onChange }: { values: string[]; onChange: (values: string[]) => void }): React.ReactElement {
+function ReasoningEffortPicker({ values, onChange, disabled = false }: { values: string[]; onChange: (values: string[]) => void; disabled?: boolean }): React.ReactElement {
   const custom = values.filter((value) => !(REASONING_OPTIONS as readonly string[]).includes(value));
   const toggle = (value: string): void => onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
-  return <fieldset className="reasoning-picker"><legend>思考强度（可选，可多选）</legend><div className="reasoning-options">{REASONING_OPTIONS.map((value) => <label key={value} className="checkbox"><input type="checkbox" checked={values.includes(value)} onChange={() => toggle(value)} />{value}</label>)}</div><label className="field"><span>自定义等级（逗号分隔）</span><input className="text-input" value={custom.join(', ')} onChange={(event) => { const next = event.target.value.split(',').map((item) => item.trim()).filter(Boolean); onChange([...values.filter((item) => (REASONING_OPTIONS as readonly string[]).includes(item)), ...next]); }} placeholder="例如 reasoning-v2" /></label></fieldset>;
+  return <fieldset className="reasoning-picker" disabled={disabled}><legend>思考强度（可选，可多选）</legend><div className="reasoning-options">{REASONING_OPTIONS.map((value) => <label key={value} className="checkbox"><input type="checkbox" checked={values.includes(value)} onChange={() => toggle(value)} />{value}</label>)}</div><label className="field"><span>自定义等级（逗号分隔）</span><input className="text-input" value={custom.join(', ')} onChange={(event) => { const next = event.target.value.split(',').map((item) => item.trim()).filter(Boolean); onChange([...values.filter((item) => (REASONING_OPTIONS as readonly string[]).includes(item)), ...next]); }} placeholder="例如 reasoning-v2" /></label></fieldset>;
 }
 
 type DshModelDetail = ModelDetail & { contextWindow?: number; maxTokens?: number };
 
-function ProviderModelRows({ provider, editable, onEdit }: { provider: DshProviderView; editable: boolean; onEdit: (model: DshModelDetail) => void }): React.ReactElement {
+function ProviderModelRows({ provider, editable, onEdit, onDefault }: { provider: DshProviderView; editable: boolean; onEdit: (model: DshModelDetail) => void; onDefault: (model: string) => void }): React.ReactElement {
   const models = Array.isArray(provider.provider['models'])
     ? (provider.provider['models'] as Record<string, unknown>[]).filter((model) => typeof model['id'] === 'string').map((model) => ({
       id: String(model['id']),
@@ -160,7 +150,7 @@ function ProviderModelRows({ provider, editable, onEdit }: { provider: DshProvid
       ...(Number.isSafeInteger(model['maxTokens']) && Number(model['maxTokens']) > 0 ? { maxTokens: Number(model['maxTokens']) } : {}),
     }))
     : provider.defaultModel.model === '' ? [] : [{ id: provider.defaultModel.model, name: provider.defaultModel.model }];
-  return <div className="model-list">{models.length === 0 ? <div className="model-empty">DSH 未返回模型。</div> : models.map((model) => <ModelRow key={model.id} model={model} onEdit={() => onEdit(model)} readOnly={!editable} />)}</div>;
+  return <div className="model-list">{models.length === 0 ? <div className="model-empty">DSH 未返回模型。</div> : models.map((model) => <div key={model.id}><ModelRow model={model} onEdit={() => onEdit(model)} readOnly={!editable} />{editable && model.id !== provider.defaultModel.model ? <button type="button" className="btn small ghost" onClick={() => onDefault(model.id)}>将 {model.id} 设为默认</button> : null}</div>)}</div>;
 }
 
 function formatCapacity(value: number): string {
@@ -177,41 +167,58 @@ function DshHarness({ dsh, dshLink, setDshLink, dshError, setDshError, provider,
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ model: '', reasoning: '', efforts: '', contextWindow: '', maxTokens: '' });
+  const [draft, setDraftState] = useState({ model: '', efforts: '', contextWindow: '', maxTokens: '' });
+  const [baselineDraft, setBaselineDraft] = useState<typeof draft | null>(null);
+  const [editBase, setEditBase] = useState<{ view: DshSettingsView; originalModel: string } | null>(null);
+  const [preview, setPreview] = useState<{ kind: 'provider'; input: DshProviderUpdate; view: DshSettingsPreview } | { kind: 'default'; input: DshDefaultModelUpdate; view: DshSettingsPreview } | null>(null);
+  const setDraft = (value: typeof draft): void => { setDraftState(value); setPreview(null); };
   useEffect(() => {
-    if (provider === null) return;
-    setDraft({
+    if (provider === null || editing) return;
+    setDraftState({
       model: provider.defaultModel.model,
-      reasoning: provider.defaultModel.reasoningEffort ?? provider.defaultReasoning ?? '',
       efforts: provider.reasoningEfforts.join(', '),
       contextWindow: provider.contextWindow === undefined ? '' : String(provider.contextWindow),
       maxTokens: provider.maxTokens === undefined ? '' : String(provider.maxTokens),
     });
-  }, [provider]);
+  }, [provider, editing]);
   const save = (): void => {
-    if (provider === null || draft.model.trim() === '') return;
+    if (editBase === null || baselineDraft === null || draft.model.trim() === '') return;
     setSaving(true); setError(null);
-    const efforts = draft.efforts.split(',').map((value) => value.trim()).filter(Boolean);
-    void api.updateDshProvider({
-      providerKey: provider.providerKey,
-      baseURL: String(provider.provider['baseURL'] ?? ''),
+    const input: DshProviderUpdate = {
+      targetId: editBase.view.target.id,
+      expectedRevision: editBase.view.providerRevision,
+      providerKey: editBase.view.providerKey,
+      previousModel: editBase.originalModel,
       model: draft.model.trim(),
-      ...(draft.reasoning === '' ? {} : { reasoning: draft.reasoning }),
-      reasoningEfforts: efforts,
-      ...(draft.contextWindow === '' ? {} : { contextWindow: Number(draft.contextWindow) }),
-      ...(draft.maxTokens === '' ? {} : { maxTokens: Number(draft.maxTokens) }),
-    }).then(() => { setEditing(false); onReload(); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
+      ...(draft.efforts === baselineDraft.efforts ? {} : { reasoningEfforts: draft.efforts.split(',').map(value => value.trim()).filter(Boolean) }),
+      ...(draft.contextWindow === baselineDraft.contextWindow ? {} : { contextWindow: draft.contextWindow === '' ? null : Number(draft.contextWindow) }),
+      ...(draft.maxTokens === baselineDraft.maxTokens ? {} : { maxTokens: draft.maxTokens === '' ? null : Number(draft.maxTokens) }),
+    };
+    void api.previewDshProvider(input).then(view => setPreview({ kind: 'provider', input, view })).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
+  };
+  const setDefault = (model: string): void => {
+    if (provider === null) return;
+    const input: DshDefaultModelUpdate = { targetId: provider.target.id, expectedRevision: provider.defaultModelRevision, providerKey: provider.providerKey, model };
+    setSaving(true); setError(null);
+    void api.previewDshDefault(input).then(view => setPreview({ kind: 'default', input, view })).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
+  };
+  const apply = (): void => {
+    if (preview === null) return;
+    setSaving(true); setError(null);
+    const pending = preview.kind === 'provider' ? api.updateDshProvider(preview.input) : api.updateDshDefault(preview.input);
+    void pending.then(() => { setPreview(null); setEditing(false); onReload(); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
   };
   const editModel = (model: DshModelDetail): void => {
     if (provider === null) return;
-    setDraft({
+    const nextDraft = {
       model: model.id,
-      reasoning: provider.defaultModel.model === model.id ? provider.defaultModel.reasoningEffort ?? provider.defaultReasoning ?? '' : provider.defaultReasoning ?? '',
-      efforts: model.reasoningEfforts?.join(', ') ?? provider.reasoningEfforts.join(', '),
-      contextWindow: model.contextWindow === undefined ? (provider.contextWindow === undefined ? '' : String(provider.contextWindow)) : String(model.contextWindow),
-      maxTokens: model.maxTokens === undefined ? (provider.maxTokens === undefined ? '' : String(provider.maxTokens)) : String(model.maxTokens),
-    });
-    setEditing(true);
+      efforts: model.reasoningEfforts?.join(', ') ?? (provider.provider['reasoningEfforts'] !== null && typeof provider.provider['reasoningEfforts'] === 'object' ? Object.keys(provider.provider['reasoningEfforts'] as object).join(', ') : ''),
+      contextWindow: model.contextWindow === undefined ? '' : String(model.contextWindow),
+      maxTokens: model.maxTokens === undefined ? '' : String(model.maxTokens),
+    };
+    setDraft(nextDraft); setBaselineDraft(nextDraft);
+    setEditBase({ view: provider, originalModel: model.id });
+    setError(null); setEditing(true);
   };
   const editable = provider !== null && !provider.official && provider.writable;
   return <div className="dsh-harness-stack" data-testid="harness-provider-dsh">
@@ -222,10 +229,12 @@ function DshHarness({ dsh, dshLink, setDshLink, dshError, setDshError, provider,
     </section>
     {provider !== null ? <section className={'panel provider-tree ' + (open ? 'open' : '')}>
       <button type="button" className="provider-tree-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} /><span className="provider-tree-title"><strong>{String(provider.provider['displayName'] ?? provider.providerKey)}</strong><small>{String(provider.provider['baseURL'] ?? 'DSH 原生配置')}</small></span><span className={'badge ' + (provider.official ? '' : 'warn')}>{provider.official ? '官方 Provider' : '第三方 Provider'}</span></button>
-      {open ? <div className="provider-tree-body"><div className="provider-facts"><span>DSH 当前 Provider · {provider.providerKey}</span><span className="provider-note">{provider.official ? '思考等级、上下文和输出上限来自 DeepSeek 官方适配器' : '思考等级、上下文和输出上限来自此 Provider 的模型声明'}</span>{editable ? <button type="button" className="btn small ghost" onClick={() => setEditing((value) => !value)}>{editing ? '收起编辑' : '调整第三方能力'}</button> : null}</div>
-        <div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>当前模型能力</small></div><span className="badge off">{provider.defaultModel.model || '未选择模型'}</span></div><ProviderModelRows provider={provider} editable={editable} onEdit={editModel} /></div>
+      {open ? <div className="provider-tree-body"><div className="provider-facts"><span>DSH 当前 Provider · {provider.providerKey}</span><span className="provider-note">{provider.official ? '思考等级、上下文和输出上限来自 DeepSeek 官方适配器' : '思考等级、上下文和输出上限来自此 Provider 的模型声明'}</span>{editable ? <button type="button" className="btn small ghost" disabled={saving} onClick={() => { setPreview(null); if (editing) setEditing(false); else editModel({ id: provider.defaultModel.model, name: provider.defaultModel.model }); }}>{editing ? '收起编辑' : '调整第三方能力'}</button> : null}</div>
+        <div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>当前模型能力</small></div><span className="badge off">{provider.defaultModel.model || '未选择模型'}</span></div><ProviderModelRows provider={provider} editable={editable && !saving} onEdit={editModel} onDefault={setDefault} /></div>
         <div className="dsh-capabilities"><div><b>思考等级</b><span>{provider.reasoningEfforts.length === 0 ? '未声明' : provider.reasoningEfforts.join(' · ')}</span></div><div><b>上下文</b><span>{provider.contextWindow === undefined ? '未声明' : formatCapacity(provider.contextWindow)}</span></div><div><b>输出上限</b><span>{provider.maxTokens === undefined ? '未声明' : formatCapacity(provider.maxTokens)}</span></div></div>
-        {editing && !provider.official ? <div className="dsh-capability-editor"><div className="form-grid"><label className="field"><span>模型 ID</span><input className="text-input" value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label><label className="field"><span>默认思考等级</span><input className="text-input" value={draft.reasoning} onChange={(event) => setDraft({ ...draft, reasoning: event.target.value })} placeholder="留空表示不指定" /></label><label className="field"><span>上下文长度</span><input className="text-input" inputMode="numeric" value={draft.contextWindow} onChange={(event) => setDraft({ ...draft, contextWindow: event.target.value })} placeholder="1000000" /></label><label className="field"><span>输出上限</span><input className="text-input" inputMode="numeric" value={draft.maxTokens} onChange={(event) => setDraft({ ...draft, maxTokens: event.target.value })} placeholder="128000" /></label></div><ReasoningEffortPicker values={draft.efforts.split(',').map((item) => item.trim()).filter(Boolean)} onChange={(values) => setDraft({ ...draft, efforts: values.join(', ') })} /><div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={save}>{saving ? '保存中…' : '保存第三方能力'}</button></div>{error !== null ? <div className="error-card" role="alert">{error}</div> : null}</div> : null}
+        {editing && !provider.official ? <div className="dsh-capability-editor"><div className="form-grid"><label className="field"><span>模型 ID</span><input className="text-input" value={draft.model} disabled={saving} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label><label className="field"><span>上下文长度</span><input className="text-input" inputMode="numeric" value={draft.contextWindow} disabled={saving} onChange={(event) => setDraft({ ...draft, contextWindow: event.target.value })} placeholder="1000000" /></label><label className="field"><span>输出上限</span><input className="text-input" inputMode="numeric" value={draft.maxTokens} disabled={saving} onChange={(event) => setDraft({ ...draft, maxTokens: event.target.value })} placeholder="128000" /></label></div><ReasoningEffortPicker disabled={saving} values={draft.efforts.split(',').map((item) => item.trim()).filter(Boolean)} onChange={(values) => setDraft({ ...draft, efforts: values.join(', ') })} /><div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={save}>{saving ? '检查中…' : '查看变更'}</button></div></div> : null}
+        {preview !== null ? <div className="panel panel-pad" data-testid="dsh-settings-preview"><h3>{preview.kind === 'default' ? '设为默认模型' : '修改模型能力'}</h3><p>目标 Host：{preview.view.target.url}</p><p>{preview.kind === 'default' ? '修改此 Host 的新会话默认模型，当前会话继续使用已选模型。' : '保存到此 Host 的配置，原生能力声明立即更新。'}</p><table><thead><tr><th>字段</th><th>当前值</th><th>修改后</th></tr></thead><tbody>{preview.view.changes.map(change => <tr key={change.path.join('/')}><td>{change.path.join(' / ')}</td><td><pre>{JSON.stringify(change.before, null, 2) ?? '未指定'}</pre></td><td><pre>{JSON.stringify(change.after, null, 2)}</pre></td></tr>)}</tbody></table><div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={apply}>确认保存</button><button type="button" className="btn" disabled={saving} onClick={() => setPreview(null)}>取消</button></div></div> : null}
+        {error !== null ? <div className="error-card" role="alert">{error}<button type="button" className="btn small" disabled={saving} onClick={() => { setSaving(true); void api.dshProvider().then(view => { if (editBase !== null) setEditBase({ ...editBase, view }); setPreview(null); setError(null); onReload(); }).catch((cause: unknown) => setError(String(cause))).finally(() => setSaving(false)); }}>刷新并重新核对</button></div> : null}
       </div> : null}
     </section> : null}
   </div>;

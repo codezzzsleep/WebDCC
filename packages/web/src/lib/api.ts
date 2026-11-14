@@ -15,6 +15,10 @@ import type {
   WatchdogView,
   CapabilitySnapshot,
   QueuedInput,
+  DshSettingsView,
+  DshProviderUpdate,
+  DshDefaultModelUpdate,
+  DshSettingsPreview,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -107,21 +111,11 @@ export const api = {
   dshStatus: () => request<{ mode: string; url: string | null; connected: boolean; version?: string }>('/api/dsh'),
   dshConnect: (link: string) => request<{ ok: boolean; url: string }>('/api/dsh/connect', { method: 'POST', body: JSON.stringify({ link }) }),
   dshDisconnect: () => request<{ ok: boolean }>('/api/dsh', { method: 'DELETE' }),
-  dshProvider: () => request<{
-    writable: boolean;
-    providerKey: string;
-    provider: Record<string, unknown>;
-    defaultModel: { provider: string; model: string; reasoningEffort?: string };
-    official: boolean;
-    reasoningEfforts: string[];
-    defaultReasoning?: string;
-    contextWindow?: number;
-    maxTokens?: number;
-    providerRevision: number;
-    defaultModelRevision: number;
-  }>('/api/dsh/provider'),
-  updateDshProvider: (input: { providerKey: string; baseURL: string; model: string; reasoning?: string; reasoningEfforts?: string[]; contextWindow?: number; maxTokens?: number; apiKey?: string }) =>
-    request('/api/dsh/provider', { method: 'PATCH', body: JSON.stringify(input) }),
+  dshProvider: () => request<DshSettingsView>('/api/dsh/provider'),
+  previewDshProvider: (input: DshProviderUpdate) => request<DshSettingsPreview>('/api/dsh/provider/preview', { method: 'POST', body: JSON.stringify(input) }),
+  updateDshProvider: (input: DshProviderUpdate) => request<DshSettingsView>('/api/dsh/provider', { method: 'PATCH', body: JSON.stringify(input) }),
+  previewDshDefault: (input: DshDefaultModelUpdate) => request<DshSettingsPreview>('/api/dsh/default-model/preview', { method: 'POST', body: JSON.stringify(input) }),
+  updateDshDefault: (input: DshDefaultModelUpdate) => request<DshSettingsView>('/api/dsh/default-model', { method: 'PATCH', body: JSON.stringify(input) }),
   command: (command: Command) =>
     request<{ ok: boolean; value?: unknown; error?: string; code?: string }>('/api/commands', {
       method: 'POST',

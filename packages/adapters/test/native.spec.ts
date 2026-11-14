@@ -165,6 +165,7 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
         'settings/describe',
         'permissionPresets/catalog',
         'settings/update',
+        'settings/mutate',
         'credentials/set',
         'userQuestions/answer',
         'workspace/create',
@@ -172,7 +173,7 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
       ].sort(),
     );
     expect(isAllowedEndpoint('host/describe')).toBe(false);
-    expect(isAllowedEndpoint('settings/mutate')).toBe(false);
+    expect(isAllowedEndpoint('settings/mutate')).toBe(true);
     expect(isAllowedEndpoint('pluginManager/install')).toBe(false);
   });
 

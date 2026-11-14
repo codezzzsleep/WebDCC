@@ -886,11 +886,33 @@
         "verification": "partial-local",
         "plannedFiles": [
           "packages/server/src/rest.ts",
-          "packages/server/test/dsh-scope.spec.ts"
+          "packages/server/test/dsh-scope.spec.ts",
+          "packages/protocol/src/native-settings.ts",
+          "packages/protocol/src/index.ts",
+          "packages/server/src/native-settings.ts",
+          "packages/server/src/dsh-capabilities.ts",
+          "packages/server/test/native-settings.spec.ts",
+          "packages/server/test/fixtures/dsh-settings.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/pages/Providers.tsx",
+          "browser-tests/settings.spec.ts",
+          "packages/adapters/test/native.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/rest.ts",
-          "packages/server/test/dsh-scope.spec.ts"
+          "packages/server/test/dsh-scope.spec.ts",
+          "packages/protocol/src/native-settings.ts",
+          "packages/protocol/src/index.ts",
+          "packages/server/src/native-settings.ts",
+          "packages/server/src/dsh-capabilities.ts",
+          "packages/server/test/native-settings.spec.ts",
+          "packages/server/test/fixtures/dsh-settings.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/pages/Providers.tsx",
+          "browser-tests/settings.spec.ts",
+          "packages/adapters/test/native.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json"
@@ -900,7 +922,7 @@
           "remote attach绝不写本机DSH_HOME；revision冲突返回409，原文件hash不变。",
           "取消/写失败/进程重启保留完整有效配置，secret不回显。"
         ],
-        "remainingWork": "Unsafe remote-to-local fallback removed; explicit Host/revision/config consistency and structured local file editing remain incomplete."
+        "remainingWork": "已提取 typed native settings service：Host/连接身份、浏览器读取 revision、read-only preview、单 namespace settings/mutate、原生 CAS 错误与写后回读。编辑 B 保留 A、名称与未提交字段；全局默认模型为独立显式动作，不再跨 namespace 连写。隐藏 secret 模型数组拒绝重述，远程失败无本机 YAML fallback；Chromium 验证取消/冲突/保留草稿/重新核对/默认选择/刷新。仍需真实 DSH 配置服务原子/重启演练、全部 schema/credential 管理及显式本地 YAML 文档编辑；原有 home patch helper 当前无生产调用，不能恢复为异常 fallback。"
       },
       "dependencyIds": [
         "NP-01",

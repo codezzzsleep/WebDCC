@@ -66,8 +66,17 @@
 - 发送、已 ACK 队列、模型/权限/effort 切换统一串行处理。权限失败保留 queued 正文并暂停，修正后执行。Chromium 已验证待生效显示实际旧权限、禁选原生 forbidden 模式，仍为 fixture 验证。
 - 本阶段六类源码门禁已通过：58 个测试文件 / 248 项单元测试及 3 项独立 Chromium 测试；以 `evidence/source-checks.json` 的实际 SHA/fingerprint 为准。真实 Codex 0.167.0 与实际模型执行验收未运行，NP-07/04/09 均未标完整完成。
 
+## DSH 配置作用域与 CAS 阶段（2026-11-14）
+
+- 权限阶段已提交 `fdcf1dc`，248 项单元 / 58 文件与 3 项 Chromium 回归及完整源码门禁通过，构建只写独立 `.artifacts/`。
+- 原生配置路由提取到 typed service 和公共协议；每次变更绑定 Host URL/连接身份和客户端已读取 revision。提供只读变更预览，原生 schema 校验，CAS 冲突 409 和同 Host 写后回读。
+- 模型编辑与设为默认拆成单 namespace 原子动作；编辑 B 保留模型 A、名称、未知字段及未传思考/容量，不更新全局默认。重名冲突和重命名当前默认的悬空引用拒绝。
+- 使用原生 settings/mutate 精确字段路径，不重述整个 Provider 或其他 Provider；含隐藏 secret 的模型数组不重述。不存在 fallback 写本机 YAML。
+- Chromium 真实 UI→HTTP→本地 Host 合同 fixture 验证 Host/变更预览、取消无写、冲突保留草稿、刷新重新核对、独立默认选择与刷新；新增 8 项服务回归。真实 DSH 服务/文档/重启验收尚未运行。
+- 本阶段六类源码门禁通过：59 个测试文件 / 256 项单元测试、4 项 Chromium 测试；报告绑定 `fdcf1dc` 及实际源码 fingerprint。旧 home patch helper 无生产调用，显式本地 YAML 编辑仍属待实施；不要因原生写失败恢复它。
+
 ## 下一步
 
-完成当前源码门禁并提交检查点，随后修 NP-12 的结构化配置编辑/原子 CAS，推进持久 owner/reconciliation、完整 raw ledger、权威交互状态机及 secret 存储。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据；全部 M1–M3 继续按矩阵依赖实施。
+完成本阶段源码门禁与提交；继续 NP-14 诊断写前脱敏与有界保留，再推进持久 owner/reconciliation、完整 raw ledger、权威 interaction/secret 存储。DSH 还需 activeAttempt/workspace 基线、计时问题与真实双界面恢复证据；全部 M1–M3 按矩阵依赖持续实施。
 
 运行入口：所有命令在 `/root/WebDCC-repair` 执行。`pnpm check:source` 构建只写 `.artifacts/<runId>/`；不要执行 release 或重启服务。真实 Codex 0.167.0 与付费模型对照尚未准备，不能拿 0.168.0 当基线通过证据。

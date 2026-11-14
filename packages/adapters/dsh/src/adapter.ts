@@ -78,6 +78,7 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'settings/describe',
   'permissionPresets/catalog',
   'settings/update',
+  'settings/mutate',
   'credentials/set',
   'commands/execute',
   'commands/list',

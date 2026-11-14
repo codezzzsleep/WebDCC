@@ -21,6 +21,7 @@ import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
 import { parseDshLink, type DshConnectionStore } from './dsh-connection.js';
 import { attachToDsh, DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
+import { DshSettingsService } from './native-settings.js';
 import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
@@ -50,75 +51,7 @@ export interface RouteDeps {
   recorder?: InteractionRecorder;
 }
 
-interface DshSettingsView {
-  writable: boolean;
-  providerKey: string;
-  provider: Record<string, unknown>;
-  defaultModel: { provider: string; model: string; reasoningEffort?: string };
-  official: boolean;
-  reasoningEfforts: string[];
-  defaultReasoning?: string;
-  contextWindow?: number;
-  maxTokens?: number;
-  providerRevision: number;
-  defaultModelRevision: number;
-}
-
-export const OFFICIAL_DSH_PROVIDERS = new Set(['deepseek-official', 'deepseek-account']);
-
-const OFFICIAL_REASONING_EFFORTS = ['off', 'low', 'high', 'max'];
-const OFFICIAL_DEFAULT_CONTEXT_WINDOW = 1_000_000;
-const OFFICIAL_DEFAULT_MAX_TOKENS = 256_000;
-const THIRD_PARTY_DEFAULT_CONTEXT_WINDOW = 1_000_000;
-const THIRD_PARTY_DEFAULT_MAX_TOKENS = 128_000;
-
-export function dshCapabilities(providerKey: string, model: string, provider: Record<string, unknown>, namespaces: Record<string, unknown>[]): Pick<DshSettingsView, 'official' | 'reasoningEfforts' | 'defaultReasoning' | 'contextWindow' | 'maxTokens'> {
-  const official = OFFICIAL_DSH_PROVIDERS.has(providerKey);
-  const officialNamespace = namespaces.find((item) => item['ns'] === (providerKey === 'deepseek-account' ? 'llm-deepseek-account' : 'llm-deepseek'));
-  const officialValue = (officialNamespace?.['value'] ?? {}) as Record<string, unknown>;
-  const models = Array.isArray(provider['models']) ? provider['models'] as Record<string, unknown>[] : [];
-  const modelEntry = models.find((entry) => entry['id'] === model) ?? {};
-  const officialModels = Array.isArray(officialValue['models']) ? officialValue['models'] as Record<string, unknown>[] : [];
-  const officialModel = officialModels.find((entry) => entry['id'] === model) ?? {};
-  const efforts = provider['reasoningEfforts'];
-  const modelEfforts = modelEntry['reasoningEfforts'];
-  const effortObject = (official ? undefined : (modelEfforts ?? efforts)) as Record<string, unknown> | undefined;
-  const reasoningEfforts = official
-    ? OFFICIAL_REASONING_EFFORTS
-    : effortObject !== undefined && effortObject !== null && typeof effortObject === 'object' ? Object.keys(effortObject) : [];
-  const defaultReasoning = official
-    ? 'high'
-    : typeof provider['reasoning'] === 'string' ? String(provider['reasoning']) : undefined;
-  // Keep the two adapter families independent. A custom pi-ai route must not
-  // inherit a value from the official DeepSeek namespace (or an old 262,144
-  // token default that may still be present there).
-  const contextWindow = Number(official
-    ? officialModel['contextWindow'] ?? officialValue['defaultContextWindow'] ?? OFFICIAL_DEFAULT_CONTEXT_WINDOW
-    : modelEntry['contextWindow'] ?? provider['defaultContextWindow'] ?? THIRD_PARTY_DEFAULT_CONTEXT_WINDOW);
-  const maxTokens = Number(official
-    ? officialModel['maxTokens'] ?? officialValue['maxTokens'] ?? OFFICIAL_DEFAULT_MAX_TOKENS
-    : modelEntry['maxTokens'] ?? provider['defaultMaxTokens'] ?? THIRD_PARTY_DEFAULT_MAX_TOKENS);
-  return {
-    official,
-    reasoningEfforts,
-    ...(defaultReasoning === undefined ? {} : { defaultReasoning }),
-    ...(Number.isFinite(contextWindow) && contextWindow > 0 ? { contextWindow } : {}),
-    ...(Number.isFinite(maxTokens) && maxTokens > 0 ? { maxTokens } : {}),
-  };
-}
-
-function dshSettingsView(input: { writable: boolean; providerKey: string; provider: Record<string, unknown>; defaultModel: { provider: string; model: string; reasoningEffort?: string }; namespaces: Record<string, unknown>[]; providerRevision: number; defaultModelRevision: number }): DshSettingsView {
-  return {
-    writable: input.writable,
-    providerKey: input.providerKey,
-    provider: input.provider,
-    defaultModel: input.defaultModel,
-    ...dshCapabilities(input.providerKey, input.defaultModel.model, input.provider, input.namespaces),
-    providerRevision: input.providerRevision,
-    defaultModelRevision: input.defaultModelRevision,
-  };
-}
-
+export { dshCapabilities } from './dsh-capabilities.js';
 function badRequest(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
@@ -574,133 +507,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return { ok: true };
   });
 
-  // ---------- DSH Provider（通过 DSH 原生 settings API） ----------
-  app.get('/api/dsh/provider', async (): Promise<DshSettingsView> => {
-    const client = dshClient(deps);
-    dshEndpoint('settings/describe');
-    const described = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
-    const namespaces = described.namespaces ?? [];
-    const llm = namespaces.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
-    const defaults = namespaces.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
-    const llmValue = (llm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
-    const defaultValue = (defaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
-    const providerKey = String(defaultValue.provider ?? Object.keys(llmValue.providers ?? {})[0] ?? '');
-    const provider = llmValue.providers?.[providerKey] ?? {};
-    return dshSettingsView({
-      writable: described.writable === true,
-      providerKey,
-      provider,
-      defaultModel: {
-        provider: providerKey,
-        model: String(defaultValue.model ?? ''),
-        ...(defaultValue.reasoningEffort === undefined ? {} : { reasoningEffort: String(defaultValue.reasoningEffort) }),
-      },
-      namespaces,
-      providerRevision: Number(llm?.['revision'] ?? 0),
-      defaultModelRevision: Number(defaults?.['revision'] ?? 0),
-    });
-  });
-
-  app.patch('/api/dsh/provider', async (request): Promise<DshSettingsView> => {
-    const body = request.body as {
-      providerKey?: string;
-      baseURL?: string;
-      model?: string;
-      reasoning?: string;
-      reasoningEfforts?: string[];
-      contextWindow?: number;
-      maxTokens?: number;
-      apiKey?: string;
-      apiKeyEnv?: string;
-    };
-    if (typeof body?.providerKey !== 'string' || body.providerKey.trim() === '') throw badRequest('需要 providerKey');
-    if (typeof body?.baseURL !== 'string' || body.baseURL.trim() === '') throw badRequest('需要 baseURL');
-    if (typeof body?.model !== 'string' || body.model.trim() === '') throw badRequest('需要 model');
-    if (OFFICIAL_DSH_PROVIDERS.has(body.providerKey)) throw Object.assign(new Error('官方 DeepSeek Provider 由 Harness 原生设置管理，不能通过第三方 Provider 表单覆盖'), { statusCode: 409 });
-    if (body.contextWindow !== undefined && (!Number.isSafeInteger(body.contextWindow) || body.contextWindow <= 0)) throw badRequest('contextWindow 必须是正整数');
-    if (body.maxTokens !== undefined && (!Number.isSafeInteger(body.maxTokens) || body.maxTokens <= 0)) throw badRequest('maxTokens 必须是正整数');
-    if (body.reasoningEfforts !== undefined && (!Array.isArray(body.reasoningEfforts) || body.reasoningEfforts.some((value) => typeof value !== 'string' || value.trim() === ''))) throw badRequest('reasoningEfforts 必须是非空字符串列表');
-
-    const client = dshClient(deps);
-    dshEndpoint('settings/describe');
-    const described = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
-    if (described.writable !== true) throw Object.assign(new Error('DSH 当前配置不可写'), { statusCode: 409 });
-    const namespaces = described.namespaces ?? [];
-    const llm = namespaces.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
-    const defaults = namespaces.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
-    const llmValue = (llm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
-    const currentProvider: Record<string, unknown> = { ...(llmValue.providers?.[body.providerKey] ?? {}) };
-    const currentModels = Array.isArray(currentProvider['models']) ? (currentProvider['models'] as Record<string, unknown>[]) : [];
-    const nextModel: Record<string, unknown> = {
-      ...(currentModels.find((item) => item['id'] === body.model) ?? {}),
-      id: body.model,
-      name: body.model,
-    };
-    if (body.reasoningEfforts !== undefined) nextModel['reasoningEfforts'] = Object.fromEntries(body.reasoningEfforts.map((effort) => [effort, effort]));
-    if (body.contextWindow !== undefined) nextModel['contextWindow'] = body.contextWindow;
-    if (body.maxTokens !== undefined) nextModel['maxTokens'] = body.maxTokens;
-    const nextModels = currentModels.some((item) => item['id'] === body.model) ? currentModels.map((item) => item['id'] === body.model ? nextModel : item) : [...currentModels, nextModel];
-    const nextProvider: Record<string, unknown> = {
-      ...currentProvider,
-      displayName: currentProvider['displayName'] ?? body.providerKey,
-      api: currentProvider['api'] ?? 'openai-completions',
-      apiKeyEnv: currentProvider['apiKeyEnv'] ?? 'OPENAI_API_KEY',
-      baseURL: body.baseURL,
-      models: nextModels,
-      ...(body.reasoning === undefined || body.reasoning === '' ? {} : { reasoning: body.reasoning }),
-      ...(body.reasoningEfforts === undefined ? {} : { reasoningEfforts: Object.fromEntries(body.reasoningEfforts.map((effort) => [effort, effort])) }),
-      ...(body.contextWindow === undefined ? {} : { defaultContextWindow: body.contextWindow }),
-      ...(body.maxTokens === undefined ? {} : { defaultMaxTokens: body.maxTokens }),
-    };
-    const providers = { ...(llmValue.providers ?? {}), [body.providerKey]: nextProvider };
-
-    {
-      dshEndpoint('settings/update');
-      await client.rpc('settings/update', {
-        ns: 'llm-pi-ai',
-        patch: { providers },
-        expectedRevision: Number(llm?.['revision'] ?? 0),
-      });
-      dshEndpoint('settings/update');
-      await client.rpc('settings/update', {
-        ns: 'agent-default-model',
-        patch: {
-          provider: body.providerKey,
-          model: body.model,
-          ...(body.reasoning === undefined || body.reasoning === '' ? {} : { reasoningEffort: body.reasoning }),
-        },
-        expectedRevision: Number(defaults?.['revision'] ?? 0),
-      });
-    }
-    if (body.apiKey !== undefined && body.apiKey !== '') {
-      dshEndpoint('credentials/set');
-      const apiKeyEnv = String(nextProvider['apiKeyEnv'] ?? '');
-      if (apiKeyEnv !== '') await client.rpc('credentials/set', { ref: apiKeyEnv, value: body.apiKey });
-    }
-
-    // Return the redacted, live view after the write.
-    dshEndpoint('settings/describe');
-    const refreshed = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
-    const ns = refreshed.namespaces ?? [];
-    const currentLlm = ns.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
-    const currentDefaults = ns.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
-    const currentValue = (currentLlm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
-    const refreshedDefaultValue = (currentDefaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
-    const nextProviderKey = String(refreshedDefaultValue.provider ?? body.providerKey);
-    return dshSettingsView({
-      writable: refreshed.writable === true,
-      providerKey: nextProviderKey,
-      provider: currentValue.providers?.[nextProviderKey] ?? {},
-      defaultModel: {
-        provider: nextProviderKey,
-        model: String(refreshedDefaultValue.model ?? body.model),
-        ...(refreshedDefaultValue.reasoningEffort === undefined ? {} : { reasoningEffort: String(refreshedDefaultValue.reasoningEffort) }),
-      },
-      namespaces: ns,
-      providerRevision: Number(currentLlm?.['revision'] ?? 0),
-      defaultModelRevision: Number(currentDefaults?.['revision'] ?? 0),
-    });
-  });
+  // Native settings writes are scoped to one namespace and the editor's revision.
+  const nativeSettings = new DshSettingsService(deps.dsh);
+  app.get('/api/dsh/provider', () => nativeSettings.read());
+  app.post('/api/dsh/provider/preview', request => nativeSettings.previewProvider(request.body));
+  app.patch('/api/dsh/provider', request => nativeSettings.updateProvider(request.body));
+  app.post('/api/dsh/default-model/preview', request => nativeSettings.previewDefault(request.body));
+  app.patch('/api/dsh/default-model', request => nativeSettings.updateDefault(request.body));
 
   // ---------- providers / models ----------
   app.get('/api/providers', async () => deps.providers.list());
