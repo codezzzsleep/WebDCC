@@ -39,4 +39,18 @@ describe('NP-02 RPC lifecycle', () => {
     expect(rpc.isClosed).toBe(true);
     expect(rpc.resourceCounts).toEqual({ pending: 0, listeners: 0, waiters: 0, frames: 0 });
   });
+
+  it('NP-04 a closed RPC channel cannot release a live writer that ignores SIGTERM', async () => {
+    const rpc = JsonRpcStdio.start({ command: process.execPath, args: ['-e', "process.on('SIGTERM',()=>{});setInterval(()=>{},1000);process.stdout.write(JSON.stringify({method:'ready'})+'\\n');"],
+      onFrame: direction => direction !== 'out' });
+    try {
+      await rpc.waitForNotification(frame => frame['method'] === 'ready', 2000);
+      await expect(rpc.request('denied', {})).rejects.toMatchObject({ code: 'uncertain' });
+      expect(rpc.isClosed).toBe(true);
+      expect(rpc.child.exitCode).toBeNull();
+      await Promise.all([rpc.kill(), rpc.kill()]);
+      expect(rpc.child.signalCode).toBe('SIGKILL');
+      expect(rpc.resourceCounts).toMatchObject({ pending: 0, listeners: 0, waiters: 0 });
+    } finally { rpc.child.kill('SIGKILL'); }
+  });
 });

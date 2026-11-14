@@ -205,3 +205,9 @@
 - diff/note、问答标签与描述仍按内容脱敏，文件路径和操作身份不重写。
 - 原生MCP与崩溃恢复报告新增实际binary SHA256、OS/arch/Node、schema/config指纹，与commit/source指纹绑定；不只记一个版本字符串。
 - 09116e3完整源码六门禁通过，原生MCP与SIGKILL恢复两个隔离验证通过；历史L1仍为22个golden差异、16个NOT_TRIGGERED，8/33场景通过，未改golden。当前新增修订需重新验证后发布；完整48项未验收完成。
+
+## 接续复核：RPC关闭与进程退出（2026-11-14）
+
+- 修复RPC.closed被误当作子进程已退出：丢失捕获或代际关闭时，SIGTERM可能被native忽略；后续dispose原本跳过kill并错误认为可释放。现在独立检查进程退出码/信号，等待真实exit，重复kill共享终止过程，超时或kill错误不声称已退出。
+- 新用真实Node子进程忽略SIGTERM复现：RPC闭合、输入拒绝后仍存活；并发kill最终SIGKILL确认且监听/请求计数清零。9项RPC/观察/owner检查及adapter typecheck通过。
+- 当前原部署读回：本机97b3c073c5ec67d50df58cf564d33537c109eddc、121的9b1ae9096c19162206361e3910b7ef2592c5f30b，两个webdcc服务active。未改部署、运行账户或部署库。

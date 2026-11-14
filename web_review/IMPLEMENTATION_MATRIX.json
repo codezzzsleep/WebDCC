@@ -316,7 +316,9 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/adapters/codex/test/rpc.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/manager.ts",
@@ -341,7 +343,9 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/adapters/codex/test/rpc.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",

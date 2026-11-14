@@ -40,6 +40,7 @@ export class JsonRpcStdio {
   private readonly output: Interface;
   private readonly errors: Interface;
   private closed = false;
+  private terminating?: Promise<void>;
   private readonly frames: Frame[] = [];
 
   private constructor(child: ChildProcessWithoutNullStreams, private readonly options: StartOptions) {
@@ -229,9 +230,23 @@ export class JsonRpcStdio {
   }
 
   async kill(signal: NodeJS.Signals = 'SIGKILL'): Promise<void> {
-    if (this.closed) return;
-    const exited = new Promise<void>((resolve) => this.child.once('exit', () => resolve()));
-    this.child.kill(signal);
-    await exited;
+    // A closed protocol channel is not evidence that its process exited.
+    if (this.child.pid === undefined || this.child.exitCode !== null || this.child.signalCode !== null) return;
+    if (this.terminating !== undefined) {
+      if (signal === 'SIGKILL') this.child.kill(signal);
+      return this.terminating;
+    }
+    const pending = new Promise<void>((resolve, reject) => {
+      const finish = (): void => { clearTimeout(timer); this.child.removeListener('exit', finish); resolve(); };
+      const timer = setTimeout(() => {
+        this.child.removeListener('exit', finish);
+        reject(new Error('原生子进程退出未确认，不能释放运行所有权'));
+      }, 5000);
+      this.child.once('exit', finish);
+      try { this.child.kill(signal); }
+      catch (error) { clearTimeout(timer); this.child.removeListener('exit', finish); reject(error); }
+    });
+    this.terminating = pending;
+    try { await pending; } finally { if (this.terminating === pending) this.terminating = undefined; }
   }
 }
