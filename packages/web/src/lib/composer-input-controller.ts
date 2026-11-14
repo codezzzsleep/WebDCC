@@ -66,7 +66,7 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
       if (!this.drafts.accepts(token)) return { submitted: false, reason: '会话已切换，正文仍在原草稿中' };
       const receipt = await enqueue({ sessionId: token.sessionId, text: draft.text, contentParts, intent });
       if (!receipt.commandId) throw new Error('消息没有获得持久命令标识');
-      this.drafts.clearIfUnchanged(token);
+      if (this.drafts.clearIfUnchanged(token)) await this.drafts.flush(token.sessionId);
       return { submitted: true };
     } finally { this.sending = false; }
   }

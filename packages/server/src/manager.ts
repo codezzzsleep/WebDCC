@@ -21,7 +21,7 @@ import type {
   ResolvedInputPart,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
-import { initialPermissions, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid } from '@webdcc/protocol';
+import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
@@ -50,6 +50,7 @@ export interface Runtime {
   workspacePath: string;
   nativeId: string;
   status: Exclude<SessionDto['status'], never>;
+  nativeObservedStatus?: SessionDto['status'];
   turnId: string | null;
   turnStartedAt: number | null;
   hot: Map<string, HotItem>;
@@ -141,7 +142,7 @@ export class SessionManager {
         const runtime = this.runtimes.get(id);
         const unanswered = this.store.allEvents(id).filter((event) => event.kind === 'question');
         const lastQuestions = new Map(unanswered.map((event) => [(event.data as EventData['question']).questionId, event.data as EventData['question']]));
-        return runtime?.turnId != null || runtime?.status === 'waiting' || runtime?.status === 'running' || this.pendingApprovalIds(id).length > 0 || [...lastQuestions.values()].some((question) => question.status !== 'answered' && question.status !== 'skipped');
+        return runtime?.turnId != null || runtime?.status === 'waiting' || runtime?.status === 'running' || this.pendingApprovalIds(id).length > 0 || [...lastQuestions.values()].some(isBlockingQuestion);
       },
       create: (source) => this.createSession({
         workspaceId: source.workspaceId, agent: 'codex', providerId: source.providerId ?? null,
@@ -805,14 +806,14 @@ export class SessionManager {
     const questions = new Map<string, EventData['question']>();
     const approvals = new Set<string>();
     for (const event of this.store.allEvents(runtime.sessionId)) {
-      if (runtime.turnId !== null && event.turnId !== null && event.turnId !== runtime.turnId) continue;
+      if (event.turnId !== null && event.turnId !== runtime.turnId) continue;
       if (event.kind === 'question') { const question = event.data as EventData['question']; questions.set(question.questionId, question); }
       if (event.kind === 'approval.request') approvals.add((event.data as EventData['approval.request']).approvalId);
       if (event.kind === 'approval.resolved') approvals.delete((event.data as EventData['approval.resolved']).approvalId);
     }
-    const waiting = approvals.size > 0 || [...questions.values()].some(question => question.status !== 'answered' && question.status !== 'skipped');
-    if (!waiting) this.turns.resume(runtime.sessionId);
-    this.setStatus(runtime, waiting ? 'waiting' : runtime.turnId === null ? 'idle' : 'running');
+    const waiting = runtime.nativeObservedStatus === 'waiting' || approvals.size > 0 || [...questions.values()].some(isBlockingQuestion);
+    if (waiting) this.turns.wait(runtime.sessionId); else this.turns.resume(runtime.sessionId);
+    this.setStatus(runtime, runtime.nativeObservedStatus === 'error' ? 'error' : waiting ? 'waiting' : runtime.turnId === null ? 'idle' : 'running');
   }
 
   async interrupt(sessionId: string): Promise<void> {
@@ -1262,6 +1263,11 @@ export class SessionManager {
         break;
       }
       case 'status': {
+        if (event.source === 'native-thread') {
+          runtime.nativeObservedStatus = event.status;
+          this.refreshInteractionStatus(runtime);
+          break;
+        }
         // A few adapters report native idle before their final item/diff
         // notifications. The public turn remains active during the settle
         // window, so that status must not hide the stop state early.

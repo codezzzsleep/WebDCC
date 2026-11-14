@@ -604,10 +604,13 @@ export class AppStore {
       byTurn.set(turnId, turn);
       order.push(turnId);
     }
+    const activeTurn = [...order].reverse().find(turnId => {
+      const turn = byTurn.get(turnId)!; return turn.pending === undefined && turn.completed === undefined && (turn.started !== undefined || turn.hot.length > 0);
+    });
     const turns = order.map((turnId) => {
       const turn = byTurn.get(turnId) as TurnModel;
       if (turn.pending !== undefined) return turn;
-      const view = reduceTurn(turn.events, turn.hot as unknown as OpenItem[]);
+      const view = reduceTurn(turn.events, turn.hot as unknown as OpenItem[], turnId === activeTurn ? orphans : [], turnId === activeTurn && this.sessions.get(sessionId)?.status === 'waiting');
       const uncertain = (this.durableQueue.get(sessionId) ?? []).some(row => row.turnId === turnId && row.state === 'uncertain');
       return { ...turn, ...view, turnId, ...(uncertain ? { commandState: 'uncertain' as const } : {}) };
     });

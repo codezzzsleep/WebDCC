@@ -102,7 +102,7 @@ type AdapterEventBody =
   | { type: 'turn.start'; nativeTurnId?: string; native?: unknown }
   | { type: 'turn.end'; nativeTurnId?: string; status: 'completed' | 'interrupted' | 'failed'; usage?: UsageData; native?: unknown }
   /** @deprecated adapters should derive session status from turn lifecycle */
-  | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error' }
+  | { type: 'status'; status: 'running' | 'waiting' | 'idle' | 'error'; source?: 'native-thread'; native?: unknown }
   /** 原生 id 迟到（Claude Code 要等首条消息才有 session_id）：manager 收到后落库 */
   | { type: 'native-id'; nativeId: string };
 

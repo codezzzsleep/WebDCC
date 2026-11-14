@@ -238,3 +238,11 @@
 - 当前候选完整源码六门禁通过：108单元文件/519测试、14 Chromium文件/22测试及typecheck/lint/库存/build，源码指纹a8a10bcea1528ea1bb502c6484db096c2f8604bbe2c67e3f159f174102adc421。提交后重新生成同提交报告。固定Codex0.167.0实际直接RPC→Web→原生信封→Chromium→刷新验证了非空多行摘要；paidModel=false，仍须按最终提交重绑该证明。
 - 用户报告普通Codex提问未完善，已提Issue#41；已有问答分支与卡片不足以证明原生提问→回答→继续闭环，isBlocking和原生模式/能力边界仍待完成。NP-01–48继续，完整验收未完成，未调整黄金文件或把NOT_TRIGGERED记作通过。
 - 当前本机部署97b3c073c5ec67d50df58cf564d33537c109eddc、121部署9b1ae9096c19162206361e3910b7ef2592c5f30b只读确认active；本批未部署、发布或合并main。
+
+## 故障回归收尾：草稿基线与问答观察（2026-11-14）
+
+- 同提交全量Browser曾暴露云端选择后清空未同步：延迟GET把较新的server revision覆盖成旧值，后续clear得到409。本机与服务端结果分别保留，未将本机空输入框当作服务器清空成功。确定性9ms回归重现后，将sync/useLocal/useRemote置于同DB/session队列，云端选择同事务CAS本机草稿与基线，PUT响应也拒绝倒退；真实两个同源页面验证旧选择无部分写入。发送后的清空等待本机持久，界面报告当前revision是否已云端同步。
+- Codex普通提问保留isBlocking，但false不被解释为模型已继续。已接原生thread/status/changed的owned观察：实际waiting flags、空flags、idle与systemError保留，notLoaded/其他thread不推断执行。服务端、TurnTracker与最后active TurnView尊重实际等待，同时只按当前/session作用域的blocking交互归约；旧卡不污染新轮。
+- 真实Codex0.167.0当前Web形状（capabilities=null、省略mode）默认工具会返回request_user_input unavailable in Default mode。实验协议+显式Plan可真实提问；Default只在用户显式开启underDevelopment feature时可发false标记的提问。该配置未在生产开启；Plan模式入口与正式experimental合同仍待Issue#41完整接入。
+- 历史L1当前32 GOLDEN/16 NOT_TRIGGERED：新增10处fixture差异仅是34个cacheCreationInputTokens:0字段，无原有正文/答案/身份/时序/计数丢失，未改golden或把未触发记通过。报告与独立审计保存在本机。
+- 本阶段局部故障回归通过；提交后重跑完整门禁并绑定正式SHA。两台原部署不变，修复PR保持草稿，不发布或合并main。

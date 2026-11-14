@@ -68,12 +68,18 @@ export interface QuestionItem {
   multiSelect?: boolean;
   allowsFreeText?: boolean;
   isSecret?: boolean;
+  /** Native blocking declaration; absence in old events means blocking. */
+  isBlocking?: boolean;
   elicitation?: ElicitationForm;
   outcome?: ElicitationAction;
   toolCallId?: string;
   status?: 'pending' | 'answered' | 'skipped';
   resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';
   submission?: 'sent' | 'uncertain' | 'collected';
+}
+
+export function isBlockingQuestion(question: Pick<QuestionItem, 'isBlocking' | 'status'>): boolean {
+  return question.isBlocking !== false && question.status !== 'answered' && question.status !== 'skipped';
 }
 
 export interface PlanItem {

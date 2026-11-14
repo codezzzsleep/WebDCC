@@ -78,3 +78,19 @@ it('editing while a failed save is retried remains in the durable write queue', 
   expect(drafts.snapshot()).toMatchObject({ revision: 2, text: 'new bytes\r\n' });
   expect(drafts.error()).toBeUndefined();
 });
+it('a rejected cloud choice preserves local durability and a late accepted choice cannot fill another Session', async () => {
+  const { store, values } = backend(); const drafts = new DraftController(store);
+  await drafts.open('A'); drafts.update('local bytes'); await drafts.flush();
+  await expect(drafts.replaceFromRemote(async () => { throw new Error('remote CAS rejected'); })).rejects.toThrow('remote CAS');
+  expect(drafts.snapshot()?.text).toBe('local bytes');
+  drafts.update('new local bytes'); await drafts.flush(); expect(values.get('A')?.text).toBe('new local bytes');
+  let release!: () => void; let began!: () => void;
+  const started = new Promise<void>(resolve => { began = resolve; });
+  const choosing = drafts.replaceFromRemote(async (sessionId, revision) => {
+    began(); await new Promise<void>(resolve => { release = resolve; });
+    return { sessionId, revision: revision + 1, text: 'chosen cloud', contentParts: { version: 1, parts: [] }, updatedAt: 3 };
+  });
+  await started; expect(drafts.loading()).toBe(true);
+  await drafts.open('B'); release(); await choosing;
+  expect(drafts.snapshot()).toMatchObject({ sessionId: 'B', text: '' });
+});

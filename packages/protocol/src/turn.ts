@@ -1,4 +1,5 @@
 import type { EventData, EventKind, StoredEvent, UsageData } from './events.js';
+import { isBlockingQuestion } from './events.js';
 import type { InputContent } from './input.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
@@ -151,7 +152,7 @@ function liveText(item: OpenItem): string | undefined {
 }
 
 function activityFor(live: readonly LiveItem[], waiting = false): TurnView['activity'] {
-  if (waiting || live.some((item) => item.kind === 'approval.request' || item.kind === 'question')) return { kind: 'waiting' };
+  if (waiting) return { kind: 'waiting' };
   if (live.some((item) => item.kind === 'command' || item.kind === 'tool.call')) return { kind: 'running' };
   if (live.some((item) => item.kind === 'assistant.message')) return { kind: 'writing' };
   if (live.some((item) => item.kind === 'reasoning')) return { kind: 'thinking' };
@@ -192,7 +193,7 @@ function usageFor(events: readonly StoredEvent[], completedData: EventData['turn
 
 /** Reduce one turn's persisted events and currently open items into the one
  * shape accepted by the web client. */
-export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnView {
+export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], sessionInteractions: readonly StoredEvent[] = [], observedWaiting = false): TurnView {
   const first = events[0];
   const turnId = first?.turnId ?? open.find((item) => item.turnId)?.turnId ?? '';
   const userEvent = events.find((event) => event.kind === 'user.message');
@@ -200,10 +201,20 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = []): TurnVi
   const started = events.find((event) => event.kind === 'turn.started');
   const completed = [...events].reverse().find((event) => event.kind === 'turn.completed');
   const completedData = completed?.data as EventData['turn.completed'] | undefined;
-  const live = open.map((item) => ({ ...item, ...(liveText(item) === undefined ? {} : { text: liveText(item) }) }));
-  const pendingApprovals = events.some((event) => event.kind === 'approval.request' && !events.some((resolved) => resolved.kind === 'approval.resolved' && (resolved.data as EventData['approval.resolved']).approvalId === (event.data as EventData['approval.request']).approvalId));
-  const pendingQuestions = events.some((event) => event.kind === 'question' && (event.data as EventData['question']).status !== 'answered' && (event.data as EventData['question']).status !== 'skipped' && !events.some((resolved) => resolved.kind === 'question' && resolved !== event && (resolved.data as EventData['question']).questionId === (event.data as EventData['question']).questionId && ((resolved.data as EventData['question']).status === 'answered' || (resolved.data as EventData['question']).status === 'skipped')));
-  const waiting = pendingApprovals || pendingQuestions || live.some((item) => item.kind === 'approval.request' || item.kind === 'question');
+  const relevant = (item: { turnId?: string | null }) => item.turnId == null || item.turnId === turnId;
+  const live = open.filter(relevant).map((item) => ({ ...item, ...(liveText(item) === undefined ? {} : { text: liveText(item) }) }));
+  const stateEvents = [...events.filter(relevant), ...sessionInteractions.filter(event => event.turnId === null)];
+  const questions = new Map<string, EventData['question']>(); const approvals = new Set<string>(); const resolvedApprovals = new Set<string>();
+  for (const event of stateEvents) {
+    if (event.kind === 'question') { const question = event.data as EventData['question']; questions.set(question.questionId, question); }
+    if (event.kind === 'approval.request') approvals.add((event.data as EventData['approval.request']).approvalId);
+    if (event.kind === 'approval.resolved') { const id = (event.data as EventData['approval.resolved']).approvalId; approvals.delete(id); resolvedApprovals.add(id); }
+  }
+  const waiting = observedWaiting || approvals.size > 0 || [...questions.values()].some(isBlockingQuestion) || live.some(item => {
+    if (item.kind === 'approval.request') return !resolvedApprovals.has((item.data as EventData['approval.request']).approvalId);
+    if (item.kind !== 'question') return false;
+    const question = item.data as EventData['question']; return isBlockingQuestion(questions.get(question.questionId) ?? question);
+  });
   const state = completedData?.status ?? (started === undefined ? 'starting' : waiting ? 'waiting' : 'running');
   const steps = currentItems(events).filter((event) => !['user.message', 'turn.started', 'turn.completed', 'internal'].includes(event.kind));
   const answer = completedData?.answerItemKeys

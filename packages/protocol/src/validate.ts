@@ -42,7 +42,7 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'approval.resolved':
       return typeof data['approvalId'] === 'string' && typeof data['optionId'] === 'string';
     case 'question':
-      return typeof data['questionId'] === 'string' && typeof data['prompt'] === 'string';
+      return typeof data['questionId'] === 'string' && typeof data['prompt'] === 'string' && (data['isBlocking'] === undefined || typeof data['isBlocking'] === 'boolean');
     case 'turn.started':
       return true;
     case 'turn.completed':

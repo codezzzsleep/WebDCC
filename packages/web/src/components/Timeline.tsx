@@ -687,27 +687,32 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
     ? { commandId: '', status: data.submission } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
       ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission });
   const busy = submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
+  const blocking = data.isBlocking !== false;
+  const nonblockingLabel = blocking ? null : <span className="what">非阻塞提问</span>;
   if (data.status === 'answered' || data.status === 'skipped') {
     return (
-      <div className="approval-card resolved" data-testid="question-card" data-state="resolved">
+      <div className="approval-card resolved" data-testid="question-card" data-state="resolved" data-blocking={blocking}>
         <Icon name="check" size={15} strokeWidth={2.2} />
         <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? '已由原生结束' : data.outcome === 'decline' ? '已拒绝' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
+        {nonblockingLabel}
       </div>
     );
   }
-  if (data.elicitation !== undefined) return <div className="question-card" data-testid="question-card" data-state="pending">
+  if (data.elicitation !== undefined) return <div className="question-card" data-testid="question-card" data-state="pending" data-blocking={blocking}>
     <div className="approval-title">{data.header ?? '原生交互'}</div><p>{data.prompt}</p>
+    {blocking ? null : <p>原生标记为非阻塞，你仍可以回答。</p>}
     {data.isSecret ? <p>敏感表单内容只在本页面保留，刷新后需要重新输入。</p> : null}
     <InteractionStatus submission={submission} />
     <ElicitationForm form={data.elicitation} busy={busy} submit={answer => store.answer(event.sessionId, data.questionId, answer)} />
   </div>;
   return (
-    <div className="question-card" data-testid="question-card" data-state="pending">
+    <div className="question-card" data-testid="question-card" data-state="pending" data-blocking={blocking}>
       <div className="approval-title">
         <Icon name="help" size={16} />
-        {data.header ?? '需要你回答'}
+        {data.header ?? (blocking ? '需要你回答' : '非阻塞提问')}
       </div>
+      {blocking ? null : <p>原生标记为非阻塞，你仍可以回答。</p>}
       <div style={{ fontSize: 14 }}>{data.prompt}</div>
       <div className="question-options" role={data.multiSelect === true ? 'group' : 'radiogroup'} aria-label={data.prompt}>
         {(data.options ?? []).map((option) => (

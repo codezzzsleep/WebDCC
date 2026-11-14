@@ -1,4 +1,5 @@
 import { chromium, type Browser, type Page } from '@playwright/test';
+import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
@@ -10,7 +11,7 @@ import { createSourceTestApp } from './helpers.js';
 async function listener(ctx: Awaited<ReturnType<typeof createSourceTestApp>>, browser: Browser): Promise<{ page: Page; base: string }> {
   await ctx.app.listen({ host: '127.0.0.1', port: 0 });
   const address = ctx.app.server.address(); if (!address || typeof address === 'string') throw new Error('Missing listener');
-  const base = `http://127.0.0.1:${address.port}`; const page = await browser.newPage();
+  const base = `http://127.0.0.1:${address.port}`; const context = await browser.newContext(); const page = await context.newPage();
   await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
   return { page, base };
 }
@@ -129,7 +130,9 @@ it('product handoff saves through draft CAS and both cloud conflict choices rema
     await expect.poll(() => targetInput.inputValue()).toBe('chosen remote draft');
     await targetInput.press('Enter');
     await expect.poll(() => ctx.store.allEvents(target.id).filter(event => event.kind === 'user.message').length).toBe(1);
-    await expect.poll(() => ctx.store.getDraft(target.id).text).toBe('');
+    await page.waitForFunction(id => (document.getElementById(`composer-${id}`) as HTMLTextAreaElement | null)?.value === ''
+      && document.querySelector('[data-testid="draft-sync-state"]')?.getAttribute('data-pending') === 'false', target.id);
+    expect(ctx.store.getDraft(target.id).text).toBe('');
     await page.reload(); await expect.poll(() => page.getByTestId('composer-input').inputValue()).toBe('');
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
@@ -173,5 +176,45 @@ it('a failed native admission can restore exact text and attachment references i
     await expect.poll(() => input.inputValue()).toBe(editor);
     await page.getByTestId('composer-attachments').getByRole('link', { name: 'recover.txt' }).waitFor();
     expect(await page.getByTestId('composer-attachments').getByRole('link', { name: 'recover.txt' }).getAttribute('href')).toBe(url);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it('two same-origin pages reject an old cloud baseline without partially adopting its local draft', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const session = await seedWorkspaceAndSession(ctx);
+    browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
+    const other = await page.context().newPage();
+    await page.goto(`${base}/s/${session.sessionId}`); await other.goto(`${base}/s/${session.sessionId}`);
+    const bundle = await build({ stdin: { resolveDir: process.cwd(), sourcefile: 'atomic-preparation.ts', loader: 'ts', contents:
+      `import { InputPreparationStore } from './packages/web/src/lib/input-preparation-store.ts'; Object.assign(window,{atomicPreparation:new InputPreparationStore('atomic-baseline-race')});` },
+      bundle: true, platform: 'browser', format: 'iife', write: false });
+    const script = bundle.outputFiles[0]!.text;
+    await page.addScriptTag({ content: script }); await other.addScriptTag({ content: script });
+    const original = await page.evaluate(async () => {
+      const store = (window as unknown as { atomicPreparation: { putDraft(draft: unknown, expected: number): Promise<void>; putRemoteDraft(baseline: unknown): Promise<void>; getRemoteDraft(id: string): Promise<unknown> } }).atomicPreparation;
+      await store.putDraft({ sessionId: 'A', revision: 3, text: 'keep local', contentParts: { version: 1, parts: [] }, updatedAt: 1 }, 0);
+      await store.putRemoteDraft({ sessionId: 'A', revision: 4, text: 'old cloud', contentParts: { version: 1, parts: [{ type: 'text', text: 'old cloud' }] } });
+      return store.getRemoteDraft('A');
+    });
+    await other.evaluate(async expected => {
+      const store = (window as unknown as { atomicPreparation: { compareRemoteDraft(baseline: unknown, expected: unknown): Promise<void> } }).atomicPreparation;
+      await store.compareRemoteDraft({ sessionId: 'A', revision: 5, text: 'new cloud', contentParts: { version: 1, parts: [{ type: 'text', text: 'new cloud' }] } }, expected);
+    }, original);
+    const result = await page.evaluate(async original => {
+      const store = (window as unknown as { atomicPreparation: {
+        getRemoteDraft(id: string): Promise<{ revision: number }>; getDraft(id: string): Promise<{ revision: number; text: string }>;
+        adoptRemoteDraft(baseline: unknown, expectedLocal: number, expectedRemote: unknown): Promise<unknown>; compareRemoteDraft(baseline: unknown, expected: unknown): Promise<void>;
+      } }).atomicPreparation;
+      const newest = await store.getRemoteDraft('A'); const errors: number[] = [];
+      for (const expected of [original, newest]) {
+        try { await store.adoptRemoteDraft(original, 3, expected); } catch (error) { errors.push((error as { status: number }).status); }
+      }
+      try { await store.compareRemoteDraft(original, newest); } catch (error) { errors.push((error as { status: number }).status); }
+      return { errors, local: await store.getDraft('A'), baseline: await store.getRemoteDraft('A') };
+    }, original);
+    expect(result.errors).toEqual([409, 409, 409]);
+    expect(result.local).toMatchObject({ revision: 3, text: 'keep local' });
+    expect(result.baseline).toMatchObject({ revision: 5, text: 'new cloud' });
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);

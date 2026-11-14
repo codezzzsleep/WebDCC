@@ -716,21 +716,27 @@
           "packages/server/src/native-actions.ts",
           "packages/server/test/native-actions.spec.ts",
           "packages/server/test/native-controls.spec.ts",
-          "browser-tests/native-controls.spec.ts"
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-64cf89e.json",
           "web_review/evidence/l1-e493ec4.json",
           "web_review/evidence/native-recovery-current.json",
-          "web_review/evidence/native-elicitation.json"
+          "web_review/evidence/native-elicitation.json",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
           "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
           "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
         ],
-        "remainingWork": "SQLite v6 区分已发传输和原生确认；Codex serverRequest/resolved 按线程与精确 requestId 确认并关闭整组，sent/collected/uncertain 展示持久化，刷新禁用待确认按钮，重启后整组 uncertain。回放保留确认状态。仍需 Claude/DSH 全部交互的原生结果对账、uncertain 可操作恢复与 partial answer rehydration、secret/URL/form、deadline/revision、原生取消与解决竞态的全部结局、acceptForSession 真实范围，以及真实三家验收。",
+        "remainingWork": "Native isBlocking and owned native thread waiting flags are retained, with current/session interaction scope and real Chromium mechanism regression. Actual pinned direct RPC proved Plan blocking and explicitly configured Default nonblocking requests/confirmation; Plan mode UI and negotiated experimental contract, ordinary real-Web native question closure, three-provider full cancellation/secret/restart matrix remain incomplete. Issue41 stays open.",
         "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
       },
       "dependencyIds": [
@@ -934,7 +940,10 @@
           "packages/server/test/hub-stream-identity.spec.ts",
           "packages/web/src/lib/store-stream-identity.spec.ts",
           "browser-tests/stream-identity.spec.ts",
-          "scripts/verify-native-reasoning.ts"
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -945,7 +954,10 @@
           "packages/server/test/hub-stream-identity.spec.ts",
           "packages/web/src/lib/store-stream-identity.spec.ts",
           "browser-tests/stream-identity.spec.ts",
-          "scripts/verify-native-reasoning.ts"
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md"
         ],
         "remainingAcceptance": [
           "summary=[a,b]与plan.text均完整显示且只出现一次。",
@@ -1862,12 +1874,14 @@
           "packages/server/src/db.ts",
           "browser-tests/composer-input.spec.ts",
           "browser-tests/input-preparation.spec.ts",
-          "docs/input-admission-and-draft.md"
+          "docs/input-admission-and-draft.md",
+          "packages/web/src/lib/synced-input-draft-store.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "browser-tests/composer-input.spec.ts",
-          "packages/server/test/attachment-admission.spec.ts"
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/web/src/lib/synced-input-draft-store.spec.ts"
         ],
         "remainingAcceptance": [
           "A/B快速切换、刷新和晚返回不会丢/串文字或图片。",
@@ -4090,7 +4104,7 @@
           "全部目标能力无unclassified/假pass；native-fallback和structured覆盖分别显示，未测不标完成。",
           "报告绑定同一commit/环境且可复现，审阅人可沿证据链接看到native输入、动作、输出和恢复结果。"
         ],
-        "remainingWork": "Full shared candidate source gate passed:108 unit files/519 tests,14 Chromium files/22 tests, typecheck/lint/inventory/build. Actual pinned Codex nonempty reasoning direct RPC/Web/browser evidence also passed; report must be rebound after commit. All48 and real-model failure/multimodal/backup/performance/external owner acceptance remain incomplete. Issue41 tracks ordinary Codex user questions. CI is a template; historical L1 remains22 GOLDEN/16 NOT_TRIGGERED."
+        "remainingWork": "Candidate source519unit/22Browser passed before exactSHA Browser exposed draft-baseline race and xterm locator ambiguity. Both diagnosed and fixed with deterministic/real browser regressions. Final full source gate must bind the new commit. L1 remains32 GOLDEN/16NOT_TRIGGERED; added10 diffs are cacheCreationInputTokens0 only. All48, paid-model failure/multimodal/performance/ownership acceptance and Issue41 Plan entry remain incomplete."
       },
       "dependencyIds": [
         "NP-01",

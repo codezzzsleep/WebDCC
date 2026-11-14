@@ -819,15 +819,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
         {controls.synced.state(draftSessionId)?.conflict ? <>
           <button type="button" onClick={() => void controls.synced.useLocal(draftSessionId).catch(cause => setError(String(cause)))}>使用本机草稿</button>
           <button type="button" onClick={() => {
-            const token = controls.drafts.token();
-            void controls.synced.readRemote(draftSessionId).then(remote => {
-              if (token === undefined || !controls.drafts.accepts(token) || controls.drafts.snapshot()?.revision !== token.revision) throw new Error('本机草稿已变化，请重新核对');
-              controls.drafts.update(remote.text, remote.contentParts);
-            }).catch(cause => setError(String(cause)));
+            void controls.drafts.replaceFromRemote((id, revision) => controls.synced.useRemote(id, revision)).catch(cause => setError(String(cause)));
           }}>使用云端草稿</button>
         </> : null}
       </div> : null}
       <div className="composer-stats">
+        {sessionId !== null ? <span data-testid="draft-sync-state" data-pending={controls.synced.state(draftSessionId)?.pending === true || controls.synced.state(draftSessionId)?.syncedRevision !== controls.drafts.snapshot()?.revision}>
+          {controls.synced.state(draftSessionId)?.pending === false && controls.synced.state(draftSessionId)?.syncedRevision === controls.drafts.snapshot()?.revision ? '草稿已同步' : '草稿已保存在本机，等待云端同步'}
+        </span> : null}
         {blockedReason !== undefined && (text !== '' || attachmentParts.length > 0) ? <span role="status" data-testid="input-blocked-reason">{blockedReason}</span> : null}
         {blockedReason?.includes('不一致') ? <button type="button" onClick={() => {
           const current = controls.drafts.snapshot(); if (current === undefined || current.sessionId !== draftSessionId) return;

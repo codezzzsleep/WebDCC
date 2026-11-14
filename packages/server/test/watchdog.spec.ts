@@ -247,6 +247,12 @@ describe('Codex Watchdog', () => {
     codex.finish(sessionId, 'failed', '429 rate limit exceeded'); await vi.advanceTimersByTimeAsync(60_000);
     expect(codex.sent).toHaveLength(1); expect(ctx.store.watchdogJob(sessionId)?.status).toBe('cancelled');
   });
+  it('nonblocking questions do not cancel automatic recovery or acquire a fabricated timeout result', async () => {
+    enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex'); await ctx.manager.send(sessionId, { text: 'task' });
+    codex.fire(sessionId, { type: 'item.complete', itemKey: 'nonblocking-question', kind: 'question', data: { questionId: 'nonblocking', prompt: 'optional native response', status: 'pending', isBlocking: false } }); expect(ctx.store.getSession(sessionId)?.status).toBe('running');
+    codex.finish(sessionId, 'failed', '429 token rate limit'); await vi.advanceTimersByTimeAsync(5000); expect(codex.sent).toHaveLength(2);
+    expect(ctx.store.allEvents(sessionId).find(event => event.kind === 'question')?.data).toMatchObject({ isBlocking: false, status: 'pending' });
+  });
 
   it('平级会话分别操作，旧会话发送和停止不会控制新会话', async () => {
     enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');

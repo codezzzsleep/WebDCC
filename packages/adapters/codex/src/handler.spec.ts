@@ -1,6 +1,26 @@
 import { expect, it } from 'vitest';
 import { CodexAdapter } from './adapter.js';
 import type { EventData } from '@webdcc/protocol';
+it.each([false, true, undefined])('preserves request_user_input isBlocking=%s and never derives it from autoResolutionMs', async isBlocking => {
+  const replay = CodexAdapter.replay('s', 'thread');
+  const events = replay.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 'blocking', method: 'item/tool/requestUserInput', params: { threadId: 'thread', turnId: 'turn', itemId: 'tool', isBlocking, autoResolutionMs: 1, questions: [{ id: 'q', question: 'preserved' }] } } });
+  const question = (events.find(event => event.type === 'item.complete' && event.kind === 'question') as { data: EventData['question'] }).data;
+  expect(question.isBlocking).toBe(isBlocking); expect(question.status).toBeUndefined();
+  replay.feed({ i: 2, t: 60_000, dir: 'in', ch: 'rpc', frame: { method: 'warning', params: { message: 'later' } } });
+  await replay.adapter.answer('s', question.questionId, { custom: 'answer' });
+  const resolved = replay.feed({ i: 3, t: 60_001, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: 'thread', requestId: 'blocking' } } });
+  const confirmed = resolved.find(event => event.type === 'item.complete' && event.kind === 'question') as { nativeTurnId?: string; data: EventData['question'] };
+  expect(confirmed).toMatchObject({ nativeTurnId: 'turn', data: { status: 'answered' } }); expect(confirmed.data.isBlocking).toBe(isBlocking);
+});
+it('maps owned native thread active flags without turning observer notLoaded or foreign state into execution facts', () => {
+  const replay = CodexAdapter.replay('s', 'thread');
+  const feed = (threadId: string, status: unknown) => replay.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'thread/status/changed', params: { threadId, status } } });
+  expect(feed('thread', { type: 'active', activeFlags: ['waitingOnUserInput'] })).toContainEqual(expect.objectContaining({ type: 'status', status: 'waiting', source: 'native-thread', scope: 'session' }));
+  expect(feed('thread', { type: 'active', activeFlags: [] })).toContainEqual(expect.objectContaining({ type: 'status', status: 'running' }));
+  expect(feed('thread', { type: 'idle' })).toContainEqual(expect.objectContaining({ type: 'status', status: 'idle' }));
+  expect(feed('thread', { type: 'notLoaded' }).some(event => event.type === 'status')).toBe(false);
+  expect(feed('foreign', { type: 'active', activeFlags: ['waitingOnApproval'] }).some(event => event.type === 'status')).toBe(false);
+});
 it('native multiquestion control replies use native IDs and wait for all answers', async () => {
   const replay = CodexAdapter.replay('s');
   const events = replay.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 12, method: 'item/tool/requestUserInput', params: { questions: [{ id: 'language', question: '语言' }, { id: 'version', question: '版本' }] } } });

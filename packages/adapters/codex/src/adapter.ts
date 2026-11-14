@@ -199,6 +199,7 @@ export function mapItemKind(type: string): EventKind {
  * unknown 只留给 schema 之外真正未知的事件；原生界面会显示的内容不许归为 internal。
  */
 export type CodexRoute =
+  | 'thread/status'
   | 'turn/started'
   | 'turn/completed'
   | 'item/started'
@@ -254,6 +255,8 @@ export function routeNotification(method: string): CodexRoute {
       return 'diff/updated';
     case 'serverRequest/resolved':
       return 'serverRequest/resolved';
+    case 'thread/status/changed':
+      return 'thread/status';
     case 'warning':
     case 'configWarning':
     case 'deprecationNotice':
@@ -270,7 +273,6 @@ export function routeNotification(method: string): CodexRoute {
     case 'item/plan/delta':
       return 'plan/item';
     case 'thread/started':
-    case 'thread/status/changed':
     case 'account/rateLimits/updated':
     case 'remoteControl/status/changed':
     case 'item/commandExecution/terminalInteraction':
@@ -1116,6 +1118,17 @@ export class CodexAdapter implements AgentAdapter {
     const frameKey = `${method.replace(/[^a-zA-Z0-9]+/g, '-')}-${runtime.frameSeq}`;
 
     switch (route) {
+      case 'thread/status': {
+        if (params['threadId'] !== runtime.nativeId) return;
+        const observed = params['status'] as { type?: unknown; activeFlags?: unknown } | null;
+        let status: 'running' | 'waiting' | 'idle' | 'error' | undefined;
+        if (observed?.type === 'idle') status = 'idle';
+        else if (observed?.type === 'systemError') status = 'error';
+        else if (observed?.type === 'active' && Array.isArray(observed.activeFlags) && observed.activeFlags.every(flag => flag === 'waitingOnApproval' || flag === 'waitingOnUserInput')) status = observed.activeFlags.length > 0 ? 'waiting' : 'running';
+        if (status !== undefined) this.emit(sessionId, { type: 'status', source: 'native-thread', status, scope: 'session', native: frame });
+        else this.emit(sessionId, { type: 'item.complete', itemKey: frameKey, kind: 'internal', data: { nativeType: method }, scope: 'session', native: frame });
+        return;
+      }
       case 'serverRequest/resolved': {
         if (params['threadId'] !== runtime.nativeId || (typeof params['requestId'] !== 'string' && typeof params['requestId'] !== 'number')) return;
         const entry = [...runtime.approvals].find(([, pending]) => pending.requestId === params['requestId']);
@@ -1537,6 +1550,7 @@ export class CodexAdapter implements AgentAdapter {
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
       const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[] | null; isOther?: boolean; isSecret?: boolean }[];
       const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, isSecret: question.isSecret === true,
+        ...(typeof params['isBlocking'] === 'boolean' ? { isBlocking: params['isBlocking'] } : {}),
         allowsFreeText: question.isSecret === true || question.options == null || question.isOther !== false, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }));
       runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params), questionIds: questions.map(question => question.id), questions: items });
       for (const question of items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.questionId.slice(approvalId.length + 1)}`, kind: 'question', data: question, native: frame });

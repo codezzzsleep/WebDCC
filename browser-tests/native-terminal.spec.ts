@@ -143,11 +143,11 @@ it('opens the actual Claude Code 2.1.322 authentication surface in Chromium with
     const transcript = () => ctx.supervisor.snapshot(terminal.id).chunks.map(chunk => chunk.data).join('');
     // Claude draws whitespace with cursor moves. Assert the rendered terminal
     // text rather than treating raw ANSI fragments as complete plain lines.
-    await ctx.page.getByText('Welcome to Claude Code v2.1.322', { exact: false }).waitFor({ timeout: 15_000 });
+    await ctx.page.getByRole('list').getByText('Welcome to Claude Code v2.1.322', { exact: false }).waitFor({ timeout: 15_000 });
     expect(terminal.nativeVersion).toBe('2.1.322');
     await ctx.page.getByText('已连接 · running', { exact: false }).waitFor();
     await ctx.page.locator('.xterm-helper-textarea').focus();
-    await ctx.page.getByText('Choose the text style that looks best with your terminal', { exact: false }).waitFor();
+    await ctx.page.getByRole('list').getByText('Choose the text style that looks best with your terminal', { exact: false }).waitFor();
     await ctx.page.keyboard.press('ArrowDown'); await ctx.page.keyboard.press('Enter');
     await ctx.page.getByText(/Claude subscription|Anthropic Console|Select login method|How do you want to log in/i).first().waitFor({ timeout: 15_000 });
     await mkdir('.artifacts/native-terminal-validation', { recursive: true });

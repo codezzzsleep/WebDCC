@@ -113,4 +113,21 @@ export class DraftController<Part = unknown> {
       .finally(() => { if (this.accepts(token)) this.restoring = false; this.notify(); });
     this.writes.set(draft.sessionId, write); void write.catch(() => undefined); return write;
   }
+  replaceFromRemote(persist: (sessionId: string, revision: number) => Promise<InputDraft<Part>>): Promise<void> {
+    const token = this.token();
+    if (token === undefined || this.restoring) return Promise.reject(new Error('草稿正在恢复'));
+    this.restoring = true; this.notify();
+    const pending = this.writes.get(token.sessionId) ?? Promise.resolve();
+    const write = pending.catch(() => undefined).then(async () => {
+      if (!this.accepts(token)) throw new Error('会话已切换，请重新选择草稿');
+      const selected = await persist(token.sessionId, token.revision);
+      this.saved.set(token.sessionId, structuredClone(selected)); this.durableRevisions.set(token.sessionId, selected.revision);
+      if (this.accepts(token)) { this.current = structuredClone(selected); this.editSequence++; }
+      this.failures.delete(token.sessionId);
+    }).finally(() => { if (this.accepts(token)) this.restoring = false; this.notify(); });
+    // A rejected cloud choice has not replaced the local bytes. Keep the
+    // prior durability chain usable instead of poisoning later local saves.
+    this.writes.set(token.sessionId, write.then(() => undefined, () => pending));
+    void write.catch(() => undefined); return write;
+  }
 }

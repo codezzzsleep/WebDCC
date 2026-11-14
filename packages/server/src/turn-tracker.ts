@@ -1,4 +1,5 @@
-import type { AdapterEvent } from '@webdcc/protocol';
+import type { AdapterEvent, QuestionItem } from '@webdcc/protocol';
+import { isBlockingQuestion } from '@webdcc/protocol';
 
 export type TurnState = 'starting' | 'running' | 'waiting' | 'completed' | 'interrupted' | 'failed';
 
@@ -73,7 +74,16 @@ export class TurnTracker {
 
   observe(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
     const assigned = this.assignment(sessionId, event, at);
-    if (assigned.turnId === null) return assigned;
+    const blocks = (event.type === 'item.start' || event.type === 'item.complete') && (event.kind === 'approval.request' || event.kind === 'question' && isBlockingQuestion(event.data as QuestionItem));
+    if (assigned.turnId === null) {
+      const active = this.active.get(sessionId); const current = active === undefined ? undefined : this.turns.get(active);
+      if (event.scope === 'session' && blocks && current !== undefined && current.endedAt === undefined) current.state = 'waiting';
+      if (event.scope === 'session' && event.type === 'status' && event.source === 'native-thread' && current !== undefined && current.endedAt === undefined) {
+        if (event.status === 'waiting') current.state = 'waiting';
+        if (event.status === 'running') current.state = 'running';
+      }
+      return assigned;
+    }
     const record = this.turns.get(assigned.turnId);
     if (record === undefined) return assigned;
     if (record.endedAt !== undefined) return assigned;
@@ -84,10 +94,10 @@ export class TurnTracker {
     }
     if (event.type === 'item.start') {
       record.open.add(event.itemKey);
-      if (event.kind === 'approval.request' || event.kind === 'question') record.state = 'waiting';
+      if (blocks) record.state = 'waiting';
       else if (record.state !== 'waiting') record.state = 'running';
     }
-    if (event.type === 'item.complete' && (event.kind === 'approval.request' || event.kind === 'question')) record.state = 'waiting';
+    if (event.type === 'item.complete' && blocks) record.state = 'waiting';
     if (event.type === 'item.complete' || event.type === 'item.cancel') record.open.delete(event.itemKey);
     // SessionManager owns terminal persistence and applies a short settle
     // window for late item/diff frames. Keep the tracker active until it calls
@@ -136,6 +146,11 @@ export class TurnTracker {
     const turnId = this.active.get(sessionId);
     const record = turnId === undefined ? undefined : this.turns.get(turnId);
     if (record !== undefined && record.state === 'waiting') record.state = 'running';
+  }
+
+  wait(sessionId: string): void {
+    const turnId = this.active.get(sessionId); const record = turnId === undefined ? undefined : this.turns.get(turnId);
+    if (record !== undefined && record.endedAt === undefined) record.state = 'waiting';
   }
 
   openItems(turnId: string): string[] {
