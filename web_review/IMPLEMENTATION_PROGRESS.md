@@ -125,7 +125,7 @@
 - 已推送修复源码 `e493ec49cd6bab75382598ce552b180ee1b6a874` 到 `fix/native-parity-repair`，草稿 PR #39 可见。没有合并 main。新增 CI 定义仍在 docs/ci/source-checks.yml；GitHub Actions 未启用，缺少 workflow 凭据权限。
 - 本轮源码报告绑定 `e493ec4`；L1 同提交检查 33 轨迹 / 3,681 帧，I1–I8 没有失败，22 GOLDEN、16 NOT_TRIGGERED，8/33 场景通过，门禁保持失败。报告位于忽略的 evidence/source-checks.json 与 evidence/l1-e493ec4.json。
 - 用户另行授权的远程环境已部署该源码：独立 release、Node 26.13.0、非 root 用户、数据库和两个 systemd 单元。真实浏览器经独立临时 HTTPS 入口验证登录、Secure/HttpOnly Cookie、地址去 token、页面渲染、刷新、版本/fingerprint 和双向 WebSocket；构建字节 SHA 与本机构建一致。
-- 该 HTTPS 入口由 quick tunnel 提供，进程重建时地址可能改变，须重新登记 origin。部署证明网页与传输可用，不代表 48 项或真实 Agent 验收完成。原生账号未配置；远程既有 DSH CLI 版本 0.2.1-rc.2 与锁定基线不同，既有 DSH 服务未升级。隔离 Codex/Claude CLI 安装仍在进行。
+- 该 HTTPS 入口由 quick tunnel 提供，进程重建时地址可能改变，须重新登记 origin。部署证明网页与传输可用，不代表 48 项或真实 Agent 验收完成。原生账号未配置；远程既有 DSH CLI 版本 0.2.1-rc.2 与锁定基线不同，既有 DSH 服务未升级。隔离 Codex 0.167.0 与 Claude CLI 2.1.322 已以服务运行用户执行 --version 验证；账号仍未配置，DSH 固定 Host 基线仍待准备。
 - 私有运维记录与登录链接保存在仓库外，未公开凭据、Cookie、完整环境文件或远程运维身份。恢复时先读私有 deployment-state.json 并核实活跃进程、当前 tunnel 地址和安装任务，不重建已完成部署。
 - 原有本机 release 仍为 `97b3c073c5ec67d50df58cf564d33537c109eddc`，原进程 PID 2303523 保持运行；原 worktree 未改变业务源码。
-- 全部 48 项继续：17 项部分推进、31 项待专项实施，0 项全部验收完成。下一步核实隔离 CLI 安装结果，继续 NP-06 uncertain 对账与部分答案恢复，并推进 NP-04 owner/fencing 与 NP-05 原生账本；随后按矩阵补齐 M1–M3。
+- 全部 48 项继续：17 项部分推进、31 项待专项实施，0 项全部验收完成。下一步继续 NP-06 uncertain 对账与部分答案恢复，并推进 NP-04 owner/fencing 与 NP-05 原生账本；随后按矩阵补齐 M1–M3。
