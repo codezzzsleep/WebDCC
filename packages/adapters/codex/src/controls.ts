@@ -6,6 +6,8 @@ import type { ThreadResumeResponse } from './schema/v2/ThreadResumeResponse.js';
 import type { TurnStartResponse } from './schema/v2/TurnStartResponse.js';
 import type { TurnInterruptResponse } from './schema/v2/TurnInterruptResponse.js';
 import type { PermissionProfileListResponse } from './schema/v2/PermissionProfileListResponse.js';
+import type { ThreadReadResponse } from './schema/v2/ThreadReadResponse.js';
+import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListResponse.js';
 import protocolSchema from './json-schema/codex_app_server_protocol.schemas.json' with { type: 'json' };
 import type { JsonRpcStdio } from './rpc.js';
 
@@ -18,6 +20,8 @@ interface Results {
   'turn/start': TurnStartResponse;
   'turn/interrupt': TurnInterruptResponse;
   'permissionProfile/list': PermissionProfileListResponse;
+  'thread/read': ThreadReadResponse;
+  'thread/turns/list': ThreadTurnsListResponse;
 }
 
 const ajv = new Ajv({ strict: false, allErrors: true, allowUnionTypes: true });
@@ -30,6 +34,7 @@ const responseRefs = {
   initialize: '#/definitions/InitializeResponse',
   'thread/start': '#/definitions/v2/ThreadStartResponse', 'thread/resume': '#/definitions/v2/ThreadResumeResponse',
   'turn/start': '#/definitions/v2/TurnStartResponse', 'turn/interrupt': '#/definitions/v2/TurnInterruptResponse', 'permissionProfile/list': '#/definitions/v2/PermissionProfileListResponse',
+  'thread/read': '#/definitions/v2/ThreadReadResponse', 'thread/turns/list': '#/definitions/v2/ThreadTurnsListResponse',
 };
 const responseValidators = new Map<string, ValidateFunction>();
 

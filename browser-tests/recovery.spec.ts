@@ -1,0 +1,60 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { chromium, type Browser } from '@playwright/test';
+import { expect, it } from 'vitest';
+import type { AgentAdapter, NativeObservation } from '@webdcc/protocol';
+import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
+import { createSourceTestApp } from './helpers.js';
+
+it('NP-04 source UI reads native state, blocks changed results, applies a fresh revision and preserves recovery after reload', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  try {
+    const workspace = ctx.store.createWorkspace('recover', ctx.dataDir);
+    const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+    ctx.store.updateSession(session.id, { nativeId: 'native', status: 'error' });
+    const identity = ctx.store.nativeOwners.acquire('old', session.id, 'codex', 'native');
+    ctx.store.nativeOwners.activate(session.id, identity, 'native');
+    ctx.store.nativeOwners.bindProcess(session.id, identity, child.pid!, ctx.dataDir, '0.167.0');
+    const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited;
+    ctx.store.nativeOwners.release(session.id, identity, false);
+    ctx.store.nativeHistory.bind(session.id, 'native-turn', 'web-turn');
+    ctx.store.journal.enqueue('accepted', session.id, 'web-turn', { text: 'accepted' });
+    ctx.store.journal.inputState('web-turn', 'uncertain');
+    ctx.store.journal.enqueue('queued', session.id, 'later', { text: 'keep queued' });
+    ctx.store.appendEvent({ sessionId: session.id, turnId: 'web-turn', itemKey: 'start', kind: 'turn.started', data: {} });
+    ctx.store.appendEvent({ sessionId: session.id, turnId: 'web-turn', itemKey: 'question', kind: 'question', data: { questionId: 'q', prompt: 'Question outcome', status: 'pending', submission: 'uncertain' } });
+    ctx.store.appendEvent({ sessionId: session.id, turnId: 'web-turn', itemKey: 'approval', kind: 'approval.request', data: { approvalId: 'a', title: 'Approval outcome', detail: 'unknown', options: [{ id: 'allow', label: 'Allow' }] } });
+    const observation: NativeObservation = { nativeId: 'native', agent: 'codex', cwd: ctx.dataDir, profilePath: ctx.dataDir, version: '0.167.0', capturedAt: new Date().toISOString(), authority: 'history-only', releasePolicy: 'managed-process', state: 'unknown', notes: [],
+      turns: [{ nativeTurnId: 'native-turn', status: 'completed', completedAt: '2026-11-14T01:00:00Z', startedAt: '2026-11-14T00:59:00Z', itemsComplete: true, clientCommandIds: [], items: [] }] };
+    let reads = 0; let sends = 0;
+    const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' });
+    adapter.observe = async () => { reads++; return structuredClone(observation); };
+    adapter.send = async () => { sends++; }; ctx.manager.registerAdapter(adapter);
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    const address = ctx.app.server.address(); if (!address || typeof address === 'string') throw new Error('Missing listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.goto(`${base}/settings/native-events?sessionId=${session.id}`);
+    const recovery = page.getByRole('region', { name: '执行恢复' });
+    await recovery.getByRole('button', { name: '读取原生状态' }).click();
+    await expect.poll(() => recovery.getByRole('button', { name: '恢复已确认的结果' }).isEnabled()).toBe(true);
+    ctx.store.updateSession(session.id, { title: 'another browser changed session' });
+    await recovery.getByRole('button', { name: '恢复已确认的结果' }).click();
+    await expect.poll(() => recovery.getByRole('alert').textContent()).toContain('不可应用');
+    expect(ctx.store.journal.queue(session.id)[0]?.state).toBe('uncertain');
+    await recovery.getByRole('button', { name: '读取原生状态' }).click();
+    await expect.poll(() => recovery.getByRole('button', { name: '恢复已确认的结果' }).isEnabled()).toBe(true);
+    await recovery.getByRole('button', { name: '恢复已确认的结果' }).click();
+    await expect.poll(() => recovery.textContent()).toContain('已恢复确认的终态');
+    expect(reads).toBe(3); expect(sends).toBe(0);
+    expect(ctx.store.journal.queue(session.id)).toEqual([expect.objectContaining({ commandId: 'queued', state: 'queued', input: { text: 'keep queued' } })]);
+    await page.reload();
+    await expect.poll(() => page.getByRole('region', { name: '执行恢复' }).textContent()).toContain('已恢复确认的终态');
+    expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'turn.completed')).toHaveLength(1);
+    await page.goto(`${base}/s/${session.id}`);
+    await expect.poll(() => page.getByTestId('question-card').textContent()).toContain('答案结果未确认');
+    await expect.poll(() => page.getByTestId('approval-card').textContent()).toContain('审批结果未确认');
+  } finally { child.kill('SIGKILL'); await browser?.close(); await ctx.close(); }
+}, 30_000);

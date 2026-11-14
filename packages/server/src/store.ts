@@ -19,6 +19,7 @@ import { NativeHistoryStore } from './native-history.js';
 import { InteractionStore } from './interactions.js';
 import { NativeOwnerStore } from './native-owners.js';
 import { NativeEventStore } from './native-events.js';
+import { NativeReconciliationStore } from './native-reconciliation.js';
 
 interface SessionRow {
   id: string;
@@ -210,7 +211,8 @@ export class Store {
   readonly interactions: InteractionStore;
   readonly nativeOwners: NativeOwnerStore;
   readonly nativeEvents: NativeEventStore;
-  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db); this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); }
+  readonly reconciliations: NativeReconciliationStore;
+  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db); this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); this.reconciliations = new NativeReconciliationStore(db, this); }
 
   watchdogSettings(): WatchdogSettings | undefined {
     const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;

@@ -17,6 +17,8 @@ it('NP-04 an expired lease cannot transfer a live native writer; a verified mana
     const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });
     const first = store.nativeOwners.acquire('first', session.id, 'codex', 'native');
     store.nativeOwners.activate(session.id, first, 'native');
+    store.nativeOwners.bindProcess(session.id, first, process.pid, '/tmp/native-profile');
+    store.nativeOwners.observe(session.id, first, 'old-turn', 12);
     db.prepare('UPDATE native_owners SET lease_until = 0 WHERE session_id = ?').run(session.id);
     expect(() => store.nativeOwners.acquire('second', session.id, 'codex', 'native')).toThrow('仍持有');
     expect(store.nativeOwners.recoverableSessions()).not.toContain(session.id);
@@ -24,6 +26,8 @@ it('NP-04 an expired lease cannot transfer a live native writer; a verified mana
     const second = store.nativeOwners.acquire('second', session.id, 'codex', 'native');
     expect(second.generation).toBe(first.generation + 1);
     expect(store.nativeOwners.current(session.id, first)).toBe(false);
+    expect(store.nativeOwners.managedProcess(session.id)).toBeNull();
+    expect(store.nativeOwners.get(session.id)).toMatchObject({ activeNativeTurnId: null, lastObservedSeq: null });
     store.nativeOwners.release(session.id, first, true);
     expect(store.nativeOwners.current(session.id, second)).toBe(true);
   } finally { db.close(); }

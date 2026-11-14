@@ -67,7 +67,7 @@ export interface QuestionItem {
   allowsFreeText?: boolean;
   toolCallId?: string;
   status?: 'pending' | 'answered' | 'skipped';
-  resolution?: 'native-acknowledged' | 'external';
+  resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';
   submission?: 'sent' | 'uncertain' | 'collected';
 }
 

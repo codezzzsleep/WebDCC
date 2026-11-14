@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -17,6 +19,7 @@ import type {
   NativePermissionObservation,
   NativeInteractionSubmission,
   RuntimeIdentity,
+  NativeObservation,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -27,6 +30,8 @@ import { JsonRpcStdio, type Frame } from './rpc.js';
 import { nativeRequest } from './controls.js';
 import type { ThreadStartParams } from './schema/v2/ThreadStartParams.js';
 import type { TurnStartParams } from './schema/v2/TurnStartParams.js';
+import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListResponse.js';
+import type { InitializeResponse } from './schema/InitializeResponse.js';
 
 export const PINNED_VERSION = '0.167.0';
 
@@ -627,6 +632,10 @@ export class CodexAdapter implements AgentAdapter {
         this.emit(sessionId, { type: 'transport.closed', reason: 'process-exited', activeWork: runtimeRef.current?.turnId != null });
       },
     });
+    const launchEnv = { ...(this.options.env ?? process.env), ...spec.env };
+    const profilePath = resolve(opts.cwd, launchEnv['CODEX_HOME'] ?? resolve(launchEnv['HOME'] ?? homedir(), '.codex'));
+    try { if (rpc.child.pid !== undefined) opts.onManagedProcess?.(rpc.child.pid, profilePath, PINNED_VERSION); }
+    catch (error) { rpc.child.kill('SIGKILL'); void rpc.kill(); throw error; }
     let markReady: () => void = () => undefined;
     const ready = new Promise<void>((resolve) => {
       markReady = resolve;
@@ -664,12 +673,60 @@ export class CodexAdapter implements AgentAdapter {
     return runtime;
   }
 
-  private async handshake(rpc: JsonRpcStdio): Promise<void> {
-    await nativeRequest(rpc, 'initialize', {
+  private async handshake(rpc: JsonRpcStdio): Promise<InitializeResponse> {
+    const initialized = await nativeRequest(rpc, 'initialize', {
       clientInfo: { name: 'webdcc', title: 'WebDCC', version: '0.1.0' },
       capabilities: null,
     });
     rpc.notify('initialized');
+    return initialized;
+  }
+
+  /** Read rollout history without resuming, changing settings, or sending input.
+   * Thread status belongs to this observer, not to another app-server process. */
+  async observe(opts: CreateOpts & { nativeId: string }): Promise<NativeObservation> {
+    await this.requirePinnedVersion();
+    const spec = this.buildLaunchSpec({ sessionId: opts.sessionId, cwd: opts.cwd, providerId: null });
+    let index = 0;
+    const rpc = JsonRpcStdio.start({ command: spec.command!, args: spec.args, cwd: opts.cwd,
+      env: { ...(this.options.env ?? process.env), ...spec.env },
+      onFrame: (dir, frame) => opts.nativeEvents?.record({ i: ++index, t: 0, dir, ch: 'rpc-observation', frame }).accepted,
+    });
+    try {
+      const initialized = await this.handshake(rpc);
+      const { thread } = await nativeRequest(rpc, 'thread/read', { threadId: opts.nativeId, includeTurns: false });
+      if (thread.id !== opts.nativeId) throw new Error('原生观察返回了不同线程');
+      if (thread.cliVersion !== PINNED_VERSION) throw new Error('原生历史版本与当前锁定协议不一致，不能推断恢复结果');
+      const turns: NativeObservation['turns'] = [];
+      let cursor: string | null = null;
+      const cursors = new Set<string>();
+      for (let page = 0; page < 10; page++) {
+        const result: ThreadTurnsListResponse = await nativeRequest(rpc, 'thread/turns/list', { threadId: opts.nativeId, cursor, limit: 50, sortDirection: 'desc', itemsView: 'full' });
+        for (const turn of result.data) {
+          if (turns.some(previous => previous.nativeTurnId === turn.id)) throw new Error('原生轮次分页重复，请重新核对');
+          turns.push({ nativeTurnId: turn.id, status: turn.status,
+            startedAt: turn.startedAt == null ? null : new Date(turn.startedAt * 1000).toISOString(),
+            completedAt: turn.completedAt == null ? null : new Date(turn.completedAt * 1000).toISOString(),
+            itemsComplete: turn.itemsView === 'full',
+            clientCommandIds: turn.items.flatMap(item => item.type === 'userMessage' && item.clientId !== null ? [item.clientId] : []),
+            items: turn.items.map(item => ({ itemKey: item.id,
+              kind: item.type === 'userMessage' ? 'user.message' : mapItemKind(item.type),
+              data: item.type === 'userMessage' ? { text: item.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'), ...(item.clientId === null ? {} : { clientCommandId: item.clientId }) }
+                : item.type === 'reasoning' ? { text: item.summary.join('\n') } : mapItemData(item as unknown as Record<string, unknown>),
+              native: item })),
+          });
+        }
+        cursor = result.nextCursor;
+        if (cursor === null) break;
+        if (cursors.has(cursor)) throw new Error('原生轮次分页游标循环');
+        cursors.add(cursor);
+      }
+      return { nativeId: thread.id, agent: this.id, cwd: thread.cwd, version: PINNED_VERSION,
+        profilePath: initialized.codexHome,
+        capturedAt: new Date().toISOString(), state: thread.status.type === 'active' ? 'running' : 'unknown',
+        authority: 'history-only', releasePolicy: 'managed-process', turns,
+        notes: ['线程状态仅属于观察进程，不能证明其他原生客户端空闲。', ...(cursor === null ? [] : ['历史超过本次500轮读取上限，未读取的轮次保持待核对。'])] };
+    } finally { await rpc.kill(); }
   }
 
   async create(opts: CreateOpts): Promise<{ nativeId: string }> {
@@ -721,10 +778,13 @@ export class CodexAdapter implements AgentAdapter {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
     const mode = runtime.accessMode;
     const params = buildTurnStartParams(runtime.nativeId, input.text, mode, runtime.model, runtime.reasoningEffort, input.images, runtime.cwd);
+    if (input.nativeRequestId !== undefined) params.clientUserMessageId = input.nativeRequestId;
     const response = await nativeRequest(runtime.rpc, 'turn/start', params);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn started', response.turn?.id);
+    const notified = runtime.turnId === response.turn.id;
     runtime.turnId = response.turn.id;
     runtime.turnStartedAt = startedAt;
+    if (!notified) this.emit(sessionId, { type: 'turn.start', nativeTurnId: response.turn.id, native: response });
     // turn/start acknowledges a turn, not its effective policy. Rejoin the
     // loaded thread without overrides to read the native policy; overrides
     // persist for subsequent turns, including when the user selects inherit.

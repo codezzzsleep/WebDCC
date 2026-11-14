@@ -150,3 +150,13 @@
 - 同提交 L1 33 轨迹 / 3,681 帧：I1–I8 没有失败；22 GOLDEN、16 NOT_TRIGGERED，8/33 场景通过，门禁仍失败。evidence/l1-20701b2.json 绑定当前检查点，未改 golden。
 - 下一可执行路径：扩展 Codex typed thread/read + thread/turns/list 只读观察（notLoaded 不代表其他进程空闲），通过 SDK 公共 spawnClaudeCodeProcess 记录可验证的 managed child identity，再接原生状态对账和交互恢复。SDK prewarm().claim 是绑定备用进程，不是原生全局所有权证据；不要将其用于声称安全接管。
 - 原生 Sidecar/Host 全局帧、坏 JSON/错误帧、版本化投影重建、准确 Host/profile 以及可操作 uncertain 恢复仍未完成。继续实现并补证，不将局部源码绿灯换成 native 完成。原本本机部署不变；当前远程部署仍为上轮的 e493ec4。
+
+## 接续实现：原生终态核对与恢复（2026-11-14）
+
+- 用户重新授权本任务继续全部 NP-01–48；使用原修复 checkout 接续暂停时的工作，不重启被调查对话，也不创建新的持久目标。当前服务器与121部署不更新。
+- 完成继承的 SQLite v8 managed process 身份和核对记录、Codex typed thread/read + thread/turns/list 只读观察、SDK 公共 spawner、Web 核对/恢复入口。绑定机器/boot/PID启动时刻/profile/原生版本，旧库身份缺失仍不能冒充安全释放。
+- 核对预览有60秒有效期和状态指纹；应用前二次读取，唯一 native turn / command identity、完整终态、工作区/版本/配置目录、旧writer已退出必须同时成立。事务失败无部分写入，重复应用被拒。
+- 恢复保留排队正文与附件，不发新模型请求，不自动重发。原生轮次终态不能证明交互答案或审批被接收，问答/审批明确展示“结果未确认”。
+- 完整源码检查六类通过：70文件/301项单元、6文件/7项真实Chromium；最后展示修订另行通过6项恢复单元及1项Chromium。完整报告为 web_review/evidence/source-checks.json；它不是全48项或真实模型验收。
+- 独立Codex 0.167.0 + scripted model：原生直接RPC完成→SIGKILL writer→重开SQLite→只读核对→明确应用终态→再重开确认，保留队列且核对期间模型请求数不变。证据 web_review/evidence/native-recovery-current.json；不冒充真实付费模型效果验收。
+- 后续继续目标状态/统计投影、全局原生帧、完整能力目录与M0剩余项；三家真实故障与外部writer仲裁、secret及完整原生surface仍待完成。

@@ -4,6 +4,7 @@ import type { TraceSink } from './trace.js';
 import type { AccessModeOption, NativePermissionObservation } from './permissions.js';
 import type { RuntimeIdentity } from './runtime.js';
 import type { NativeFrameSink } from './native-events.js';
+import type { NativeObservation } from './native-observation.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -40,6 +41,7 @@ export interface CreateOpts {
   provider?: ProviderRuntimeConfig | null;
   runtime?: RuntimeIdentity;
   nativeEvents?: NativeFrameSink;
+  onManagedProcess?: (pid: number, profilePath: string, nativeVersion: string) => void;
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
@@ -145,4 +147,5 @@ export interface AgentAdapter {
   onEvent(cb: (sessionId: string, e: AdapterEvent) => void): void;
   /** Bind transport-free handlers and adapter lifecycle callbacks before activation. */
   bindRuntime?(sessionId: string, identity: RuntimeIdentity): void;
+  observe?(opts: CreateOpts & { nativeId: string }): Promise<NativeObservation>;
 }

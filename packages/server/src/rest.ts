@@ -139,6 +139,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     manager.requireSession(id);
     return { owner: store.nativeOwners.get(id) ?? null };
   });
+  app.get('/api/sessions/:id/reconciliation', async request => {
+    const { id } = request.params as { id: string };
+    manager.requireSession(id);
+    return { reconciliation: store.reconciliations.get(id) };
+  });
+  app.post('/api/sessions/:id/reconciliation', async request => manager.reconcile((request.params as { id: string }).id));
+  app.post('/api/sessions/:id/reconciliation/apply', async request => {
+    const revision = (request.body as { revision?: unknown } | null)?.revision;
+    if (typeof revision !== 'string' || revision.length > 100 || revision.length < 1) throw badRequest('需要已读取的核对版本');
+    return manager.applyReconciliation((request.params as { id: string }).id, revision);
+  });
   app.patch('/api/watchdog', async (request) => {
     try { return manager.watchdog.configure(request.body); }
     catch (error) { throw badRequest(error instanceof Error ? error.message : '无效 Watchdog 设置'); }

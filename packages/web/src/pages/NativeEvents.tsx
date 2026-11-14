@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NativeEnvelopeDetail, NativeEnvelopeSummary, NativeOwnerDto, StoredEvent } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
+import { NativeRecovery } from '../components/NativeRecovery.js';
 
 const disposition: Record<string, string> = { accepted: '已处理', observed: '已接收', 'outgoing-attempt': '提交请求',
   'stale-owner': '旧实例记录', 'stale-generation': '旧代际已忽略', 'source-mismatch': '其他实例已忽略',
@@ -60,6 +61,7 @@ export function NativeEventsPage({ initialSessionId = '' }: { initialSessionId?:
     {webEvent === undefined ? null : <section aria-label="Web 事件详情"><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(webEvent, null, 2)}</pre>
       {detail === undefined ? <p>未关联原生信封。本地生成事件和旧版本记录可能没有原始接口证据。</p> : null}</section>}
     {owner === null ? null : <details><summary>运行实例：{owner.state}</summary><pre>{JSON.stringify(owner, null, 2)}</pre><p>此记录仅覆盖 WebDCC 管理的连接。外部原生客户端由原生系统仲裁。</p></details>}
+    {filter ? <NativeRecovery sessionId={filter} onApplied={() => setRevision(value => value + 1)} /> : null}
     {error ? <p role="alert">{error}</p> : null}
     {busy ? <p role="status">正在读取…</p> : null}
     <table><thead><tr><th>ID</th><th>接口</th><th>来源</th><th>状态</th><th>代际</th></tr></thead>

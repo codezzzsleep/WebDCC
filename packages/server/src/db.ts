@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 
 export type Db = Database.Database;
 // v6 adds a durable sent/awaiting-native state; v5 binaries cannot safely replay it.
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -77,6 +77,12 @@ export function openDb(file: string): Db {
       lease_until INTEGER NOT NULL, observed_at TEXT NOT NULL,
       server_pid INTEGER NOT NULL, server_boot TEXT NOT NULL, server_start TEXT NOT NULL
     ); CREATE UNIQUE INDEX IF NOT EXISTS native_owners_identity ON native_owners(host_id, agent, native_id) WHERE native_id IS NOT NULL;`);
+    const ownerColumns = db.prepare('PRAGMA table_info(native_owners)').all() as { name: string }[];
+    if (!ownerColumns.some(column => column.name === 'managed_process')) db.exec('ALTER TABLE native_owners ADD COLUMN managed_process TEXT');
+    db.exec(`CREATE TABLE IF NOT EXISTS native_reconciliations (
+      revision TEXT PRIMARY KEY, session_id TEXT NOT NULL, generation INTEGER, owner_id TEXT,
+      native_id TEXT NOT NULL, observed_at TEXT NOT NULL, data TEXT NOT NULL, applied INTEGER NOT NULL DEFAULT 0
+    ); CREATE INDEX IF NOT EXISTS native_reconciliations_session ON native_reconciliations(session_id, observed_at);`);
     db.exec(`CREATE TABLE IF NOT EXISTS native_event_envelopes (
       id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, agent TEXT NOT NULL, native_id TEXT,
       owner_id TEXT, generation INTEGER, received_at TEXT NOT NULL,

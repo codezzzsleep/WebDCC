@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -31,6 +32,7 @@ import { buildFileChanges, isValidEventData, traceFrame, normalizeQuestionAnswer
 
 import { ClaudeContentReducer } from './content.js';
 import { claudeSystemEvent } from './system.js';
+import { managedClaudeProcess } from './managed-process.js';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -371,6 +373,8 @@ export class ClaudeAdapter implements AgentAdapter {
       ...(base.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       ...(resume === undefined ? {} : { resume }),
       canUseTool,
+      ...(opts.onManagedProcess === undefined ? {} : { spawnClaudeCodeProcess: options => managedClaudeProcess(options,
+        pid => opts.onManagedProcess!(pid, resolve(options.cwd ?? opts.cwd, options.env['CLAUDE_CONFIG_DIR'] ?? resolve(options.env['HOME'] ?? homedir(), '.claude')), PINNED_CLI_VERSION), base.stderr) }),
       env: { ...(process.env as Record<string, string>), ...spec.env },
     };
   }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Link } from '@tanstack/react-router';
 import type { EventData, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
@@ -143,6 +144,7 @@ function TurnView({
           <div className="user-meta">
             {turn.pending !== undefined || turn.commandState !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending?.status ?? turn.commandState ?? 'pending')}</span> : null}
             {turn.pending?.status === 'queued' ? <button type="button" className="btn" onClick={() => { void store.cancelQueued(sessionId, turn.pending?.clientCommandId ?? '').catch(error => setCancelError(String(error))); }}>取消排队</button> : null}
+            {turn.pending?.status === 'uncertain' || turn.commandState === 'uncertain' ? <Link to="/settings/native-events" search={{ sessionId }} className="btn">核对原生执行</Link> : null}
             <span>{new Date(user.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
           {cancelError ? <p role="alert">{cancelError}</p> : null}
@@ -578,6 +580,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
   const resolvedText = (() => {
     if (resolution === undefined) return null;
     const resolved = resolution.data as EventData['approval.resolved'];
+    if (resolved.optionId === 'outcome-unknown') return '原生轮次已结束，审批结果未确认';
     const option = resolved.optionId.toLowerCase();
     const result = ['allow', 'accept', 'acceptforsession', 'allowed-once', 'approved', 'approved_for_session', 'approve', 'allow-always', 'allowed-always'].includes(option)
       ? '已允许一次'
@@ -662,7 +665,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
     return (
       <div className="approval-card resolved" data-testid="question-card" data-state="resolved">
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>{data.resolution === 'external' ? '已由原生结束' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
+        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? '已由原生结束' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
       </div>
     );

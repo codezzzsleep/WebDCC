@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import type { AgentId, NativeOwnerDto, RuntimeIdentity } from '@webdcc/protocol';
+import type { AgentId, NativeOwnerDto, RuntimeIdentity, ManagedProcessIdentity } from '@webdcc/protocol';
 import type { Db } from './db.js';
+import { captureProcess } from './process-identity.js';
 
 interface Row {
   session_id: string; agent: AgentId; host_id: string; native_id: string | null;
@@ -9,6 +10,7 @@ interface Row {
   active_native_turn_id: string | null; last_observed_seq: number | null;
   lease_until: number; observed_at: string; server_pid: number;
   server_boot: string; server_start: string;
+  managed_process?: string | null;
 }
 const boot = (): string => { try { return readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch { return 'unknown'; } };
 function processStart(pid: number): string {
@@ -49,7 +51,8 @@ export class NativeOwnerStore {
         VALUES (?, ?, ?, ?, ?, ?, 'opening', ?, ?, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET owner_id=excluded.owner_id, generation=excluded.generation,
         state='opening', lease_until=excluded.lease_until, observed_at=excluded.observed_at,
-        server_pid=excluded.server_pid, server_boot=excluded.server_boot, server_start=excluded.server_start`)
+        server_pid=excluded.server_pid, server_boot=excluded.server_boot, server_start=excluded.server_start,
+        managed_process=NULL, active_native_turn_id=NULL, last_observed_seq=NULL`)
         .run(sessionId, agent, this.hostId, nativeId || null, ownerId, generation, now + this.leaseMs,
           new Date(now).toISOString(), process.pid, this.serverBoot, this.serverStart);
       return { ownerId, generation, hostId: this.hostId };
@@ -88,6 +91,22 @@ export class NativeOwnerStore {
   release(sessionId: string, identity: RuntimeIdentity, verified: boolean): void {
     this.db.prepare('UPDATE native_owners SET state = ?, lease_until = 0 WHERE session_id = ? AND owner_id = ? AND generation = ?')
       .run(verified ? 'released' : 'uncertain', sessionId, identity.ownerId, identity.generation);
+  }
+  managedProcess(sessionId: string): ManagedProcessIdentity | null {
+    const row = this.db.prepare('SELECT managed_process FROM native_owners WHERE session_id = ?').get(sessionId) as { managed_process: string | null } | undefined;
+    return row?.managed_process == null ? null : JSON.parse(row.managed_process) as ManagedProcessIdentity;
+  }
+  bindProcess(sessionId: string, identity: RuntimeIdentity, pid: number, profilePath?: string, nativeVersion?: string): void {
+    this.assert(sessionId, identity);
+    const captured = captureProcess(pid, profilePath);
+    if (captured === undefined) throw new Error('托管子进程身份无法验证');
+    this.db.prepare('UPDATE native_owners SET managed_process = ? WHERE session_id = ? AND owner_id = ? AND generation = ?')
+      .run(JSON.stringify({ ...captured, ...(nativeVersion === undefined ? {} : { nativeVersion }) }), sessionId, identity.ownerId, identity.generation);
+  }
+  reconcileRelease(sessionId: string, ownerId: string, generation: number): void {
+    const changed = this.db.prepare("UPDATE native_owners SET state = 'released', active_native_turn_id = NULL, lease_until = 0 WHERE session_id = ? AND owner_id = ? AND generation = ? AND state IN ('uncertain','released')")
+      .run(sessionId, ownerId, generation).changes;
+    if (changed !== 1) throw conflict('运行身份已变化，请重新核对');
   }
   /** Recover only abandoned owners. Starting a second manager must not rewrite
    * another live manager's commands or interactions as uncertain. */

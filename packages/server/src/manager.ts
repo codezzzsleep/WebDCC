@@ -12,6 +12,8 @@ import type {
   UserInput,
   AnswerSubmission,
   RuntimeIdentity,
+  ReconciliationView,
+  NativeObservation,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, nativeAccessMode, observePermissions, ulid } from '@webdcc/protocol';
@@ -151,7 +153,9 @@ export class SessionManager {
     const runtime = this.runtimes.get(session.id);
     if (runtime === undefined) throw new Error('原生实例尚未绑定运行身份');
     this.store.nativeEvents.addSecret(opts.provider?.apiKey);
-    opts = { ...opts, runtime: runtime.identity, nativeEvents: { record: frame => {
+    opts = { ...opts, runtime: runtime.identity,
+      onManagedProcess: (pid, profilePath, nativeVersion) => this.store.nativeOwners.bindProcess(session.id, runtime.identity, pid, profilePath, nativeVersion),
+      nativeEvents: { record: frame => {
       try {
         const accepted = !runtime.disposing && this.runtimes.get(session.id) === runtime && this.store.nativeOwners.current(session.id, runtime.identity);
         const envelopeId = this.store.nativeEvents.frame({ sessionId: session.id, agent: session.agent, nativeId: runtime.nativeId, identity: runtime.identity }, frame, accepted);
@@ -208,6 +212,37 @@ export class SessionManager {
 
   getRuntime(sessionId: string): Runtime | undefined {
     return this.runtimes.get(sessionId);
+  }
+
+  private async observeNative(sessionId: string): Promise<NativeObservation> {
+    const session = this.requireSession(sessionId);
+    const adapter = this.adapters.get(session.agent);
+    if (adapter?.observe === undefined) throw Object.assign(new Error('此原生运行时的只读对账尚不可用'), { statusCode: 501 });
+    if (!session.nativeId) throw Object.assign(new Error('会话没有可核对的原生身份'), { statusCode: 409 });
+    const workspace = this.requireWorkspace(session.workspaceId);
+    return adapter.observe({ sessionId, cwd: workspace.path, nativeId: session.nativeId, providerId: null,
+      nativeEvents: { record: frame => {
+        try { return { envelopeId: this.store.nativeEvents.frame({ sessionId, agent: session.agent, nativeId: session.nativeId! }, frame, true), accepted: true }; }
+        catch { return { envelopeId: 0, accepted: false }; }
+      } } });
+  }
+
+  async reconcile(sessionId: string): Promise<ReconciliationView> {
+    return this.control(sessionId, async () => this.store.reconciliations.capture(sessionId, await this.observeNative(sessionId)));
+  }
+
+  async applyReconciliation(sessionId: string, revision: string): Promise<ReconciliationView> {
+    return this.control(sessionId, async () => {
+      if (this.runtimes.has(sessionId) || this.activations.has(sessionId)) throw Object.assign(new Error('托管实例尚未关闭，请重新读取状态'), { statusCode: 409 });
+      const preview = this.store.reconciliations.get(sessionId, revision);
+      if (preview === null || !preview.canApply || preview.applied) throw Object.assign(new Error('核对记录不可应用，请重新读取状态'), { statusCode: 409 });
+      const fresh = await this.observeNative(sessionId);
+      const result = this.store.reconciliations.apply(sessionId, revision, fresh);
+      this.uncertainSessions.delete(sessionId);
+      for (const event of result.events) this.hooks.onEvent(event);
+      this.hooks.onFeed(sessionId, { status: 'idle', queueRevision: Date.now() }, result.feedSeq);
+      return result.view;
+    });
   }
 
   hotItems(sessionId: string): HotItem[] {

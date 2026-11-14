@@ -20,5 +20,6 @@ export * from './commands.js';
 export * from './question-answer.js';
 export * from './runtime.js';
 export * from './native-events.js';
+export * from './native-observation.js';
 
 export const PROTOCOL_VERSION = 1;

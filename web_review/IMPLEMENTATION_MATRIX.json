@@ -280,7 +280,18 @@
           "packages/protocol/src/runtime.ts",
           "packages/server/src/native-owners.ts",
           "packages/server/test/native-owners.spec.ts",
-          "packages/server/test/fixtures/owner-crash.ts"
+          "packages/server/test/fixtures/owner-crash.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/manager.ts",
@@ -294,12 +305,24 @@
           "packages/protocol/src/runtime.ts",
           "packages/server/src/native-owners.ts",
           "packages/server/test/native-owners.spec.ts",
-          "packages/server/test/fixtures/owner-crash.ts"
+          "packages/server/test/fixtures/owner-crash.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-e493ec4.json",
-          "web_review/evidence/l1-20701b2.json"
+          "web_review/evidence/l1-20701b2.json",
+          "web_review/evidence/native-recovery-current.json"
         ],
         "remainingAcceptance": [
           "并发resume只创建一个owner，旧query晚到不能污染新会话。",
@@ -469,7 +492,18 @@
           "packages/protocol/src/events.ts",
           "packages/server/test/interactions.spec.ts",
           "packages/server/test/fixtures/interaction-crash.ts",
-          "packages/testing/fake-adapter/src/replay.ts"
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -493,12 +527,24 @@
           "packages/protocol/src/events.ts",
           "packages/server/test/interactions.spec.ts",
           "packages/server/test/fixtures/interaction-crash.ts",
-          "packages/testing/fake-adapter/src/replay.ts"
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-64cf89e.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-recovery-current.json"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
@@ -734,18 +780,41 @@
           "packages/adapters/claude/src/content.ts",
           "packages/adapters/claude/src/system.ts",
           "packages/adapters/claude/src/content.spec.ts",
-          "packages/adapters/claude/test/lifecycle.spec.ts"
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "actualFiles": [
           "packages/adapters/claude/src/adapter.ts",
           "packages/adapters/claude/src/content.ts",
           "packages/adapters/claude/src/system.ts",
           "packages/adapters/claude/src/content.spec.ts",
-          "packages/adapters/claude/test/lifecycle.spec.ts"
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
-          "web_review/evidence/l1-e493ec4.json"
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-recovery-current.json"
         ],
         "remainingAcceptance": [
           "两个text block完成态保持各自内容，主子输出交错不串线。",
@@ -2816,7 +2885,18 @@
           "packages/server/test/interactions.spec.ts",
           "packages/server/test/native-events.spec.ts",
           "packages/server/src/native-events.ts",
-          "packages/server/src/native-owners.ts"
+          "packages/server/src/native-owners.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/db.ts",
@@ -2828,12 +2908,24 @@
           "packages/server/test/interactions.spec.ts",
           "packages/server/test/native-events.spec.ts",
           "packages/server/src/native-events.ts",
-          "packages/server/src/native-owners.ts"
+          "packages/server/src/native-owners.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-e493ec4.json",
-          "web_review/evidence/l1-20701b2.json"
+          "web_review/evidence/l1-20701b2.json",
+          "web_review/evidence/native-recovery-current.json"
         ],
         "remainingAcceptance": [
           "从审核基线数据库升级保留sessionId/URL/events/files及已有命令结果。",

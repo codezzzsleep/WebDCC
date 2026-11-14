@@ -23,6 +23,7 @@ import type {
   NativeEnvelopeDetail,
   NativeOwnerDto,
   StoredEvent,
+  ReconciliationView,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -55,6 +56,9 @@ export const api = {
   nativeEvent: (id: number) => request<NativeEnvelopeDetail>(`/api/native-events/${id}`),
   eventEvidence: (sessionId: string, seq: number) => request<{ event: StoredEvent; envelope: NativeEnvelopeDetail | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/events/${seq}/evidence`),
   runtime: (sessionId: string) => request<{ owner: NativeOwnerDto | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/runtime`),
+  reconciliation: (sessionId: string) => request<{ reconciliation: ReconciliationView | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/reconciliation`),
+  reconcile: (sessionId: string) => request<ReconciliationView>(`/api/sessions/${encodeURIComponent(sessionId)}/reconciliation`, { method: 'POST', body: '{}' }),
+  applyReconciliation: (sessionId: string, revision: string) => request<ReconciliationView>(`/api/sessions/${encodeURIComponent(sessionId)}/reconciliation/apply`, { method: 'POST', body: JSON.stringify({ revision }) }),
   queue: (sessionId: string) => request<{ inputs: QueuedInput[]; revision: number }>(`/api/sessions/${encodeURIComponent(sessionId)}/queue`),
   cancelQueued: (sessionId: string, commandId: string) => request<void>(`/api/sessions/${encodeURIComponent(sessionId)}/queue/${encodeURIComponent(commandId)}`, { method: 'DELETE' }),
   capabilities: (workspaceId?: string) => request<CapabilitySnapshot>(`/api/capabilities${workspaceId === undefined ? '' : `?workspaceId=${encodeURIComponent(workspaceId)}`}`),
