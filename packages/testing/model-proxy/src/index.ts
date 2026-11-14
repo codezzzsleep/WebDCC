@@ -1,8 +1,12 @@
 import { createServer, request as requestHttp, type ClientRequest, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { request as requestHttps } from 'node:https';
-import { appendFile, chmod, mkdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { DiagnosticCapture, diagnosticSecretsFromHeaders, redactDiagnosticBytes, sensitiveDiagnosticField } from './redaction.js';
+export { DiagnosticCapture, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from './redaction.js';
+import { DiagnosticFileWriter } from './diagnostic-writer.js';
+export { DiagnosticFileWriter, type DiagnosticWriteLimits } from './diagnostic-writer.js';
 
 export interface ModelProxyChunk { t: number; data: string; bytes?: number; sha256?: string; }
 export interface ModelProxyRecord {
@@ -14,6 +18,7 @@ export interface ModelProxyRecord {
   error?: { name: string; message: string; code?: string };
   request: { method: string; path: string; headers: IncomingHttpHeaders; body: string; sha256?: string };
   response: { status: number; headers: Record<string, string | string[] | undefined>; chunks: ModelProxyChunk[]; upstreamStatus?: number | null };
+  coverage?: { truncated: boolean; requestBytes: number; responseBytes: number; responseChunks: number; digestScope: 'redacted' };
 }
 export interface ModelProxyEvent { requestId: string; t: number; phase: 'request' | 'headers' | 'chunk' | 'complete'; value: unknown; }
 export interface ModelProxyOptions {
@@ -26,31 +31,22 @@ export interface ModelProxyOptions {
   secrets?: string[];
   onEvent?: (event: ModelProxyEvent) => void;
   onRecord?: (record: ModelProxyRecord) => void | Promise<void>;
+  maxCaptureBytes?: number;
+  maxCaptureChunks?: number;
+  maxRecordFileBytes?: number;
+  maxPendingRecordBytes?: number;
 }
 
-const sensitiveHeader = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key)$/i;
-function safeHeaders(headers: IncomingHttpHeaders): IncomingHttpHeaders {
-  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, sensitiveHeader.test(key) ? '<redacted>' : value]));
+function safeHeaders(headers: IncomingHttpHeaders, secrets: readonly string[] = []): IncomingHttpHeaders {
+  const redact = (value: string): string => redactDiagnosticBytes(Buffer.from(value), secrets).toString();
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, sensitiveDiagnosticField.test(key) ? '<redacted>' : Array.isArray(value) ? value.map(redact) : value === undefined ? undefined : redact(value)]));
 }
 function hash(bytes: Buffer): string { return createHash('sha256').update(bytes).digest('hex'); }
-function safeBytes(bytes: Buffer, secrets: readonly string[]): Buffer {
-  const result = Buffer.from(bytes);
-  const candidates = new Set([...secrets.filter(Boolean), ...bytes.toString('latin1').matchAll(/\bsk-[A-Za-z0-9_-]{8,}\b/g)].map(value => typeof value === 'string' ? value : value[0]));
-  for (const secret of candidates) {
-    const needle = Buffer.from(secret);
-    for (let at = result.indexOf(needle); at >= 0; at = result.indexOf(needle, at + needle.length)) result.fill(42, at, at + needle.length);
-  }
-  return result;
-}
+const safeBytes = redactDiagnosticBytes;
 function safePath(path: string): string {
   const url = new URL(path, 'http://record.invalid');
   for (const key of [...url.searchParams.keys()]) if (/key|token|secret|password/i.test(key)) url.searchParams.set(key, '<redacted>');
   return `${url.pathname}${url.search}`;
-}
-async function bodyOf(req: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.from(chunk as Buffer));
-  return Buffer.concat(chunks);
 }
 
 /** A forwarding observer: headers and bytes reach the client as they arrive.
@@ -63,7 +59,13 @@ export class ModelProxy {
   private readonly pending = new Set<Promise<void>>();
   private readonly recordingErrors: Error[] = [];
   private readonly abortRequests = new Set<() => void>();
-  constructor(private readonly options: ModelProxyOptions) { this.target = new URL(options.target); }
+  private readonly writer: DiagnosticFileWriter;
+  private pendingBytes = 0;
+  constructor(private readonly options: ModelProxyOptions) {
+    this.target = new URL(options.target);
+    new DiagnosticCapture(options.maxCaptureBytes, options.maxCaptureChunks);
+    this.writer = new DiagnosticFileWriter({ maxFileBytes: options.maxRecordFileBytes, maxQueuedBytes: options.maxPendingRecordBytes });
+  }
 
   async listen(): Promise<{ host: string; port: number; url: string }> {
     if (this.server !== null) throw new Error('model proxy already listening');
@@ -94,16 +96,21 @@ export class ModelProxy {
     await this.flush();
   }
   private observe(event: ModelProxyEvent): void {
-    try { this.options.onEvent?.(event); } catch (error) { this.recordingErrors.push(error instanceof Error ? error : new Error(String(error))); }
+    try { this.options.onEvent?.(event); } catch (error) { this.recordingError(error); }
   }
+  private recordingError(error: unknown): void { if (this.recordingErrors.length < 16) this.recordingErrors.push(error instanceof Error ? error : new Error(String(error))); }
   private persist(record: ModelProxyRecord): void {
+    if (this.options.recordFile === undefined && this.options.onRecord === undefined) return;
+    const text = `${JSON.stringify(record)}\n`;
+    const bytes = Buffer.byteLength(text);
+    if (this.pendingBytes + bytes > (this.options.maxPendingRecordBytes ?? 32 * 1024 * 1024)) { this.recordingError(new Error('Diagnostic record queue limit reached')); return; }
+    this.pendingBytes += bytes;
     const work = (async () => {
       if (this.options.recordFile !== undefined) {
-        await appendFile(this.options.recordFile, `${JSON.stringify(record)}\n`, { mode: 0o600 });
-        await chmod(this.options.recordFile, 0o600);
+        await this.writer.write(this.options.recordFile, text, 'append', error => this.recordingError(error));
       }
       await this.options.onRecord?.(record);
-    })().catch((error: unknown) => { this.recordingErrors.push(error instanceof Error ? error : new Error(String(error))); });
+    })().catch((error: unknown) => { this.recordingError(error); }).finally(() => { this.pendingBytes -= bytes; });
     this.pending.add(work);
     void work.finally(() => this.pending.delete(work));
   }
@@ -113,33 +120,32 @@ export class ModelProxy {
     const begun = Date.now();
     const requestIndex = ++this.seq;
     const elapsed = (): number => Date.now() - begun;
-    let body: Buffer = Buffer.alloc(0);
+    const requestCapture = new DiagnosticCapture(this.options.maxCaptureBytes, this.options.maxCaptureChunks);
+    let requestEnded = false;
     let responseStatus: number | null = null;
     let responseHeaders: IncomingHttpHeaders = {};
-    const chunks: { t: number; bytes: Buffer }[] = [];
+    const capture = new DiagnosticCapture(this.options.maxCaptureBytes, this.options.maxCaptureChunks);
     let settled = false;
     let upstreamRequest: ClientRequest | undefined;
     let abort = (): void => undefined;
-    const secrets = [...(this.options.secrets ?? [])];
-    for (const [key, value] of Object.entries(req.headers)) if (sensitiveHeader.test(key) && typeof value === 'string') {
-      secrets.push(value, value.replace(/^Bearer\s+/i, ''));
-    }
+    const secrets = [...(this.options.secrets ?? []), ...diagnosticSecretsFromHeaders(req.headers), this.target.password, decodeURIComponent(this.target.password)].filter(Boolean);
     const finish = (outcome: 'completed' | 'failed' | 'cancelled', error?: Error): void => {
       if (settled) return;
       settled = true;
       this.abortRequests.delete(abort);
-      const raw = Buffer.concat(chunks.map(chunk => chunk.bytes));
+      const raw = capture.buffer();
       const safe = safeBytes(raw, secrets);
       let offset = 0;
-      const recordedChunks = chunks.map(chunk => {
+      const recordedChunks = capture.chunks.map(chunk => {
         const data = safe.subarray(offset, offset + chunk.bytes.length); offset += chunk.bytes.length;
-        return { t: chunk.t, data: data.toString('base64'), bytes: chunk.bytes.length, sha256: hash(chunk.bytes) };
+        return { t: chunk.t, data: data.toString('base64'), bytes: chunk.bytes.length, sha256: hash(data) };
       });
       const record: ModelProxyRecord = {
         i: requestIndex, t: begun - this.started, requestId, durationMs: elapsed(), outcome,
         ...(error === undefined ? {} : { error: { name: error.name, message: safeBytes(Buffer.from(error.message), secrets).toString(), ...('code' in error ? { code: String(error.code) } : {}) } }),
-        request: { method: req.method ?? 'GET', path: safePath(req.url ?? '/'), headers: safeHeaders(req.headers), body: safeBytes(body, secrets).toString('base64'), sha256: hash(body) },
-        response: { status: responseStatus ?? 502, upstreamStatus: responseStatus, headers: safeHeaders(responseHeaders), chunks: recordedChunks },
+        request: { method: req.method ?? 'GET', path: safeBytes(Buffer.from(safePath(req.url ?? '/')), secrets).toString(), headers: safeHeaders(req.headers, secrets), body: safeBytes(requestCapture.buffer(), secrets).toString('base64'), sha256: hash(safeBytes(requestCapture.buffer(), secrets)) },
+        response: { status: responseStatus ?? 502, upstreamStatus: responseStatus, headers: safeHeaders(responseHeaders, secrets), chunks: recordedChunks },
+        coverage: { truncated: capture.truncated || requestCapture.truncated || !requestEnded, requestBytes: requestCapture.bytes, responseBytes: capture.bytes, responseChunks: capture.count, digestScope: 'redacted' },
       };
       this.observe({ requestId, t: elapsed(), phase: 'complete', value: record });
       this.persist(record);
@@ -147,23 +153,21 @@ export class ModelProxy {
     abort = () => { finish('cancelled', new Error('Recording route closed')); upstreamRequest?.destroy(); res.destroy(); };
     this.abortRequests.add(abort);
     try {
-      body = await bodyOf(req);
-      if (settled) return;
-      this.observe({ requestId, t: elapsed(), phase: 'request', value: { method: req.method, path: safePath(req.url ?? '/'), headers: safeHeaders(req.headers), body: safeBytes(body, secrets).toString('base64'), sha256: hash(body) } });
+      this.observe({ requestId, t: elapsed(), phase: 'request', value: { method: req.method, path: safeBytes(Buffer.from(safePath(req.url ?? '/')), secrets).toString(), headers: safeHeaders(req.headers, secrets), capture: 'pending-redaction' } });
       const url = new URL(req.url ?? '/', this.target.origin);
       url.username = this.target.username; url.password = this.target.password;
       const transport = url.protocol === 'https:' ? requestHttps : requestHttp;
-      const upstream = transport(url, { method: req.method, headers: { ...req.headers, host: this.target.host, 'content-length': body.length } }, response => {
+      const upstream = transport(url, { method: req.method, headers: { ...req.headers, host: this.target.host } }, response => {
         responseStatus = response.statusCode ?? 502;
         responseHeaders = response.headers;
-        this.observe({ requestId, t: elapsed(), phase: 'headers', value: { status: responseStatus, headers: safeHeaders(response.headers) } });
+        this.observe({ requestId, t: elapsed(), phase: 'headers', value: { status: responseStatus, headers: safeHeaders(response.headers, secrets) } });
         for (const [key, value] of Object.entries(response.headers)) if (value !== undefined) res.setHeader(key, value);
         res.writeHead(responseStatus);
         res.flushHeaders();
         response.on('data', (value: Buffer | string) => {
           const bytes = Buffer.from(value); const t = elapsed();
-          chunks.push({ t, bytes });
-          this.observe({ requestId, t, phase: 'chunk', value: { bytes: bytes.length, sha256: hash(bytes) } });
+          capture.push(bytes, t);
+          this.observe({ requestId, t, phase: 'chunk', value: { bytes: bytes.length, capture: capture.truncated ? 'omitted' : 'pending-redaction' } });
           if (!res.write(bytes)) { response.pause(); res.once('drain', () => response.resume()); }
         });
         response.once('end', () => { finish('completed'); res.end(); });
@@ -179,7 +183,12 @@ export class ModelProxy {
         }
       });
       res.once('close', () => { if (!res.writableFinished) { finish('cancelled', new Error('Downstream cancelled')); upstream.destroy(); } });
-      upstream.end(body);
+      // Preserve request streaming and backpressure. Capture is a bounded
+      // side channel, never the buffer from which native input is forwarded.
+      req.on('data', (value: Buffer) => requestCapture.push(value, elapsed()));
+      req.once('end', () => { requestEnded = true; });
+      req.once('error', error => { finish('failed', error); upstream.destroy(error); });
+      req.pipe(upstream);
     } catch (error) {
       const problem = error instanceof Error ? error : new Error(String(error));
       finish(req.aborted ? 'cancelled' : 'failed', problem);

@@ -10,9 +10,20 @@ import type {
   WorkspaceDto,
   WatchdogJob,
   WatchdogSettings,
+  PermissionState,
+  InputContent,
+  InteractionKind,
+  InteractionEventResponse,
 } from '@webdcc/protocol';
-import { ulid } from '@webdcc/protocol';
+import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
+import { CommandJournal } from './command-journal.js';
+import { NativeHistoryStore } from './native-history.js';
+import { InteractionStore } from './interactions.js';
+import { NativeOwnerStore } from './native-owners.js';
+import { NativeEventStore } from './native-events.js';
+import { NativeReconciliationStore } from './native-reconciliation.js';
+import { NativeActionStore } from './native-actions.js';
 
 interface SessionRow {
   id: string;
@@ -24,6 +35,7 @@ interface SessionRow {
   model: string | null;
   reasoning_effort: string | null;
   access_mode: string | null;
+  permission_state?: string | null;
   status: string;
   pinned: number;
   archived: number;
@@ -36,6 +48,7 @@ interface SessionRow {
 }
 
 interface EventRow {
+  native_envelope_id?: number | null;
   session_id: string;
   seq: number;
   turn_id: string;
@@ -125,9 +138,11 @@ interface UploadRow {
   size: number;
   received: string;
   created_at: string;
+  session_id: string | null;
 }
 
 export interface AppendEventInput {
+  nativeEnvelopeId?: number;
   sessionId: string;
   turnId: string | null;
   itemKey: string;
@@ -136,6 +151,7 @@ export interface AppendEventInput {
   native?: unknown;
   nativeSeq?: number;
   late?: boolean;
+  at?: string;
 }
 
 export interface CreateSessionInput {
@@ -161,6 +177,7 @@ function toSessionDto(row: SessionRow): SessionDto {
     ...(row.model === null ? {} : { model: row.model }),
     ...(row.reasoning_effort === null ? {} : { reasoningEffort: row.reasoning_effort }),
     ...(row.access_mode === null ? {} : { accessMode: row.access_mode }),
+    permissions: row.permission_state == null ? initialPermissions(row.access_mode) : JSON.parse(row.permission_state) as PermissionState,
     ...(row.parent_id === null || row.parent_id === undefined ? {} : { parentId: row.parent_id }),
     ...(row.handoff_kind == null ? {} : { handoffKind: row.handoff_kind }),
     status: row.status as SessionDto['status'],
@@ -184,6 +201,7 @@ function toEvent(row: EventRow): StoredEvent {
     ...(row.native === null ? {} : { native: JSON.parse(row.native) as unknown }),
     ...(row.native_seq === null ? {} : { nativeSeq: row.native_seq }),
     ...(row.late === 1 ? { late: true } : {}),
+    ...(row.native_envelope_id == null ? {} : { nativeEnvelopeId: row.native_envelope_id }),
   };
 }
 
@@ -193,7 +211,14 @@ function toWatchdogJob(data: string): WatchdogJob {
 }
 
 export class Store {
-  constructor(private readonly db: Db) {}
+  readonly journal: CommandJournal;
+  readonly nativeHistory: NativeHistoryStore;
+  readonly interactions: InteractionStore;
+  readonly nativeOwners: NativeOwnerStore;
+  readonly nativeEvents: NativeEventStore;
+  readonly reconciliations: NativeReconciliationStore;
+  readonly nativeActions: NativeActionStore;
+  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db); this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); this.reconciliations = new NativeReconciliationStore(db, this); this.nativeActions = new NativeActionStore(db); }
 
   watchdogSettings(): WatchdogSettings | undefined {
     const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;
@@ -274,10 +299,10 @@ export class Store {
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, reasoning_effort, access_mode, status, title, parent_id, handoff_kind, last_seq, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, ?, ?)`,
+        `INSERT INTO sessions (id, workspace_id, agent, provider_id, model, reasoning_effort, access_mode, permission_state, status, title, parent_id, handoff_kind, last_seq, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, ?, ?)`,
       )
-      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.reasoningEffort ?? null, input.accessMode ?? null, input.title ?? null, input.parentId ?? null, input.parentId == null ? null : input.handoffKind ?? 'manual', at, at);
+      .run(id, input.workspaceId, input.agent, input.providerId ?? null, input.model ?? null, input.reasoningEffort ?? null, input.accessMode ?? null, JSON.stringify(initialPermissions(input.accessMode)), input.title ?? null, input.parentId ?? null, input.parentId == null ? null : input.handoffKind ?? 'manual', at, at);
     return this.getSession(id) as SessionDto;
   }
 
@@ -297,6 +322,7 @@ export class Store {
       model?: string | null;
       reasoningEffort?: string | null;
       accessMode?: string | null;
+      permissions?: PermissionState;
       providerId?: string | null;
       pinned?: boolean;
       archived?: boolean;
@@ -316,6 +342,7 @@ export class Store {
     if (patch.model !== undefined) push('model', patch.model);
     if (patch.reasoningEffort !== undefined) push('reasoning_effort', patch.reasoningEffort);
     if (patch.accessMode !== undefined) push('access_mode', patch.accessMode);
+    if (patch.permissions !== undefined) push('permission_state', JSON.stringify(patch.permissions));
     if (patch.providerId !== undefined) push('provider_id', patch.providerId);
     if (patch.pinned !== undefined) push('pinned', patch.pinned ? 1 : 0);
     if (patch.archived !== undefined) push('archived', patch.archived ? 1 : 0);
@@ -435,7 +462,26 @@ export class Store {
 
   /** seq 分配与事件写入在同一事务（SPEC 11.2） */
   appendEvent(input: AppendEventInput): StoredEvent {
-    const at = new Date().toISOString();
+    // Redact content, while retaining IDs, lifecycle enums and form contracts.
+    // A secret such as "answered" must not turn a confirmed status into stars.
+    const data = input.data as unknown as Record<string, unknown>;
+    const contentFields: Partial<Record<EventKind, string[]>> = {
+      'user.message': ['text'], 'assistant.message': ['text'], reasoning: ['text'], error: ['message'],
+      command: ['command', 'label', 'outputTail'], 'file.read': ['label'],
+      'tool.call': ['label', 'input', 'output'], goal: ['objective'], notice: ['text'],
+      question: ['prompt', 'header'], 'approval.request': ['title', 'detail', 'reason', 'planMarkdown'],
+    };
+    const sanitized = { ...data };
+    for (const field of contentFields[input.kind] ?? []) if (field in data) sanitized[field] = this.nativeEvents.redact(data[field]);
+    if ((input.kind === 'file.change' || input.kind === 'turn.diff') && Array.isArray(data['changes'])) sanitized['changes'] = data['changes'].map((change: Record<string, unknown>) => ({
+      ...change, ...('diff' in change ? { diff: this.nativeEvents.redact(change['diff']) } : {}), ...('note' in change ? { note: this.nativeEvents.redact(change['note']) } : {}),
+    }));
+    if (input.kind === 'question' && Array.isArray(data['options'])) sanitized['options'] = data['options'].map((option: Record<string, unknown>) => ({ ...option,
+      label: this.nativeEvents.redact(option['label']), ...('description' in option ? { description: this.nativeEvents.redact(option['description']) } : {}),
+    }));
+    input = { ...input, data: sanitized as unknown as StoredEvent['data'],
+      ...(input.native === undefined ? {} : { native: this.nativeEvents.policyValue(input.sessionId, input.native) }) };
+    const at = input.at ?? new Date().toISOString();
     const tx = this.db.transaction((event: AppendEventInput): StoredEvent => {
       const current = this.db.prepare('SELECT last_seq FROM sessions WHERE id = ?').get(event.sessionId) as
         | { last_seq: number }
@@ -444,8 +490,8 @@ export class Store {
       const seq = current.last_seq + 1;
       this.db
         .prepare(
-          `INSERT INTO events (session_id, seq, turn_id, item_key, kind, native_seq, data, native, at, late)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO events (session_id, seq, turn_id, item_key, kind, native_seq, data, native, at, late, native_envelope_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           event.sessionId,
@@ -458,9 +504,10 @@ export class Store {
           event.native === undefined ? null : JSON.stringify(event.native),
           at,
           event.late === true ? 1 : 0,
+          event.nativeEnvelopeId ?? null,
         );
       this.db.prepare('UPDATE sessions SET last_seq = ?, updated_at = ? WHERE id = ?').run(seq, at, event.sessionId);
-      return {
+      const stored: StoredEvent = {
         sessionId: event.sessionId,
         seq,
         turnId: event.turnId,
@@ -471,7 +518,11 @@ export class Store {
         ...(event.native === undefined ? {} : { native: event.native }),
         ...(event.nativeSeq === undefined ? {} : { nativeSeq: event.nativeSeq }),
         ...(event.late === true ? { late: true } : {}),
+        ...(event.nativeEnvelopeId === undefined ? {} : { nativeEnvelopeId: event.nativeEnvelopeId }),
       };
+      this.interactions.observe(stored);
+      if (event.nativeEnvelopeId !== undefined) this.nativeEvents.projected(event.nativeEnvelopeId, seq);
+      return stored;
     });
     return tx(input);
   }
@@ -502,6 +553,17 @@ export class Store {
     return (this.db.prepare('SELECT * FROM events WHERE session_id = ? ORDER BY seq ASC').all(sessionId) as EventRow[]).map(
       toEvent,
     );
+  }
+
+  latestInteractionEvent(sessionId: string, kind: InteractionKind, interactionId: string): InteractionEventResponse {
+    return this.db.transaction(() => {
+      const session = this.getSession(sessionId);
+      if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+      const row = kind === 'answer'
+        ? this.db.prepare("SELECT * FROM events WHERE session_id = ? AND kind = 'question' AND json_extract(data, '$.questionId') = ? ORDER BY seq DESC LIMIT 1").get(sessionId, interactionId)
+        : this.db.prepare("SELECT * FROM events WHERE session_id = ? AND kind IN ('approval.request', 'approval.resolved') AND json_extract(data, '$.approvalId') = ? ORDER BY seq DESC LIMIT 1").get(sessionId, interactionId);
+      return { event: row === undefined ? null : toEvent(row as EventRow), throughSeq: session.lastSeq };
+    })();
   }
 
   // ---------- feed ----------
@@ -570,22 +632,23 @@ export class Store {
 
   // ---------- drafts ----------
   getDraft(sessionId: string): DraftDto {
-    const row = this.db.prepare('SELECT text, file_ids, updated_at FROM drafts WHERE session_id = ?').get(sessionId) as
-      | { text: string; file_ids: string; updated_at: string }
+    const row = this.db.prepare('SELECT text, file_ids, content_parts, revision, updated_at FROM drafts WHERE session_id = ?').get(sessionId) as
+      | { text: string; file_ids: string; content_parts: string | null; revision: number; updated_at: string }
       | undefined;
-    if (row === undefined) return { text: '', fileIds: [], updatedAt: new Date(0).toISOString() };
-    return { text: row.text, fileIds: JSON.parse(row.file_ids) as string[], updatedAt: row.updated_at };
+    if (row === undefined) return { text: '', fileIds: [], updatedAt: new Date(0).toISOString(), revision: 0 };
+    return { text: row.text, fileIds: JSON.parse(row.file_ids) as string[], updatedAt: row.updated_at, revision: row.revision, ...(row.content_parts === null ? {} : { contentParts: JSON.parse(row.content_parts) as InputContent }) };
   }
 
-  setDraft(sessionId: string, text: string, fileIds: string[]): DraftDto {
-    const at = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO drafts (session_id, text, file_ids, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(session_id) DO UPDATE SET text = excluded.text, file_ids = excluded.file_ids, updated_at = excluded.updated_at`,
-      )
-      .run(sessionId, text, JSON.stringify(fileIds), at);
-    return { text, fileIds, updatedAt: at };
+  setDraft(sessionId: string, text: string, fileIds: string[], options: { expectedRevision?: number; contentParts?: InputContent } = {}): DraftDto {
+    return this.db.transaction(() => {
+      const previous = this.getDraft(sessionId);
+      if (options.expectedRevision !== undefined && previous.revision !== options.expectedRevision) throw Object.assign(new Error('草稿已被另一端修改，请重新读取后合并'), { statusCode: 409, code: 'draft-conflict', revision: previous.revision });
+      const at = new Date().toISOString(); const revision = previous.revision + 1;
+      this.db.prepare(`INSERT INTO drafts (session_id, text, file_ids, content_parts, revision, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET text = excluded.text, file_ids = excluded.file_ids, content_parts = excluded.content_parts, revision = excluded.revision, updated_at = excluded.updated_at`)
+        .run(sessionId, text, JSON.stringify(fileIds), options.contentParts === undefined ? null : JSON.stringify(options.contentParts), revision, at);
+      return { text, fileIds, updatedAt: at, revision, ...(options.contentParts === undefined ? {} : { contentParts: options.contentParts }) };
+    })();
   }
 
   // ---------- files ----------
@@ -604,21 +667,48 @@ export class Store {
   }
 
   getFileBySha(sha256: string): FileDto | undefined {
-    const row = this.db.prepare('SELECT * FROM files WHERE sha256 = ?').get(sha256) as FileRow | undefined;
+    const row = this.db.prepare('SELECT * FROM files WHERE sha256 = ? ORDER BY created_at, id LIMIT 1').get(sha256) as FileRow | undefined;
     if (row === undefined) return undefined;
     return { id: row.id, sha256: row.sha256, name: row.name, mime: row.mime, size: row.size, createdAt: row.created_at };
   }
 
+  getFileByMetadata(sha256: string, name: string, mime: string): FileDto | undefined {
+    const row = this.db.prepare('SELECT id FROM files WHERE sha256 = ? AND name = ? AND mime = ? ORDER BY created_at, id LIMIT 1').get(sha256, name, mime) as { id: string } | undefined;
+    return row === undefined ? undefined : this.getFile(row.id);
+  }
+
   // ---------- uploads ----------
-  createUpload(input: { id: string; sha256: string; name: string; mime: string; size: number }): void {
+  grantFile(sessionId: string, fileId: string, source: 'upload' | 'user-attach'): void {
+    this.db.prepare('INSERT OR IGNORE INTO file_session_grants (session_id, file_id, source, created_at) VALUES (?, ?, ?, ?)').run(sessionId, fileId, source, new Date().toISOString());
+  }
+
+  hasFileGrant(sessionId: string, fileId: string): boolean {
+    return this.db.prepare('SELECT 1 FROM file_session_grants WHERE session_id = ? AND file_id = ?').get(sessionId, fileId) !== undefined;
+  }
+
+  createUpload(input: { id: string; sha256: string; name: string; mime: string; size: number; sessionId?: string }): void {
     this.db
-      .prepare('INSERT INTO uploads (id, sha256, name, mime, size, received, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(input.id, input.sha256, input.name, input.mime, input.size, '[]', new Date().toISOString());
+      .prepare('INSERT INTO uploads (id, sha256, name, mime, size, received, created_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(input.id, input.sha256, input.name, input.mime, input.size, '[]', new Date().toISOString(), input.sessionId ?? null);
   }
 
   getUpload(id: string): (UploadRow & { receivedList: number[] }) | undefined {
     const row = this.db.prepare('SELECT * FROM uploads WHERE id = ?').get(id) as UploadRow | undefined;
     return row === undefined ? undefined : { ...row, receivedList: JSON.parse(row.received) as number[] };
+  }
+
+  listUploads(): (UploadRow & { receivedList: number[] })[] {
+    return (this.db.prepare('SELECT * FROM uploads').all() as UploadRow[]).map(row => ({ ...row, receivedList: JSON.parse(row.received) as number[] }));
+  }
+
+  fileStorageUsage(): { stored: number; pending: number } {
+    return { stored: (this.db.prepare('SELECT COALESCE(SUM(size), 0) AS bytes FROM (SELECT MAX(size) AS size FROM files GROUP BY sha256)').get() as { bytes: number }).bytes,
+      pending: (this.db.prepare('SELECT COALESCE(SUM(size), 0) AS bytes FROM uploads').get() as { bytes: number }).bytes };
+  }
+
+  saveCapabilitySnapshot(scope: string, revision: string, data: unknown): void {
+    this.db.prepare('INSERT INTO capability_snapshots (scope, revision, data, at) VALUES (?, ?, ?, ?) ON CONFLICT(scope) DO UPDATE SET revision = excluded.revision, data = excluded.data, at = excluded.at')
+      .run(scope, revision, JSON.stringify(data), new Date().toISOString());
   }
 
   setUploadReceived(id: string, received: number[]): void {

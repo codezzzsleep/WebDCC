@@ -1,10 +1,13 @@
 /** REST DTO（SPEC 11.1） */
 import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { ProbeResult } from './adapter.js';
+import type { BuildManifest } from './build.js';
+import type { AccessModeOption, PermissionState } from './permissions.js';
+import type { InputContent } from './input.js';
 
 export interface AgentMeta extends ProbeResult {
   adapterKind?: 'real' | 'fake';
-  accessModes?: { id: string; label: string }[];
+  accessModes?: AccessModeOption[];
   models?: { id: string; label: string }[];
 }
 
@@ -15,6 +18,7 @@ export interface MetaResponse {
   agents: Record<string, AgentMeta>;
   /** 服务进程是否以 root 运行：root 下 Claude 不能用 bypassPermissions（MODE-claude-01） */
   runningAsRoot?: boolean;
+  build?: BuildManifest;
 }
 
 export interface WorkspaceDto {
@@ -34,6 +38,7 @@ export interface SessionDto {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  permissions?: PermissionState;
   /** 接续会话的上一棒（"在另一个 Agent 中继续"） */
   parentId?: string;
   /** Manual handoffs are children; Watchdog recoveries stay at their source's level. */
@@ -61,6 +66,10 @@ export interface EventsPageResponse {
   events: StoredEvent[];
   hasMore: boolean;
 }
+
+export type InteractionKind = 'answer' | 'approve';
+/** An actual persisted interaction event and its same-read-window event boundary. */
+export interface InteractionEventResponse { event: StoredEvent | null; throughSeq: number }
 
 export interface FileDto {
   id: string;
@@ -92,6 +101,8 @@ export interface DraftDto {
   text: string;
   fileIds: string[];
   updatedAt: string;
+  revision: number;
+  contentParts?: InputContent;
 }
 
 export interface ProviderEndpointMap {

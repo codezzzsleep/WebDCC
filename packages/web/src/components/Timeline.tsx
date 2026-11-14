@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { EventData, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { isValidEventData } from '@webdcc/protocol';
+import { Link } from '@tanstack/react-router';
+import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
+import { goalLabel, isValidEventData } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -9,6 +10,8 @@ import { duration, shortNumber } from '../lib/format.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Icon, Spinner, type IconName } from './Icon.js';
 import { Markdown, MarkdownWorkspace } from './Markdown.js';
+import { ElicitationForm } from './ElicitationForm.js';
+import { InputAttachments } from './InputAttachments.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -27,6 +30,12 @@ interface TimelineProps {
 export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compact = false }: TimelineProps): React.ReactElement {
   const turns = useTurns(sessionId);
   const hotCount = store.getHot(sessionId).length;
+  const standalone = new Map<string, StoredEvent>();
+  for (const event of store.getEvents(sessionId)) {
+    if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
+    if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
+    if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
+  }
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [stickToBottom, setStickToBottom] = useState(true);
@@ -61,6 +70,9 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   return (
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      {[...standalone.values()].filter(event => event.turnId === null).map(event => <div key={event.itemKey} className="timeline-inner">
+        {event.kind === 'question' ? <QuestionCard event={event} data={event.data as EventData['question']} /> : <ApprovalCard event={event} data={event.data as EventData['approval.request']} />}
+      </div>)}
       <div className="timeline-inner" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
         {virtualizer.getVirtualItems().map((item) => {
           const turn = turns[item.index];
@@ -75,6 +87,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
             >
               <TurnView
+                sessionId={sessionId}
                 turn={turn}
                 expanded={isExpanded}
                 isLast={isLast}
@@ -96,6 +109,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
 const INTERACTIVE_KINDS = new Set(['approval.request', 'question']);
 
 function TurnView({
+  sessionId,
   turn,
   expanded,
   isLast,
@@ -105,6 +119,7 @@ function TurnView({
   onOpenDiff,
   onHandoff,
 }: {
+  sessionId: string;
   turn: ProtocolTurnView;
   expanded: boolean;
   isLast: boolean;
@@ -114,6 +129,7 @@ function TurnView({
   onOpenDiff: (fileId: string, path: string) => void;
   onHandoff: (text: string) => void;
 }): React.ReactElement {
+  const [cancelError, setCancelError] = useState('');
   const user = turn.user;
   const running = turn.state === 'starting' || turn.state === 'running' || turn.state === 'waiting';
   const steps = turn.steps;
@@ -131,17 +147,32 @@ function TurnView({
 
   return (
     <section className={`turn ${running ? 'turn-running' : ''}`} id={turn.userSeq === undefined ? undefined : `e-${turn.userSeq}`}>
-      {turn.pending !== undefined || user.text !== '' ? (
+      {turn.pending !== undefined || user.text !== '' || (user.images?.length ?? 0) > 0 || user.contentParts?.parts.some(part => part.type !== 'text') ? (
         <div className="user-message" data-testid="user-message">
           <div className="user-bubble">
             <Markdown text={user.text} />
+            <InputAttachments contentParts={user.contentParts} images={user.images} />
           </div>
           <div className="user-meta">
-            {turn.pending !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending.status)}</span> : null}
+            {turn.pending !== undefined || turn.commandState !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending?.status ?? turn.commandState ?? 'pending')}</span> : null}
+            {turn.pending?.status === 'queued' ? <button type="button" className="btn" onClick={() => { void store.cancelQueued(sessionId, turn.pending?.clientCommandId ?? '').catch(error => setCancelError(String(error))); }}>取消排队</button> : null}
+            {turn.pending?.status === 'queued' && turn.pending.error !== undefined ? <button type="button" className="btn" onClick={() => void api.retryQueuedInput(sessionId, turn.pending!.clientCommandId).then(() => store.refreshQueue(sessionId)).catch(error => setCancelError(String(error)))}>重新核对附件并发送</button> : null}
+            {turn.pending?.status === 'uncertain' || turn.commandState === 'uncertain' ? <Link to="/settings/native-events" search={{ sessionId }} className="btn">核对原生执行</Link> : null}
             <span>{new Date(user.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+            {store.canRecoverFailedInput(turn.pending?.clientCommandId ?? user.commandId) ? <button type="button" className="btn" onClick={() => {
+              try { store.recoverFailedInput(sessionId, turn.pending?.clientCommandId ?? user.commandId ?? ''); setCancelError(''); } catch (error) { setCancelError(String(error)); }
+            }}>放回输入框</button> : null}
           </div>
+          {cancelError ? <p role="alert">{cancelError}</p> : null}
+          {turn.pending?.error !== undefined ? <p role="alert">{turn.pending.error}</p> : null}
         </div>
       ) : null}
+
+      {[...(turn.inputs?.slice(1) ?? []), ...(turn.pendingInputs ?? [])].map((input, index) => <div className="user-message" data-testid="additional-user-input" key={`additional-${index}`}>
+        <div className="user-bubble"><Markdown text={input.text} /><InputAttachments contentParts={input.contentParts} images={input.images} /></div>
+        <div className="user-meta"><span>本轮补充消息</span>{'status' in input ? <span className="outbox-status">{outboxLabel(input.status)}</span> : null}<span>{new Date(input.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span></div>
+        {'error' in input && input.error !== undefined ? <p role="alert">{input.error}</p> : null}
+      </div>)}
 
       {turn.pending !== undefined ? null : (
         <div className="turn-header">
@@ -224,7 +255,7 @@ function summaryLabel(turn: ProtocolTurnView): string {
   const { commands, reads, edits, tools } = turn.summary;
   const parts: string[] = [];
   if (turn.plan !== undefined) parts.push('更新了计划');
-  if (turn.goal !== undefined) parts.push('更新了目标');
+  if (turn.goal !== undefined) parts.push(goalLabel(turn.goal));
   if (commands > 0) parts.push(`执行了 ${commands} 条命令`);
   if (reads > 0) parts.push(`读取了 ${reads} 个文件`);
   if (edits > 0) parts.push(`编辑了 ${edits} 个文件`);
@@ -232,7 +263,8 @@ function summaryLabel(turn: ProtocolTurnView): string {
   return parts.length === 0 ? '查看过程' : parts.join('，');
 }
 
-function outboxLabel(status: 'pending' | 'queued' | 'sent' | 'failed'): string {
+function outboxLabel(status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain'): string {
+  if (status === 'uncertain') return '原生结果待核对，未自动重发';
   if (status === 'pending') return '待发送';
   if (status === 'queued') return '队列中';
   if (status === 'sent') return '已送达';
@@ -436,11 +468,12 @@ function StepRow({
       const data = event.data as EventData['tool.call'];
       const toolInput = data.input as Record<string, unknown>;
       const childId = data.name === 'subagent' && typeof toolInput?.['childId'] === 'string' ? toolInput['childId'] : undefined;
+      const canControlChild = childId !== undefined && toolInput?.['mode'] === 'continuable';
       const sendSubagent = async (): Promise<void> => {
         if (childId === undefined || subagentText.trim() === '') return;
         setSubagentBusy(true);
         try {
-          await api.sendSubagent(event.sessionId, childId, subagentText.trim());
+          await api.sendSubagent(event.sessionId, childId, subagentText);
           setSubagentText('');
         } finally {
           setSubagentBusy(false);
@@ -471,7 +504,7 @@ function StepRow({
               {data.output === undefined ? '' : `\n\n→ ${typeof data.output === 'string' ? data.output : JSON.stringify(data.output, null, 2)}`}
             </pre>
           ) : null}
-          {childId !== undefined ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
+          {canControlChild ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
         </div>
       );
     }
@@ -487,7 +520,7 @@ function StepRow({
       const data = event.data as EventData['goal'];
       return (
         <div className={className}>
-          <StepLine icon="target" label="更新了目标" detail={data.objective} />
+          <StepLine icon="target" label={goalLabel(data)} detail={data.objective} />
         </div>
       );
     }
@@ -559,7 +592,11 @@ function approvalWhat(data: EventData['approval.request']): string {
 
 function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['approval.request'] }): React.ReactElement {
   useStoreVersion();
-  const [clicked, setClicked] = useState(false);
+  const submission = data.submission === 'sent' || data.submission === 'uncertain'
+    ? { commandId: '', status: data.submission } : store.getInteractionSubmission(event.sessionId, 'approve', data.approvalId)
+      ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission });
+  const synchronized = store.isInteractionSynced(event.sessionId, 'approve', data.approvalId);
+  const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
   // 处理过的审批要显示结果、不再显示按钮（F11 / F17）；结果也可能来自其他界面
   const resolution = [...store.getEvents(event.sessionId)]
     .reverse()
@@ -567,7 +604,11 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
   const resolvedText = (() => {
     if (resolution === undefined) return null;
     const resolved = resolution.data as EventData['approval.resolved'];
+    if (resolved.optionId === 'outcome-unknown') return '原生轮次已结束，审批结果未确认';
     const option = resolved.optionId.toLowerCase();
+    if (option === 'grant-turn') return '已允许本轮额外权限';
+    if (option === 'grant-session') return '已允许本会话额外权限';
+    if (option === 'deny-permissions') return '已拒绝额外权限';
     const result = ['allow', 'accept', 'acceptforsession', 'allowed-once', 'approved', 'approved_for_session', 'approve', 'allow-always', 'allowed-always'].includes(option)
       ? '已允许一次'
       : ['reject', 'rejected', 'deny', 'decline', 'declined', 'denied'].includes(option)
@@ -582,15 +623,16 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
 
   if (resolvedText !== null) {
     return (
-      <div className="approval-card resolved" data-testid="approval-card" data-state="resolved" data-tool={toolName} data-resolved="true" id={`e-${event.seq}`}>
+      <div className="approval-card resolved" data-testid="approval-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName} data-resolved="true" id={`e-${event.seq}`}>
         <Icon name="check" size={15} strokeWidth={2.2} />
         <span>{resolvedText}</span>
         {what === '' ? null : <span className="what">· {what}</span>}
+        {synchronized ? null : <span>历史记录，当前状态尚未核对</span>}
       </div>
     );
   }
   return (
-    <div className="approval-card" data-testid="approval-card" data-state="pending" data-tool={toolName} id={`e-${event.seq}`}>
+    <div className="approval-card" data-testid="approval-card" data-state="pending" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName} id={`e-${event.seq}`}>
       <div className="approval-title">
         <Icon name="shield" size={16} />
         {data.title}
@@ -606,6 +648,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
         <summary>详情</summary>
         <pre className="output">{data.detail}</pre>
       </details>
+      {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="approve" id={data.approvalId} />}
       <div className="approval-actions">
         {data.options.map((option, index) => {
           const deny = /deny|reject|decline|cancel/i.test(option.id);
@@ -614,9 +657,8 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
               key={option.id}
               type="button"
               className={`btn ${index === 0 && !deny ? 'primary' : ''}`}
-              disabled={clicked}
+              disabled={busy}
               onClick={() => {
-                setClicked(true);
                 store.approve(event.sessionId, data.approvalId, option.id);
               }}
             >
@@ -629,25 +671,61 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
   );
 }
 
+function InteractionStatus({ submission }: { submission: ReturnType<typeof store.getInteractionSubmission> }): React.ReactElement | null {
+  if (submission === undefined) return null;
+  const text = submission.status === 'failed' ? submission.error ?? '提交失败，请重试'
+    : submission.status === 'uncertain' ? '提交结果待核对，请等待会话同步'
+    : submission.status === 'collected' ? '此答案已保存，等待其他问题'
+    : submission.status === 'sent' ? '已提交，等待原生结果'
+    : store.connectionState === 'online' ? '正在提交…' : '等待连接后提交…';
+  return <p role={submission.status === 'failed' ? 'alert' : 'status'}>{text}</p>;
+}
+
+function InteractionSyncStatus({ sessionId, kind, id }: { sessionId: string; kind: InteractionKind; id: string }): React.ReactElement {
+  const [error, setError] = useState('');
+  return <div>
+    <p role="status">交互状态尚未确认，暂时不能提交。</p>
+    <button type="button" className="btn" onClick={() => { setError(''); void store.refreshInteraction(sessionId, kind, id).catch(error => setError(String(error))); }}>重新核对状态</button>
+    {error ? <p role="alert">{error}</p> : null}
+  </div>;
+}
+
 function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['question'] }): React.ReactElement {
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState('');
-  const [submitted, setSubmitted] = useState(data.status === 'answered' || data.status === 'skipped');
-  if (submitted) {
+  useStoreVersion();
+  const submission = data.submission === 'sent' || data.submission === 'uncertain'
+    ? { commandId: '', status: data.submission } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
+      ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission });
+  const synchronized = store.isInteractionSynced(event.sessionId, 'answer', data.questionId);
+  const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
+  const blocking = data.isBlocking !== false;
+  const nonblockingLabel = blocking ? null : <span className="what">非阻塞提问</span>;
+  if (data.status === 'answered' || data.status === 'skipped') {
     return (
-      <div className="approval-card resolved" data-testid="question-card" data-state="resolved">
+      <div className="approval-card resolved" data-testid="question-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-blocking={blocking}>
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>已回答</span>
+        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? '已由原生结束' : data.outcome === 'decline' ? '已拒绝' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
+        {nonblockingLabel}
+        {synchronized ? null : <span>历史记录，当前状态尚未核对</span>}
       </div>
     );
   }
+  if (data.elicitation !== undefined) return <div className="question-card" data-testid="question-card" data-state="pending" data-sync={synchronized ? 'ready' : 'loading'} data-blocking={blocking}>
+    <div className="approval-title">{data.header ?? '原生交互'}</div><p>{data.prompt}</p>
+    {blocking ? null : <p>原生标记为非阻塞，你仍可以回答。</p>}
+    {data.isSecret ? <p>敏感表单内容只在本页面保留，刷新后需要重新输入。</p> : null}
+    {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
+    <ElicitationForm form={data.elicitation} busy={busy} submit={answer => store.answer(event.sessionId, data.questionId, answer)} />
+  </div>;
   return (
-    <div className="question-card" data-testid="question-card" data-state="pending">
+    <div className="question-card" data-testid="question-card" data-state="pending" data-sync={synchronized ? 'ready' : 'loading'} data-blocking={blocking}>
       <div className="approval-title">
         <Icon name="help" size={16} />
-        {data.header ?? '需要你回答'}
+        {data.header ?? (blocking ? '需要你回答' : '非阻塞提问')}
       </div>
+      {blocking ? null : <p>原生标记为非阻塞，你仍可以回答。</p>}
       <div style={{ fontSize: 14 }}>{data.prompt}</div>
       <div className="question-options" role={data.multiSelect === true ? 'group' : 'radiogroup'} aria-label={data.prompt}>
         {(data.options ?? []).map((option) => (
@@ -655,6 +733,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
             <input
               type={data.multiSelect === true ? 'checkbox' : 'radio'}
               name={data.questionId}
+              disabled={busy}
               checked={selected.includes(option.id)}
               onChange={() =>
                 setSelected((prev) => (data.multiSelect === true ? (prev.includes(option.id) ? prev.filter((id) => id !== option.id) : [...prev, option.id]) : [option.id]))
@@ -668,16 +747,18 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         ))}
       </div>
       {data.allowsFreeText !== false ? (
-        <input className="text-input" placeholder="其他（可选）" aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
+        <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
       ) : null}
+      {data.isSecret ? <p>敏感回答只在本页面保留，刷新后需要重新输入。</p> : null}
+      {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
       <div className="approval-actions">
         <button
           type="button"
           className="btn primary"
-          disabled={selected.length === 0 && text.trim() === ''}
+          disabled={busy || selected.length === 0 && text.trim() === ''}
           onClick={() => {
-            setSubmitted(true);
             store.answer(event.sessionId, data.questionId, { selected, custom: text });
+            if (data.isSecret) setText('');
           }}
         >
           提交

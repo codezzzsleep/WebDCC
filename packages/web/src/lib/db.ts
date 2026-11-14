@@ -1,6 +1,6 @@
 /** IndexedDB 缓存（SPEC 7.5） */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { SessionDto, StoredEvent } from '@webdcc/protocol';
+import type { PermissionState, SessionDto, StoredEvent } from '@webdcc/protocol';
 
 export interface CachedSession {
   id: string;
@@ -15,6 +15,7 @@ export interface CachedSession {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  permissions?: PermissionState;
   parentId?: string;
   handoffKind?: SessionDto['handoffKind'];
 }
@@ -28,8 +29,10 @@ export interface CachedDraft {
 export interface CachedCommand {
   clientCommandId: string;
   command: unknown;
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'sent' | 'failed' | 'uncertain';
   createdAt: number;
+  sensitive?: true;
+  error?: string;
 }
 
 interface WebdccSchema extends DBSchema {
@@ -57,18 +60,20 @@ function db(): Promise<IDBPDatabase<WebdccSchema>> {
 }
 
 export const cache = {
-  async putEvents(events: StoredEvent[]): Promise<void> {
+  async putEvents(events: StoredEvent[], coverage?: { sessionId: string; from: number; to: number }): Promise<void> {
     if (events.length === 0) return;
     const database = await db();
-    const tx = database.transaction('events', 'readwrite');
-    for (const event of events) void tx.store.put(event);
+    const tx = database.transaction(['events', 'meta'], 'readwrite');
+    for (const event of events) void tx.objectStore('events').put(event);
+    if (coverage !== undefined) void tx.objectStore('meta').put(coverage, `coveredWindow:${coverage.sessionId}`);
     await tx.done;
   },
 
   async getEvents(sessionId: string, limit = 500): Promise<StoredEvent[]> {
     const database = await db();
-    const range = IDBKeyRange.bound([sessionId, 0], [sessionId, Number.MAX_SAFE_INTEGER]);
-    const events = await database.getAll('events', range, limit);
+    const events: StoredEvent[] = [];
+    let cursor = await database.transaction('events').store.index('bySession').openCursor(sessionId, 'prev');
+    while (cursor !== null && events.length < limit) { events.push(cursor.value); cursor = await cursor.continue(); }
     return events.sort((a, b) => a.seq - b.seq);
   },
 

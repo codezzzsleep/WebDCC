@@ -1,0 +1,4188 @@
+{
+  "baseline_commit": "9b1ae9096c19162206361e3910b7ef2592c5f30b",
+  "review_date": "2026-11-14 Asia/Shanghai",
+  "estimate_unit": "手写实现新增及实质修改行；测试单列；文件为每需求触及数、不可跨行累加为唯一文件数",
+  "requirements": [
+    {
+      "id": "NP-01",
+      "phase": "M0",
+      "title": "冻结原生基线与能力清单",
+      "gap": "版本常量、静态菜单、已导出的协议和实际运行环境没有形成同一份可验证能力清单。",
+      "behavior": "新增 CapabilityRegistry，按 agent、binary/SDK版本、OS、profile、Host身份、账号状态、Provider、插件集合记录能力。每项分别记录 nativeAvailability、apiExposure、structuredImplemented、structuredVerified、fallbackVerified、reason 与证据，不用一个 supported 布尔值替代。启动、配置变更和连接代际变化均刷新。 unknown/unverified是显式待验证状态，不能用来缩小全功能分母；发布前逐项消除或列为阻断。",
+      "native": "以本仓 Codex 0.167.0 ClientRequest/ServerRequest/ServerNotification，Claude SDK 0.3.322公开类型，DSH 0.2.2-rc.1的193端点目录为初始库存；实际握手结果可使能力降级。",
+      "accept": [
+        "每个原生方法和每个用户功能都映射到 capabilityId、内部辅助或明确排除理由，未分类数量为0。",
+        "UI与服务端使用同一snapshot revision；模型/插件变化后旧revision动作得到409及刷新指引。",
+        "缺登录、缺插件、实验功能未协商、版本不兼容均可观察，不被标为平台已实现。"
+      ],
+      "paths": "protocol/src/capabilities.ts（新）；server capability-registry（新）；adapters/* capability providers（新）；web capability hooks（新）",
+      "deps": "无",
+      "impl": [
+        220,
+        400
+      ],
+      "tests": [
+        180,
+        320
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "中高",
+      "route": "结构化",
+      "source_findings": [
+        "F17"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/capabilities.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/server/src/capability-registry.ts",
+          "packages/server/src/native-inventory.json",
+          "scripts/native-inventory.ts",
+          "packages/server/test/capability-registry.spec.ts",
+          "packages/web/src/pages/Capabilities.tsx",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/lib/agents.ts",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/capabilities.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/server/src/capability-registry.ts",
+          "packages/server/src/native-inventory.json",
+          "scripts/native-inventory.ts",
+          "packages/server/test/capability-registry.spec.ts",
+          "packages/web/src/pages/Capabilities.tsx",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/lib/agents.ts",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "每个原生方法和每个用户功能都映射到 capabilityId、内部辅助或明确排除理由，未分类数量为0。",
+          "UI与服务端使用同一snapshot revision；模型/插件变化后旧revision动作得到409及刷新指引。",
+          "缺登录、缺插件、实验功能未协商、版本不兼容均可观察，不被标为平台已实现。"
+        ],
+        "remainingWork": "Runtime profile/Host/plugin/account probing and revision-bound action execution remain incomplete; inventory is not full parity verification.",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": []
+    },
+    {
+      "id": "NP-02",
+      "phase": "M0",
+      "title": "类型化原生协议与分域适配器",
+      "gap": "导出的schema存在，但大量Record<string, unknown>和强制转换仍让错误wire参数通过类型检查；adapter把传输、生命周期、交互、映射混在一起。",
+      "behavior": "保持AgentAdapter外观兼容，逐步提取Transport、NativeSessionBridge、InteractionCoordinator、纯EventReducer和NativeControls。已知request/result必须使用锁定类型并在边界校验。未知方法明确unsupported，不能当通用批准。",
+      "native": "Codex保留string或number JSON-RPC ID；Claude使用公开SDK类型；DSH校验payload.args和每端点参数描述符。schema只通过原生导出更新。",
+      "accept": [
+        "所有已用native方法的请求与响应通过合同测试，错误字段和错误枚举必失败。",
+        "生产与回放调用同一reducer，不允许回放独有的语义补帧。",
+        "清理监听器、进程、流和诊断缓冲；失败启动后资源计数回到基线。"
+      ],
+      "paths": "adapters/codex/src/{rpc,adapter}.ts；adapters/claude/src/adapter.ts；adapters/dsh/src/{host,adapter}.ts；各域新模块",
+      "deps": "NP-01",
+      "impl": [
+        750,
+        1300
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        14,
+        24
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F07",
+        "F14",
+        "F22"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/adapters/codex/src/controls.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/protocol/src/command-validation.ts",
+          "packages/server/src/hub.ts",
+          "packages/server/src/rest.ts",
+          "tsconfig.base.json",
+          "packages/adapters/codex/test/contracts.spec.ts",
+          "packages/adapters/codex/test/rpc.spec.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/adapters/codex/src/controls.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/protocol/src/command-validation.ts",
+          "packages/server/src/hub.ts",
+          "packages/server/src/rest.ts",
+          "tsconfig.base.json",
+          "packages/adapters/codex/test/contracts.spec.ts",
+          "packages/adapters/codex/test/rpc.spec.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json",
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "所有已用native方法的请求与响应通过合同测试，错误字段和错误枚举必失败。",
+          "生产与回放调用同一reducer，不允许回放独有的语义补帧。",
+          "清理监听器、进程、流和诊断缓冲；失败启动后资源计数回到基线。"
+        ],
+        "remainingWork": "DSH 已用端点按冻结 catalog 校验请求与可导出的响应；完整 Claude 控制类型、纯 reducer 分域及所有资源合同仍待完成。",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-01"
+      ]
+    },
+    {
+      "id": "NP-03",
+      "phase": "M0",
+      "title": "持久命令账本、幂等与持久队列",
+      "gap": "去重在execute之后写入，且排队正文仅在runtime.queued；成功ACK后浏览器删除outbox，崩溃可重复执行或丢输入。",
+      "behavior": "在SQLite事务中先占有commandId并写payload hash、session、动作和状态，成功持久接收后才能ACK。队列正文/附件/顺序持久化；同ID同payload复用结果，同ID异payload返回409。原生提交的未知结果进入uncertain并对账，不能盲目重发。",
+      "native": "利用原生requestId/turnId可查证部分实现去重；没有原生幂等能力时明确不保证外部副作用exactly-once。",
+      "accept": [
+        "同一命令100个并发HTTP/WS请求只进入一次执行；同ID异内容被拒。",
+        "在received/queued/dispatching/native-accepted各边界kill进程后恢复，消息仍可见，原生已执行的不会自动重复。",
+        "accepted队列可查看、取消、按版本调整；失败与uncertain都有可操作恢复路径。"
+      ],
+      "paths": "server/src/{db,store,dispatcher,manager}.ts；protocol/src/sync.ts；web/src/lib/{store,db}.ts；新command-journal/queue",
+      "deps": "NP-02",
+      "impl": [
+        700,
+        1200
+      ],
+      "tests": [
+        550,
+        950
+      ],
+      "files": [
+        8,
+        13
+      ],
+      "confidence": "中高",
+      "route": "结构化",
+      "source_findings": [
+        "F04",
+        "F05"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/protocol/src/commands.ts",
+          "packages/server/src/rest.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/server/test/journal.spec.ts",
+          "packages/server/test/fixtures/queue-crash.ts",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/protocol/src/commands.ts",
+          "packages/server/src/rest.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/server/test/journal.spec.ts",
+          "packages/server/test/fixtures/queue-crash.ts",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/adapters/claude/src/stdio-capture.ts",
+          "packages/adapters/dsh/src/host.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-live-dsh.json",
+          "web_review/evidence/native-live-codex-revalidated.json",
+          "web_review/evidence/native-claude-stdio.json"
+        ],
+        "remainingAcceptance": [
+          "同一命令100个并发HTTP/WS请求只进入一次执行；同ID异内容被拒。",
+          "在received/queued/dispatching/native-accepted各边界kill进程后恢复，消息仍可见，原生已执行的不会自动重复。",
+          "accepted队列可查看、取消、按版本调整；失败与uncertain都有可操作恢复路径。"
+        ],
+        "remainingWork": "Native reconciliation/ownership, all crash windows, queue auto-recovery under verified ownership, secret-aware commands and complete attachments/outbox coverage remain incomplete.",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-02"
+      ]
+    },
+    {
+      "id": "NP-04",
+      "phase": "M0",
+      "title": "会话所有权、运行代际与故障恢复",
+      "gap": "runtime只靠sessionId；resume/换模型/旧进程迟到消息可能串入，新旧native turn与本地turn边界不一致。",
+      "behavior": "每个native会话有owner、generation、activeNativeTurn、lastObservedSeq和single-flight activation。任何异步回调携带generation；旧代际仅可作为诊断记录。区分Web服务重启、原生进程重启和浏览器重连，先读取权威状态再派生idle/running。",
+      "native": "原生自主continuation必须更新active turn；attach外部Host不能因为Web重启就伪造其已中断。",
+      "accept": [
+        "并发resume只创建一个owner，旧query晚到不能污染新会话。",
+        "活动native turn的interrupt总指向当前ID，取消完成由native结果确认。",
+        "服务端重启时区分原生仍运行/已退出/未知，不把所有情况都标用户打断。"
+      ],
+      "paths": "server/src/manager.ts；server native-runtime（新）；protocol runtime types（新）；三个adapter lifecycle",
+      "deps": "NP-02、NP-03",
+      "impl": [
+        450,
+        800
+      ],
+      "tests": [
+        350,
+        650
+      ],
+      "files": [
+        7,
+        11
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F05",
+        "F12",
+        "F15",
+        "F22"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/manager.ts",
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/server/test/turn-tracker.spec.ts",
+          "packages/server/test/permissions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/runtime.ts",
+          "packages/server/src/native-owners.ts",
+          "packages/server/test/native-owners.spec.ts",
+          "packages/server/test/fixtures/owner-crash.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/adapters/codex/test/rpc.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/manager.ts",
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/server/test/turn-tracker.spec.ts",
+          "packages/server/test/permissions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/runtime.ts",
+          "packages/server/src/native-owners.ts",
+          "packages/server/test/native-owners.spec.ts",
+          "packages/server/test/fixtures/owner-crash.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/adapters/codex/test/rpc.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/native-history.ts",
+          "packages/adapters/claude/src/stdio-capture.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/test/journal.spec.ts",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json",
+          "web_review/evidence/native-recovery-current.json",
+          "web_review/evidence/native-live-dsh.json",
+          "web_review/evidence/native-live-codex-revalidated.json",
+          "web_review/evidence/native-claude-stdio.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
+        ],
+        "remainingAcceptance": [
+          "并发resume只创建一个owner，旧query晚到不能污染新会话。",
+          "活动native turn的interrupt总指向当前ID，取消完成由native结果确认。",
+          "服务端重启时区分原生仍运行/已退出/未知，不把所有情况都标用户打断。"
+        ],
+        "remainingWork": "Managed owner/generation 占有、PID/boot 恢复、单 flight、跨 manager 恢复隔离和 callback/call fencing 已实施；租约失效不证明 native writer 已退出。仍需完整 NativeSessionRef/Host/profile 校验、原生仍运行/已退出/未知的权威对账、native 自主 continuation/activeTurn 全闭环、原生释放证据及真实故障验收。",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-02",
+        "NP-03"
+      ]
+    },
+    {
+      "id": "NP-05",
+      "phase": "M0",
+      "title": "无损原生事件、同步水位与可重建投影",
+      "gap": "部分事件被丢弃，raw与UI投影未彻底分离；首屏历史失败仍推进cursor；snapshot合并残留热条目。",
+      "behavior": "原生信封先持久化再投影，保存source identity、generation和schema版本。分开记录serverLastSeq与客户端已覆盖区间；只有成功落缓存的连续段才推进水位。带版本snapshot替换对应热状态。raw及未知事件在独立检查器可读，不能仅保存不可访问JSON。",
+      "native": "保留native session/actor/turn/item/request IDs；内部帧可不进聊天，但必须有忽略理由或诊断去向。敏感凭据例外按NP-14最小化留存。",
+      "accept": [
+        "历史API首次失败后下一次能补齐缺口，afterSeq不越过未接收区间。",
+        "同native事件重放10次只有一个语义投影，空snapshot清除旧hot。",
+        "任意seq，包括turnId=null、unknown、内部帧，都能定位查看；live与replay结果一致。"
+      ],
+      "paths": "server/src/{store,hub,manager,turn-tracker}.ts；protocol/src/{events,turn}.ts；web/src/lib/{store,db}.ts；EventInspector（新）",
+      "deps": "NP-02、NP-04",
+      "impl": [
+        650,
+        1100
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        9,
+        15
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F10",
+        "F14",
+        "F18",
+        "F20"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store-sync.spec.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts",
+          "scripts/l1-replay.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/test/turn.spec.ts",
+          "packages/protocol/src/native-events.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/web/src/pages/NativeEvents.tsx",
+          "browser-tests/native-events.spec.ts",
+          "packages/server/src/rest.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Sidebar.tsx",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "actualFiles": [
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store-sync.spec.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts",
+          "scripts/l1-replay.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/test/turn.spec.ts",
+          "packages/protocol/src/native-events.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/web/src/pages/NativeEvents.tsx",
+          "browser-tests/native-events.spec.ts",
+          "packages/server/src/rest.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Sidebar.tsx",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/adapters/claude/src/stdio-capture.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/test/journal.spec.ts",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json",
+          ".artifacts/dsh-native-smoke.json",
+          "web_review/evidence/native-live-dsh.json",
+          "web_review/evidence/native-live-codex-revalidated.json",
+          "web_review/evidence/native-claude-stdio.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
+        ],
+        "remainingAcceptance": [
+          "历史API首次失败后下一次能补齐缺口，afterSeq不越过未接收区间。",
+          "同native事件重放10次只有一个语义投影，空snapshot清除旧hot。",
+          "任意seq，包括turnId=null、unknown、内部帧，都能定位查看；live与replay结果一致。"
+        ],
+        "remainingWork": "传输与映射记录分开持久化，可分页/单记录/任意 Web seq 查看，旧代际只进证据。internal data 真实保留；精确完成事件去重完成标记与 event 原子提交。仍需全部全局/设置/错误帧和历史覆盖、raw 到版本化投影的完整重建、持久 gap、完整 actor 身份、源身份冲突对账和全部 live/replay/native 验收。",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-02",
+        "NP-04"
+      ]
+    },
+    {
+      "id": "NP-06",
+      "phase": "M0",
+      "title": "审批、提问和Elicitation完整状态机",
+      "gap": "简单optionId和selected/custom不足以承载secret、多题、权限增量、MCP表单；UI提前宣称成功，刷新有重复pending卡。",
+      "behavior": "使用discriminated union保存request类型、schema、options、scope、deadline、native身份、request group和revision；pending→sending→resolved/failed/expired/cancelled/uncertain。一个request只生成一张权威投影，负ACK保留错误并允许合法重试。多题按原生group原子回复。 native可能已接收但响应丢失时，interaction与command共同进入uncertain；对账前不解除重试限制。",
+      "native": "Codex command/file/permissions/userInput/MCP各自响应；Claude canUseTool、onElicitation、公开dialog callbacks；DSH waterfall/callId/durable approval关联。",
+      "accept": [
+        "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
+        "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
+        "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
+      ],
+      "paths": "protocol interactions（新）；server interaction store/coordinator（新）；adapters/* handlers；web Approval/Question/Dialog组件",
+      "deps": "NP-03、NP-05",
+      "impl": [
+        850,
+        1450
+      ],
+      "tests": [
+        700,
+        1150
+      ],
+      "files": [
+        11,
+        18
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F06",
+        "F07",
+        "F08"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/question-answer.ts",
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/protocol/test/question-answer.spec.ts",
+          "packages/adapters/codex/src/handler.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/server/src/manager.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/events.ts",
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/fixtures/interaction-crash.ts",
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/question-answer.ts",
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/protocol/test/question-answer.spec.ts",
+          "packages/adapters/codex/src/handler.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/server/src/manager.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/store.ts",
+          "packages/protocol/src/events.ts",
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/fixtures/interaction-crash.ts",
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-64cf89e.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-recovery-current.json",
+          "web_review/evidence/native-elicitation.json",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
+        ],
+        "remainingAcceptance": [
+          "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
+          "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
+          "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
+        ],
+        "remainingWork": "Native blocking/actual thread waiting retained. Cached cards and durable interaction replay wait verified HTTP/WS boundaries; per-ID real stored native results reconcile history gaps without inventing completion. Controlled Chromium and deterministic before/after regressions passed. Ordinary Plan-mode UI/experimental negotiation and full actual native-Web multi-provider cancellation/secret/restart acceptance remain incomplete; Issue41 stays open.",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-03",
+        "NP-05"
+      ]
+    },
+    {
+      "id": "NP-07",
+      "phase": "M0",
+      "title": "原生权限默认值与实际生效状态",
+      "gap": "未选择模式仍被第一项覆盖；Codex下一轮字段错误；Claude换模型可能恢复旧权限；UI把请求值当生效值。",
+      "behavior": "新增inherit模式，缺省不传覆盖。requested与effective分开；目录保留allowed、reason、来源及作用域。降权若需等待下一轮，应明确pending，不能即刻显示已生效；任何升级权限必须是用户明确动作。",
+      "native": "Codex thread/start的sandbox与turn/start的sandboxPolicy分别类型化；Claude setPermissionMode后更新持久launch state；DSH使用permission catalog/原生命令及原生状态。",
+      "accept": [
+        "用户配置为非默认模式时，无选择新建会话保持该配置。",
+        "workspace-write→read-only在下一native执行前可证实生效；失败不显示成功。",
+        "换模型、resume、服务重启后权限一致；不可应用的profile和managed限制不可选。"
+      ],
+      "paths": "server/src/manager.ts；三adapter access methods；protocol permission types（新）；web Composer/SessionHeader",
+      "deps": "NP-01、NP-02、NP-06",
+      "impl": [
+        350,
+        650
+      ],
+      "tests": [
+        350,
+        600
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "高",
+      "route": "结构化",
+      "source_findings": [
+        "F01",
+        "F15",
+        "F17"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/claude/src/adapter.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/codex/test/contracts.spec.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/test/native.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/index.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/testing/fake-adapter/src/index.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/pages/NewSession.tsx",
+          "browser-tests/helpers.ts",
+          "browser-tests/permissions.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/adapters/codex/src/permissions.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/adapters/dsh/test/permissions.spec.ts",
+          "packages/protocol/src/permissions.ts",
+          "packages/protocol/test/permissions.spec.ts",
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/test/permissions.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/claude/src/adapter.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/codex/test/contracts.spec.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/test/native.spec.ts",
+          "packages/protocol/src/adapter.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/index.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/testing/fake-adapter/src/index.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/pages/NewSession.tsx",
+          "browser-tests/helpers.ts",
+          "browser-tests/permissions.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/adapters/codex/src/permissions.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/adapters/dsh/test/permissions.spec.ts",
+          "packages/protocol/src/permissions.ts",
+          "packages/protocol/test/permissions.spec.ts",
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/test/permissions.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
+        ],
+        "remainingAcceptance": [
+          "用户配置为非默认模式时，无选择新建会话保持该配置。",
+          "workspace-write→read-only在下一native执行前可证实生效；失败不显示成功。",
+          "换模型、resume、服务重启后权限一致；不可应用的profile和managed限制不可选。"
+        ],
+        "remainingWork": "已建立 inherit/requested/pending/observed/failed/unknown 权限状态与 SQLite v4 迁移。新建原生会话不自动选第一档，不复用上次新建的选择；真实 UI 依据原生观察显示实际权限，禁止原生 disallowed/未接入 profile。Codex turn/start 后无覆盖 thread/resume 回读权限，不从请求参数生成 effective；回读失败保持未确认。DSH 使用原生 catalog、权限投影与命令业务结果，Claude 切换保持确认配置并隔离旧实例。仍需锁定版本真实执行、managed 限制、DSH catalog 变更通知及跨连接配置代际的完整验收。"
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-02",
+        "NP-06"
+      ]
+    },
+    {
+      "id": "NP-08",
+      "phase": "M0",
+      "title": "Codex事件和反向请求正确性修复",
+      "gap": "reasoning.summary按错误形状读取、plan.text被当items；未知反向请求当exec_command审批；自主turn启动未更新interrupt目标。",
+      "behavior": "按锁定ThreadItem/ServerRequest做穷举映射；string ID不转Number；保持reasoning分段、plan markdown、actor和late items；未知请求返回可诊断协议错误或原生规定的拒绝，禁止猜测响应。",
+      "native": "修复本次局部复现；修复范围为现有事件与调用，不在本项塞入新的native管理功能。",
+      "accept": [
+        "summary=[a,b]与plan.text均完整显示且只出现一次。",
+        "MCP elicitation、permissions和auth refresh不会走command卡片；没有合法handler时无假成功。",
+        "原生turn/started后不经send也能interrupt；请求ID字符串往返不变。"
+      ],
+      "paths": "adapters/codex/src/{adapter,rpc}.ts；新event handlers；codex handler/routing测试",
+      "deps": "NP-02、NP-06",
+      "impl": [
+        250,
+        480
+      ],
+      "tests": [
+        350,
+        600
+      ],
+      "files": [
+        5,
+        9
+      ],
+      "confidence": "高",
+      "route": "结构化",
+      "source_findings": [
+        "F06",
+        "F07",
+        "F12",
+        "F13"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
+        ],
+        "actualFiles": [
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/adapters/codex/src/rpc.ts",
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts",
+          "packages/server/test/question-blocking.spec.ts",
+          "browser-tests/question-blocking.spec.ts",
+          "docs/question-blocking-semantics.md"
+        ],
+        "remainingAcceptance": [
+          "summary=[a,b]与plan.text均完整显示且只出现一次。",
+          "MCP elicitation、permissions和auth refresh不会走command卡片；没有合法handler时无假成功。",
+          "原生turn/started后不经send也能interrupt；请求ID字符串往返不变。"
+        ],
+        "remainingWork": "Remaining notification and reverse-request cases require contract and native verification."
+      },
+      "dependencyIds": [
+        "NP-02",
+        "NP-06"
+      ]
+    },
+    {
+      "id": "NP-09",
+      "phase": "M0",
+      "title": "Claude块级事件与运行控制正确性修复",
+      "gap": "完成时多text block被整段重复覆盖；非init system/未知SDK消息生产路径丢弃；task与执行错误分类不准确。",
+      "behavior": "按native session/message/block/parent_tool_use_id构建identity，主/子actor独立归约。保留compact/status/task/hook/未知系统消息，失败和用户中断分开。更新参数走SDK已支持控制方法，必须重启时用generation交接。",
+      "native": "适配锁定SDKMessage全联合；TaskCreate/Update以成功返回的真实ID归约，不能预猜序号。",
+      "accept": [
+        "两个text block完成态保持各自内容，主子输出交错不串线。",
+        "compact/task/status生产listener与replay具有相同保留策略。",
+        "权限切换后换模型保持effective权限；工具失败不产生成功任务或用户中断假象。"
+      ],
+      "paths": "adapters/claude/src/adapter.ts；Claude reducer/runtime/task modules（新）；对应handler tests",
+      "deps": "NP-02、NP-04、NP-06",
+      "impl": [
+        350,
+        650
+      ],
+      "tests": [
+        400,
+        700
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "中高",
+      "route": "结构化",
+      "source_findings": [
+        "F06",
+        "F14",
+        "F15",
+        "F16"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/adapters/claude/src/content.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/src/content.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/adapters/claude/src/adapter.ts",
+          "packages/adapters/claude/src/content.ts",
+          "packages/adapters/claude/src/system.ts",
+          "packages/adapters/claude/src/content.spec.ts",
+          "packages/adapters/claude/test/lifecycle.spec.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-recovery-current.json"
+        ],
+        "remainingAcceptance": [
+          "两个text block完成态保持各自内容，主子输出交错不串线。",
+          "compact/task/status生产listener与replay具有相同保留策略。",
+          "权限切换后换模型保持effective权限；工具失败不产生成功任务或用户中断假象。"
+        ],
+        "remainingWork": "已完成块级 reducer/系统消息保留与局部 query 控制：权限和 effort 写入下一实例启动配置，完整后台任务快照阻止错误替换，失败初始化关闭新实例并恢复旧配置。仍需完整 SDK 输出/任务实体、全部初始化和退出故障、真实原生模型与权限结果验证。"
+      },
+      "dependencyIds": [
+        "NP-02",
+        "NP-04",
+        "NP-06"
+      ]
+    },
+    {
+      "id": "NP-10",
+      "phase": "M0",
+      "title": "DSH连接、重订阅与历史恢复",
+      "gap": "remote.mux关闭后没有完整重连；snapshot/user.message被丢弃；attach切换未重开旧follow；路径前缀被截断。",
+      "behavior": "实现HTTP deadline、WS generation/backoff、过期认证可见、subscription registry和snapshot/page补读。保留origin+basePath，正确HTTPS/WSS。断开操作同时停止订阅并持久化null。CLOSED close幂等，boot失败清理。",
+      "native": "workspace/follow、session/follow开场snapshot与session/page游标；$events clientId随generation更新。外部user/message按identity去重，不再全丢。",
+      "accept": [
+        "只切断native WS保持HTTP后恢复，旧会话继续收流并补全期间事件。",
+        "原版UI发消息、WebDCC离线后回归，双方历史一致；不会重复本地预写user.message。",
+        "带路径前缀链接、断开重启、Host重启、cookie过期和已关闭socket全部有终态。"
+      ],
+      "paths": "adapters/dsh/src/{host,adapter}.ts；server/src/dsh-connection.ts；native history bridge（新）",
+      "deps": "NP-04、NP-05",
+      "impl": [
+        850,
+        1450
+      ],
+      "tests": [
+        650,
+        1100
+      ],
+      "files": [
+        8,
+        14
+      ],
+      "confidence": "中高",
+      "route": "结构化",
+      "source_findings": [
+        "F09",
+        "F10"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/history.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/adapters/dsh/test/host.spec.ts",
+          "packages/adapters/dsh/test/history.spec.ts",
+          "packages/server/test/dsh-connection.spec.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "actualFiles": [
+          "packages/adapters/dsh/src/host.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/history.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/rest.ts",
+          "packages/adapters/dsh/test/host.spec.ts",
+          "packages/adapters/dsh/test/history.spec.ts",
+          "packages/server/test/dsh-connection.spec.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/adapters.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/adapters/claude/src/stdio-capture.ts",
+          "packages/server/test/journal.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          ".artifacts/dsh-native-smoke.json",
+          "web_review/evidence/native-live-dsh.json",
+          "web_review/evidence/native-live-codex-revalidated.json",
+          "web_review/evidence/native-claude-stdio.json"
+        ],
+        "remainingAcceptance": [
+          "只切断native WS保持HTTP后恢复，旧会话继续收流并补全期间事件。",
+          "原版UI发消息、WebDCC离线后回归，双方历史一致；不会重复本地预写user.message。",
+          "带路径前缀链接、断开重启、Host重启、cookie过期和已关闭socket全部有终态。"
+        ],
+        "remainingWork": "HTTP deadline、原生 WS 重连/订阅恢复/401 停止、开场 cut 绑定分页、失败水位保留、旧回调隔离、持久 null 与外部 user 消息导入已具备局部实现/测试。真实 DSH 双界面断线/Host 重启验收、activeAttempt 开场流重建、workspace baseline 与全部历史恢复仍待完成。",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-04",
+        "NP-05"
+      ]
+    },
+    {
+      "id": "NP-11",
+      "phase": "M0",
+      "title": "DSH交互与子Agent协议修正",
+      "gap": "subagents/prompt参数未包request且缺父身份；interruptByUser不在锁定目录；审批id/outcome映射错误；回答失败前已删除pending。",
+      "behavior": "修正子Agentwire及父子权限检查；保存callId、durable approval id、waterfall eventId映射；$events取消/原版解决能收敛。native ACK前不删pending；超时先对账。",
+      "native": "使用subagents/interruptByParent；continuable child显式mode，one-shot child不提供非法继续。计时问题使用userQuestions/answer/attachWait支持范围。",
+      "accept": [
+        "所有调用通过锁定catalog参数校验，父身份不匹配返回拒绝。",
+        "首次答案网络失败后可安全重试，不丢问题。",
+        "fixture的{id,outcome}决定生成resolved；原版UI解决或取消后Web只有一个最终状态。"
+      ],
+      "paths": "adapters/dsh/src/adapter.ts；DSH interaction/subagent modules（新）；server subagent routes；UI cards",
+      "deps": "NP-06、NP-10",
+      "impl": [
+        350,
+        650
+      ],
+      "tests": [
+        400,
+        700
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "高",
+      "route": "结构化",
+      "source_findings": [
+        "F08",
+        "F11"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "actualFiles": [
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/contracts.ts",
+          "packages/adapters/dsh/test/interactions.spec.ts",
+          "packages/adapters/dsh/test/contracts.spec.ts",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          ".artifacts/dsh-native-smoke.json"
+        ],
+        "remainingAcceptance": [
+          "所有调用通过锁定catalog参数校验，父身份不匹配返回拒绝。",
+          "首次答案网络失败后可安全重试，不丢问题。",
+          "fixture的{id,outcome}决定生成resolved；原版UI解决或取消后Web只有一个最终状态。"
+        ],
+        "remainingWork": "已修复父会话包装/continuable 方法、one-shot 控制限制、durable id/callId/waterfall 映射、{id,outcome} 和原生 cancel、答案失败保留。计时问题 attachWait/继续回答、跨连接交互对账、真实原生操作验收与完整表单闭环仍待完成。",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-06",
+        "NP-10"
+      ]
+    },
+    {
+      "id": "NP-12",
+      "phase": "M0",
+      "title": "原生配置修改的作用域与一致性",
+      "gap": "DSH settings异常fallback会写WebDCC主机的home patch，可能改错远程Host，模型A/B替换和缺省字段造成配置损坏。",
+      "behavior": "删除隐式文件写fallback。用户显式选择会话/项目/用户/Host作用域后才允许修改，显示来源、diff、重启影响；优先native revision接口。若必须编辑文件，验证Host所有权并采用AST、CAS、原子替换与备份。未知字段不删除。",
+      "native": "Codex config/read、config/value/write、config/batchWrite；Claude原生settings控制；DSH settings namespaces/revisions。禁止在RPC catch中自动改本机文件。",
+      "accept": [
+        "编辑B不改A、不重复ID、不清除未提交字段。",
+        "remote attach绝不写本机DSH_HOME；revision冲突返回409，原文件hash不变。",
+        "取消/写失败/进程重启保留完整有效配置，secret不回显。"
+      ],
+      "paths": "server/src/{rest,dsh-settings,providers}.ts；native settings service（新）；web Providers/Settings",
+      "deps": "NP-01、NP-02",
+      "impl": [
+        400,
+        750
+      ],
+      "tests": [
+        350,
+        650
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "中高",
+      "route": "结构化",
+      "source_findings": [
+        "F02"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/server/src/rest.ts",
+          "packages/server/test/dsh-scope.spec.ts",
+          "packages/protocol/src/native-settings.ts",
+          "packages/protocol/src/index.ts",
+          "packages/server/src/native-settings.ts",
+          "packages/server/src/dsh-capabilities.ts",
+          "packages/server/test/native-settings.spec.ts",
+          "packages/server/test/fixtures/dsh-settings.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/pages/Providers.tsx",
+          "browser-tests/settings.spec.ts",
+          "packages/adapters/test/native.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/rest.ts",
+          "packages/server/test/dsh-scope.spec.ts",
+          "packages/protocol/src/native-settings.ts",
+          "packages/protocol/src/index.ts",
+          "packages/server/src/native-settings.ts",
+          "packages/server/src/dsh-capabilities.ts",
+          "packages/server/test/native-settings.spec.ts",
+          "packages/server/test/fixtures/dsh-settings.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/web/src/lib/api.ts",
+          "packages/web/src/pages/Providers.tsx",
+          "browser-tests/settings.spec.ts",
+          "packages/adapters/test/native.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json"
+        ],
+        "remainingAcceptance": [
+          "编辑B不改A、不重复ID、不清除未提交字段。",
+          "remote attach绝不写本机DSH_HOME；revision冲突返回409，原文件hash不变。",
+          "取消/写失败/进程重启保留完整有效配置，secret不回显。"
+        ],
+        "remainingWork": "已提取 typed native settings service：Host/连接身份、浏览器读取 revision、read-only preview、单 namespace settings/mutate、原生 CAS 错误与写后回读。编辑 B 保留 A、名称与未提交字段；全局默认模型为独立显式动作，不再跨 namespace 连写。隐藏 secret 模型数组拒绝重述，远程失败无本机 YAML fallback；Chromium 验证取消/冲突/保留草稿/重新核对/默认选择/刷新。仍需真实 DSH 配置服务原子/重启演练、全部 schema/credential 管理及显式本地 YAML 文档编辑；原有 home patch helper 当前无生产调用，不能恢复为异常 fallback。"
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-02"
+      ]
+    },
+    {
+      "id": "NP-13",
+      "phase": "M0",
+      "title": "主动内容、认证来源与上传边界",
+      "gap": "/files按客户端声明mime同源返回HTML，缺attachment/CSP/nosniff；认证mutation未校验Origin；上传索引/大小和Cookie异常校验不足。",
+      "behavior": "安全图片类型允许内联，HTML/SVG等主动内容默认下载或独立隔离origin预览；禁止带应用权限执行。校验Host/Origin和可信代理；HTTPS设置Secure Cookie。请求按schema校验；分片序号、大小、总配额、hash与清理策略完整。",
+      "native": "权限边界是单用户远程服务器，原生工具权限不替代Web接口认证。启用原生Web/PTY入口也必须复用该边界。",
+      "accept": [
+        "认证用户打开不可信HTML/SVG不能以WebDCC origin调用命令；附件头与预览隔离均测。",
+        "非法Origin和错误Host mutation/WS被拒；合法代理部署通过；坏cookie得到401/400而非500。",
+        "越界/负数/重复/缺块/超大小上传不能变成成功文件，workspace symlink逃逸被拒。"
+      ],
+      "paths": "server/src/{auth,app,hub,rest,files,workspace-assets,workspace-files}.ts；upload/schema validation",
+      "deps": "NP-02",
+      "impl": [
+        450,
+        800
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        8,
+        13
+      ],
+      "confidence": "高",
+      "route": "结构化",
+      "source_findings": [
+        "F03"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/server/src/auth.ts",
+          "packages/server/src/config.ts",
+          "packages/server/src/app.ts",
+          "packages/server/src/files.ts",
+          "packages/server/src/file-response.ts",
+          "packages/server/src/rest.ts",
+          "packages/server/src/workspace-assets.ts",
+          "packages/server/test/security.spec.ts",
+          "browser-tests/security.spec.ts",
+          "packages/server/test/helpers.ts",
+          "packages/server/test/uploads.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/auth.ts",
+          "packages/server/src/config.ts",
+          "packages/server/src/app.ts",
+          "packages/server/src/files.ts",
+          "packages/server/src/file-response.ts",
+          "packages/server/src/rest.ts",
+          "packages/server/src/workspace-assets.ts",
+          "packages/server/test/security.spec.ts",
+          "browser-tests/security.spec.ts",
+          "packages/server/test/helpers.ts",
+          "packages/server/test/uploads.spec.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json"
+        ],
+        "remainingAcceptance": [
+          "认证用户打开不可信HTML/SVG不能以WebDCC origin调用命令；附件头与预览隔离均测。",
+          "非法Origin和错误Host mutation/WS被拒；合法代理部署通过；坏cookie得到401/400而非500。",
+          "越界/负数/重复/缺块/超大小上传不能变成成功文件，workspace symlink逃逸被拒。"
+        ],
+        "remainingWork": "Remaining exhaustive request/upload/WS and workspace descriptor/race boundaries need completion; HTML/browser/Origin/Cookie/chunk regressions passed."
+      },
+      "dependencyIds": [
+        "NP-02"
+      ]
+    },
+    {
+      "id": "NP-14",
+      "phase": "M0",
+      "title": "可控观测与敏感数据最小留存",
+      "gap": "当前默认录制新交互、可能覆写模型endpoint并为DSH加载诊断模块，与严格原装口径及显式录制旧约定不一致；无清晰保留期限。",
+      "behavior": "分开必要事件日志与可选全量模型诊断。默认保留运行所需事件，完整model body/诊断录制默认关，显式开启且可见；脱敏在写盘前执行，secret交互不进普通outbox。保留期限、磁盘配额、下载范围和删除行为可配置。",
+      "native": "诊断hook/endpoint代理只属于明确开启的诊断模式；不能改模型输入语义。native auth opaque时诚实标native-only。Watchdog等平台扩展单独标识来源并默认关。",
+      "accept": [
+        "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
+        "凭据跨chunk和nested字段不会出现在DB/trace/导出；脱敏hash语义有说明。",
+        "大输出和长期会话内存/磁盘有界，录制失败不阻断原生运行且coverage告警可见。"
+      ],
+      "paths": "server/src/{config,interaction-recorder,model-recording,native-http-recorder,watchdog}.ts；三adapterlaunch；web诊断设置",
+      "deps": "NP-02、NP-05",
+      "impl": [
+        400,
+        750
+      ],
+      "tests": [
+        300,
+        550
+      ],
+      "files": [
+        7,
+        12
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F20",
+        "F22"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/config.ts",
+          "packages/server/src/main.ts",
+          "packages/server/test/config.spec.ts",
+          "docs/diagnostics.md",
+          "packages/testing/model-proxy/src/redaction.ts",
+          "packages/testing/model-proxy/src/redaction.spec.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.spec.ts",
+          "packages/testing/model-proxy/src/index.ts",
+          "packages/testing/model-proxy/src/index.spec.ts",
+          "packages/server/src/interaction-recorder.ts",
+          "packages/server/src/native-http-recorder.ts",
+          "packages/server/src/model-recording.ts",
+          "packages/server/src/adapters.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/server/test/interaction-recorder.spec.ts",
+          "packages/server/test/model-recording.spec.ts",
+          "packages/server/test/native-http-recorder.spec.ts",
+          "packages/server/test/fixtures/native-recorder.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/config.ts",
+          "packages/server/src/main.ts",
+          "packages/server/test/config.spec.ts",
+          "docs/diagnostics.md",
+          "packages/testing/model-proxy/src/redaction.ts",
+          "packages/testing/model-proxy/src/redaction.spec.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.ts",
+          "packages/testing/model-proxy/src/diagnostic-writer.spec.ts",
+          "packages/testing/model-proxy/src/index.ts",
+          "packages/testing/model-proxy/src/index.spec.ts",
+          "packages/server/src/interaction-recorder.ts",
+          "packages/server/src/native-http-recorder.ts",
+          "packages/server/src/model-recording.ts",
+          "packages/server/src/adapters.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/server/test/interaction-recorder.spec.ts",
+          "packages/server/test/model-recording.spec.ts",
+          "packages/server/test/native-http-recorder.spec.ts",
+          "packages/server/test/fixtures/native-recorder.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/src/db.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/adapters/claude/src/stdio-capture.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/test/journal.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json",
+          "web_review/evidence/native-live-dsh.json",
+          "web_review/evidence/native-live-codex-revalidated.json",
+          "web_review/evidence/native-claude-stdio.json"
+        ],
+        "remainingAcceptance": [
+          "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
+          "凭据跨chunk和nested字段不会出现在DB/trace/导出；脱敏hash语义有说明。",
+          "大输出和长期会话内存/磁盘有界，录制失败不阻断原生运行且coverage告警可见。"
+        ],
+        "remainingWork": "已统一诊断写前 field/JSON/known-secret/Cookie/URL 脱敏，HTTP 跨分片拼接后脱敏；保留原始 request/response 流式转发与背压，录制正文/分片/排队字节/单文件有界，超限完整丢弃正文并标 coverage；诊断 hash 改为 redacted bytes。启动或路由录制失败保持原生配置；周期按活动触发的过期清理、跨重启缺失标记和真实 Node preload 故障回归已做。SQLite/command/queue/IndexedDB 的 secret-aware 存储、原生 SDK/RPC 跨帧连续脱敏、所有 credential/provider 来源、跨进程全局配额、旧录制导出与完整 native launch/config 对照仍待完成。",
+        "budgetNote": "共用诊断 redactor/writer 覆盖 model proxy、native preload 与主 recorder，文件范围超过初始 NP-14 规划；其中新增测试/fixture 与公共边界提取单列。仍为分阶段实施，未下调完整验收。",
+        "revisedEstimate": {
+          "impl": [
+            700,
+            1250
+          ],
+          "tests": [
+            550,
+            950
+          ],
+          "files": [
+            18,
+            28
+          ],
+          "confidence": "中",
+          "reason": "共用诊断 writer/redactor 已跨主 recorder、native preload、model proxy，且完整敏感存储、原生分片脱敏、跨进程配额和旧录制导出仍需实现；原审查预算保留为基线估算，此执行估算覆盖余项。"
+        },
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-02",
+        "NP-05"
+      ]
+    },
+    {
+      "id": "NP-15",
+      "phase": "M0",
+      "title": "验收证据与门禁可信度修复",
+      "gap": "M8/M9报告不同SHA；M9只读旧M8；notTriggered固定为空；回放可以未触发审批却算场景完成。",
+      "behavior": "统一GateReport格式并绑定commit、Agent/SDK版本、OS、Provider能力和配置fingerprint。无论测试通过或失败都产出本轮报告。场景定义requiredNativePredicates与UI动作，未触发记blocked/not-triggered，不算pass。修复ratchet格式与两遍ID集合检查。",
+      "native": "原生对照来自同版本direct native session/log/UI；不能只把被测adapter输出写成答案oracle。L1零输出豁免必须按真实帧类型白名单。",
+      "accept": [
+        "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",
+        "S04/S05/S08必须实际发生请求并从浏览器允许/拒绝/回答，验证原生结果。",
+        "失败套件也生成报告；M8 ratchet真正执行并比较相同ID，不以文件存在代替。"
+      ],
+      "paths": "scripts/{accept-m8,accept-m9,l1-replay}.ts；server/src/trace-real.ts；e2e-real/reporter与stubs；test manifests（新）",
+      "deps": "NP-01、NP-02",
+      "impl": [
+        450,
+        800
+      ],
+      "tests": [
+        400,
+        750
+      ],
+      "files": [
+        9,
+        15
+      ],
+      "confidence": "高",
+      "route": "结构化",
+      "source_findings": [
+        "F14",
+        "F23",
+        "F24"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "scripts/lib/gate-report.ts",
+          "scripts/accept-m8.ts",
+          "scripts/accept-m9.ts",
+          "scripts/l1-replay.ts",
+          "packages/protocol/src/native-evidence.ts",
+          "packages/server/src/trace-real.ts",
+          "e2e-real/reporter.ts",
+          "scripts/lib/gate-report.spec.ts",
+          "packages/protocol/test/native-evidence.spec.ts",
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/server/test/helpers.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts"
+        ],
+        "actualFiles": [
+          "scripts/lib/gate-report.ts",
+          "scripts/accept-m8.ts",
+          "scripts/accept-m9.ts",
+          "scripts/l1-replay.ts",
+          "packages/protocol/src/native-evidence.ts",
+          "packages/server/src/trace-real.ts",
+          "e2e-real/reporter.ts",
+          "scripts/lib/gate-report.spec.ts",
+          "packages/protocol/test/native-evidence.spec.ts",
+          "packages/testing/fake-adapter/src/replay.ts",
+          "packages/protocol/src/user-echo.ts",
+          "packages/server/test/native-history.spec.ts",
+          "browser-tests/interactions.spec.ts",
+          "packages/server/test/helpers.ts",
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/dsh-recovery-l1.json",
+          "web_review/evidence/claude-block-l1.json",
+          "web_review/evidence/l1-64cf89e.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-elicitation.json",
+          "packages/server/test/interaction-lookup.spec.ts",
+          "packages/web/src/lib/store-interaction-sync.spec.ts",
+          "browser-tests/interaction-sync.spec.ts"
+        ],
+        "remainingAcceptance": [
+          "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",
+          "S04/S05/S08必须实际发生请求并从浏览器允许/拒绝/回答，验证原生结果。",
+          "失败套件也生成报告；M8 ratchet真正执行并比较相同ID，不以文件存在代替。"
+        ],
+        "remainingWork": "新增真实 Chromium 原始源码 UI 问答失败/重试/刷新回归，临时页面实际由测试服务器提供，未关闭 Chromium 安全检查。L1 当前无 I1–I8 失败但 22 个旧 golden 与 16 个未触发谓词仍使门禁失败；原 golden 未修改，完整原生证据仍待采集。"
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-02"
+      ]
+    },
+    {
+      "id": "NP-16",
+      "phase": "M1",
+      "title": "原生模型、Provider与推理目录",
+      "gap": "Codex/Claude原生模型列表硬编码；model DTO只剩字符串；DSH同名模型丢provider身份，推理档位部分只读。",
+      "behavior": "ModelRef采用agent+providerId+modelId；保留输入模态、reasoning choices、context、service tier和availability。支持inherit与显式选择，展示requested/effective。缓存按配置revision失效，不猜模型默认值。",
+      "native": "Codex model/list和provider capabilities；Claude supportedModels/accountInfo/initialization；DSH modelCatalog/selectModel与presets。",
+      "accept": [
+        "原生目录与UI一致，同名model跨provider不会串路由。",
+        "只呈现该模型合法effort/模态，未知数据标未知不编造。",
+        "切换、失败、刷新和重启后effective模型/effort一致。"
+      ],
+      "paths": "protocol ModelOption/API；三adapterlistModels；server模型目录；web Composer/NewSession/Providers",
+      "deps": "NP-01、NP-07、NP-12",
+      "impl": [
+        500,
+        900
+      ],
+      "tests": [
+        350,
+        600
+      ],
+      "files": [
+        8,
+        13
+      ],
+      "confidence": "中高",
+      "route": "结构化",
+      "source_findings": [
+        "F17"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "原生目录与UI一致，同名model跨provider不会串路由。",
+          "只呈现该模型合法effort/模态，未知数据标未知不编造。",
+          "切换、失败、刷新和重启后effective模型/effort一致。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-07",
+        "NP-12"
+      ]
+    },
+    {
+      "id": "NP-17",
+      "phase": "M1",
+      "title": "多模态输入与原生附件语义",
+      "gap": "统一UserInput只有text+images，无法保留原生file receipt、文档、skill/resource引用和文本element元数据；远程DSH看不到本机文件路径。",
+      "behavior": "输入变成版本化contentParts，文字逐字保留；文件、图片、资源、skill引用是明确用户选择的结构化项。每个adapter按原生输入schema编码，unsupported提前解释；远程Host通过原生上传/receipt接收字节。",
+      "native": "Codex UserInput联合；Claude SDK支持的内容块；DSH fileUploads/session attachment。不能给模型暗加说明句来伪装原生引用。",
+      "accept": [
+        "发送文本字节与编辑框相同；skill/file引用精确绑定用户所选项。",
+        "发送前后核对实际图片/文档hash，remote Host拿到同一字节。",
+        "不支持图片的模型明确拒绝；纯图片输入只在原生支持时通过；历史中附件可重看。"
+      ],
+      "paths": "protocol/src/adapter.ts；server dispatcher/files；三adapterinput encoder；web Composer/Timeline",
+      "deps": "NP-03、NP-13、NP-16",
+      "impl": [
+        550,
+        1000
+      ],
+      "tests": [
+        400,
+        700
+      ],
+      "files": [
+        8,
+        13
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F19"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/input.spec.ts",
+          "packages/adapters/codex/src/input.ts",
+          "packages/adapters/codex/test/input.spec.ts",
+          "packages/adapters/claude/src/input.ts",
+          "packages/adapters/claude/src/input.spec.ts",
+          "packages/adapters/dsh/src/input.ts",
+          "packages/adapters/dsh/src/input-capabilities.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/src/files.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/InputAttachments.tsx",
+          "docs/native-input-boundaries.md"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/input.spec.ts",
+          "packages/adapters/codex/src/input.ts",
+          "packages/adapters/codex/test/input.spec.ts",
+          "packages/adapters/claude/src/input.ts",
+          "packages/adapters/claude/src/input.spec.ts",
+          "packages/adapters/dsh/src/input.ts",
+          "packages/adapters/dsh/src/input-capabilities.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/src/files.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/InputAttachments.tsx",
+          "docs/native-input-boundaries.md"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
+        "remainingAcceptance": [
+          "发送文本字节与编辑框相同；skill/file引用精确绑定用户所选项。",
+          "发送前后核对实际图片/文档hash，remote Host拿到同一字节。",
+          "不支持图片的模型明确拒绝；纯图片输入只在原生支持时通过；历史中附件可重看。"
+        ],
+        "remainingWork": "Structured input, exact bytes and honest native modality boundaries implemented with isolated mechanism/browser tests. Codex independent file/resource are explicitly unsupported; Claude image availability remains unknown. Full real-model image/audio/document/skill semantics and public remote Host acceptance remain unverified."
+      },
+      "dependencyIds": [
+        "NP-03",
+        "NP-13",
+        "NP-16"
+      ]
+    },
+    {
+      "id": "NP-18",
+      "phase": "M1",
+      "title": "草稿、附件与上传任务恢复",
+      "gap": "草稿只恢复text，附件未恢复/切换未清理；Enter绕过uploading禁用；上传失败HTTP响应可被当成功。",
+      "behavior": "DraftController按session和revision加载text/contentParts；异步任务带session generation，不能回填别的会话。UploadController持久化状态、检查每次HTTP结果并支持暂停/续传/取消。提交按钮和键盘共享完整guard。",
+      "native": "本项只负责Web输入准备和上传，不改变native接收语义；使用NP-17的数据模型。",
+      "accept": [
+        "A/B快速切换、刷新和晚返回不会丢/串文字或图片。",
+        "上传时Enter不发送缺附件消息；断网/服务端500后保持可重试状态。",
+        "真实浏览器断网后续传并比较sha256；已发送气泡显示正确附件。"
+      ],
+      "paths": "web Composer.tsx；lib drafts/uploads（新）；web IndexedDB；server upload validation tests",
+      "deps": "NP-17",
+      "impl": [
+        350,
+        650
+      ],
+      "tests": [
+        300,
+        550
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "高",
+      "route": "结构化",
+      "source_findings": [
+        "F19",
+        "F20"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/web/src/lib/draft-controller.ts",
+          "packages/web/src/lib/upload-controller.ts",
+          "packages/web/src/lib/input-preparation-store.ts",
+          "packages/web/src/lib/synced-input-draft-store.ts",
+          "packages/web/src/lib/composer-input-controller.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/server/src/store.ts",
+          "packages/server/src/db.ts",
+          "browser-tests/composer-input.spec.ts",
+          "browser-tests/input-preparation.spec.ts",
+          "docs/input-admission-and-draft.md"
+        ],
+        "actualFiles": [
+          "packages/web/src/lib/draft-controller.ts",
+          "packages/web/src/lib/upload-controller.ts",
+          "packages/web/src/lib/input-preparation-store.ts",
+          "packages/web/src/lib/synced-input-draft-store.ts",
+          "packages/web/src/lib/composer-input-controller.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/server/src/store.ts",
+          "packages/server/src/db.ts",
+          "browser-tests/composer-input.spec.ts",
+          "browser-tests/input-preparation.spec.ts",
+          "docs/input-admission-and-draft.md",
+          "packages/web/src/lib/synced-input-draft-store.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/web/src/lib/synced-input-draft-store.spec.ts"
+        ],
+        "remainingAcceptance": [
+          "A/B快速切换、刷新和晚返回不会丢/串文字或图片。",
+          "上传时Enter不发送缺附件消息；断网/服务端500后保持可重试状态。",
+          "真实浏览器断网后续传并比较sha256；已发送气泡显示正确附件。"
+        ],
+        "remainingWork": "Product Composer recovery, IndexedDB Blob/task persistence, late A/B isolation and local/remote draft CAS choices verified in real Chromium. Broader device/server-failure/large-upload matrix remains to be accepted."
+      },
+      "dependencyIds": [
+        "NP-17"
+      ]
+    },
+    {
+      "id": "NP-19",
+      "phase": "M1",
+      "title": "发送、排队、Steer与停止的明确交互",
+      "gap": "运行中一律本地排队，steer接口未贯通；离线pending被空reducer覆盖，ACK错误不呈现。",
+      "behavior": "输入框明确发送新轮/加入队列/介入当前轮三个意图，仅原生支持时提供。队列显示文本/附件/位置并允许合法修改和取消；离线pending从持久command投影，不被空turn覆盖。停止区分turn、任务和整个native session。",
+      "native": "Codex turn/steer带expectedTurnId；DSH prompt mode queue/steer及updateQueue；Claude使用其原生stream control可表达的范围，不stop+send伪造steer。",
+      "accept": [
+        "运行中介入不意外创建新轮；不支持时给明确原因。",
+        "离线刷新仍可读待发送正文/附件/错误和真实时间，队列重启不丢。",
+        "失败ACK恢复可操作状态；过期interrupt不作用于新的turn。"
+      ],
+      "paths": "protocol commands；server queue/manager；三adaptercontrols；web Composer/QueuePanel/Outbox",
+      "deps": "NP-03、NP-04、NP-18",
+      "impl": [
+        450,
+        800
+      ],
+      "tests": [
+        350,
+        650
+      ],
+      "files": [
+        7,
+        12
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F05"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/src/invariants.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/input.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/turn.ts",
+          "packages/protocol/src/invariants.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-recovery.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
+        "remainingAcceptance": [
+          "运行中介入不意外创建新轮；不支持时给明确原因。",
+          "离线刷新仍可读待发送正文/附件/错误和真实时间，队列重启不丢。",
+          "失败ACK恢复可操作状态；过期interrupt不作用于新的turn。"
+        ],
+        "remainingWork": "Explicit busy send rejects; queue survives failures; steer uses independent native UUID with server-verified turn and real echo confirmation. Failed input restoration implemented. Queue editing and complete interrupt scope/expiry/native stop failure matrix remain unverified."
+      },
+      "dependencyIds": [
+        "NP-03",
+        "NP-04",
+        "NP-18"
+      ]
+    },
+    {
+      "id": "NP-20",
+      "phase": "M1",
+      "title": "原生历史发现、导入、搜索与跨界面同步",
+      "gap": "主要只展示WebDCC自身创建的会话，外部原生历史没有完整发现/导入/冲突处理。",
+      "behavior": "提供只读发现和预览，再由用户关联到工作区。NativeSessionRef唯一索引绑定Host和Agent，不复制成无关会话。分页导入原生历史、附件、actor/turn关系和metadata；记录覆盖范围，原生外部更新可增量同步。",
+      "native": "Codex thread/list、thread/read、thread/turns/list、thread/items/list；Claude listSessions/getSessionInfo/getSessionMessages；DSH session/list/page/search及workspace follow。",
+      "accept": [
+        "三个Agent各选一个原先在原生端创建的会话，导入后可恢复同nativeId。",
+        "反复导入不重复用户/助手消息，原版与Web交替操作无缺口。",
+        "大历史分页加载、搜索定位、部分不可读记录和schema变化均有显式状态。"
+      ],
+      "paths": "server native-session-index/history（新）；db/store；三adapterhistory readers；web Sidebar/Import/Search",
+      "deps": "NP-04、NP-05、NP-10",
+      "impl": [
+        900,
+        1550
+      ],
+      "tests": [
+        600,
+        1000
+      ],
+      "files": [
+        11,
+        18
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F10"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json",
+          ".artifacts/dsh-native-smoke.json"
+        ],
+        "remainingAcceptance": [
+          "三个Agent各选一个原先在原生端创建的会话，导入后可恢复同nativeId。",
+          "反复导入不重复用户/助手消息，原版与Web交替操作无缺口。",
+          "大历史分页加载、搜索定位、部分不可读记录和schema变化均有显式状态。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-04",
+        "NP-05",
+        "NP-10"
+      ]
+    },
+    {
+      "id": "NP-21",
+      "phase": "M1",
+      "title": "原生会话元数据与组织操作",
+      "gap": "本地rename/archive/pin不等于写回原生，删除/重命名等语义与原生范围未统一。",
+      "behavior": "区分Web标签与native metadata。支持原生提供的rename/archive/unarchive/delete及workspace组织，显示作用域和冲突；删除确认指向确切native目标与影响，不删除不相关共享文件。",
+      "native": "Codex thread name/archive等；Claude公开rename/tag及允许生命周期；DSH workspace/session对应方法。不存在的操作不得本地改名冒充原生成功。",
+      "accept": [
+        "原生可写metadata从Web修改后原版可见，反向更新也收敛。",
+        "重启/重复操作不制造重复实体；并发revision冲突可处理。",
+        "原生删除与仅移除Web关联有不同按钮及确认文案。"
+      ],
+      "paths": "server session services/routes；三adaptermetadata handlers；web Sidebar/SessionHeader",
+      "deps": "NP-20",
+      "impl": [
+        300,
+        550
+      ],
+      "tests": [
+        250,
+        450
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "原生可写metadata从Web修改后原版可见，反向更新也收敛。",
+          "重启/重复操作不制造重复实体；并发revision冲突可处理。",
+          "原生删除与仅移除Web关联有不同按钮及确认文案。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-20"
+      ]
+    },
+    {
+      "id": "NP-22",
+      "phase": "M1",
+      "title": "原生分叉、对话回退、压缩与文件检查点",
+      "gap": "原文手动交接不能代替native fork/revert；目前没有完整原生checkpoint/compact控制。",
+      "behavior": "分别呈现fork、对话回退、compact和文件rewind，显示原生支持范围、预览及不可撤销影响。操作结束读取权威history/文件状态并重建投影，不用摘要prompt模拟。未跟踪shell副作用必须明示。",
+      "native": "Codex thread/fork、thread/revert、thread/compact/start（以锁定schema名称为准）；Claude forkSession/resumeSessionAt/enableFileCheckpointing/rewindFiles；DSH session/fork及原生commands。",
+      "accept": [
+        "fork保留原会话不变且新nativeId明确；回退后原生与Web历史一致。",
+        "rewind dry-run列出可还原文件，未跟踪文件保持原生规定行为；失败不显示全部恢复。",
+        "compact进度/完成/失败可见，后续提问与原生配置和上下文连续。"
+      ],
+      "paths": "三adapternative history controls；server commands/history；web SessionActions/Preview",
+      "deps": "NP-20、NP-21、NP-29",
+      "impl": [
+        750,
+        1300
+      ],
+      "tests": [
+        550,
+        950
+      ],
+      "files": [
+        10,
+        16
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "fork保留原会话不变且新nativeId明确；回退后原生与Web历史一致。",
+          "rewind dry-run列出可还原文件，未跟踪文件保持原生规定行为；失败不显示全部恢复。",
+          "compact进度/完成/失败可见，后续提问与原生配置和上下文连续。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-20",
+        "NP-21",
+        "NP-29"
+      ]
+    },
+    {
+      "id": "NP-23",
+      "phase": "M1",
+      "title": "计划、目标和任务的原生实体投影",
+      "gap": "统一PlanItem不足以表示Markdown计划、task owner/dependencies、多个目标和原生完成状态；部分任务ID由UI猜测。",
+      "behavior": "保留各Agent原生实体字段，公共视图提供概要但允许专用细节。原生返回ID才创建最终任务；状态变更按entity revision归约。计划批准与普通文件审批区分，显示原生计划正文。",
+      "native": "Codex plan/goal；Claude Task*与ExitPlanMode；DSH todo/goals/team任务。控制动作分别由NP-24/32/38承接。",
+      "accept": [
+        "原生同一任务更新/删除不会重复，失败创建不产生幽灵任务。",
+        "刷新后owner、依赖、计划正文、目标状态与原生一致。",
+        "主Agent与子Agent任务隔离；UI空状态不把缺数据当已完成。"
+      ],
+      "paths": "protocol domain entities（新）；三adapterreducers；server projections；web TaskPanel/GoalPanel",
+      "deps": "NP-05、NP-08、NP-09、NP-11",
+      "impl": [
+        500,
+        900
+      ],
+      "tests": [
+        350,
+        650
+      ],
+      "files": [
+        8,
+        13
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F13",
+        "F16"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "原生同一任务更新/删除不会重复，失败创建不产生幽灵任务。",
+          "刷新后owner、依赖、计划正文、目标状态与原生一致。",
+          "主Agent与子Agent任务隔离；UI空状态不把缺数据当已完成。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-05",
+        "NP-08",
+        "NP-09",
+        "NP-11"
+      ]
+    },
+    {
+      "id": "NP-24",
+      "phase": "M1",
+      "title": "原生子Agent、团队和后台任务",
+      "gap": "有工具卡片但缺actor层级、独立历史、原生任务状态和可靠的单任务操作。",
+      "behavior": "新增原生actor tree和background task视图，支持真实可用的follow、stop、continue、inbox等能力，展示父身份和可用操作。主回答不混入子任务输出，user action必须指明目标actor。 Claude只有在单任务停止UI与控制确实可用时才声明perTaskStopAffordance=true；否则遵守SDK默认interrupt对后台任务的实际影响并在按钮明确范围，不能承诺只停前台。",
+      "native": "Codex collab events及公开子线程方法；Claude parent_tool_use_id、backgroundTasks/stopTask；DSH continuable subagents与jobs。Claude没有一般sendTaskInput时不得隐式发父级prompt。",
+      "accept": [
+        "两子Agent并发输出不串线，单个stop不打断其他actor。",
+        "子任务完成/失败/暂停与native列表一致，刷新可恢复。",
+        "仅对native允许的目标提供continue或message，拒绝越过父子权限边界。"
+      ],
+      "paths": "三adapteractor/task bridges；protocol actor graph；server child routes；web ActorTree/TaskInspector",
+      "deps": "NP-04、NP-06、NP-20、NP-23",
+      "impl": [
+        850,
+        1500
+      ],
+      "tests": [
+        600,
+        1000
+      ],
+      "files": [
+        12,
+        19
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F11",
+        "F16"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json",
+          ".artifacts/dsh-native-smoke.json"
+        ],
+        "remainingAcceptance": [
+          "两子Agent并发输出不串线，单个stop不打断其他actor。",
+          "子任务完成/失败/暂停与native列表一致，刷新可恢复。",
+          "仅对native允许的目标提供continue或message，拒绝越过父子权限边界。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-04",
+        "NP-06",
+        "NP-20",
+        "NP-23"
+      ]
+    },
+    {
+      "id": "NP-25",
+      "phase": "M1",
+      "title": "MCP发现、认证、资源与用户交互",
+      "gap": "用户MCP可能被native加载，但Web缺服务器状态、OAuth、资源读取和完整elicitation闭环。",
+      "behavior": "提供native MCP目录、状态、错误、工具/资源详情、合法重连/开关和OAuth进度；使用NP-06处理form/URL elicitation。富MCP UI只能在隔离surface运行，通过有限消息桥访问对应resource。",
+      "native": "Codex mcpServerStatus/list、OAuth/resource methods；Claude mcpServerStatus/reconnect/toggle/readMcpResource/onElicitation；DSH已安装插件公开能力。",
+      "accept": [
+        "原生加载集合与Web列表一致；认证失败/过期可恢复。",
+        "表单按native schema校验，URL流程完成后原请求得到正确结果。",
+        "嵌入MCP UI不能访问WebDCC Cookie/任意workspace API；unsupported UI清楚提示。"
+      ],
+      "paths": "native MCP controllers；server resource/OAuth bridge；web MCP pages/Form/IsolatedSurface",
+      "deps": "NP-01、NP-06、NP-13、NP-28",
+      "impl": [
+        850,
+        1500
+      ],
+      "tests": [
+        550,
+        950
+      ],
+      "files": [
+        12,
+        19
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F07"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/elicitation.ts",
+          "packages/adapters/codex/src/elicitation.ts",
+          "packages/adapters/codex/test/elicitation.spec.ts",
+          "packages/web/src/components/ElicitationForm.tsx",
+          "browser-tests/elicitation.spec.ts",
+          "scripts/verify-native-elicitation.ts",
+          "packages/testing/mock-models/src/plan.ts",
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-elicitation.json",
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "原生加载集合与Web列表一致；认证失败/过期可恢复。",
+          "表单按native schema校验，URL流程完成后原请求得到正确结果。",
+          "嵌入MCP UI不能访问WebDCC Cookie/任意workspace API；unsupported UI清楚提示。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-06",
+        "NP-13",
+        "NP-28"
+      ]
+    },
+    {
+      "id": "NP-26",
+      "phase": "M1",
+      "title": "Skills、Hooks、斜杠命令与来源诊断",
+      "gap": "原生继承生效与Web可管理被混为一谈；命令只含name/description，部分结果被丢弃或前端拦截成其他动作。",
+      "behavior": "显示能力来源/启用状态/作用域/加载错误；命令目录保存原生种类、参数、附件能力、执行路由和返回结果。用户显式选skill保留结构化引用。TUI专用命令转到原生surface或显示不可用，不能发普通prompt冒充。",
+      "native": "Codex skills/list/hooks/list/config；Claude init command catalog与公开reload方法；DSH commands/list/execute/skills。配置更改按NP-12。",
+      "accept": [
+        "/model在各Agent走声明的原生或Web路由并可辨认，未识别命令不静默改写。",
+        "带附件命令和返回正文保留，多个输入行不被截断。",
+        "现有用户hooks/skills仍生效；刷新catalog不注入平台自定义能力。"
+      ],
+      "paths": "adapters native commands/skills modules；server catalogs；web CommandPalette/SkillPicker/Diagnostics",
+      "deps": "NP-01、NP-12、NP-17",
+      "impl": [
+        650,
+        1150
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        10,
+        16
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "/model在各Agent走声明的原生或Web路由并可辨认，未识别命令不静默改写。",
+          "带附件命令和返回正文保留，多个输入行不被截断。",
+          "现有用户hooks/skills仍生效；刷新catalog不注入平台自定义能力。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-12",
+        "NP-17"
+      ]
+    },
+    {
+      "id": "NP-27",
+      "phase": "M1",
+      "title": "原生插件、Apps与市场管理",
+      "gap": "Web中缺原生插件和连接器的安装/状态/升级/启停交互，不能靠继承加载宣称具备。",
+      "behavior": "对运行时实际公开且允许的操作提供目录、安装计划、显式确认、进度、失败恢复、reload和状态读回。管理员策略/实验限制保留。尚未稳定的API通过native surface接入，不强行自动开启实验开关。",
+      "native": "Codex app/plugin/marketplace族按pinned契约和实验标记；Claude已公开plugins/reload控制；DSH pluginManager/Market/Inventory。",
+      "accept": [
+        "安装/移除必须是用户显式动作，访问页面不改配置。",
+        "取消、失败、已安装、版本冲突和native重载后状态可靠。",
+        "native公开文档标under-development的方法没有被未经验证当生产支持。"
+      ],
+      "paths": "native plugin controllers；server settings/jobs；web Plugins/Apps pages",
+      "deps": "NP-01、NP-12、NP-25",
+      "impl": [
+        750,
+        1350
+      ],
+      "tests": [
+        500,
+        850
+      ],
+      "files": [
+        11,
+        17
+      ],
+      "confidence": "中低",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "planned",
+        "verification": "not-run",
+        "plannedFiles": [],
+        "actualFiles": [],
+        "evidence": [],
+        "remainingAcceptance": [
+          "安装/移除必须是用户显式动作，访问页面不改配置。",
+          "取消、失败、已安装、版本冲突和native重载后状态可靠。",
+          "native公开文档标under-development的方法没有被未经验证当生产支持。"
+        ]
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-12",
+        "NP-25"
+      ]
+    },
+    {
+      "id": "NP-28",
+      "phase": "M1",
+      "title": "原生登录、账号状态与额度",
+      "gap": "probe多为unknown或常量，Web缺账号/OAuth到期/退出/额度等控制。",
+      "behavior": "显示真实binary/SDK、账号来源、登录方式、额度和限制；登录链接或device code由native产生，敏感凭据仅在服务端。logout显式影响范围；无账号时不暗改Provider。",
+      "native": "Codex account/login/read/rateLimits；Claude accountInfo及可用原生登录路径；DSH account接口。SDK没有登录管理时交由受认证native surface。",
+      "accept": [
+        "原生未登录/过期/已登录三种状态与UI一致。",
+        "OAuth取消、失败、重复callback和跨会话state不会误绑定。",
+        "账号凭据不出现在浏览器日志、普通events或导出，额度未知不显示0。"
+      ],
+      "paths": "三adapterprobe/account modules；server auth bridge；web Account/Quota UI",
+      "deps": "NP-01、NP-13、NP-14、NP-43",
+      "impl": [
+        550,
+        950
+      ],
+      "tests": [
+        350,
+        650
+      ],
+      "files": [
+        8,
+        13
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "原生未登录/过期/已登录三种状态与UI一致。",
+          "OAuth取消、失败、重复callback和跨会话state不会误绑定。",
+          "账号凭据不出现在浏览器日志、普通events或导出，额度未知不显示0。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-13",
+        "NP-14",
+        "NP-43"
+      ]
+    },
+    {
+      "id": "NP-29",
+      "phase": "M1",
+      "title": "工作区、文件改动、富产物与资源",
+      "gap": "有文件编辑和diff基础，但native附件、引用、生成图像、完整命令输出与远程资源不完整；链接定位和主动内容边界不统一。",
+      "behavior": "文件版本和native resource身份分开；保持现有CAS编辑，扩展原生文件列表/搜索/产物下载与安全预览。diff区分累计快照与单次patch，重命名/二进制/无diff应正确表达。复制/交接使用同一final answer投影。",
+      "native": "Codex typed fileChange/image/search/MCP items；Claude内容块/resources；DSH workspaceFiles/fileReferences/officeToPdf/native receipts；能力不支持不伪造diff。",
+      "accept": [
+        "文本编辑冲突不覆盖；二进制/重命名/删除/超大输出均有准确视图。",
+        "从任意seq深链可加载对应diff/产物，资源下载hash与native相同。",
+        "@/复制/交接使用已完成turn的全部final内容，不取commentary或空缓存。"
+      ],
+      "paths": "protocol content/resources；server workspace/files/resources；web Dock/FileEditor/Markdown/Timeline/Handoff",
+      "deps": "NP-05、NP-13、NP-17",
+      "impl": [
+        700,
+        1200
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        10,
+        16
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F20"
+      ],
+      "execution": {
+        "implementation": "planned",
+        "verification": "not-run",
+        "plannedFiles": [],
+        "actualFiles": [],
+        "evidence": [],
+        "remainingAcceptance": [
+          "文本编辑冲突不覆盖；二进制/重命名/删除/超大输出均有准确视图。",
+          "从任意seq深链可加载对应diff/产物，资源下载hash与native相同。",
+          "@/复制/交接使用已完成turn的全部final内容，不取commentary或空缓存。"
+        ]
+      },
+      "dependencyIds": [
+        "NP-05",
+        "NP-13",
+        "NP-17"
+      ]
+    },
+    {
+      "id": "NP-30",
+      "phase": "M1",
+      "title": "Usage、上下文、限额与错误可观测性",
+      "gap": "已有usage字段，但三家cache桶语义不同；错误/中断/未知及SDK估价容易混用。",
+      "behavior": "按native来源显示token、cache、reasoning、context、rate limit与cost；标明observed/estimated、attempt/turn/session维度。原生错误代码、可恢复性、重试来源可见，未知不补0。",
+      "native": "Codex cached input为其input子集；Claude input与cache buckets分开；DSH按attempt累积，避免双计。",
+      "accept": [
+        "同一session跨多轮及重连后用量无重复，原始usage可查。",
+        "失败、用户取消、额度耗尽、自动continuation有不同状态。",
+        "金额仅按已知native或Provider规则展示，估值不冒充账单。"
+      ],
+      "paths": "protocol usage/error；adapter usage reducers；server metrics；web SessionHeader/UsagePanel",
+      "deps": "NP-05、NP-16",
+      "impl": [
+        350,
+        650
+      ],
+      "tests": [
+        250,
+        450
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json",
+          "packages/adapters/codex/test/stream-identity.spec.ts",
+          "packages/server/test/turn-stream-identity.spec.ts",
+          "packages/server/test/hub-stream-identity.spec.ts",
+          "packages/web/src/lib/store-stream-identity.spec.ts",
+          "browser-tests/stream-identity.spec.ts",
+          "scripts/verify-native-reasoning.ts"
+        ],
+        "remainingAcceptance": [
+          "同一session跨多轮及重连后用量无重复，原始usage可查。",
+          "失败、用户取消、额度耗尽、自动continuation有不同状态。",
+          "金额仅按已知native或Provider规则展示，估值不冒充账单。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-05",
+        "NP-16"
+      ]
+    },
+    {
+      "id": "NP-31",
+      "phase": "M2",
+      "title": "Codex原生Review与项目工作流",
+      "gap": "没有完整review/start、project/worktree/environment相关可操作路径。",
+      "behavior": "提供原生review目标选择、进度、结果与native线程关系；项目/环境/worktree功能从capability显示，结构化UI优先支持稳定公开路径，其他经native入口。不能用“请review”隐藏提示替代review API。",
+      "native": "review/start及锁定ClientRequest明确存在的thread metadata/section/attachment操作；project/environment在本基线主要是通知，不据此假定有控制方法。worktree或environment操作必须逐项取得公开API或真实CLI证据，否则标不可用或native后备。",
+      "accept": [
+        "未提交改动、基线分支、commit三种review目标各有真实原生对照。",
+        "review期间刷新/停止/完成后结果关系正确。",
+        "工作区/环境切换显示实际cwd，误连项目或不存在方法被阻止。"
+      ],
+      "paths": "codex native review/project controls；server actions；web ReviewPanel/ProjectSelector",
+      "deps": "NP-20、NP-22、NP-29",
+      "impl": [
+        450,
+        850
+      ],
+      "tests": [
+        350,
+        600
+      ],
+      "files": [
+        7,
+        12
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "未提交改动、基线分支、commit三种review目标各有真实原生对照。",
+          "review期间刷新/停止/完成后结果关系正确。",
+          "工作区/环境切换显示实际cwd，误连项目或不存在方法被阻止。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-20",
+        "NP-22",
+        "NP-29"
+      ]
+    },
+    {
+      "id": "NP-32",
+      "phase": "M2",
+      "title": "Codex目标、原生队列和自主续跑控制",
+      "gap": "goal主要只读，原生continuation、队列状态与平台watchdog边界不清晰。",
+      "behavior": "接通已公开的goal get/set/clear控制与原生continuation状态；目标变化带revision。原生队列可读状态与WebDCC自己的持久输入队列分开展示，不能混称原生队列编辑。native自主执行与平台watchdog标来源，用户stop不被平台自动续跑覆盖。",
+      "native": "锁定schema的thread/goal/set、get、clear与turn/steer；本基线只有thread/queue/changed通知，没有原生queue编辑API。WebDCC持久队列编辑属于NP-03/19；原生队列编辑须验证CLI能力或未来明确协商的API，未验证时只读。",
+      "accept": [
+        "设置/暂停或清除目标按实际native支持读回，续跑turn可单独停止。",
+        "原生队列和Web队列不会双提交同一消息。",
+        "用户取消后watchdog不重启任务，native仍在运行时状态诚实。"
+      ],
+      "paths": "codex goal/queue controls；server manager/watchdog；web GoalPanel/QueuePanel",
+      "deps": "NP-04、NP-19、NP-23",
+      "impl": [
+        400,
+        750
+      ],
+      "tests": [
+        300,
+        550
+      ],
+      "files": [
+        6,
+        10
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F12"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/goals.ts",
+          "packages/protocol/test/goals.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/server/src/turn-tracker.ts",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "设置/暂停或清除目标按实际native支持读回，续跑turn可单独停止。",
+          "原生队列和Web队列不会双提交同一消息。",
+          "用户取消后watchdog不重启任务，native仍在运行时状态诚实。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-04",
+        "NP-19",
+        "NP-23"
+      ]
+    },
+    {
+      "id": "NP-33",
+      "phase": "M2",
+      "title": "原生进程输出与交互终端控制",
+      "gap": "command卡主要显示文本尾部，没有完整进程输出、stdin、resize、单进程终止。",
+      "behavior": "对native提供的命令/terminal服务建立query/action/duplex stream，保持native沙箱/审批语义；实现输出背压、有界缓存、重连与终止。它与直接启动CLI的NP-43是不同能力。",
+      "native": "Codex command/exec、write/resize/terminate与process通知；DSH terminal/job对应接口。Claude仅展示/停止其公开background task，不能捏造stdin方法。",
+      "accept": [
+        "交互程序stdin、resize、exit code可复现；断网恢复不重启原命令。",
+        "大输出不会无限堆积，完整日志可下载且终止可确认。",
+        "权限、cwd与原生执行一致，不使用平台任意shell旁路替代native终端。"
+      ],
+      "paths": "native process adapters；server stream broker；protocol duplex；web ProcessTerminal/OutputViewer",
+      "deps": "NP-04、NP-13、NP-24",
+      "impl": [
+        850,
+        1500
+      ],
+      "tests": [
+        550,
+        950
+      ],
+      "files": [
+        10,
+        17
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-process-current.json",
+          ".artifacts/native-terminal-validation/codex-validation.json",
+          ".artifacts/native-terminal-validation/claude-validation.json"
+        ],
+        "remainingAcceptance": [
+          "交互程序stdin、resize、exit code可复现；断网恢复不重启原命令。",
+          "大输出不会无限堆积，完整日志可下载且终止可确认。",
+          "权限、cwd与原生执行一致，不使用平台任意shell旁路替代native终端。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "remainingWork": "Actual Codex 0.167.0 command/exec duplex, Unicode, resize and exit succeeded with explicitly read-back native sandbox; browser route/lease integration and full failures still need acceptance. DSH process producer remains unavailable."
+      },
+      "dependencyIds": [
+        "NP-04",
+        "NP-13",
+        "NP-24"
+      ]
+    },
+    {
+      "id": "NP-34",
+      "phase": "M3",
+      "title": "实时、语音与平台专属能力边界",
+      "gap": "存在realtime通知不等于存在可调用控制；服务器OS/设备、账号与native客户端能力不同。",
+      "behavior": "为实时/语音/桌面专属能力建立版本化能力条目、明确条件与native入口。当前pinned API没有启动方法时标unavailable-in-api，并执行有限spike确认；不得通过猜JSON-RPC方法或伪装成功实现。",
+      "native": "本仓Codex有realtime通知但导出ClientRequest无完整启动入口；DSH speech族依赖实际安装；Claude按SDK公开能力与CLI实测。",
+      "accept": [
+        "有通知无启动入口的基线不能显示可用开始按钮。",
+        "有真实native能力时，在浏览器完成一次开始/输入/结束与权限撤销对照。",
+        "不可用条目包含版本/平台/设备/账号原因和解除条件；不被算入已覆盖。"
+      ],
+      "paths": "capability manifests；native media bridge spike；web capability explanations",
+      "deps": "NP-01、NP-28、NP-42、NP-43",
+      "impl": [
+        180,
+        350
+      ],
+      "tests": [
+        180,
+        320
+      ],
+      "files": [
+        4,
+        7
+      ],
+      "confidence": "低",
+      "route": "条件性：能力门控与验证；新媒体引擎不在该预算",
+      "source_findings": [],
+      "execution": {
+        "implementation": "planned",
+        "verification": "not-run",
+        "plannedFiles": [],
+        "actualFiles": [],
+        "evidence": [],
+        "remainingAcceptance": [
+          "有通知无启动入口的基线不能显示可用开始按钮。",
+          "有真实native能力时，在浏览器完成一次开始/输入/结束与权限撤销对照。",
+          "不可用条目包含版本/平台/设备/账号原因和解除条件；不被算入已覆盖。"
+        ]
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-28",
+        "NP-42",
+        "NP-43"
+      ]
+    },
+    {
+      "id": "NP-35",
+      "phase": "M2",
+      "title": "Claude原生模型控制与高级输出选项",
+      "gap": "当前模型/effort为窄静态字段，未完整暴露thinking、outputFormat、上下文和native运行控制。",
+      "behavior": "从SDK/模型目录生成合法选项，按会话或单轮作用域显示。结构化输出和thinking选择必须是用户显式控制；保持Claude原生preset和settings来源，不覆盖系统提示。模型改变时重新读取有效权限。",
+      "native": "公开Query.setModel/setPermissionMode、thinking与outputFormat等Options；已废弃方法不作为新方案。",
+      "accept": [
+        "合法与非法schema/思考参数分别有成功/拒绝结果。",
+        "设置改变后新旧query不交叉，pending交互得到正确终态。",
+        "structured result保留原生结构和失败原因，普通聊天格式不被强制改变。"
+      ],
+      "paths": "claude controls/options modules；protocol capability options；web ModelSettings/StructuredOutput",
+      "deps": "NP-09、NP-16、NP-30",
+      "impl": [
+        450,
+        800
+      ],
+      "tests": [
+        300,
+        550
+      ],
+      "files": [
+        7,
+        11
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "合法与非法schema/思考参数分别有成功/拒绝结果。",
+          "设置改变后新旧query不交叉，pending交互得到正确终态。",
+          "structured result保留原生结构和失败原因，普通聊天格式不被强制改变。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-09",
+        "NP-16",
+        "NP-30"
+      ]
+    },
+    {
+      "id": "NP-36",
+      "phase": "M3",
+      "title": "Claude任务、Teams与SDK专属对话",
+      "gap": "任务通知和部分dialog未贯通，native Teams与普通工具调用不能等同；SDK不一定有全部TUI控制。",
+      "behavior": "在NP-24公共树上接公开task/dialog能力，支持onUserDialog/supportedDialogKinds等实际可用形状；按actor归属显示Teams/task事件。SDK无直接操作的团队控制明确走原生surface，不能偷偷通过父prompt模拟。 NP-24负责共享actor/task模型及基础停止，本项仅扩展Claude专用Teams/dialog适配和原生后备接线。",
+      "native": "锁定SDK的backgroundTasks/stopTask/task_*消息与公开dialog集合；团队成员消息发送按实际可用native接口，否则只读或后备。 perTaskStopAffordance仅在单任务stop链路完成验收后开启；未开启时interrupt是否影响后台任务以该SDK行为为准并显示。",
+      "accept": [
+        "真实后台任务完成/失败/停止通知正确显示并可恢复。",
+        "原生dialog类型逐类正确响应，不支持类型显式拒绝而不挂起。",
+        "主子任务输出隔离；SDK不支持的操作不会出现假按钮。"
+      ],
+      "paths": "claude task/dialog controllers；web native dialogs/ActorTree；server interaction routing",
+      "deps": "NP-06、NP-09、NP-24、NP-43",
+      "impl": [
+        500,
+        900
+      ],
+      "tests": [
+        350,
+        650
+      ],
+      "files": [
+        8,
+        13
+      ],
+      "confidence": "中低",
+      "route": "结构化",
+      "source_findings": [
+        "F16"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "真实后台任务完成/失败/停止通知正确显示并可恢复。",
+          "原生dialog类型逐类正确响应，不支持类型显式拒绝而不挂起。",
+          "主子任务输出隔离；SDK不支持的操作不会出现假按钮。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-06",
+        "NP-09",
+        "NP-24",
+        "NP-43"
+      ]
+    },
+    {
+      "id": "NP-37",
+      "phase": "M2",
+      "title": "DSH Preset、动态设置与原生模型路由",
+      "gap": "当前默认preset和固定permission集合无法覆盖Host安装的完整组合；部分Provider配置只支持一种命名。",
+      "behavior": "接入agentPresets、permissionPresets与settings namespaces目录；创建前选择合法preset，运行后只允许原生支持的修改。保留provider+model复合身份，所有配置由目标Host执行且有revision。",
+      "native": "agentPresets/*、permissionPresets/catalog、session/modelCatalog/selectModel、settings/*、credentials/*，以catalog和Host实际集合交集。",
+      "accept": [
+        "非默认preset启动后工具/权限集合与直接native一致。",
+        "同模型多Provider选择准确；native设置覆盖原因和重启要求可见。",
+        "未知插件namespace保留只读说明或原生入口，不静默丢配置。"
+      ],
+      "paths": "DSH catalogs/settings controllers；server dsh routes；web Preset/Settings/Provider UI",
+      "deps": "NP-10、NP-12、NP-16",
+      "impl": [
+        650,
+        1150
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        9,
+        14
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F17"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/assistant.ts",
+          "packages/adapters/dsh/src/identity.ts",
+          "packages/adapters/dsh/src/workspaces.ts",
+          "packages/server/src/dsh-connection.ts",
+          "packages/server/src/adapters.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json",
+          ".artifacts/dsh-native-smoke.json"
+        ],
+        "remainingAcceptance": [
+          "非默认preset启动后工具/权限集合与直接native一致。",
+          "同模型多Provider选择准确；native设置覆盖原因和重启要求可见。",
+          "未知插件namespace保留只读说明或原生入口，不静默丢配置。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-10",
+        "NP-12",
+        "NP-16"
+      ]
+    },
+    {
+      "id": "NP-38",
+      "phase": "M2",
+      "title": "DSH目标、日程与提醒",
+      "gap": "没有完整goals/schedule控制，普通任务清单不能替代定时执行与提醒。",
+      "behavior": "提供native目标与日程的list/create/edit/run/history/cancel/delete支持集合；显示用户时区、下次时间、执行对象、原生交付位置和失败状态。操作明确说明会在未来执行。平台不另造第二套调度器。",
+      "native": "goals七个方法与schedule九个方法按锁定catalog逐项映射。schedule/edit使用action update或delete及expectedUpdatedAt；deleteInactive是清理全部已结束项的批量操作，需单独说明影响。不得把泛称cancel/delete编造成不存在的endpoint；缺插件时不可用。",
+      "accept": [
+        "同一时刻在浏览器时区和Host时区解释一致；DST边界有测试。",
+        "日程在WebDCC重启后由native继续执行，修改/取消在原生列表读回。",
+        "执行历史对应真实native会话，失败不会被标成送达。"
+      ],
+      "paths": "dsh goal/schedule controllers；web Schedule/Goal UI；server capability actions",
+      "deps": "NP-10、NP-23、NP-37",
+      "impl": [
+        850,
+        1500
+      ],
+      "tests": [
+        550,
+        950
+      ],
+      "files": [
+        10,
+        16
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "同一时刻在浏览器时区和Host时区解释一致；DST边界有测试。",
+          "日程在WebDCC重启后由native继续执行，修改/取消在原生列表读回。",
+          "执行历史对应真实native会话，失败不会被标成送达。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-10",
+        "NP-23",
+        "NP-37"
+      ]
+    },
+    {
+      "id": "NP-39",
+      "phase": "M3",
+      "title": "DSH Action Cards与动态插件界面",
+      "gap": "动态卡片只退化为unknown/tool JSON，用户无法完成卡片动作，手工重绘所有Cordis组件没有有限终点。",
+      "behavior": "公共层识别card identity、kind、允许verbs、原生status和resource reference；有稳定schema的卡片结构化渲染，动态插件UI默认通过NP-42原生surface。跨surface动作读回native权威状态，不引入Cordis运行时到主React bundle。",
+      "native": "actionCards/act、dynamicCordisRunner/*、toolResults/watch；只有实际注册kind才提供操作。",
+      "accept": [
+        "一个已注册卡片从展示、动作、进度到结束完整通过原生对照。",
+        "相同card并发动作不重复执行；未注册kind只能安全dismiss或原生支持动作。",
+        "动态surface不获取WebDCC主域权限；fallback可达与结构化完成分开计数。"
+      ],
+      "paths": "DSH card bridge；protocol card/resource types；web NativeCard/NativeSurface",
+      "deps": "NP-06、NP-13、NP-42",
+      "impl": [
+        650,
+        1200
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        8,
+        14
+      ],
+      "confidence": "中低",
+      "route": "混合：结构化已知卡片，动态UI走原生",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "一个已注册卡片从展示、动作、进度到结束完整通过原生对照。",
+          "相同card并发动作不重复执行；未注册kind只能安全dismiss或原生支持动作。",
+          "动态surface不获取WebDCC主域权限；fallback可达与结构化完成分开计数。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-06",
+        "NP-13",
+        "NP-42"
+      ]
+    },
+    {
+      "id": "NP-40",
+      "phase": "M3",
+      "title": "DSH Forge、工作树和原生开发工作流",
+      "gap": "已有diff查看，但不等于Forge的worktree、review、checks和PR等完整开发流程。",
+      "behavior": "提供能力入口、当前workspace/worktree身份及关键状态摘要；原生复杂Forge流程优先通过受认证native surface完成。高频稳定操作可逐项结构化；提交/合并/删除仍保留原生确认与权限。",
+      "native": "forgePanel二十个方法及workspace相关接口；不能把公开方法全部自动变按钮。",
+      "accept": [
+        "从Web进入原生Forge后目标workspace/worktree正确且返回可同步。",
+        "一次原生review/check流程的状态和产物在Web可追踪。",
+        "需要写远端/删除的动作不会由只读导航或状态刷新触发。"
+      ],
+      "paths": "dsh forge bridge；web WorkspaceNativeActions；server ownership/resource mapping",
+      "deps": "NP-20、NP-29、NP-42、NP-44",
+      "impl": [
+        450,
+        850
+      ],
+      "tests": [
+        300,
+        550
+      ],
+      "files": [
+        6,
+        11
+      ],
+      "confidence": "中低",
+      "route": "原生入口优先；全量重绘另估",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "actualFiles": [
+          "packages/protocol/src/native-controls.ts",
+          "packages/adapters/codex/src/native.ts",
+          "packages/adapters/codex/src/native-results.ts",
+          "packages/adapters/claude/src/native.ts",
+          "packages/adapters/claude/src/native-state.ts",
+          "packages/adapters/dsh/src/native.ts",
+          "packages/server/src/native-control-routes.ts",
+          "packages/web/src/components/NativeControls.tsx"
+        ],
+        "evidence": [
+          "web_review/evidence/native-live-claude.json",
+          "web_review/evidence/native-models-current.json"
+        ],
+        "remainingAcceptance": [
+          "从Web进入原生Forge后目标workspace/worktree正确且返回可同步。",
+          "一次原生review/check流程的状态和产物在Web可追踪。",
+          "需要写远端/删除的动作不会由只读导航或状态刷新触发。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-20",
+        "NP-29",
+        "NP-42",
+        "NP-44"
+      ]
+    },
+    {
+      "id": "NP-41",
+      "phase": "M3",
+      "title": "DSH共享、语音、反馈及长尾原生功能",
+      "gap": "account/liveshare/speech/reference/feedback/remote等长尾域缺完整Web通路；可能有部署/账号限制。",
+      "behavior": "将每个部署中可用的用户能力接到NP-42真实native surface，显示能力、对象、登录/插件条件及当前覆盖状态。共享权限变更必须显式发起；无原生可用条件的功能保持unavailable。",
+      "native": "liveshareShares、speech、message/sessionFeedback、sessionReferenceResolver、remoteAccess等；内部telemetry/传输端点只做库存分类，不要求独立按钮。",
+      "accept": [
+        "逐能力有可达入口和至少一条原生操作证据；只到首页不算完成。",
+        "分享创建/撤销的对象和权限可见，不改变WebDCC本身访问范围。",
+        "媒体/账号受限时说明实际环境条件，能力未验证不计pass。"
+      ],
+      "paths": "DSH capability manifest；native route/deep-link mapping；web原生功能目录",
+      "deps": "NP-01、NP-28、NP-34、NP-42",
+      "impl": [
+        300,
+        600
+      ],
+      "tests": [
+        300,
+        550
+      ],
+      "files": [
+        5,
+        9
+      ],
+      "confidence": "低",
+      "route": "原生surface；不含逐功能自绘UI",
+      "source_findings": [],
+      "execution": {
+        "implementation": "planned",
+        "verification": "not-run",
+        "plannedFiles": [],
+        "actualFiles": [],
+        "evidence": [],
+        "remainingAcceptance": [
+          "逐能力有可达入口和至少一条原生操作证据；只到首页不算完成。",
+          "分享创建/撤销的对象和权限可见，不改变WebDCC本身访问范围。",
+          "媒体/账号受限时说明实际环境条件，能力未验证不计pass。"
+        ]
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-28",
+        "NP-34",
+        "NP-42"
+      ]
+    },
+    {
+      "id": "NP-42",
+      "phase": "M2",
+      "title": "远程可达且受认证的DSH原生Web入口",
+      "gap": "已有打开原版链接可能指服务器127.0.0.1，远程用户不可达；单纯iframe不能解决认证/路径/WS。",
+      "behavior": "实现面向浏览器的受认证native入口，优先独立origin的新页或停靠surface；处理Host/Origin、basePath、cookie scope、HTTPS/WSS、静态资源、下载、重定向与深链。代理只到已登记Host，禁止任意URL代理。",
+      "native": "复用已运行DSH Host及其真实Web bundle，不fork其agent loop；与用户配置保持同源native状态。内嵌受CSP限制时允许明确的新页入口。",
+      "accept": [
+        "从不在服务器本机的浏览器通过WebDCC登录进入原生UI，不能要求另装SSH工具。",
+        "聊天/设置/日程/插件/Forge至少各一个深层流程可执行，资源和WS不落回loopback。",
+        "撤销认证或更换Host后旧surface失效；无token进入URL日志/引用头；与NP-44所有权一致。"
+      ],
+      "paths": "server native-surface proxy/auth（新）；web NativeSurface/Router；部署代理配置；DSH连接管理",
+      "deps": "NP-10、NP-13、NP-28",
+      "impl": [
+        900,
+        1650
+      ],
+      "tests": [
+        650,
+        1100
+      ],
+      "files": [
+        10,
+        17
+      ],
+      "confidence": "中低",
+      "route": "浏览器原生surface；非全量自绘",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-process-current.json",
+          ".artifacts/native-terminal-validation/codex-validation.json",
+          ".artifacts/native-terminal-validation/claude-validation.json"
+        ],
+        "remainingAcceptance": [
+          "从不在服务器本机的浏览器通过WebDCC登录进入原生UI，不能要求另装SSH工具。",
+          "聊天/设置/日程/插件/Forge至少各一个深层流程可执行，资源和WS不落回loopback。",
+          "撤销认证或更换Host后旧surface失效；无token进入URL日志/引用头；与NP-44所有权一致。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "remainingWork": "Independent-origin authenticated DSH carrier is implemented; main wiring is explicitly read-only, absent public origin unavailable. Real browser smoke and native ownership/durable stream mutation acceptance remain. Deep destinations use native navigation; not all functional workflows verified."
+      },
+      "dependencyIds": [
+        "NP-10",
+        "NP-13",
+        "NP-28"
+      ]
+    },
+    {
+      "id": "NP-43",
+      "phase": "M1",
+      "title": "浏览器中的原生Codex与Claude CLI",
+      "gap": "headless API/SDK不能完整覆盖TUI命令；目前无真实原生终端入口。",
+      "behavior": "提供认证的PTY surface启动真实CLI，argv数组构造，固定已授权cwd和native配置；支持UTF-8、粘贴、resize、重连、输出背压、停止和关闭。不得通过shell字符串拼接或额外prompt模拟。日志按敏感数据策略处理。",
+      "native": "同一版本真实codex/claude可执行文件；是否resume同nativeId由NP-44验证。服务器原生CLI没有的桌面/设备功能不因此获得。",
+      "accept": [
+        "真实CLI的至少三个SDK不可用但用户相关的命令在远程浏览器可操作。",
+        "断线重连不另起重复CLI；关闭后PTY/process/FD回到基线。",
+        "终端输出不执行HTML；未认证/跨origin/错误cwd/越权owner连接被拒。"
+      ],
+      "paths": "server pty-supervisor/terminal routes（新）；protocol terminal stream；web NativeTerminal；运行依赖/部署配置",
+      "deps": "NP-04、NP-13、NP-14",
+      "impl": [
+        1200,
+        2200
+      ],
+      "tests": [
+        850,
+        1400
+      ],
+      "files": [
+        14,
+        23
+      ],
+      "confidence": "中低",
+      "route": "原生CLI后备；未验证不可宣称全功能",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-process-current.json",
+          ".artifacts/native-terminal-validation/codex-validation.json",
+          ".artifacts/native-terminal-validation/claude-validation.json"
+        ],
+        "remainingAcceptance": [
+          "真实CLI的至少三个SDK不可用但用户相关的命令在远程浏览器可操作。",
+          "断线重连不另起重复CLI；关闭后PTY/process/FD回到基线。",
+          "终端输出不执行HTML；未认证/跨origin/错误cwd/越权owner连接被拒。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "remainingWork": "Real browser Codex keymap/theme/vim zero-model workflows and Claude theme/login screen verified in isolated source fixtures. Main-app production wiring, complete target commands, real Claude logged-in commands and profile fidelity remain; unsafe same-session claims are withheld."
+      },
+      "dependencyIds": [
+        "NP-04",
+        "NP-13",
+        "NP-14"
+      ]
+    },
+    {
+      "id": "NP-44",
+      "phase": "M2",
+      "title": "结构化界面与原生界面的安全接管",
+      "gap": "新终端/新原版页面不自动等于同一会话；多个控制端同时写native session有竞争和状态缺口。",
+      "behavior": "NativeSessionOwner lease支持structured/pty/external及fencing token。token只能约束WebDCC托管的adapter、WS和PTY，不能假定外部CLI或直连DSH识别它。接管前idle或用户明确停止，依靠原生锁、live owner状态或可验证协作确认旧owner释放，再以同nativeId恢复；无法验证时只读或blocked。返回时补读历史与effective设置。DSH允许合法多客户端观察和原生仲裁，不把平台lease描述为全系统独占锁。",
+      "native": "先验证每Agent/版本的resume与并发限制。不能安全接管时明确提供新原生会话，并把本会话无缝接管标blocked，不谎称完成。",
+      "accept": [
+        "结构化→native→结构化同会话往返，历史/附件/权限/model不丢；本服务托管域内无双owner，对外部owner另有原生释放/仲裁证据。",
+        "接管中崩溃、超时和浏览器关页后lease可恢复；旧token不能再经WebDCC托管连接写入，但不声称能撤销外部原生连接。",
+        "无法验证外部owner释放或版本不支持迁移时必须blocked/只读；允许明确的新原生会话，但不计同会话接管覆盖。"
+      ],
+      "paths": "server native owner/lease service；db/native identity；三adapteractivation；web接管状态与确认",
+      "deps": "NP-04、NP-20、NP-42、NP-43",
+      "impl": [
+        650,
+        1150
+      ],
+      "tests": [
+        500,
+        850
+      ],
+      "files": [
+        9,
+        15
+      ],
+      "confidence": "中低",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "actualFiles": [
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-process-current.json",
+          ".artifacts/native-terminal-validation/codex-validation.json",
+          ".artifacts/native-terminal-validation/claude-validation.json"
+        ],
+        "remainingAcceptance": [
+          "结构化→native→结构化同会话往返，历史/附件/权限/model不丢；本服务托管域内无双owner，对外部owner另有原生释放/仲裁证据。",
+          "接管中崩溃、超时和浏览器关页后lease可恢复；旧token不能再经WebDCC托管连接写入，但不声称能撤销外部原生连接。",
+          "无法验证外部owner释放或版本不支持迁移时必须blocked/只读；允许明确的新原生会话，但不计同会话接管覆盖。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "remainingWork": "Same-session takeover remains blocked: original/external writer release and complete history/settings/attachments round trip are not proven. Continuous CLI identity inspection/fencing is being implemented; interval inspection cannot prove no previous side effect or native global arbitration."
+      },
+      "dependencyIds": [
+        "NP-04",
+        "NP-20",
+        "NP-42",
+        "NP-43"
+      ]
+    },
+    {
+      "id": "NP-45",
+      "phase": "M3",
+      "title": "按需订阅、增量投影、移动端与可访问性",
+      "gap": "所有缓存会话/created feed自动订阅全历史；全局version引发全量重算；虚拟DOM不足以限制网络和CPU。",
+      "behavior": "分离sidebar feed、可见会话live和历史分页，仅活动/可见会话保持必要流。每session增量投影与memoization；限制snapshot/backfill大小并背压。补深链虚拟定位、键盘焦点、手机输入和错误恢复。",
+      "native": "不改变native事件完整性；未订阅会话通过durable feed/摘要知道有更新，再按需补读。",
+      "accept": [
+        "100会话/总10万事件时，打开首页不拉全库事件；可见历史分页不超过声明窗口。",
+        "在1万事件会话持续输出时输入可用，内存及帧处理成本有界。",
+        "1440px/390px两种布局和键盘可完成发送/审批/问答/切换/原生入口；性能记录机器和网络条件。"
+      ],
+      "paths": "web/src/lib/{store,hooks,connection}.ts；Timeline/Trajectory/Composer；server/hub；projection cache（新）",
+      "deps": "NP-05、NP-18、NP-19",
+      "impl": [
+        700,
+        1200
+      ],
+      "tests": [
+        450,
+        800
+      ],
+      "files": [
+        9,
+        15
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F21"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store-sync.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "actualFiles": [
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store-sync.spec.ts",
+          "browser-tests/goals.spec.ts",
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts",
+          "scripts/build-server.ts",
+          "scripts/release.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/native-process-current.json",
+          ".artifacts/native-terminal-validation/codex-validation.json",
+          ".artifacts/native-terminal-validation/claude-validation.json"
+        ],
+        "remainingAcceptance": [
+          "100会话/总10万事件时，打开首页不拉全库事件；可见历史分页不超过声明窗口。",
+          "在1万事件会话持续输出时输入可用，内存及帧处理成本有界。",
+          "1440px/390px两种布局和键盘可完成发送/审批/问答/切换/原生入口；性能记录机器和网络条件。"
+        ],
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-05",
+        "NP-18",
+        "NP-19"
+      ]
+    },
+    {
+      "id": "NP-46",
+      "phase": "M0",
+      "title": "可重复安装、发布与版本兼容门禁",
+      "gap": "本环境标准pnpm入口因ignored build配置失败；文档版本和实际运行存在偏差；版本升级缺强制行为证明。",
+      "behavior": "在声明的Node/pnpm/OS组合完成干净安装与构建，明确native依赖build策略；CI锁定Agent/SDK和schema hash。产物带commit/build manifest；升级原生版本必须diff能力与schema并跑选定contract/live gates。",
+      "native": "不在review中改为追最新；保持已审核版本和兼容区间，拒绝不知版本却显示全能力。",
+      "accept": [
+        "全新容器按README五个命令可复现，工作树不被包管理器写入占位配置。",
+        "产物commit/schema/native version与报告绑定，错版本启动显示受限而非假正常。",
+        "发布失败回滚到上一个产物，兼容数据库版本有明确检查。"
+      ],
+      "paths": "package.json/pnpm-workspace.yaml；scripts/build/release；CI workflows（新）；server meta/deploy docs",
+      "deps": "NP-01、NP-15",
+      "impl": [
+        400,
+        750
+      ],
+      "tests": [
+        300,
+        550
+      ],
+      "files": [
+        7,
+        12
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F24"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "pnpm-workspace.yaml",
+          "package.json",
+          "scripts/build-server.ts",
+          "scripts/release.ts",
+          "scripts/check-source.ts",
+          ".github/workflows/source-checks.yml",
+          "packages/protocol/src/build.ts",
+          "packages/server/src/build-info.ts",
+          "packages/adapters/codex/test/version.spec.ts",
+          "README.md",
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts"
+        ],
+        "actualFiles": [
+          "pnpm-workspace.yaml",
+          "package.json",
+          "scripts/build-server.ts",
+          "scripts/release.ts",
+          "scripts/check-source.ts",
+          "docs/ci/source-checks.yml",
+          "packages/protocol/src/build.ts",
+          "packages/server/src/build-info.ts",
+          "packages/adapters/codex/test/version.spec.ts",
+          "README.md",
+          "packages/server/src/native-surfaces-integration.ts",
+          "packages/server/src/native-terminal.ts",
+          "packages/server/src/native-terminal-process.ts",
+          "packages/server/src/dsh-native-surface.ts",
+          "packages/web/src/components/NativeSurface.tsx",
+          "packages/web/src/components/NativeDshSurface.tsx",
+          "packages/web/src/components/NativeTerminal.tsx",
+          "scripts/verify-native-process.ts"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/native-process-current.json",
+          ".artifacts/native-terminal-validation/codex-validation.json",
+          ".artifacts/native-terminal-validation/claude-validation.json"
+        ],
+        "remainingAcceptance": [
+          "全新容器按README五个命令可复现，工作树不被包管理器写入占位配置。",
+          "产物commit/schema/native version与报告绑定，错版本启动显示受限而非假正常。",
+          "发布失败回滚到上一个产物，兼容数据库版本有明确检查。"
+        ],
+        "remainingWork": "Fresh-container CI, artifact/database release rollback verification and all native version compatibility remain incomplete. The delivered CI definition is docs/ci/source-checks.yml; .github/workflows/source-checks.yml remains a planned file because the available GitHub credential lacks workflow scope. No GitHub Actions execution or deployment is claimed.",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-15"
+      ]
+    },
+    {
+      "id": "NP-47",
+      "phase": "M3",
+      "title": "数据库迁移、备份与恢复",
+      "gap": "新增账本/identity/interaction后需迁移旧会话；现有事件、附件、secrets与native历史跨目录，单备WebDCC目录不保证所有原生状态。",
+      "behavior": "做可重复schema迁移、旧格式适配、备份manifest和恢复检查。分别记录WebDCC DB/files/secrets与native homes/Host外部依赖，明确哪些备份由用户另行管理。不删除旧events或重写native历史掩盖错误。 M0起每次数据库改动必须同时交付迁移和回滚保护；本项M3预算只负责完整备份恢复与跨版本演练，不允许把基础迁移延后。",
+      "native": "DSH attach的外部Host状态不属于本服务自动拷贝范围；原生OAuth凭据遵循其存储策略。",
+      "accept": [
+        "从审核基线数据库升级保留sessionId/URL/events/files及已有命令结果。",
+        "迁移中断可恢复，失败不启动不兼容应用；恢复演练包含附件hash和native session关联。",
+        "备份/导出不带意外secret；缺外部native备份明确显示无法完整恢复范围。"
+      ],
+      "paths": "server migrations（新）；db/store；backup/restore scripts（新）；运维文档",
+      "deps": "NP-03、NP-05、NP-06、NP-46",
+      "impl": [
+        450,
+        800
+      ],
+      "tests": [
+        350,
+        650
+      ],
+      "files": [
+        7,
+        11
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "partial-local-and-native",
+        "plannedFiles": [
+          "packages/server/src/db.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/src/native-owners.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/src/backup.ts",
+          "scripts/backup.ts",
+          "packages/server/test/backup.spec.ts",
+          "packages/server/src/files.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "docs/backup-and-restore.md"
+        ],
+        "actualFiles": [
+          "packages/server/src/db.ts",
+          "packages/server/src/native-history.ts",
+          "packages/server/test/native-history.spec.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/permission-migration.spec.ts",
+          "packages/server/src/interactions.ts",
+          "packages/server/test/interactions.spec.ts",
+          "packages/server/test/native-events.spec.ts",
+          "packages/server/src/native-events.ts",
+          "packages/server/src/native-owners.ts",
+          "packages/protocol/src/native-observation.ts",
+          "packages/server/src/native-reconciliation.ts",
+          "packages/server/src/process-identity.ts",
+          "packages/server/test/native-reconciliation.spec.ts",
+          "packages/server/test/reconciliation-migration.spec.ts",
+          "packages/web/src/components/NativeRecovery.tsx",
+          "browser-tests/recovery.spec.ts",
+          "scripts/verify-native-recovery.ts",
+          "packages/adapters/codex/test/observation.spec.ts",
+          "packages/adapters/claude/src/managed-process.ts",
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/src/dispatcher.ts",
+          "packages/server/test/question-contract.spec.ts",
+          "packages/server/src/native-actions.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/test/native-actions.spec.ts",
+          "packages/server/test/native-controls.spec.ts",
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/src/command-journal.ts",
+          "packages/adapters/claude/src/stdio-capture.ts",
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/test/journal.spec.ts",
+          "packages/server/src/backup.ts",
+          "scripts/backup.ts",
+          "packages/server/test/backup.spec.ts",
+          "packages/server/src/files.ts",
+          "packages/server/test/attachment-admission.spec.ts",
+          "docs/backup-and-restore.md"
+        ],
+        "evidence": [
+          "web_review/evidence/source-checks.json",
+          "web_review/evidence/l1-e493ec4.json",
+          "web_review/evidence/l1-20701b2.json",
+          "web_review/evidence/native-recovery-current.json",
+          "web_review/evidence/native-live-dsh.json",
+          "web_review/evidence/native-live-codex-revalidated.json",
+          "web_review/evidence/native-claude-stdio.json",
+          "browser-tests/composer-input.spec.ts",
+          "packages/server/test/attachment-admission.spec.ts"
+        ],
+        "remainingAcceptance": [
+          "从审核基线数据库升级保留sessionId/URL/events/files及已有命令结果。",
+          "迁移中断可恢复，失败不启动不兼容应用；恢复演练包含附件hash和native session关联。",
+          "备份/导出不带意外secret；缺外部native备份明确显示无法完整恢复范围。"
+        ],
+        "remainingWork": "Encrypted isolated online SQLite/CAS/upload backup, semantic validation, schema13 migration and MIME aliases verified locally. External native profile/history backups and full clean-install rollback/restore acceptance remain required.",
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+      },
+      "dependencyIds": [
+        "NP-03",
+        "NP-05",
+        "NP-06",
+        "NP-46"
+      ]
+    },
+    {
+      "id": "NP-48",
+      "phase": "M3",
+      "title": "完整能力验收、升级流程与交付状态",
+      "gap": "已有报告把场景、帧不变量与功能对等混在一起；新功能无法靠一个总绿勾表示。",
+      "behavior": "生成逐capability证据矩阵，显示native可用/结构化已测/native后备已测/受限原因。每个user capability要求触发、用户动作、native结果、Web结果、恢复五段证据。发布同时更新README/原装原则/新SPEC优先级与第三方来源说明。",
+      "native": "使用NP-01冻结分母；平台内部telemetry不当用户功能，目标部署实际拥有但未做出的能力不能从分母删除。",
+      "accept": [
+        "M0正确性全过后才允许扩展阶段；主功能至少一次真实Agent+模型交互及失败路径。",
+        "全部目标能力无unclassified/假pass；native-fallback和structured覆盖分别显示，未测不标完成。",
+        "报告绑定同一commit/环境且可复现，审阅人可沿证据链接看到native输入、动作、输出和恢复结果。"
+      ],
+      "paths": "capability验收manifests；真实E2E/fixtures/oracles；CI报告；README/SPEC/约束及来源记录",
+      "deps": "全部适用需求",
+      "impl": [
+        400,
+        750
+      ],
+      "tests": [
+        650,
+        1100
+      ],
+      "files": [
+        10,
+        18
+      ],
+      "confidence": "中",
+      "route": "结构化",
+      "source_findings": [
+        "F23",
+        "F24"
+      ],
+      "execution": {
+        "implementation": "in-progress",
+        "verification": "not-complete",
+        "plannedFiles": [],
+        "actualFiles": [],
+        "evidence": [],
+        "remainingAcceptance": [
+          "M0正确性全过后才允许扩展阶段；主功能至少一次真实Agent+模型交互及失败路径。",
+          "全部目标能力无unclassified/假pass；native-fallback和structured覆盖分别显示，未测不标完成。",
+          "报告绑定同一commit/环境且可复现，审阅人可沿证据链接看到native输入、动作、输出和恢复结果。"
+        ],
+        "remainingWork": "Candidate source519unit/22Browser passed before exactSHA Browser exposed draft-baseline race and xterm locator ambiguity. Both diagnosed and fixed with deterministic/real browser regressions. Final full source gate must bind the new commit. L1 remains32 GOLDEN/16NOT_TRIGGERED; added10 diffs are cacheCreationInputTokens0 only. All48, paid-model failure/multimodal/performance/ownership acceptance and Issue41 Plan entry remain incomplete."
+      },
+      "dependencyIds": [
+        "NP-01",
+        "NP-02",
+        "NP-03",
+        "NP-04",
+        "NP-05",
+        "NP-06",
+        "NP-07",
+        "NP-08",
+        "NP-09",
+        "NP-10",
+        "NP-11",
+        "NP-12",
+        "NP-13",
+        "NP-14",
+        "NP-15",
+        "NP-16",
+        "NP-17",
+        "NP-18",
+        "NP-19",
+        "NP-20",
+        "NP-21",
+        "NP-22",
+        "NP-23",
+        "NP-24",
+        "NP-25",
+        "NP-26",
+        "NP-27",
+        "NP-28",
+        "NP-29",
+        "NP-30",
+        "NP-31",
+        "NP-32",
+        "NP-33",
+        "NP-34",
+        "NP-35",
+        "NP-36",
+        "NP-37",
+        "NP-38",
+        "NP-39",
+        "NP-40",
+        "NP-41",
+        "NP-42",
+        "NP-43",
+        "NP-44",
+        "NP-45",
+        "NP-46",
+        "NP-47"
+      ]
+    }
+  ],
+  "execution_scope": {
+    "workspace": "/root/WebDCC-repair",
+    "branch": "fix/native-parity-repair",
+    "start_commit": "878c8c9",
+    "deployment": "not-requested",
+    "objective": "Implement all 48 requirements; repair source only, do not update the deployed version.",
+    "native_acceptance": "partial-local-and-native; isolated pinned Codex 0.167.0, Claude CLI 2.1.322 / SDK 0.3.322 and DSH 0.2.2-rc.1 smoke evidence exists, including limited real-model Read/command proofs; full NP-01–48/native failure/multimodal/ownership acceptance remains incomplete. Existing L1 has 22 GOLDEN and 16 NOT_TRIGGERED; no golden modifications.",
+    "source_checkpoint": "8ecc85b085363d13bc94ef07915115f44e8c70e1: stable source gate: 408 unit / 15 Chromium tests passed; current uncommitted continuation requires a new exact-source gate. Historical source-checks environment records local Codex 0.169.0; isolated 0.167.0 proof does not claim that default executable is pinned.",
+    "ci": "docs/ci/source-checks.yml is the delivered review template; .github/workflows/source-checks.yml is absent. GitHub Actions remains unenabled pending workflow-scope authorization; template presence is not CI execution."
+  }
+}

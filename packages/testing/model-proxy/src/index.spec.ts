@@ -38,3 +38,29 @@ it('connection refusal and cancelled partial streams both retain terminal eviden
     await new Promise(resolve => setImmediate(resolve)); await next.close(); expect(cancelled[0]?.outcome).toBe('cancelled'); expect(cancelled[0]?.response.chunks.length).toBeGreaterThan(0);
   } finally { await next.close(); await close(upstream); }
 });
+
+it('NP-14 forwards a streaming request before its end and drops over-limit captures without changing either direction', async () => {
+  const records: ModelProxyRecord[] = [];
+  let receivedFirst!: () => void;
+  const first = new Promise<void>(resolve => { receivedFirst = resolve; });
+  let upstreamBody = '';
+  const upstream = createServer((req, res) => {
+    req.on('data', bytes => { upstreamBody += String(bytes); receivedFirst(); });
+    req.on('end', () => { res.end('large-secret-response'); });
+  });
+  const port = await listen(upstream);
+  const proxy = new ModelProxy({ target: `http://127.0.0.1:${port}`, maxCaptureBytes: 8, onRecord: record => { records.push(record); } });
+  try {
+    const address = await proxy.listen();
+    const body = await new Promise<string>((resolve, reject) => {
+      const req = request(`${address.url}/responses`, { method: 'POST' }, res => { let text = ''; res.on('data', bytes => { text += String(bytes); }); res.once('end', () => resolve(text)); });
+      req.once('error', reject);
+      req.write('first-');
+      void first.then(() => { req.end('request-tail'); });
+    });
+    expect(upstreamBody).toBe('first-request-tail');
+    expect(body).toBe('large-secret-response');
+    await proxy.flush();
+    expect(records[0]).toMatchObject({ outcome: 'completed', request: { body: '' }, response: { chunks: [] }, coverage: { truncated: true, requestBytes: 18, responseBytes: 21, digestScope: 'redacted' } });
+  } finally { await proxy.close(); await close(upstream); }
+});

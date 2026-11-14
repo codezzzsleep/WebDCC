@@ -5,6 +5,8 @@ packages:
 
 allowBuilds:
   esbuild: true
+  better-sqlite3: true
+  node-pty: true
 
 minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.322'

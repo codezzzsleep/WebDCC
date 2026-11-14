@@ -1,0 +1,15 @@
+import { join } from 'node:path';
+import { openDb } from '../../src/db.js';
+import { Store } from '../../src/store.js';
+const directory = process.argv[2]!;
+const db = openDb(join(directory, 'owner.sqlite'));
+const store = new Store(db);
+const workspace = store.createWorkspace('owner crash', directory);
+const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+store.updateSession(session.id, { nativeId: 'native-crash' });
+const identity = store.nativeOwners.acquire('child-owner', session.id, 'codex', 'native-crash');
+store.nativeOwners.activate(session.id, identity, 'native-crash');
+store.nativeOwners.observe(session.id, identity, 'active-native-turn', 71);
+store.appendEvent({ sessionId: session.id, turnId: 'turn', itemKey: 'start', kind: 'turn.started', data: {} });
+process.send?.({ sessionId: session.id, identity });
+setInterval(() => undefined, 1000);

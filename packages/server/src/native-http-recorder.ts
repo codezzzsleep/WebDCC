@@ -1,9 +1,10 @@
 /** Native DSH preload/plugin. Uses the official header hook for attribution,
  * removes its private marker before fetch, and observes actual provider bytes.
  * It never changes model messages, tool declarations or permission decisions. */
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { DiagnosticCapture, DiagnosticFileWriter, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from '@webdcc/model-proxy';
 
 export const name = 'webdcc-native-http-recorder';
 const MARKER = 'x-webdcc-native-session';
@@ -23,27 +24,40 @@ export function apply(ctx: PluginContext): void {
 const STATE = Symbol.for('webdcc.native.http.recorder');
 const state = globalThis as unknown as Record<symbol, boolean>;
 const directory = process.env['WDCC_TRACE_DIR'];
-const queues = new Map<string, Promise<void>>();
+const limit = (name: string, fallback: number, minimum = 0): number => { if (process.env[name]?.trim() === '' || process.env[name] === undefined) return fallback; const value = Number(process.env[name]); return Number.isSafeInteger(value) && value >= minimum ? value : fallback; };
+const captureLimits = [limit('WDCC_TRACE_MAX_CAPTURE_BYTES', 8 * 1024 * 1024), limit('WDCC_TRACE_MAX_CAPTURE_CHUNKS', 4096, 1)] as const;
+const writer = new DiagnosticFileWriter({ maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024), maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024) });
+const reportedFiles = new Set<string>();
+let reportedOverflow = false;
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
-function redact(bytes: Buffer, secrets: string[]): Buffer {
-  const result = Buffer.from(bytes);
-  const candidates = new Set([...secrets.filter(Boolean), ...[...bytes.toString('latin1').matchAll(/\bsk-[A-Za-z0-9_-]{8,}\b/g)].map(match => match[0])]);
-  for (const secret of candidates) {
-    const needle = Buffer.from(secret);
-    for (let at = result.indexOf(needle); at >= 0; at = result.indexOf(needle, at + needle.length)) result.fill(42, at, at + needle.length);
-  }
-  return result;
+async function captureRequest(request: Request): Promise<DiagnosticCapture> {
+  const capture = new DiagnosticCapture(...captureLimits);
+  const reader = request.clone().body?.getReader();
+  if (reader === undefined) return capture;
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      capture.push(Buffer.from(next.value), 0);
+      if (capture.truncated) { void reader.cancel().catch(() => undefined); break; }
+    }
+  } catch { capture.truncated = true; capture.chunks.length = 0; }
+  return capture;
 }
-function safeUrl(value: string): string { const url = new URL(value); for (const key of [...url.searchParams.keys()]) if (/key|token|secret|password/i.test(key)) url.searchParams.set(key, '<redacted>'); return url.href; }
-function safeHeaders(headers: Headers): Record<string, string> { return Object.fromEntries([...headers].map(([key, value]) => [key, /authorization|cookie|api.?key/i.test(key) ? '<redacted>' : value])); }
+const redact = redactDiagnosticBytes;
+function safeUrl(value: string): string { const url = new URL(value); url.username = ''; url.password = ''; for (const key of [...url.searchParams.keys()]) if (/key|token|secret|password|signature/i.test(key)) url.searchParams.set(key, '<redacted>'); return url.href; }
+function safeHeaders(headers: Headers, secrets: readonly string[] = []): Record<string, string> { return Object.fromEntries([...headers].map(([key, value]) => [key, sensitiveDiagnosticField.test(key) ? '<redacted>' : String(redactDiagnosticValue(value, secrets))])); }
 function publish(file: string, row: unknown): void {
   const text = `${JSON.stringify(row)}\n`;
-  const work = (queues.get(file) ?? Promise.resolve()).then(async () => { await mkdir(directory as string, { recursive: true, mode: 0o700 }); await appendFile(file, text, { mode: 0o600 }); }).catch(() => {
+  void writer.write(file, text, 'append', () => {
     // A diagnostic is explicit; never fail the original model call because a
     // recording disk is unavailable. Incomplete started requests remain visible.
+    if (reportedFiles.has(file)) return;
+    if (reportedFiles.size >= 256) { if (!reportedOverflow) { reportedOverflow = true; process.stderr.write('webdcc: additional native recording failures omitted\n'); } return; }
+    reportedFiles.add(file);
     process.stderr.write('webdcc: native model recording write failed\n');
+    void writeFile(file.replace(/\.jsonl$/, '.coverage.json'), JSON.stringify({ incomplete: true, errors: ['Native diagnostic file could not be written'] }), { mode: 0o600 }).catch(() => undefined);
   });
-  queues.set(file, work); void work.finally(() => { if (queues.get(file) === work) queues.delete(file); });
 }
 
 if (directory !== undefined && !state[STATE]) {
@@ -57,35 +71,37 @@ if (directory !== undefined && !state[STATE]) {
     const modelRequest = logicalId !== null || /\/(responses|messages|chat\/completions|completions)(?:\/|$)/.test(new URL(request.url).pathname);
     if (!modelRequest) return original(input, init);
     const headers = new Headers(request.headers); headers.delete(MARKER); headers.delete(LOGICAL); headers.delete(PURPOSE);
-    const body = request.clone().arrayBuffer().then(value => Buffer.from(value)).catch(() => Buffer.alloc(0));
+    const body = captureRequest(request);
     const clean = new Request(request, { headers });
     const requestId = randomUUID(); const started = Date.now(); let seq = 0;
-    const secrets = [...request.headers].filter(([key]) => /authorization|cookie|api.?key/i.test(key)).flatMap(([, value]) => [value, value.replace(/^Bearer\s+/i, '')]);
+    const secrets = diagnosticSecretsFromHeaders(Object.fromEntries(request.headers));
     const context = nativeId === null ? Promise.resolve(undefined) : readFile(join(directory, `context-${encodeURIComponent(nativeId)}.json`), 'utf8').then(text => JSON.parse(text) as unknown).catch(() => undefined);
     const file = join(directory, `model-${encodeURIComponent(nativeId ?? 'unassigned')}.jsonl`);
-    const pendingRequest = body.then(async bytes => {
+    const pendingRequest = body.then(async capture => {
       const owner = await context;
-      publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date(started).toISOString(), elapsedMs: 0, source: 'model-http', channel: 'request', direction: 'out', context: owner, value: { requestId, nativeId, logicalId, purpose, method: request.method, url: safeUrl(request.url), headers: safeHeaders(headers), body: redact(bytes, secrets).toString('base64'), bytes: bytes.length, sha256: sha256(bytes) } });
+      const bytes = capture.buffer();
+      const safe = redact(bytes, secrets);
+      publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date(started).toISOString(), elapsedMs: 0, source: 'model-http', channel: 'request', direction: 'out', context: redactDiagnosticValue(owner, secrets), value: { requestId, nativeId, logicalId, purpose, method: request.method, url: safeUrl(request.url), headers: safeHeaders(headers, secrets), body: safe.toString('base64'), bytes: capture.bytes, coverage: { truncated: capture.truncated, digestScope: 'redacted' }, sha256: sha256(safe), digestScope: 'redacted' } });
     });
-    const emit = (channel: string, value: unknown): void => { void pendingRequest.then(async () => publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date().toISOString(), elapsedMs: Date.now() - started, source: 'model-http', channel, direction: 'in', context: await context, value: { requestId, value } })); };
+    const emit = (channel: string, value: unknown): void => { void pendingRequest.then(async () => publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date().toISOString(), elapsedMs: Date.now() - started, source: 'model-http', channel, direction: 'in', context: redactDiagnosticValue(await context, secrets), value: { requestId, value } })); };
     try {
       const response = await original(clean);
-      emit('headers', { status: response.status, headers: safeHeaders(response.headers) });
+      emit('headers', { status: response.status, headers: safeHeaders(response.headers, secrets) });
       if (response.body === null) { emit('complete', { outcome: 'completed', status: response.status }); return response; }
       const reader = response.body.getReader();
       let terminal = false;
-      const chunks: { t: number; bytes: Buffer }[] = [];
-      const finish = (outcome: string, error?: unknown): void => { if (!terminal) { terminal = true; const safe = redact(Buffer.concat(chunks.map(chunk => chunk.bytes)), secrets); let offset = 0;
-        const recordedChunks = chunks.map(chunk => { const data = safe.subarray(offset, offset + chunk.bytes.length); offset += chunk.bytes.length; return { t: chunk.t, bytes: chunk.bytes.length, sha256: sha256(chunk.bytes), data: data.toString('base64') }; });
-        emit('complete', { outcome, status: response.status, chunks: recordedChunks, ...(error === undefined ? {} : { error: error instanceof Error ? error.message : String(error) }) }); } };
+      const capture = new DiagnosticCapture(...captureLimits);
+      const finish = (outcome: string, error?: unknown): void => { if (!terminal) { terminal = true; void body.then(requestCapture => { const safe = redact(capture.buffer(), secrets); let offset = 0;
+        const recordedChunks = capture.chunks.map(chunk => { const data = safe.subarray(offset, offset + chunk.bytes.length); offset += chunk.bytes.length; return { t: chunk.t, bytes: chunk.bytes.length, sha256: sha256(data), data: data.toString('base64') }; });
+        emit('complete', { outcome, status: response.status, chunks: recordedChunks, coverage: { truncated: capture.truncated || requestCapture.truncated, requestBytes: requestCapture.bytes, responseBytes: capture.bytes, responseChunks: capture.count, digestScope: 'redacted' }, ...(error === undefined ? {} : { error: redactDiagnosticValue(error instanceof Error ? error.message : String(error), secrets) }) }); }); } };
       const stream = new ReadableStream<Uint8Array>({
         async pull(controller) {
           try {
             const next = await reader.read();
             if (next.done) { finish('completed'); controller.close(); return; }
             const bytes = Buffer.from(next.value);
-            chunks.push({ t: Date.now() - started, bytes });
-            emit('chunk', { bytes: bytes.length, sha256: sha256(bytes) });
+            capture.push(bytes, Date.now() - started);
+            emit('chunk', { bytes: bytes.length, capture: capture.truncated ? 'omitted' : 'pending-redaction' });
             controller.enqueue(next.value);
           } catch (error) { finish('failed', error); controller.error(error); }
         },
@@ -94,6 +110,6 @@ if (directory !== undefined && !state[STATE]) {
       const observed = new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers });
       Object.defineProperties(observed, { url: { value: response.url }, redirected: { value: response.redirected }, type: { value: response.type } });
       return observed;
-    } catch (error) { emit('complete', { outcome: 'failed', error: error instanceof Error ? error.message : String(error) }); throw error; }
+    } catch (error) { emit('complete', { outcome: 'failed', error: redactDiagnosticValue(error instanceof Error ? error.message : String(error), secrets) }); throw error; }
   };
 }

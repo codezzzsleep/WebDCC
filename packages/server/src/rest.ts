@@ -16,20 +16,27 @@ import type {
   UploadInitResponse,
   UploadStatusResponse,
   WorkspaceDto,
+  InputContent,
+  InteractionEventResponse,
 } from '@webdcc/protocol';
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
 import { parseDshLink, type DshConnectionStore } from './dsh-connection.js';
-import { attachToDsh, DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
+import { attachToDshCredentials, DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
+import { DshSettingsService } from './native-settings.js';
 import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
-import { updateDshHomePatch } from './dsh-settings.js';
+import { fileResponseHeaders } from './file-response.js';
+import { CapabilityRegistry } from './capability-registry.js';
+import { buildManifest } from './build-info.js';
+import { isCommand, isInputContent } from '@webdcc/protocol';
 import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
+import { registerNativeControlRoutes } from './native-control-routes.js';
 
 export interface RouteDeps {
   store: Store;
@@ -47,75 +54,7 @@ export interface RouteDeps {
   recorder?: InteractionRecorder;
 }
 
-interface DshSettingsView {
-  writable: boolean;
-  providerKey: string;
-  provider: Record<string, unknown>;
-  defaultModel: { provider: string; model: string; reasoningEffort?: string };
-  official: boolean;
-  reasoningEfforts: string[];
-  defaultReasoning?: string;
-  contextWindow?: number;
-  maxTokens?: number;
-  providerRevision: number;
-  defaultModelRevision: number;
-}
-
-export const OFFICIAL_DSH_PROVIDERS = new Set(['deepseek-official', 'deepseek-account']);
-
-const OFFICIAL_REASONING_EFFORTS = ['off', 'low', 'high', 'max'];
-const OFFICIAL_DEFAULT_CONTEXT_WINDOW = 1_000_000;
-const OFFICIAL_DEFAULT_MAX_TOKENS = 256_000;
-const THIRD_PARTY_DEFAULT_CONTEXT_WINDOW = 1_000_000;
-const THIRD_PARTY_DEFAULT_MAX_TOKENS = 128_000;
-
-export function dshCapabilities(providerKey: string, model: string, provider: Record<string, unknown>, namespaces: Record<string, unknown>[]): Pick<DshSettingsView, 'official' | 'reasoningEfforts' | 'defaultReasoning' | 'contextWindow' | 'maxTokens'> {
-  const official = OFFICIAL_DSH_PROVIDERS.has(providerKey);
-  const officialNamespace = namespaces.find((item) => item['ns'] === (providerKey === 'deepseek-account' ? 'llm-deepseek-account' : 'llm-deepseek'));
-  const officialValue = (officialNamespace?.['value'] ?? {}) as Record<string, unknown>;
-  const models = Array.isArray(provider['models']) ? provider['models'] as Record<string, unknown>[] : [];
-  const modelEntry = models.find((entry) => entry['id'] === model) ?? {};
-  const officialModels = Array.isArray(officialValue['models']) ? officialValue['models'] as Record<string, unknown>[] : [];
-  const officialModel = officialModels.find((entry) => entry['id'] === model) ?? {};
-  const efforts = provider['reasoningEfforts'];
-  const modelEfforts = modelEntry['reasoningEfforts'];
-  const effortObject = (official ? undefined : (modelEfforts ?? efforts)) as Record<string, unknown> | undefined;
-  const reasoningEfforts = official
-    ? OFFICIAL_REASONING_EFFORTS
-    : effortObject !== undefined && effortObject !== null && typeof effortObject === 'object' ? Object.keys(effortObject) : [];
-  const defaultReasoning = official
-    ? 'high'
-    : typeof provider['reasoning'] === 'string' ? String(provider['reasoning']) : undefined;
-  // Keep the two adapter families independent. A custom pi-ai route must not
-  // inherit a value from the official DeepSeek namespace (or an old 262,144
-  // token default that may still be present there).
-  const contextWindow = Number(official
-    ? officialModel['contextWindow'] ?? officialValue['defaultContextWindow'] ?? OFFICIAL_DEFAULT_CONTEXT_WINDOW
-    : modelEntry['contextWindow'] ?? provider['defaultContextWindow'] ?? THIRD_PARTY_DEFAULT_CONTEXT_WINDOW);
-  const maxTokens = Number(official
-    ? officialModel['maxTokens'] ?? officialValue['maxTokens'] ?? OFFICIAL_DEFAULT_MAX_TOKENS
-    : modelEntry['maxTokens'] ?? provider['defaultMaxTokens'] ?? THIRD_PARTY_DEFAULT_MAX_TOKENS);
-  return {
-    official,
-    reasoningEfforts,
-    ...(defaultReasoning === undefined ? {} : { defaultReasoning }),
-    ...(Number.isFinite(contextWindow) && contextWindow > 0 ? { contextWindow } : {}),
-    ...(Number.isFinite(maxTokens) && maxTokens > 0 ? { maxTokens } : {}),
-  };
-}
-
-function dshSettingsView(input: { writable: boolean; providerKey: string; provider: Record<string, unknown>; defaultModel: { provider: string; model: string; reasoningEffort?: string }; namespaces: Record<string, unknown>[]; providerRevision: number; defaultModelRevision: number }): DshSettingsView {
-  return {
-    writable: input.writable,
-    providerKey: input.providerKey,
-    provider: input.provider,
-    defaultModel: input.defaultModel,
-    ...dshCapabilities(input.providerKey, input.defaultModel.model, input.provider, input.namespaces),
-    providerRevision: input.providerRevision,
-    defaultModelRevision: input.defaultModelRevision,
-  };
-}
-
+export { dshCapabilities } from './dsh-capabilities.js';
 function badRequest(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
@@ -158,6 +97,7 @@ async function resolveNewInsideWorkspace(workspacePath: string, requested: strin
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { store, files, manager, dispatcher } = deps;
+  registerNativeControlRoutes(app, manager, store);
   const metrics = new SystemMetricsReader(deps.dataDir);
   const workspaceFiles = new WorkspaceFiles(deps.recordFileOperation);
   app.get('/api/sessions/:id/trace', async (request, reply) => {
@@ -173,6 +113,47 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   });
 
   app.get('/api/watchdog', async () => manager.watchdog.view());
+  app.get('/api/native-events', async request => {
+    const query = request.query as { sessionId?: string; after?: string; limit?: string };
+    const after = Number(query.after ?? 0); const limit = Number(query.limit ?? 50);
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw badRequest('记录分页参数无效');
+    const records = store.nativeEvents.list(query.sessionId, after, limit);
+    return { records, next: records.at(-1)?.id ?? after, projectionVersion: 1 };
+  });
+  app.get('/api/native-events/:id', async request => {
+    const id = Number((request.params as { id: string }).id);
+    if (!Number.isSafeInteger(id) || id < 1) throw badRequest('原生记录 ID 无效');
+    const record = store.nativeEvents.get(id);
+    if (record === undefined) throw Object.assign(new Error('原生记录不存在'), { statusCode: 404 });
+    return record;
+  });
+  app.get('/api/sessions/:id/events/:seq/evidence', async request => {
+    const { id, seq: value } = request.params as { id: string; seq: string };
+    const seq = Number(value);
+    if (!Number.isSafeInteger(seq) || seq < 1) throw badRequest('Web 事件序号无效');
+    manager.requireSession(id);
+    const event = store.listEvents(id, { after: seq - 1, limit: 1 })[0];
+    if (event === undefined || event.seq !== seq) throw Object.assign(new Error('Web 事件不存在'), { statusCode: 404 });
+    return { event: { ...event, data: store.nativeEvents.diagnosticValue(event.data),
+      ...(event.native === undefined ? {} : { native: store.nativeEvents.diagnosticValue(event.native) }) },
+      envelope: event.nativeEnvelopeId === undefined ? null : store.nativeEvents.get(event.nativeEnvelopeId) ?? null };
+  });
+  app.get('/api/sessions/:id/runtime', async request => {
+    const { id } = request.params as { id: string };
+    manager.requireSession(id);
+    return { owner: store.nativeOwners.get(id) ?? null };
+  });
+  app.get('/api/sessions/:id/reconciliation', async request => {
+    const { id } = request.params as { id: string };
+    manager.requireSession(id);
+    return { reconciliation: store.reconciliations.get(id) };
+  });
+  app.post('/api/sessions/:id/reconciliation', async request => manager.reconcile((request.params as { id: string }).id));
+  app.post('/api/sessions/:id/reconciliation/apply', async request => {
+    const revision = (request.body as { revision?: unknown } | null)?.revision;
+    if (typeof revision !== 'string' || revision.length > 100 || revision.length < 1) throw badRequest('需要已读取的核对版本');
+    return manager.applyReconciliation((request.params as { id: string }).id, revision);
+  });
   app.patch('/api/watchdog', async (request) => {
     try { return manager.watchdog.configure(request.body); }
     catch (error) { throw badRequest(error instanceof Error ? error.message : '无效 Watchdog 设置'); }
@@ -197,20 +178,28 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
         auth: 'unknown' as const,
         notes: ['probe 失败'],
       }));
+      const modes = adapter.listAccessModes === undefined ? adapter.accessModes() : await adapter.listAccessModes().catch(() => adapter.accessModes().map(option => ({ ...option, allowed: false, reason: '原生权限目录暂时不可用' })));
       agents[adapter.id] = {
         ...probe,
         adapterKind: adapter.kind ?? 'real',
-        accessModes: adapter.listAccessModes === undefined ? adapter.accessModes() : await adapter.listAccessModes().catch(() => adapter.accessModes()),
+        accessModes: adapter.kind === 'fake' ? modes : [{ id: 'inherit', label: '沿用原生权限', allowed: true, implemented: true, reason: '新建或恢复时不覆盖原生权限' }, ...modes],
         models: await adapter.listModels(null).catch(() => []),
       };
     }
     return {
       version: deps.version,
-      commit: deps.commit ?? process.env['WDCC_COMMIT'] ?? 'unknown',
-      builtAt: deps.builtAt ?? process.env['WDCC_BUILT_AT'] ?? new Date(0).toISOString(),
+      commit: buildManifest?.commit ?? deps.commit ?? process.env['WDCC_COMMIT'] ?? 'unknown',
+      builtAt: buildManifest?.builtAt ?? deps.builtAt ?? process.env['WDCC_BUILT_AT'] ?? new Date(0).toISOString(),
+      ...(buildManifest === undefined ? {} : { build: buildManifest }),
       agents,
       runningAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : false,
     };
+  });
+
+  const capabilities = new CapabilityRegistry(store, manager);
+  app.get('/api/capabilities', async request => {
+    const query = request.query as { workspaceId?: string; revision?: string };
+    return query.revision === undefined ? capabilities.snapshot(query.workspaceId ?? null) : capabilities.assertRevision(query.revision, query.workspaceId ?? null);
   });
 
   app.get('/api/system/metrics', async () => metrics.read());
@@ -420,18 +409,76 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return store.getDraft(id);
   });
 
+  app.get('/api/sessions/:id/interactions/:kind', async (request): Promise<InteractionEventResponse> => {
+    const { id, kind } = request.params as { id: string; kind: string };
+    const interactionId = (request.query as { interactionId?: unknown }).interactionId;
+    if (kind !== 'answer' && kind !== 'approve') throw badRequest('交互类型必须是 answer 或 approve');
+    if (typeof interactionId !== 'string' || !interactionId || interactionId.length > 2048) throw badRequest('交互身份无效');
+    return store.latestInteractionEvent(id, kind, interactionId);
+  });
+
   app.put('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {
     const { id } = request.params as { id: string };
     if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
-    const body = request.body as { text?: string; fileIds?: string[] };
-    return store.setDraft(id, body?.text ?? '', Array.isArray(body?.fileIds) ? body.fileIds : []);
+    const body = request.body as { text?: unknown; fileIds?: unknown; contentParts?: unknown; expectedRevision?: unknown };
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['text', 'fileIds', 'contentParts', 'expectedRevision'].includes(key)) || typeof body.text !== 'string') throw badRequest('草稿格式无效');
+    if (body.expectedRevision === undefined) throw Object.assign(new Error('保存草稿需要已读取的 expectedRevision'), { statusCode: 428 });
+    if (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 0) throw badRequest('草稿版本无效');
+    let contentParts: InputContent | undefined;
+    if (body.contentParts !== undefined) {
+      if (!isInputContent(body.contentParts, body.text)) throw badRequest('草稿结构化输入与正文不一致');
+      contentParts = body.contentParts;
+    }
+    const referenced = contentParts?.parts.flatMap(part => 'fileId' in part ? [part.fileId] : []);
+    const fileIds = body.fileIds ?? referenced ?? [];
+    if (!Array.isArray(fileIds) || fileIds.length > 32 || fileIds.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(id))) throw badRequest('草稿附件引用无效');
+    if (referenced !== undefined && JSON.stringify(referenced) !== JSON.stringify(fileIds)) throw badRequest('草稿附件清单与结构化输入顺序不一致');
+    // Saving a draft does not activate a native runtime. Only attachment CAS
+    // and session grants are checked; capabilities are checked on send.
+    for (const fileId of fileIds as string[]) await files.resolveAttachment({ type: 'file', fileId }, id);
+    if (contentParts !== undefined) for (const part of contentParts.parts) if ('fileId' in part) await files.resolveAttachment(part, id);
+    return store.setDraft(id, body.text, fileIds as string[], { expectedRevision: Number(body.expectedRevision), ...(contentParts === undefined ? {} : { contentParts }) });
   });
 
-  app.post('/api/commands', async (request) => {
+  app.post('/api/sessions/:id/attachments', async request => {
+    const { id } = request.params as { id: string }; const body = request.body as { fileId?: unknown };
+    if (!body || typeof body !== 'object' || Object.keys(body).some(key => key !== 'fileId') || typeof body.fileId !== 'string') throw badRequest('需要明确选择的 fileId');
+    const attachment = await files.attachToSession(id, body.fileId);
+    const { path: _path, type: _type, ...file } = attachment; return { attached: true, file };
+  });
+
+  app.post('/api/commands', async (request, reply) => {
     const body = request.body as { command?: Command; op?: string } & Partial<Command>;
     const command = (body?.command ?? (body as unknown as Command)) as Command;
-    if (typeof command?.clientCommandId !== 'string' || typeof command?.op !== 'string') throw badRequest('命令缺少 clientCommandId 或 op');
-    return dispatcher.dispatch(command);
+    if (!isCommand(command)) throw badRequest('命令格式无效');
+    const result = await dispatcher.dispatch(command);
+    if (result.code === 'command-conflict' || result.code === 'conflict') return reply.status(409).send(result);
+    return result;
+  });
+
+  app.get('/api/commands/:commandId', async request => {
+    const { commandId } = request.params as { commandId: string };
+    const command = store.journal.get(commandId);
+    if (command === undefined) throw Object.assign(new Error('命令不存在'), { statusCode: 404 });
+    return command;
+  });
+
+  app.get('/api/sessions/:id/queue', async request => {
+    const { id } = request.params as { id: string };
+    if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+    return { inputs: store.journal.queue(id), revision: store.maxFeedSeq() };
+  });
+
+  app.delete('/api/sessions/:id/queue/:commandId', async (request, reply) => {
+    const { id, commandId } = request.params as { id: string; commandId: string };
+    store.journal.cancel(id, commandId);
+    manager.queueChanged(id);
+    return reply.status(204).send();
+  });
+
+  app.post('/api/sessions/:id/queue/:commandId/retry', async request => {
+    const { id, commandId } = request.params as { id: string; commandId: string };
+    await manager.retryQueuedInput(id, commandId); return { accepted: true };
   });
 
   // ---------- 测试钩子（只在 WDCC_TEST_HOOKS=1 时存在，SPEC-M8 6.4） ----------
@@ -522,166 +569,32 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const body = request.body as { link?: string };
     if (typeof body?.link !== 'string') throw badRequest('需要 link（DSH 的访问链接）');
     const { url, token } = parseDshLink(body.link);
-    const cookie = await attachToDsh(url, token);
-    await deps.dsh.save({ url, cookie, connectedAt: new Date().toISOString() });
+    const credentials = await attachToDshCredentials(url, token);
+    const persist = (): Promise<void> => deps.dsh.save({ url, ...credentials, connectedAt: new Date().toISOString() });
+    let attached = false;
     for (const adapter of manager.adaptersList()) {
       if (adapter.id === 'dsh') {
-        const dshAdapter = adapter as unknown as { setAttach?: (u: string, c: string) => Promise<void> };
-        await dshAdapter.setAttach?.(url, cookie);
+        const dshAdapter = adapter as unknown as { setAttach?: (u: string, c: string, persist: () => Promise<void>, browserCookie?: string) => Promise<void> };
+        if (dshAdapter.setAttach !== undefined) { await dshAdapter.setAttach(url, credentials.cookie, persist, credentials.browserCookie); attached = true; }
       }
     }
+    if (!attached) await persist();
     return { ok: true, url };
   });
 
   app.delete('/api/dsh', async () => {
     await deps.dsh.clear();
+    for (const adapter of manager.adaptersList()) if (adapter.id === 'dsh') await (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect?.();
     return { ok: true };
   });
 
-  // ---------- DSH Provider（通过 DSH 原生 settings API） ----------
-  app.get('/api/dsh/provider', async (): Promise<DshSettingsView> => {
-    const client = dshClient(deps);
-    dshEndpoint('settings/describe');
-    const described = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
-    const namespaces = described.namespaces ?? [];
-    const llm = namespaces.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
-    const defaults = namespaces.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
-    const llmValue = (llm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
-    const defaultValue = (defaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
-    const providerKey = String(defaultValue.provider ?? Object.keys(llmValue.providers ?? {})[0] ?? '');
-    const provider = llmValue.providers?.[providerKey] ?? {};
-    return dshSettingsView({
-      writable: described.writable === true,
-      providerKey,
-      provider,
-      defaultModel: {
-        provider: providerKey,
-        model: String(defaultValue.model ?? ''),
-        ...(defaultValue.reasoningEffort === undefined ? {} : { reasoningEffort: String(defaultValue.reasoningEffort) }),
-      },
-      namespaces,
-      providerRevision: Number(llm?.['revision'] ?? 0),
-      defaultModelRevision: Number(defaults?.['revision'] ?? 0),
-    });
-  });
-
-  app.patch('/api/dsh/provider', async (request): Promise<DshSettingsView> => {
-    const body = request.body as {
-      providerKey?: string;
-      baseURL?: string;
-      model?: string;
-      reasoning?: string;
-      reasoningEfforts?: string[];
-      contextWindow?: number;
-      maxTokens?: number;
-      apiKey?: string;
-      apiKeyEnv?: string;
-    };
-    if (typeof body?.providerKey !== 'string' || body.providerKey.trim() === '') throw badRequest('需要 providerKey');
-    if (typeof body?.baseURL !== 'string' || body.baseURL.trim() === '') throw badRequest('需要 baseURL');
-    if (typeof body?.model !== 'string' || body.model.trim() === '') throw badRequest('需要 model');
-    if (OFFICIAL_DSH_PROVIDERS.has(body.providerKey)) throw Object.assign(new Error('官方 DeepSeek Provider 由 Harness 原生设置管理，不能通过第三方 Provider 表单覆盖'), { statusCode: 409 });
-    if (body.contextWindow !== undefined && (!Number.isSafeInteger(body.contextWindow) || body.contextWindow <= 0)) throw badRequest('contextWindow 必须是正整数');
-    if (body.maxTokens !== undefined && (!Number.isSafeInteger(body.maxTokens) || body.maxTokens <= 0)) throw badRequest('maxTokens 必须是正整数');
-    if (body.reasoningEfforts !== undefined && (!Array.isArray(body.reasoningEfforts) || body.reasoningEfforts.some((value) => typeof value !== 'string' || value.trim() === ''))) throw badRequest('reasoningEfforts 必须是非空字符串列表');
-
-    const client = dshClient(deps);
-    dshEndpoint('settings/describe');
-    const described = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
-    if (described.writable !== true) throw Object.assign(new Error('DSH 当前配置不可写'), { statusCode: 409 });
-    const namespaces = described.namespaces ?? [];
-    const llm = namespaces.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
-    const defaults = namespaces.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
-    const llmValue = (llm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
-    const currentDefaultValue = (defaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
-    const currentProvider: Record<string, unknown> = { ...(llmValue.providers?.[body.providerKey] ?? {}) };
-    const currentModels = Array.isArray(currentProvider['models']) ? (currentProvider['models'] as Record<string, unknown>[]) : [];
-    const nextModel: Record<string, unknown> = {
-      ...(currentModels.find((item) => item['id'] === body.model) ?? {}),
-      id: body.model,
-      name: body.model,
-    };
-    if (body.reasoningEfforts !== undefined) nextModel['reasoningEfforts'] = Object.fromEntries(body.reasoningEfforts.map((effort) => [effort, effort]));
-    if (body.contextWindow !== undefined) nextModel['contextWindow'] = body.contextWindow;
-    if (body.maxTokens !== undefined) nextModel['maxTokens'] = body.maxTokens;
-    const nextModels = currentModels.some((item) => item['id'] === body.model) ? currentModels.map((item) => item['id'] === body.model ? nextModel : item) : [...currentModels, nextModel];
-    const nextProvider: Record<string, unknown> = {
-      ...currentProvider,
-      displayName: currentProvider['displayName'] ?? body.providerKey,
-      api: currentProvider['api'] ?? 'openai-completions',
-      apiKeyEnv: currentProvider['apiKeyEnv'] ?? 'OPENAI_API_KEY',
-      baseURL: body.baseURL,
-      models: nextModels,
-      ...(body.reasoning === undefined || body.reasoning === '' ? {} : { reasoning: body.reasoning }),
-      ...(body.reasoningEfforts === undefined ? {} : { reasoningEfforts: Object.fromEntries(body.reasoningEfforts.map((effort) => [effort, effort])) }),
-      ...(body.contextWindow === undefined ? {} : { defaultContextWindow: body.contextWindow }),
-      ...(body.maxTokens === undefined ? {} : { defaultMaxTokens: body.maxTokens }),
-    };
-    const providers = { ...(llmValue.providers ?? {}), [body.providerKey]: nextProvider };
-
-    let usedHomePatch = false;
-    try {
-      dshEndpoint('settings/update');
-      await client.rpc('settings/update', {
-        ns: 'llm-pi-ai',
-        patch: { providers },
-        expectedRevision: Number(llm?.['revision'] ?? 0),
-      });
-      dshEndpoint('settings/update');
-      await client.rpc('settings/update', {
-        ns: 'agent-default-model',
-        patch: {
-          provider: body.providerKey,
-          model: body.model,
-          ...(body.reasoning === undefined || body.reasoning === '' ? {} : { reasoningEffort: body.reasoning }),
-        },
-        expectedRevision: Number(defaults?.['revision'] ?? 0),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/overridden by a home patch/i.test(message)) throw error;
-      await updateDshHomePatch({
-        providerKey: body.providerKey,
-        baseURL: body.baseURL,
-        model: body.model,
-        previousModel: typeof currentDefaultValue.model === 'string' ? currentDefaultValue.model : undefined,
-        reasoning: body.reasoning,
-        reasoningEfforts: body.reasoningEfforts,
-        contextWindow: body.contextWindow,
-        maxTokens: body.maxTokens,
-        apiKeyEnv: String(nextProvider['apiKeyEnv'] ?? 'OPENAI_API_KEY'),
-      });
-      usedHomePatch = true;
-    }
-    if (body.apiKey !== undefined && body.apiKey !== '') {
-      dshEndpoint('credentials/set');
-      const apiKeyEnv = String(nextProvider['apiKeyEnv'] ?? '');
-      if (apiKeyEnv !== '') await client.rpc('credentials/set', { ref: apiKeyEnv, value: body.apiKey });
-    }
-
-    // Return the redacted, live view after the write.
-    dshEndpoint('settings/describe');
-    const refreshed = (await client.rpc<{ writable?: boolean; namespaces?: Record<string, unknown>[] }>('settings/describe', {}));
-    const ns = refreshed.namespaces ?? [];
-    const currentLlm = ns.find((item) => item['ns'] === 'llm-pi-ai') as Record<string, unknown> | undefined;
-    const currentDefaults = ns.find((item) => item['ns'] === 'agent-default-model') as Record<string, unknown> | undefined;
-    const currentValue = (currentLlm?.['value'] ?? {}) as { providers?: Record<string, Record<string, unknown>> };
-    const refreshedDefaultValue = (currentDefaults?.['value'] ?? {}) as { provider?: string; model?: string; reasoningEffort?: string };
-    const nextProviderKey = String(refreshedDefaultValue.provider ?? body.providerKey);
-    return dshSettingsView({
-      writable: refreshed.writable === true,
-      providerKey: nextProviderKey,
-      provider: currentValue.providers?.[nextProviderKey] ?? {},
-      defaultModel: {
-        provider: nextProviderKey,
-        model: String(refreshedDefaultValue.model ?? body.model),
-        ...(refreshedDefaultValue.reasoningEffort === undefined ? {} : { reasoningEffort: String(refreshedDefaultValue.reasoningEffort) }),
-      },
-      namespaces: ns,
-      providerRevision: Number(currentLlm?.['revision'] ?? (usedHomePatch ? 1 : 0)),
-      defaultModelRevision: Number(currentDefaults?.['revision'] ?? 0),
-    });
-  });
+  // Native settings writes are scoped to one namespace and the editor's revision.
+  const nativeSettings = new DshSettingsService(deps.dsh);
+  app.get('/api/dsh/provider', () => nativeSettings.read());
+  app.post('/api/dsh/provider/preview', request => nativeSettings.previewProvider(request.body));
+  app.patch('/api/dsh/provider', request => nativeSettings.updateProvider(request.body));
+  app.post('/api/dsh/default-model/preview', request => nativeSettings.previewDefault(request.body));
+  app.patch('/api/dsh/default-model', request => nativeSettings.updateDefault(request.body));
 
   // ---------- providers / models ----------
   app.get('/api/providers', async () => deps.providers.list());
@@ -738,18 +651,19 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       // 原生登录 / DSH 自己的设置：模型列表来自 adapter（DSH 用 session/modelCatalog）
       const adapter = manager.adaptersList().find((item) => item.id === agent);
       const models = adapter === undefined ? [] : await adapter.listModels(null).catch(() => []);
-      return { models: models.map((model) => model.id) };
+      return { models: models.map((model) => model.id), options: models };
     }
     return { models: deps.providers.modelsFor(agent, providerId) };
   });
 
   // ---------- uploads ----------
   app.post('/api/uploads', async (request): Promise<UploadInitResponse & { existingFileId?: string }> => {
-    const body = request.body as { name?: string; size?: number; sha256?: string; mime?: string };
+    const body = request.body as { name?: string; size?: number; sha256?: string; mime?: string; sessionId?: string };
     if (typeof body?.name !== 'string' || typeof body?.size !== 'number' || (body?.sha256 !== undefined && typeof body.sha256 !== 'string')) {
       throw badRequest('需要 name、size；sha256 可选');
     }
-    return files.initUpload({ name: body.name, size: body.size, sha256: body.sha256, mime: body.mime ?? 'application/octet-stream' });
+    if (body.sessionId !== undefined && typeof body.sessionId !== 'string') throw badRequest('上传会话身份无效');
+    return files.initUpload({ name: body.name, size: body.size, sha256: body.sha256, mime: body.mime ?? 'application/octet-stream', ...(body.sessionId === undefined ? {} : { sessionId: body.sessionId }) });
   });
 
   app.put('/api/uploads/:uploadId/chunks/:index', async (request) => {
@@ -767,6 +681,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.post('/api/uploads/:uploadId/complete', async (request): Promise<UploadCompleteResponse> => {
     const { uploadId } = request.params as { uploadId: string };
     return files.completeUpload(uploadId);
+  });
+
+  app.delete('/api/uploads/:uploadId', async (request, reply) => {
+    const { uploadId } = request.params as { uploadId: string };
+    await files.cancelUpload(uploadId);
+    return reply.status(204).send();
   });
 
   // ---------- 附件：把上传的文件放进工作区（SPEC-M8 F7） ----------
@@ -811,7 +731,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (found === undefined) throw Object.assign(new Error('文件不存在'), { statusCode: 404 });
     const { file, buffer } = found;
     const etag = `"${file.sha256}"`;
-    reply.header('content-type', file.mime);
+    fileResponseHeaders(reply, file.name, buffer);
     reply.header('cache-control', 'private, max-age=31536000, immutable');
     reply.header('etag', etag);
     reply.header('accept-ranges', 'bytes');

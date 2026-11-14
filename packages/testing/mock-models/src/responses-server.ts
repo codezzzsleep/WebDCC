@@ -310,6 +310,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       return;
     }
     const toolName = resolvedStep.toolName;
+    const toolNamespace = resolvedStep.toolNamespace;
     const toolInput = { ...defaultToolInput(resolvedStep.kind ?? step.tool?.kind ?? 'other'), ...(resolvedStep.toolInput ?? {}) };
 
     const responseId = newId('resp');
@@ -351,6 +352,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
           status: 'completed',
           call_id: callId,
           name: toolName,
+          ...(toolNamespace === undefined ? {} : { namespace: toolNamespace }),
           arguments: JSON.stringify(toolInput),
         });
       }
@@ -496,7 +498,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       writeSse(res, 'response.output_item.added', {
         type: 'response.output_item.added',
         output_index: index,
-        item: { id: itemId, type: 'function_call', status: 'in_progress', call_id: callId, name: toolName, arguments: '' },
+        item: { id: itemId, type: 'function_call', status: 'in_progress', call_id: callId, name: toolName, ...(toolNamespace === undefined ? {} : { namespace: toolNamespace }), arguments: '' },
       });
       const json = JSON.stringify(toolInput);
       for (const chunk of chunkText(json, 24)) {
@@ -514,7 +516,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         output_index: index,
         arguments: json,
       });
-      const item = { id: itemId, type: 'function_call', status: 'completed', call_id: callId, name: toolName, arguments: json };
+      const item = { id: itemId, type: 'function_call', status: 'completed', call_id: callId, name: toolName, ...(toolNamespace === undefined ? {} : { namespace: toolNamespace }), arguments: json };
       outputItems.push(item);
       writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
     }

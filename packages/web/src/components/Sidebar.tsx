@@ -73,6 +73,7 @@ export function Sidebar({
         <Link to="/settings/providers" className="icon-btn" aria-label="Agent 与 Provider" title="Agent 与 Provider">
           <Icon name="sliders" size={18} />
         </Link>
+        <Link to="/settings/capabilities" className="icon-btn" aria-label="原生能力" title="原生能力"><Icon name="listChecks" size={18} /></Link>
         <button type="button" className="icon-btn" onClick={toggleTheme} aria-label="切换亮暗色" title={theme === 'dark' ? '切换到亮色' : '切换到暗色'}>
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
         </button>
@@ -103,6 +104,8 @@ export function Sidebar({
       </Link>
 
       <nav className="sidebar-nav">
+        <Link to="/settings/capabilities" className="nav-item" activeProps={{ className: 'nav-item active' }} onClick={() => onNavigate?.()}><Icon name="listChecks" />原生能力</Link>
+        <Link to="/settings/native-events" search={{ sessionId: undefined }} className="nav-item" activeProps={{ className: 'nav-item active' }} onClick={() => onNavigate?.()}><Icon name="listChecks" />原生记录</Link>
         <Link
           to="/settings/providers"
           className={`nav-item ${settingsActive ? 'active' : ''}`}

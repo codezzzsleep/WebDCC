@@ -1,8 +1,10 @@
-import type { AdapterEvent } from '@webdcc/protocol';
+import type { AdapterEvent, QuestionItem } from '@webdcc/protocol';
+import { isBlockingQuestion } from '@webdcc/protocol';
 
 export type TurnState = 'starting' | 'running' | 'waiting' | 'completed' | 'interrupted' | 'failed';
 
 interface TurnRecord {
+  sessionId: string;
   turnId: string;
   state: TurnState;
   startedAt: number;
@@ -30,7 +32,7 @@ export class TurnTracker {
   constructor(private readonly lateWindowMs = 10_000) {}
 
   start(sessionId: string, turnId: string, at = Date.now()): void {
-    const record: TurnRecord = { turnId, state: 'starting', startedAt: at, open: new Set() };
+    const record: TurnRecord = { sessionId, turnId, state: 'starting', startedAt: at, open: new Set() };
     this.turns.set(turnId, record);
     this.active.set(sessionId, turnId);
   }
@@ -39,20 +41,27 @@ export class TurnTracker {
     if (nativeTurnId === undefined || nativeTurnId === '') return;
     const record = this.turns.get(turnId);
     if (record === undefined) return;
+    if (record.nativeTurnId !== undefined && record.nativeTurnId !== nativeTurnId) return;
+    const existing = this.nativeToTurn.get(JSON.stringify([record.sessionId, nativeTurnId]));
+    if (existing !== undefined && existing !== turnId) return;
     record.nativeTurnId = nativeTurnId;
-    this.nativeToTurn.set(nativeTurnId, turnId);
+    this.nativeToTurn.set(JSON.stringify([record.sessionId, nativeTurnId]), turnId);
   }
 
   assignment(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
+    if (event.scope === 'session') return { turnId: null, late: false };
     const nativeTurnId = 'nativeTurnId' in event ? event.nativeTurnId : 'turnId' in event ? event.turnId : undefined;
     if (nativeTurnId !== undefined) {
-      const known = this.nativeToTurn.get(nativeTurnId);
+      const known = this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));
       if (known !== undefined) return { turnId: known, late: this.isLate(sessionId, known, at) };
       const current = this.active.get(sessionId);
-      if (current !== undefined) {
+      if (current !== undefined && this.turns.get(current)?.nativeTurnId === undefined) {
         this.bindNative(current, nativeTurnId);
         return { turnId: current, late: false };
       }
+      // An explicit but unknown native identity is not evidence that this
+      // frame belongs to the current public turn. Keep it in the raw ledger.
+      return { turnId: null, late: false };
     }
     const current = this.active.get(sessionId);
     if (current !== undefined) return { turnId: current, late: false };
@@ -65,9 +74,19 @@ export class TurnTracker {
 
   observe(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
     const assigned = this.assignment(sessionId, event, at);
-    if (assigned.turnId === null) return assigned;
+    const blocks = (event.type === 'item.start' || event.type === 'item.complete') && (event.kind === 'approval.request' || event.kind === 'question' && isBlockingQuestion(event.data as QuestionItem));
+    if (assigned.turnId === null) {
+      const active = this.active.get(sessionId); const current = active === undefined ? undefined : this.turns.get(active);
+      if (event.scope === 'session' && blocks && current !== undefined && current.endedAt === undefined) current.state = 'waiting';
+      if (event.scope === 'session' && event.type === 'status' && event.source === 'native-thread' && current !== undefined && current.endedAt === undefined) {
+        if (event.status === 'waiting') current.state = 'waiting';
+        if (event.status === 'running') current.state = 'running';
+      }
+      return assigned;
+    }
     const record = this.turns.get(assigned.turnId);
     if (record === undefined) return assigned;
+    if (record.endedAt !== undefined) return assigned;
     if (event.type === 'turn.start') record.state = 'running';
     if (event.type === 'status') {
       if (event.status === 'running') record.state = 'running';
@@ -75,10 +94,10 @@ export class TurnTracker {
     }
     if (event.type === 'item.start') {
       record.open.add(event.itemKey);
-      if (event.kind === 'approval.request' || event.kind === 'question') record.state = 'waiting';
+      if (blocks) record.state = 'waiting';
       else if (record.state !== 'waiting') record.state = 'running';
     }
-    if (event.type === 'item.complete' && (event.kind === 'approval.request' || event.kind === 'question')) record.state = 'waiting';
+    if (event.type === 'item.complete' && blocks) record.state = 'waiting';
     if (event.type === 'item.complete' || event.type === 'item.cancel') record.open.delete(event.itemKey);
     // SessionManager owns terminal persistence and applies a short settle
     // window for late item/diff frames. Keep the tracker active until it calls
@@ -113,10 +132,25 @@ export class TurnTracker {
     return this.active.get(sessionId);
   }
 
+  nativeTurn(turnId: string): string | undefined { return this.turns.get(turnId)?.nativeTurnId; }
+
+  publicTurn(sessionId: string, nativeTurnId: string): string | undefined {
+    return this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));
+  }
+
+  startedAt(turnId: string): number | undefined { return this.turns.get(turnId)?.startedAt; }
+
+  ended(turnId: string): boolean { return this.turns.get(turnId)?.endedAt !== undefined; }
+
   resume(sessionId: string): void {
     const turnId = this.active.get(sessionId);
     const record = turnId === undefined ? undefined : this.turns.get(turnId);
     if (record !== undefined && record.state === 'waiting') record.state = 'running';
+  }
+
+  wait(sessionId: string): void {
+    const turnId = this.active.get(sessionId); const record = turnId === undefined ? undefined : this.turns.get(turnId);
+    if (record !== undefined && record.endedAt === undefined) record.state = 'waiting';
   }
 
   openItems(turnId: string): string[] {
@@ -124,6 +158,7 @@ export class TurnTracker {
   }
 
   private isLate(sessionId: string, turnId: string, at: number): boolean {
+    if (this.turns.get(turnId)?.endedAt !== undefined) return true;
     const ended = this.lastEnded.get(sessionId);
     return ended?.turnId === turnId && at - ended.at <= this.lateWindowMs;
   }

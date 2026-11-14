@@ -30,7 +30,13 @@ export function checkTurnInvariants(events: readonly StoredEvent[], view: TurnVi
   for (const [key, count] of keys) if (count > 1) fail('I2', `itemKey ${key} 多次持久化`);
   const turnIds = new Set(events.filter((event) => event.turnId !== null).map((event) => event.turnId));
   if (turnIds.size > 1) fail('I3', '一轮包含多个 turnId');
-  if (events.filter((event) => event.kind === 'user.message').length > 1) fail('I3', 'user.message 不止一条');
+  const userInputs = events.filter(event => event.kind === 'user.message');
+  const inputCommands = new Set<string>();
+  for (const [index, event] of userInputs.entries()) {
+    const input = event.data as { intent?: string; clientCommandId?: string };
+    if (index > 0 && (input.intent !== 'steer' || !input.clientCommandId || inputCommands.has(input.clientCommandId))) fail('I3', '本轮补充输入没有独立的介入命令身份');
+    if (input.clientCommandId !== undefined) inputCommands.add(input.clientCommandId);
+  }
   if (events.filter((event) => event.kind === 'turn.started').length > 1) fail('I3', 'turn.started 不止一条');
   if (events.filter((event) => event.kind === 'turn.completed').length > 1) fail('I3', 'turn.completed 不止一条');
   if (options.inputProducedEvent === false && options.deltaFrame !== true) fail('I8', '输入帧没有产生事件且未登记为 delta');

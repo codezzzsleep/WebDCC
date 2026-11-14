@@ -5,6 +5,7 @@ import { agentText } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
+import { NativeControls } from './NativeControls.js';
 
 interface SessionHeaderProps {
   sessionId: string;
@@ -21,11 +22,29 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
   const session = store.getSession(sessionId);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
+  const [nativeOpen, setNativeOpen] = useState(false);
   const [menu, setMenu] = useState<'more' | 'dock' | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const nativeDialogRef = useRef<HTMLDivElement>(null);
   const agent = session?.agent ?? 'dsh';
   const provider = providers.find((item) => item.id === session?.providerId);
   const modelText = [provider?.name, session?.model].filter((part) => part !== undefined && part !== '').join(' · ');
+  useEffect(() => {
+    if (!nativeOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = nativeDialogRef.current;
+    dialog?.querySelector<HTMLButtonElement>('button')?.focus();
+    const key = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') { event.preventDefault(); setNativeOpen(false); return; }
+      if (event.key !== 'Tab' || !dialog) return;
+      const entries = [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], summary')].filter(element => element.getClientRects().length > 0);
+      const first = entries[0]; const last = entries.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('keydown', key); previous?.focus(); };
+  }, [nativeOpen]);
 
   useEffect(() => {
     if (menu === null) return;
@@ -91,6 +110,11 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
         </span>
         <span className="spacer" />
         <div className="header-actions" ref={actionsRef}>
+          <button type="button" className="btn ghost" aria-expanded={nativeOpen} onClick={() => setNativeOpen(value => !value)}>原生控制</button>
+          {nativeOpen ? <div ref={nativeDialogRef} role="dialog" aria-modal="true" aria-label="原生控制台" className="native-control-dialog" style={{ position: 'fixed', inset: '5vh 5vw', zIndex: 100, background: 'var(--bg-panel, #171a20)', overflowY: 'auto', border: '1px solid var(--border, #555)', borderRadius: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: 16 }}><strong>原生控制台</strong><button type="button" className="btn" onClick={() => setNativeOpen(false)}>关闭</button></div>
+            <NativeControls key={sessionId} sessionId={sessionId} />
+          </div> : null}
           <span className="menu-anchor">
             <button
               type="button"

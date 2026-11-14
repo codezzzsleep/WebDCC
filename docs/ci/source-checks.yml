@@ -1,0 +1,23 @@
+name: Source checks
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        node: ['24', '26']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: corepack enable
+      - run: corepack prepare pnpm@12.18.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm native:inventory
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser
+      - run: pnpm build

@@ -107,6 +107,7 @@ export class FakeAdapter implements AgentAdapter {
       approval: null,
       question: null,
     });
+    this.emit(opts.sessionId, { type: 'permissions', observation: { effective: opts.accessMode ?? this.accessModes()[0]?.id ?? 'default', source: 'fake/create', scope: 'session' } });
     return { nativeId };
   }
 
@@ -118,6 +119,12 @@ export class FakeAdapter implements AgentAdapter {
       approval: null,
       question: null,
     });
+    this.emit(opts.sessionId, { type: 'permissions', observation: { effective: opts.accessMode ?? this.accessModes()[0]?.id ?? 'default', source: 'fake/resume', scope: 'session' } });
+  }
+
+  async setAccessMode(sessionId: string, mode: string): Promise<{ accessMode: string }> {
+    this.emit(sessionId, { type: 'permissions', observation: { effective: mode === 'inherit' ? this.accessModes()[0]?.id ?? 'default' : mode, source: 'fake/setAccessMode', scope: 'session' } });
+    return { accessMode: mode };
   }
 
   async send(sessionId: string, input: UserInput): Promise<void> {

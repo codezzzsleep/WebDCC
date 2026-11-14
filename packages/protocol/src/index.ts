@@ -1,6 +1,12 @@
 export * from './events.js';
+export * from './goals.js';
+export * from './elicitation.js';
 export * from './changes.js';
 export * from './adapter.js';
+export * from './input.js';
+export * from './permissions.js';
+export * from './native-settings.js';
+export * from './user-echo.js';
 export * from './sync.js';
 export * from './api.js';
 export * from './ulid.js';
@@ -9,5 +15,15 @@ export * from './trace.js';
 export * from './turn.js';
 export * from './invariants.js';
 export * from './watchdog.js';
+export * from './capabilities.js';
+export * from './build.js';
+export * from './native-evidence.js';
+export * from './command-validation.js';
+export * from './commands.js';
+export * from './question-answer.js';
+export * from './runtime.js';
+export * from './native-events.js';
+export * from './native-observation.js';
+export * from './native-controls.js';
 
 export const PROTOCOL_VERSION = 1;

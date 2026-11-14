@@ -8,9 +8,18 @@
  *  - 认证：`GET /?token=<t>` → 303 + HttpOnly Cookie（`dsh-auth-<sha256(authority)>`）
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import WebSocket from 'ws';
+import { validateDshArgs, validateDshResult } from './contracts.js';
+
+export function dshBaseUrl(value: string | number): string {
+  const url = new URL(typeof value === 'number' ? `http://127.0.0.1:${value}/` : value);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('DSH endpoint must be an HTTP(S) Host URL');
+  url.search = ''; url.hash = '';
+  if (!url.pathname.endsWith('/')) url.pathname += '/';
+  return url.toString();
+}
 
 export interface RpcError {
   code: string;
@@ -60,7 +69,8 @@ export async function startSidecar(options: SidecarOptions): Promise<Sidecar> {
 
   const stdoutLines: string[] = [];
   const stderrLines: string[] = [];
-  const tokenUrl = await new Promise<string>((resolve, reject) => {
+  let tokenUrl: string;
+  try { tokenUrl = await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`dsh web ${options.bootTimeoutMs ?? 90_000}ms 内没有打印 token URL`)), options.bootTimeoutMs ?? 90_000);
     createInterface({ input: child.stdout }).on('line', (line) => {
       stdoutLines.push(line);
@@ -78,7 +88,15 @@ export async function startSidecar(options: SidecarOptions): Promise<Sidecar> {
       clearTimeout(timer);
       reject(new Error(`dsh web 提前退出（code=${String(code)}, signal=${String(signal)}）\n${stderrLines.slice(-20).join('\n')}`));
     });
-  });
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+  }); } catch (error) {
+    if (child.exitCode === null && child.signalCode === null && child.pid !== undefined) {
+      const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+      child.kill('SIGKILL');
+      await exited;
+    }
+    throw error;
+  }
 
   const parsed = new URL(tokenUrl);
   const port = Number(parsed.port);
@@ -108,19 +126,89 @@ export interface StreamFrame {
 
 /** attach 模式：用启动 token 换一个 operator Cookie（SPEC-M8 2.2） */
 export async function attachToDsh(endpoint: string | number, token: string): Promise<string> {
-  const origin = typeof endpoint === 'number' ? `http://127.0.0.1:${endpoint}` : new URL(endpoint).origin;
-  const target = new URL('/connect', origin);
+  const origin = dshBaseUrl(endpoint);
+  const target = new URL('connect', origin);
   target.searchParams.set('token', token);
   target.searchParams.set('interactions', 'answer');
   const response = await fetch(target, {
     redirect: 'manual',
+    signal: AbortSignal.timeout(10_000),
     headers: { host: new URL(origin).host },
   });
   const setCookies = response.headers.getSetCookie();
   const first = setCookies[0];
-  if (first === undefined) throw new Error(`DSH /connect 失败：HTTP ${response.status}，没有 Set-Cookie`);
+  if ((!response.ok && ![302, 303, 307].includes(response.status)) || first === undefined) throw new Error(`DSH /connect 失败：HTTP ${response.status}`);
   // v2 Cookie 形如 dsh-auth-<hash>=v2…，是 operator Cookie，可用于 /api 与 remote.mux
   return first.split(';')[0] ?? '';
+}
+
+/** Persistable credentials for current Host attach. Each cookie is returned
+ * by its native exchange; the launch token is never retained or derived. */
+export async function attachToDshCredentials(endpoint: string | number, token: string): Promise<{ cookie: string; browserCookie: string }> {
+  const { attachDshBrowser } = await import('./identity.js');
+  const browserCookie = await attachDshBrowser(endpoint, token);
+  const cookie = await attachToDsh(endpoint, token);
+  if (!/^dsh-auth-[^=]+=v2\./.test(cookie)) throw Object.assign(new Error('DSH operator authentication did not return a native v2 credential'), { statusCode: 401 });
+  return { cookie, browserCookie };
+}
+
+export interface DshHostOptions {
+  reconnectDelayMs?: number;
+  maxReconnectDelayMs?: number;
+  connectTimeoutMs?: number;
+  rpcTimeoutMs?: number;
+  maxFrames?: number;
+  /** Capture is bounded independently of the native HTTP response handling. */
+  maxRpcCaptureBytes?: number;
+  onRpcFrame?: DshRpcFrameObserver;
+  /** Explicit synchronous persistence admission, separate from observation. */
+  admitRpc?: DshRpcAdmission;
+  onState?: (state: 'online' | 'reconnecting' | 'auth-required' | 'closed') => void;
+}
+
+export type DshRpcJson = null | boolean | number | string | readonly DshRpcJson[] | { readonly [key: string]: DshRpcJson };
+export type DshRpcCaptureCoverage = 'complete' | 'oversize' | 'invalid-json' | 'transport-error' | 'http-auth-rejected';
+/** A detached, deeply frozen JSON observation. Headers, credentials, invalid
+ * bytes and hashes of omitted content are never part of this interface. */
+export interface DshRpcObservation {
+  readonly dir: 'in' | 'out';
+  readonly endpoint: string;
+  /** The actual transport request id, including on malformed responses. */
+  readonly rpcId: string;
+  readonly httpStatus?: number;
+  readonly capture: Readonly<{ coverage: DshRpcCaptureCoverage; maxBytes: number; jsonBytes?: number }>;
+  /** Complete native JSON or a safe capture marker, never the business value alone. */
+  readonly frame: DshRpcJson;
+}
+export type DshRpcFrameObserver = (observation: DshRpcObservation) => void | Promise<void>;
+export type DshRpcAdmission = (request: DshRpcObservation) => boolean;
+export interface DshFileUploadValue { receiptId: string; file: { attachmentId: string; name: string; bytes: number } }
+export interface DshBinaryUploadObservation {
+  readonly dir: 'in' | 'out'; readonly sessionId: string; readonly httpStatus?: number;
+  readonly coverage: 'referenced' | DshRpcCaptureCoverage; readonly frame: DshRpcJson;
+}
+export type DshBinaryUploadObserver = (observation: DshBinaryUploadObservation) => void | Promise<void>;
+
+function rpcCaptureLimit(configured = 1024 * 1024): number {
+  return Number.isSafeInteger(configured) ? Math.max(0, Math.min(configured, 4 * 1024 * 1024)) : 1024 * 1024;
+}
+
+function freezeRpcJson(value: DshRpcJson): DshRpcJson {
+  const pending: DshRpcJson[] = [value];
+  while (pending.length > 0) {
+    const item = pending.pop();
+    if (item !== null && typeof item === 'object') {
+      for (const child of Object.values(item)) pending.push(child);
+      Object.freeze(item);
+    }
+  }
+  return value;
+}
+
+interface StreamSubscription {
+  endpoint: string;
+  args: Record<string, unknown>;
+  handler: (frame: StreamFrame) => void;
 }
 
 export class DshHostClient {
@@ -129,103 +217,295 @@ export class DshHostClient {
   private cookie = '';
   private counter = 0;
   private ws: WebSocket | null = null;
-  private readonly streamHandlers = new Map<string, (frame: StreamFrame) => void>();
+  private connecting: Promise<void> | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private closing = false;
+  private authRequired = false;
+  private reconnectAttempt = 0;
+  private readonly streams = new Map<string, StreamSubscription>();
   private readonly allFrames: unknown[] = [];
 
-  constructor(endpoint: string | number) {
-    this.base = typeof endpoint === 'number' ? `http://127.0.0.1:${endpoint}` : new URL(endpoint).origin;
+  constructor(endpoint: string | number, private readonly options: DshHostOptions = {}) {
+    this.base = dshBaseUrl(endpoint);
     this.websocketBase = this.base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
   }
 
-  /** attach 模式：直接注入已换到的 operator Cookie */
   useCookie(cookie: string): void {
     this.cookie = cookie;
+    this.authRequired = false;
   }
 
-  /** `GET /?token=` 换会话 Cookie */
   async authenticate(tokenUrl: string): Promise<string> {
-    const response = await fetch(tokenUrl, { redirect: 'manual' });
-    const setCookies = response.headers.getSetCookie();
-    const first = setCookies[0];
-    if (first === undefined) throw new Error(`token 换 Cookie 失败：HTTP ${response.status}，没有 Set-Cookie`);
-    this.cookie = first.split(';')[0] ?? '';
+    if (dshBaseUrl(tokenUrl) !== this.base) throw new Error('DSH authentication target does not match Host');
+    const response = await fetch(tokenUrl, { redirect: 'manual', signal: AbortSignal.timeout(this.options.connectTimeoutMs ?? 10_000) });
+    const first = response.headers.getSetCookie()[0];
+    if ((!response.ok && ![302, 303, 307].includes(response.status)) || first === undefined) throw new Error(`token 换 Cookie 失败：HTTP ${response.status}`);
+    this.useCookie(first.split(';')[0] ?? '');
     return this.cookie;
   }
 
-  get cookieHeader(): string {
-    return this.cookie;
-  }
+  get cookieHeader(): string { return this.cookie; }
+  get isConnected(): boolean { return this.ws?.readyState === WebSocket.OPEN; }
 
-  /** 一元 RPC */
-  async rpc<T = unknown>(endpoint: string, args: Record<string, unknown> = {}): Promise<T> {
-    const rpcId = randomUUID();
-    const body = { type: 'client-request', rpcId, method: endpoint, payload: { args } };
-    const response = await fetch(`${this.base}/api/${endpoint}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: this.cookie },
-      body: JSON.stringify(body),
-    });
-    const text = await response.text();
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      throw new Error(`${endpoint} 返回非 JSON（HTTP ${response.status}）：${text.slice(0, 200)}`);
+  /** Native authenticated streaming upload route; it has no RPC id. The
+   * durable caller file reference accompanies a body marker, never raw bytes. */
+  async uploadFileBinary(request: { sessionId: string; data: Uint8Array; name?: string; fileId: string },
+    observer?: DshBinaryUploadObserver, admit?: (request: DshBinaryUploadObservation) => boolean): Promise<DshFileUploadValue> {
+    const body = new Uint8Array(request.data);
+    const target = new URL('api/session/uploadFileBinary', this.base);
+    target.searchParams.set('sessionId', request.sessionId);
+    if (request.name !== undefined) target.searchParams.set('name', request.name);
+    const observe = (observation: DshBinaryUploadObservation): void => {
+      try { const pending = observer?.(observation); if (pending !== undefined) void pending.catch(() => undefined); } catch { /* observer only */ }
+    };
+    const outgoing: DshBinaryUploadObservation = Object.freeze({ dir: 'out', sessionId: request.sessionId, coverage: 'referenced',
+      frame: Object.freeze({ type: 'binary-upload-reference', sessionId: request.sessionId, fileId: request.fileId, byteLength: body.byteLength,
+        ...(request.name === undefined ? {} : { name: request.name }) }) });
+    observe(outgoing);
+    if (admit !== undefined) {
+      let accepted = false; try { accepted = admit(outgoing) === true; } catch { /* before dispatch */ }
+      if (!accepted) throw Object.assign(new Error('DSH binary upload was not durably admitted'), { code: 'uncertain' });
     }
-    const envelope = parsed as { type?: string; rpcId?: string; result?: { ok?: boolean; value?: unknown; error?: RpcError } };
-    if (envelope.result === undefined) throw new Error(`${endpoint} 响应缺少 result：${text.slice(0, 200)}`);
-    if (envelope.result.ok !== true) throw new DshRpcError(envelope.result.error ?? { code: 'unknown', message: text.slice(0, 200) });
+    let response: Response;
+    try {
+      response = await fetch(target, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(this.options.rpcTimeoutMs ?? 30_000),
+        headers: { 'content-type': 'application/octet-stream', cookie: this.cookie }, body });
+    } catch (error) {
+      observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, coverage: 'transport-error', frame: Object.freeze({ type: 'binary-upload-capture', coverage: 'transport-error' }) })); throw error;
+    }
+    if ([401, 403].includes(response.status)) {
+      observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, httpStatus: response.status, coverage: 'http-auth-rejected', frame: Object.freeze({ type: 'binary-upload-capture', coverage: 'http-auth-rejected' }) }));
+      this.authenticationLost(); throw Object.assign(new Error('DSH 认证已失效，请重新连接目标 Host'), { code: 'dsh-needs-link', statusCode: 401 });
+    }
+    let envelope: unknown;
+    try { envelope = await response.json(); } catch {
+      observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, httpStatus: response.status, coverage: 'invalid-json', frame: Object.freeze({ type: 'binary-upload-capture', coverage: 'invalid-json' }) }));
+      throw new Error(`DSH native upload returned invalid JSON (HTTP ${response.status})`);
+    }
+    let frame: DshRpcJson; let coverage: DshBinaryUploadObservation['coverage'] = 'complete';
+    try {
+      const serialized = JSON.stringify(envelope);
+      if (Buffer.byteLength(serialized) > rpcCaptureLimit(this.options.maxRpcCaptureBytes)) throw new Error('capture limit');
+      frame = freezeRpcJson(JSON.parse(serialized) as DshRpcJson);
+    } catch { coverage = 'oversize'; frame = Object.freeze({ type: 'binary-upload-capture', coverage }); }
+    observe(Object.freeze({ dir: 'in', sessionId: request.sessionId, httpStatus: response.status, coverage, frame }));
+    const result = envelope as { ok?: boolean; value?: DshFileUploadValue; error?: RpcError } | null;
+    if (result?.ok === false) throw new DshRpcError(result.error ?? { code: 'unknown', message: 'Native upload failed' });
+    if (!response.ok || result?.ok !== true || typeof result.value?.receiptId !== 'string' || !result.value.receiptId
+      || result.value.file?.attachmentId !== `sha256:${createHash('sha256').update(body).digest('hex')}`
+      || typeof result.value.file.name !== 'string' || result.value.file.bytes !== body.byteLength) throw new Error('DSH native upload response does not identify the exact uploaded file');
+    return result.value;
+  }
+
+  private rpcObservation(dir: 'in' | 'out', endpoint: string, rpcId: string,
+    payload: { json: unknown } | { serialized: string } | { coverage: Exclude<DshRpcCaptureCoverage, 'complete' | 'oversize'> }, httpStatus?: number): DshRpcObservation {
+    const maxBytes = rpcCaptureLimit(this.options.maxRpcCaptureBytes);
+    let coverage: DshRpcCaptureCoverage;
+    let jsonBytes: number | undefined;
+    let frame: DshRpcJson;
+    if ('coverage' in payload) coverage = payload.coverage;
+    else {
+      try {
+        const serialized = 'serialized' in payload ? payload.serialized : JSON.stringify(payload.json);
+        jsonBytes = Buffer.byteLength(serialized);
+        coverage = jsonBytes > maxBytes ? 'oversize' : 'complete';
+        if (coverage === 'complete') frame = freezeRpcJson(JSON.parse(serialized) as DshRpcJson);
+      } catch { coverage = 'oversize'; }
+    }
+    if (coverage !== 'complete') frame = Object.freeze({ type: 'dsh-rpc-capture', rpcId, method: endpoint, coverage });
+    return Object.freeze({ dir, endpoint, rpcId, ...(httpStatus === undefined ? {} : { httpStatus }),
+      capture: Object.freeze({ coverage, maxBytes, ...(jsonBytes === undefined ? {} : { jsonBytes }) }), frame: frame! });
+  }
+
+  private observeRpc(observation: DshRpcObservation, observer?: DshRpcFrameObserver): void {
+    for (const sink of [this.options.onRpcFrame, observer]) {
+      if (sink === undefined) continue;
+      try { const pending = sink(observation); if (pending !== undefined) void pending.catch(() => undefined); }
+      catch { /* Capture observers do not change dispatch, retries or HTTP errors. */ }
+    }
+  }
+
+  async rpc<T = unknown>(endpoint: string, args: Record<string, unknown> = {}, observer?: DshRpcFrameObserver, admitRpc?: DshRpcAdmission): Promise<T> {
+    if (!/^(?:[\w-]+\/[\w-]+|\$events\/result)$/.test(endpoint)) throw new Error('Invalid DSH RPC endpoint');
+    validateDshArgs(endpoint, args);
+    const rpcId = randomUUID();
+    const body = JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args } });
+    const capture = observer !== undefined || this.options.onRpcFrame !== undefined || admitRpc !== undefined || this.options.admitRpc !== undefined;
+    if (capture) {
+      const request = this.rpcObservation('out', endpoint, rpcId, { serialized: body });
+      this.observeRpc(request, observer);
+      for (const admit of [this.options.admitRpc, admitRpc]) {
+        if (admit === undefined) continue;
+        let accepted = false;
+        try { accepted = admit(request); } catch { /* Failure precedes the HTTP dispatch. */ }
+        if (!accepted) throw Object.assign(new Error('DSH native RPC request was not durably admitted; no HTTP request was dispatched'), { code: 'uncertain' });
+      }
+    }
+    let response: Response;
+    try { response = await fetch(`${this.base}api/${endpoint}`, {
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(this.options.rpcTimeoutMs ?? 30_000),
+      headers: { 'content-type': 'application/json', cookie: this.cookie },
+      body,
+    }); } catch (error) {
+      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'transport-error' }), observer);
+      throw error;
+    }
+    if ([401, 403].includes(response.status)) {
+      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'http-auth-rejected' }, response.status), observer);
+      this.authenticationLost();
+      throw Object.assign(new Error('DSH 认证已失效，请重新连接目标 Host'), { code: 'dsh-needs-link', statusCode: 401 });
+    }
+    let value: unknown;
+    try { value = await response.json(); } catch {
+      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'invalid-json' }, response.status), observer);
+      throw new Error(`${endpoint} 返回非 JSON（HTTP ${response.status}）`);
+    }
+    if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { json: value }, response.status), observer);
+    const envelope = value as { type?: string; rpcId?: string; result?: { ok?: boolean; value?: unknown; error?: RpcError } } | null;
+    if (envelope?.type !== 'server-response' || envelope.rpcId !== rpcId || envelope.result === undefined || envelope.result === null || typeof envelope.result.ok !== 'boolean') throw new Error(`${endpoint} 响应身份或信封不匹配`);
+    if (!response.ok && envelope.result.ok) throw new Error(`${endpoint} HTTP ${response.status} 未成功`);
+    if (envelope.result.ok !== true) throw new DshRpcError(envelope.result.error ?? { code: 'unknown', message: 'Native request failed' });
+    validateDshResult(endpoint, envelope.result.value);
     return envelope.result.value as T;
   }
 
-  /** 连上 `/api/remote.mux`（多路复用事件流） */
-  async connect(): Promise<void> {
-    const socket = new WebSocket(`${this.websocketBase}/api/remote.mux`, { headers: { cookie: this.cookie } });
-    this.ws = socket;
-    socket.on('message', (data: WebSocket.RawData) => {
-      let frame: StreamFrame;
-      try {
-        frame = JSON.parse(data.toString()) as StreamFrame;
-      } catch {
-        return;
-      }
-      this.allFrames.push(frame);
-      const streamId = frame.streamId;
-      if (streamId !== undefined) this.streamHandlers.get(streamId)?.(frame);
-    });
-    await new Promise<void>((resolve, reject) => {
-      socket.once('open', () => resolve());
-      socket.once('error', (error) => reject(error));
+  /** Read one authoritative opening from a native snapshot stream, then
+   * release only this subscription. Never mistake a streaming RPC for unary. */
+  async snapshot<T = unknown>(endpoint: string, args: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<T> {
+    await this.connect();
+    return new Promise<T>((resolve, reject) => {
+      const streamId = this.openStream(endpoint, args, frame => {
+        if (!['item', 'error', 'end'].includes(frame.type)) return;
+        clearTimeout(timer);
+        this.closeStream(streamId);
+        if (frame.type !== 'item') { reject(new Error(`DSH ${endpoint} snapshot ended before its baseline`)); return; }
+        try { validateDshResult(endpoint, frame.value); resolve(frame.value as T); } catch (error) { reject(error); }
+      });
+      const timer = setTimeout(() => { this.closeStream(streamId); reject(new Error(`DSH ${endpoint} snapshot timed out`)); }, timeoutMs);
     });
   }
 
-  /** 打开一条逻辑流 */
-  openStream(endpoint: string, args: Record<string, unknown>, onFrame: (frame: StreamFrame) => void): string {
-    if (this.ws === null) throw new Error('先调用 connect()');
-    this.counter += 1;
-    const streamId = `s${this.counter}`;
-    this.streamHandlers.set(streamId, onFrame);
-    this.ws.send(JSON.stringify({ type: 'open', streamId, endpoint, payload: { args } }));
+  connect(): Promise<void> {
+    if (this.authRequired) return Promise.reject(Object.assign(new Error('DSH 需要重新认证'), { code: 'dsh-needs-link' }));
+    if (this.isConnected) return Promise.resolve();
+    if (this.connecting !== null) return this.connecting;
+    this.closing = false;
+    const pending = this.openSocket();
+    this.connecting = pending;
+    void pending.finally(() => { if (this.connecting === pending) this.connecting = null; }).catch(() => undefined);
+    return pending;
+  }
+
+  private openSocket(): Promise<void> {
+    const socket = new WebSocket(`${this.websocketBase}api/remote.mux`, { headers: { cookie: this.cookie } });
+    this.ws = socket;
+    return new Promise<void>((resolve, reject) => {
+      let opened = false;
+      const timer = setTimeout(() => { reject(new Error('DSH 连接超时')); socket.terminate(); }, this.options.connectTimeoutMs ?? 10_000);
+      socket.once('open', () => {
+        opened = true;
+        clearTimeout(timer);
+        if (this.ws !== socket || this.closing) { socket.terminate(); reject(new Error('DSH 连接已取消')); return; }
+        this.reconnectAttempt = 0;
+        this.options.onState?.('online');
+        for (const [id, stream] of this.streams) this.sendOpen(id, stream);
+        resolve();
+      });
+      socket.on('message', data => {
+        if (this.ws !== socket) return;
+        let frame: StreamFrame;
+        try {
+          const value: unknown = JSON.parse(data.toString());
+          if (value === null || typeof value !== 'object' || Array.isArray(value)) return;
+          frame = value as StreamFrame;
+        } catch { return; }
+        const limit = Math.max(0, this.options.maxFrames ?? 0);
+        if (limit > 0) { this.allFrames.push(frame); if (this.allFrames.length > limit) this.allFrames.shift(); }
+        if (typeof frame.streamId === 'string') {
+          const stream = this.streams.get(frame.streamId);
+          if (frame.type === 'end' || frame.type === 'error') this.streams.delete(frame.streamId);
+          stream?.handler(frame);
+        }
+      });
+      socket.on('error', error => { clearTimeout(timer); if (!opened) reject(error); });
+      socket.on('unexpected-response', (request, response) => {
+        clearTimeout(timer);
+        if ([401, 403].includes(response.statusCode ?? 0)) this.authenticationLost();
+        request.destroy();
+        socket.terminate();
+        reject(new Error(`DSH handshake HTTP ${response.statusCode ?? 'unknown'}`));
+      });
+      socket.once('close', () => {
+        clearTimeout(timer);
+        if (!opened) reject(new Error('DSH 连接在打开前关闭'));
+        if (this.ws !== socket) return;
+        this.ws = null;
+        if (!this.closing && !this.authRequired) this.scheduleReconnect();
+      });
+    });
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer !== null || this.closing || this.authRequired) return;
+    this.options.onState?.('reconnecting');
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connect().catch(() => this.scheduleReconnect());
+    }, Math.min(this.options.maxReconnectDelayMs ?? 30_000, (this.options.reconnectDelayMs ?? 1000) * 2 ** Math.min(this.reconnectAttempt++, 10)));
+    this.reconnectTimer.unref?.();
+  }
+
+  private authenticationLost(): void {
+    if (this.authRequired) return;
+    this.authRequired = true;
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    this.options.onState?.('auth-required');
+    this.ws?.terminate();
+  }
+
+  private sendOpen(id: string, stream: StreamSubscription): void {
+    if (!this.isConnected) throw new Error('DSH 尚未连接');
+    this.ws?.send(JSON.stringify({ type: 'open', streamId: id, endpoint: stream.endpoint, payload: { args: stream.args } }));
+  }
+
+  openStream(endpoint: string, args: Record<string, unknown>, handler: (frame: StreamFrame) => void): string {
+    validateDshArgs(endpoint, args);
+    if (!this.isConnected) throw new Error('先调用 connect()');
+    const streamId = `s${++this.counter}`;
+    const stream = { endpoint, args: structuredClone(args), handler };
+    this.streams.set(streamId, stream);
+    this.sendOpen(streamId, stream);
     return streamId;
   }
 
-  closeStream(streamId: string): void {
-    this.ws?.send(JSON.stringify({ type: 'cancel', streamId }));
-    this.streamHandlers.delete(streamId);
+  updateStreamArgs(streamId: string, args: Record<string, unknown>): void {
+    const stream = this.streams.get(streamId);
+    if (stream !== undefined) stream.args = structuredClone(args);
   }
 
-  get frames(): readonly unknown[] {
-    return this.allFrames;
+  closeStream(streamId: string): void {
+    this.streams.delete(streamId);
+    if (this.isConnected) this.ws?.send(JSON.stringify({ type: 'cancel', streamId }));
   }
+
+  get frames(): readonly unknown[] { return this.allFrames; }
 
   async close(): Promise<void> {
+    this.closing = true;
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    this.streams.clear();
     const socket = this.ws;
-    if (socket === null) return;
     this.ws = null;
-    await new Promise<void>((resolve) => {
-      socket.once('close', () => resolve());
-      socket.close();
-    });
+    if (socket !== null && socket.readyState !== WebSocket.CLOSED) {
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(() => { socket.terminate(); resolve(); }, 1000);
+        socket.once('close', () => { clearTimeout(timer); resolve(); });
+        if (socket.readyState === WebSocket.CONNECTING) socket.terminate(); else socket.close();
+      });
+    }
+    this.options.onState?.('closed');
   }
 }
 

@@ -127,7 +127,9 @@ describe('Codex Watchdog', () => {
     const ws = await seedWorkspaceAndSession(ctx, 'codex');
     ctx.store.createProvider({ id: 'test-provider', name: 'test', baseUrl: 'https://example.invalid', protocols: ['openai-responses'], models: ['fake-model'], secretRef: 'fake-key-ref', codexCatalogPath: null });
     const source = await ctx.manager.createSession({ workspaceId: ws.workspaceId, agent: 'codex', providerId: 'test-provider', model: 'fake-model', reasoningEffort: 'high', accessMode: 'workspace' });
-    await ctx.manager.send(source.id, { text: '实现 Watchdog，暂不上线', images: [{ fileId: 'old-image', path: '/unused.png', mime: 'image/png' }] });
+    const image = await ctx.files.putBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nAAAAABJRU5ErkJggg==', 'base64'), 'old-image.png', 'image/png');
+    await ctx.files.attachToSession(source.id, image.id);
+    await ctx.manager.send(source.id, { text: '实现 Watchdog，暂不上线', images: [{ fileId: image.id, path: '/unused.png', mime: 'image/png' }] });
     codex.fire(source.id, { type: 'item.complete', itemKey: 'progress', kind: 'assistant.message', data: { text: '已完成数据库迁移' }, native: { encrypted_content: 'must-not-copy' } });
     codex.finish(source.id, 'failed', RESOURCE_ERROR);
     await vi.advanceTimersByTimeAsync(5000);
@@ -245,6 +247,12 @@ describe('Codex Watchdog', () => {
     codex.finish(sessionId, 'failed', '429 rate limit exceeded'); await vi.advanceTimersByTimeAsync(60_000);
     expect(codex.sent).toHaveLength(1); expect(ctx.store.watchdogJob(sessionId)?.status).toBe('cancelled');
   });
+  it('nonblocking questions do not cancel automatic recovery or acquire a fabricated timeout result', async () => {
+    enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex'); await ctx.manager.send(sessionId, { text: 'task' });
+    codex.fire(sessionId, { type: 'item.complete', itemKey: 'nonblocking-question', kind: 'question', data: { questionId: 'nonblocking', prompt: 'optional native response', status: 'pending', isBlocking: false } }); expect(ctx.store.getSession(sessionId)?.status).toBe('running');
+    codex.finish(sessionId, 'failed', '429 token rate limit'); await vi.advanceTimersByTimeAsync(5000); expect(codex.sent).toHaveLength(2);
+    expect(ctx.store.allEvents(sessionId).find(event => event.kind === 'question')?.data).toMatchObject({ isBlocking: false, status: 'pending' });
+  });
 
   it('平级会话分别操作，旧会话发送和停止不会控制新会话', async () => {
     enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
@@ -277,6 +285,8 @@ describe('Codex Watchdog', () => {
     const queued = await ctx.manager.send(sessionId, { text: '用户的下一步' });
     expect(queued.queued).toBe(true);
     codex.finish(sessionId, 'failed', '429 token rate limit exceeded');
+    // Queue delivery now shares the session's serialized native controls.
+    await vi.advanceTimersByTimeAsync(0);
     expect(codex.sent.map((item) => item.input.text)).toEqual(['第一轮', '用户的下一步']);
     expect(ctx.store.watchdogJob(sessionId)).toBeUndefined();
     await vi.advanceTimersByTimeAsync(60_000); expect(codex.sent).toHaveLength(2);

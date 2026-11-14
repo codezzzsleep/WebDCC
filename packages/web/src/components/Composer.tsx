@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ProviderDto } from '@webdcc/protocol';
+import type { InputContent, ModelOption, ProviderDto } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
@@ -8,6 +8,13 @@ import { useAppData } from '../lib/appData.js';
 import { shortNumber } from '../lib/format.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
+import { InputPreparationStore } from '../lib/input-preparation-store.js';
+import { DraftConflictError, DraftController } from '../lib/draft-controller.js';
+import { UploadController, type UploadKind } from '../lib/upload-controller.js';
+import { ComposerInputController, type ComposerInputCapabilities, type ComposerIntent, type PreparedPart } from '../lib/composer-input-controller.js';
+import { SyncedInputDraftStore } from '../lib/synced-input-draft-store.js';
+import { AttachmentPreview } from './InputAttachments.js';
+import { attachmentDigest } from '../lib/input-digest.js';
 
 type ComposerMode =
   | {
@@ -24,7 +31,7 @@ type ComposerMode =
       onChoice: (choice: ModelChoice) => void;
       accessMode: string | undefined;
       onAccessMode: (mode: string) => void;
-      onSubmit: (text: string, images: string[]) => Promise<void>;
+      onSubmit: (text: string, contentParts: InputContent) => Promise<{ commandId: string }>;
     };
 
 interface ComposerProps {
@@ -38,7 +45,7 @@ interface MentionState {
   start: number;
 }
 
-type MenuName = 'harness' | 'mode' | 'model' | 'reasoning' | 'attach' | null;
+type MenuName = 'harness' | 'mode' | 'model' | 'reasoning' | 'attach' | 'skill' | null;
 const CODEX_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
@@ -52,12 +59,23 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const agentMeta = meta?.agents[agent];
 
   const [text, setText] = useState('');
-  const [images, setImages] = useState<string[]>([]);
+  const capabilitiesRef = useRef<ComposerInputCapabilities>({ contentTypes: ['text', 'image', 'file'], intents: ['send'], running: false });
+  const [controls] = useState(() => {
+    const backend = new InputPreparationStore<PreparedPart>();
+    const uploads = new UploadController({ store: backend, scopeSession: id => id.startsWith('new:') ? undefined : id });
+    const synced = new SyncedInputDraftStore(backend, uploads, id => store.getDraft(id));
+    const drafts = new DraftController(synced);
+    return { backend, uploads, drafts, synced, input: new ComposerInputController(drafts, uploads, () => capabilitiesRef.current) };
+  });
+  const [, setPreparationVersion] = useState(0);
+  const [selecting, setSelecting] = useState(false);
   const [mention, setMention] = useState<MentionState>({ open: false, query: '', start: 0 });
   const [files, setFiles] = useState<{ name: string; path: string }[]>([]);
   const [menu, setMenu] = useState<MenuName>(null);
-  const [uploading, setUploading] = useState(false);
   const [sessionModels, setSessionModels] = useState<string[]>([]);
+  const [skills, setSkills] = useState<{ skillId: string; name: string; description: string; enabled: boolean }[]>([]);
+  const [skillStatus, setSkillStatus] = useState('');
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashCommands, setSlashCommands] = useState<{ name: string; description?: string }[]>([]);
   const [slashStatus, setSlashStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable' | 'error'>('idle');
@@ -68,14 +86,40 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
   // 草稿：会话里的输入框跟着会话走（换设备也在）
   useEffect(() => {
+    const changed = (): void => { setText(controls.drafts.snapshot()?.text ?? ''); setPreparationVersion(value => value + 1); };
+    const offDrafts = controls.drafts.subscribe(changed);
+    const offUploads = controls.uploads.subscribe(task => { changed(); void controls.synced.sync(task.sessionId); });
+    const offSync = controls.synced.subscribe(changed);
+    return () => { offDrafts(); offUploads(); offSync(); };
+  }, [controls]);
+  const draftSessionId = sessionId ?? `new:${workspaceId}`;
+  useEffect(() => {
+    setText(''); setError(null); setMenu(null); setMention({ open: false, query: '', start: 0 });
+    void controls.drafts.open(draftSessionId).catch(cause => setError(String(cause)));
+    void controls.uploads.restore(draftSessionId).catch(cause => setError(String(cause)));
+  }, [draftSessionId, controls]);
+  useEffect(() => {
     if (sessionId === null) return;
-    setText(store.getDraft(sessionId).text);
-    void store.loadDraft(sessionId).then((draft) => setText(draft.text));
-  }, [sessionId]);
+    return store.bindDraftRecovery(sessionId, input => {
+      const current = controls.drafts.snapshot();
+      if (current?.sessionId !== sessionId || controls.drafts.loading() || controls.input.busy()) return false;
+      const selected = input.contentParts ?? { version: 1 as const, parts: [
+        ...(input.text === '' ? [] : [{ type: 'text' as const, text: input.text }]),
+        ...(input.images ?? []).map(fileId => ({ type: 'image' as const, fileId })),
+      ] };
+      if (current.text === '' && current.contentParts.parts.length === 0) controls.drafts.update(input.text, selected);
+      else {
+        const nextText = current.text === '' ? input.text : `${current.text}\n${input.text}`;
+        controls.drafts.update(nextText, { version: 1, parts: [{ type: 'text', text: nextText }, ...current.contentParts.parts.filter(part => part.type !== 'text'), ...selected.parts.filter(part => part.type !== 'text')] });
+      }
+      return true;
+    });
+  }, [sessionId, controls]);
 
   useEffect(() => {
     if (session?.agent === 'codex' || session?.agent === 'claude-code') setSessionReasoning(session.reasoningEffort ?? 'medium');
@@ -93,12 +137,15 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   // 会话里：同一 Provider 下可以换模型
   useEffect(() => {
-    if (session === undefined) return;
+    let active = true;
+    setModelOptions([]);
     void api
-      .models(session.agent, session.providerId ?? null)
-      .then(setSessionModels)
-      .catch(() => setSessionModels([]));
-  }, [session?.agent, session?.providerId, sessionId]);
+      .modelOptions(agent, mode.kind === 'session' ? session?.providerId ?? null : mode.choice.providerId)
+      .then(options => { if (active) setModelOptions(options); })
+      .catch(() => undefined);
+    if (session !== undefined) void api.models(session.agent, session.providerId ?? null).then(models => { if (active) setSessionModels(models); }).catch(() => { if (active) setSessionModels([]); });
+    return () => { active = false; };
+  }, [agent, session?.providerId, mode.kind, mode.kind === 'new' ? mode.choice.providerId : null, sessionId]);
 
   useEffect(() => {
     if (!slashOpen) return;
@@ -119,6 +166,18 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
         setSlashStatus('error');
       });
   }, [slashOpen, sessionId]);
+  useEffect(() => {
+    if (menu !== 'skill' || sessionId === null || agent !== 'codex') return;
+    let active = true; setSkills([]); setSkillStatus('正在读取原生技能目录');
+    void api.nativeControls(sessionId, true).then(async snapshot => {
+      const catalog = snapshot.catalog as { skills?: { available?: boolean; value?: { data?: { skills?: { name?: string; path?: string; description?: string; enabled?: boolean }[] }[] } } } | undefined;
+      if (catalog?.skills?.available !== true) throw new Error('原生技能目录当前不可用');
+      const options = await Promise.all((catalog.skills.value?.data ?? []).flatMap(entry => entry.skills ?? []).flatMap(skill =>
+        typeof skill.name === 'string' && typeof skill.path === 'string' ? [attachmentDigest(new Blob([JSON.stringify([skill.name, skill.path])])).then(skillId => ({ skillId, name: skill.name!, description: skill.description ?? '', enabled: skill.enabled === true }))] : []));
+      if (active) { setSkills([...new Map(options.map(option => [option.skillId, option])).values()]); setSkillStatus(options.length === 0 ? '当前原生目录没有可用技能' : ''); }
+    }).catch(cause => { if (active) setSkillStatus(cause instanceof Error ? cause.message : String(cause)); });
+    return () => { active = false; };
+  }, [menu, sessionId, agent]);
 
   // 点菜单外面关闭菜单
   useEffect(() => {
@@ -142,10 +201,21 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const rootBlocked = meta?.runningAsRoot === true && agent === 'claude-code';
   const accessModeId = mode.kind === 'session' ? session?.accessMode : mode.accessMode;
   const currentMode = accessModes.find((item) => item.id === accessModeId) ?? accessModes[0];
+  const permissions = mode.kind === 'session' ? session?.permissions : undefined;
+  const effectiveMode = accessModes.find(item => item.id === permissions?.effective || item.id.replace(/^:/, '') === permissions?.effective?.replace(/^:/, ''));
+  const accessLabel = mode.kind === 'session' && session === undefined ? '正在读取权限' : permissions === undefined ? currentMode?.label ?? '沿用原生权限'
+    : `${effectiveMode?.label ?? permissions.effective ?? '实际权限待确认'}${permissions.phase === 'pending' ? ' · 待生效' : permissions.phase === 'failed' ? ' · 切换失败' : permissions.phase === 'unknown' ? ' · 待确认' : ''}`;
 
   const providerOf = (id: string | null | undefined): ProviderDto | undefined => providers.find((provider) => provider.id === id);
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
   const currentModel = mode.kind === 'session' ? (session?.model ?? '') : mode.choice.model;
+  const selectedModel = modelOptions.find(option => option.id === currentModel) ?? (currentModel === '' ? modelOptions.find(option => option.isDefault) : undefined);
+  capabilitiesRef.current = { contentTypes: agent === 'codex' ? ['text', 'image', 'audio', 'skill'] : ['text', 'image', 'file'], inputModalities: selectedModel?.inputModalities,
+    intents: running ? agent === 'codex' || agent === 'dsh' ? ['queue', 'steer'] : ['queue'] : ['send'], running,
+    ...(mode.kind === 'new' && workspaceId === '' ? { unavailableReason: '请先选择工作区' } : {}) };
+  const attachmentParts = (controls.drafts.snapshot()?.sessionId === draftSessionId ? controls.drafts.snapshot()?.contentParts.parts ?? [] : []).filter(part => part.type !== 'text');
+  const uploadTasks = controls.uploads.list(draftSessionId);
+  const uploading = selecting || attachmentParts.some(part => part.uploadTaskId !== undefined && ['queued', 'uploading', 'completing'].includes(controls.uploads.get(part.uploadTaskId)?.state ?? 'queued'));
   const currentReasoning = agent === 'dsh' && mode.kind === 'session'
     ? (session?.reasoningEffort ?? '未确定')
     : mode.kind === 'session' ? sessionReasoning : (mode.choice.reasoningEffort ?? 'medium');
@@ -173,8 +243,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     return files.filter((file) => file.path.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 8);
   }, [files, mention.query]);
 
-  const persist = (value: string, nextImages: string[] = images): void => {
-    if (sessionId !== null) store.setDraft(sessionId, value, nextImages);
+  const persist = (value: string): void => {
+    if (controls.drafts.snapshot()?.sessionId !== draftSessionId || controls.drafts.loading()) return;
+    controls.drafts.update(value);
   };
 
   const updateText = (value: string): void => {
@@ -201,129 +272,47 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     textareaRef.current?.focus();
   };
 
-  const submit = async (): Promise<void> => {
-    const value = text;
-    if (value.trim() === '' || busy) return;
-    if (value.trim() === '/model') {
-      setText('');
-      setSlashOpen(false);
-      setMenu('model');
-      return;
+  const submit = async (intent: ComposerIntent = running ? 'queue' : 'send'): Promise<void> => {
+    if (busy) return;
+    if (text.trim() === '/model' && attachmentParts.length === 0) {
+      setSlashOpen(false); setMenu('model'); return;
     }
-    setError(null);
-    if (mode.kind === 'session') {
-      if (sessionId === null) return;
-      store.sendMessage(sessionId, value, images);
-      setText('');
-      setImages([]);
-      store.setDraft(sessionId, '', []);
-      return;
-    }
-    setBusy(true);
+    setError(null); setBusy(true);
+    const expectedTurnId = intent === 'steer' ? store.getTurns(sessionId ?? '').findLast(turn => ['starting', 'running', 'waiting'].includes(turn.state) && turn.pending === undefined)?.turnId : undefined;
     try {
-      await mode.onSubmit(value, images);
-      setText('');
-      setImages([]);
+      const result = await controls.input.submit(intent, async input => {
+        const contentParts = input.contentParts as InputContent;
+        if (mode.kind === 'new') return mode.onSubmit(input.text, contentParts);
+        return store.sendStructuredMessage(input.sessionId, input.text, contentParts, input.intent, expectedTurnId);
+      });
+      if (!result.submitted && result.reason !== undefined) setError(result.reason);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
-  /** 分片上传一个文件，返回 fileId（断点续传：按服务端已收到的分片续传） */
-  const uploadOne = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const subtle = globalThis.crypto?.subtle;
-    const digest = subtle === undefined ? undefined : await subtle.digest('SHA-256', buffer);
-    const sha256 = digest === undefined ? '' : [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-    const response = await fetch('/api/uploads', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: file.name, size: file.size, ...(sha256 === '' ? {} : { sha256 }), mime: file.type || 'application/octet-stream' }),
-    });
-    if (!response.ok) throw new Error(`上传失败：${response.status}`);
-    const init = (await response.json()) as { uploadId: string; chunkSize: number; received: number[]; existingFileId?: string };
-    if (init.existingFileId !== undefined) return init.existingFileId;
-    const total = Math.ceil(buffer.byteLength / init.chunkSize);
-    const sent = new Set(init.received);
-    for (let index = 0; index < total; index += 1) {
-      if (sent.has(index)) continue;
-      const chunk = buffer.slice(index * init.chunkSize, (index + 1) * init.chunkSize);
-      // 断网时重试同一个分片（A6f：服务端不会留下重复分片）
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        try {
-          const put = await fetch(`/api/uploads/${init.uploadId}/chunks/${index}`, {
-            method: 'PUT',
-            credentials: 'same-origin',
-            headers: { 'content-type': 'application/octet-stream' },
-            body: chunk,
-          });
-          if (put.ok) break;
-        } catch {
-          // 继续重试
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const status = (await fetch(`/api/uploads/${init.uploadId}`, { credentials: 'same-origin' })
-          .then((r) => r.json())
-          .catch(() => ({ received: [] }))) as { received: number[] };
-        if (status.received.includes(index)) break;
-      }
-    }
-    const complete = (await fetch(`/api/uploads/${init.uploadId}/complete`, { method: 'POST', credentials: 'same-origin' }).then((r) =>
-      r.json(),
-    )) as { fileId: string };
-    return complete.fileId;
-  };
-
-  const uploadImages = async (list: FileList | null): Promise<void> => {
+  const attach = async (list: FileList | null, kind: UploadKind): Promise<void> => {
     if (list === null) return;
-    setUploading(true);
+    setSelecting(true); setError(null);
     try {
       for (const file of Array.from(list)) {
-        const fileId = await uploadOne(file);
-        setImages((prev) => {
-          const next = [...prev, fileId];
-          persist(text, next);
-          return next;
+        const selected = await controls.input.addAttachment(file, kind);
+        if (selected.attached) void controls.uploads.resume(selected.task.id).catch(cause => {
+          if (controls.drafts.snapshot()?.sessionId === selected.task.sessionId) setError(cause instanceof Error ? cause.message : String(cause));
         });
       }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setUploading(false);
-    }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setSelecting(false); }
   };
-
-  /** 其他文件：复制到 <工作区>/.webdcc/uploads/，把相对路径插进输入框（F7） */
-  const attachFiles = async (list: FileList | null): Promise<void> => {
-    if (list === null || workspaceId === '') return;
-    setUploading(true);
-    try {
-      let next = text;
-      for (const file of Array.from(list)) {
-        if (file.size > 100 * 1024 * 1024) {
-          setError(`文件超过 100 MB 上限：${file.name}`);
-          continue;
-        }
-        const fileId = await uploadOne(file);
-        const attached = (await fetch(`/api/workspaces/${workspaceId}/attach`, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ fileId, name: file.name }),
-        }).then((response) => response.json())) as { path: string };
-        const cursor = textareaRef.current?.selectionStart ?? next.length;
-        next = `${next.slice(0, cursor)}${attached.path} ${next.slice(cursor)}`;
-      }
-      setText(next);
-      persist(next);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setUploading(false);
-    }
+  const removeAttachment = (part: PreparedPart): void => {
+    const current = controls.drafts.snapshot();
+    if (current?.sessionId !== draftSessionId) return;
+    controls.drafts.update(current.text, { version: 1, parts: current.contentParts.parts.filter(candidate =>
+      part.uploadTaskId !== undefined ? candidate.uploadTaskId !== part.uploadTaskId
+        : part.type === 'skill' ? candidate.skillId !== part.skillId
+        : part.type === 'resource' ? candidate.uri !== part.uri
+        : !(candidate.type === part.type && candidate.fileId === part.fileId)) });
+    if (part.uploadTaskId !== undefined) void controls.uploads.cancel(part.uploadTaskId).catch(cause => setError(String(cause)));
   };
 
   const pickModel = (providerId: string | null, model: string): void => {
@@ -354,35 +343,31 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     currentProvider.codexCatalogPath === undefined &&
     !(currentModel === '' ? currentProvider.models : [currentModel]).some((model) => model.startsWith('gpt-'));
   const stats = sessionId === null ? null : statsFor(sessionId);
-  const sendDisabled = text.trim() === '' || busy || uploading || (mode.kind === 'new' && workspaceId === '');
+  const sendIntent: ComposerIntent = running ? 'queue' : 'send';
+  const blockedReason = controls.input.reason(sendIntent);
+  const sendDisabled = busy || blockedReason !== undefined;
 
   return (
     <div className="composer-wrap" data-testid="composer">
       <div className="composer">
-        {images.length > 0 ? (
-          <div className="attachments">
-            {images.map((fileId) => (
-              <span key={fileId} className="attachment-chip">
-                <Icon name="image" size={13} />
-                图片 {fileId.slice(-6)}
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="移除图片"
-                  onClick={() =>
-                    setImages((prev) => {
-                      const next = prev.filter((id) => id !== fileId);
-                      persist(text, next);
-                      return next;
-                    })
-                  }
-                >
-                  <Icon name="x" size={12} />
-                </button>
-              </span>
-            ))}
-          </div>
-        ) : null}
+        {attachmentParts.length > 0 ? <div className="attachments" data-testid="composer-attachments">
+          {attachmentParts.map((part, index) => {
+            const task = part.uploadTaskId === undefined ? undefined : controls.uploads.get(part.uploadTaskId);
+            const uploaded = task?.fileId === undefined ? part : { ...part, fileId: task.fileId };
+            return <span className="attachment-chip" key={part.uploadTaskId ?? `${part.fileId}-${index}`}>
+              <AttachmentPreview part={uploaded} blob={task?.blob} />
+              {task !== undefined && task.state !== 'completed' ? <span role="status">{task.state === 'failed' ? task.error ?? '上传失败' : task.state === 'paused' ? '已暂停' : task.state === 'cancelled' ? '已取消' : `正在上传 ${task.received.length} 个分片`}</span> : null}
+              {task?.state === 'uploading' ? <button type="button" onClick={() => void controls.uploads.pause(task.id)}>暂停</button> : null}
+              {task !== undefined && ['paused', 'failed', 'queued'].includes(task.state) ? <button type="button" onClick={() => void controls.uploads.resume(task.id).catch(cause => setError(String(cause)))}>继续上传</button> : null}
+              <button type="button" className="icon-btn" aria-label="移除附件" onClick={() => removeAttachment(part)}><Icon name="x" size={12} /></button>
+            </span>;
+          })}
+        </div> : null}
+        {uploadTasks.filter(task => task.state !== 'completed' && task.state !== 'cancelled' && !attachmentParts.some(part => part.uploadTaskId === task.id)).map(task => <div key={task.id} role="status">
+          原会话的附件仍已保存：{task.name}
+          <button type="button" onClick={() => { const token = controls.drafts.token(); if (token !== undefined) controls.input.appendPart(token, { type: task.kind, uploadTaskId: task.id, name: task.name, mime: task.mime, sha256: task.sha256, size: task.size }); }}>恢复到草稿</button>
+          <button type="button" onClick={() => void controls.uploads.cancel(task.id)}>取消上传</button>
+        </div>)}
 
         <label className="visually-hidden" htmlFor={`composer-${sessionId ?? 'new'}`}>
           消息
@@ -394,6 +379,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           className="composer-input"
           placeholder={`发消息给 ${agentText(agent).name}，/ 调用它的指令，@ 引用文件或会话`}
           value={text}
+          disabled={controls.drafts.loading() || controls.drafts.snapshot()?.sessionId !== draftSessionId}
           rows={Math.min(10, Math.max(isSession ? 1 : 2, text.split('\n').length))}
           onChange={(event) => updateText(event.target.value)}
           onKeyDown={(event) => {
@@ -417,7 +403,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               aria-label="添加附件"
               aria-haspopup="menu"
               aria-expanded={menu === 'attach'}
-              disabled={uploading}
+              disabled={uploading || controls.drafts.loading()}
               onClick={() => setMenu(menu === 'attach' ? null : 'attach')}
               data-testid="attach-button"
             >
@@ -433,7 +419,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   type="button"
                   role="menuitem"
                   className="menu-item"
-                  disabled={workspaceId === ''}
+                  disabled={workspaceId === '' || agent === 'codex'}
                   onClick={() => {
                     setMenu(null);
                     attachInputRef.current?.click();
@@ -443,11 +429,19 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <Icon name="paperclip" />
                   <span className="menu-item-body">
                     添加文件
-                    <span className="menu-item-sub">放进工作区的 .webdcc/uploads，并把路径插进输入框</span>
+                    <span className="menu-item-sub">{agent === 'codex' ? '当前 Codex 原生输入未验证独立文件引用' : '作为原生附件发送，保留文件名和原始内容'}</span>
                   </span>
                 </button>
+                {agent === 'codex' && selectedModel?.inputModalities?.includes('audio') ? <button type="button" role="menuitem" className="menu-item" onClick={() => { setMenu(null); audioInputRef.current?.click(); }}>添加音频</button> : null}
+                {agent === 'codex' && sessionId !== null ? <button type="button" role="menuitem" className="menu-item" onClick={() => setMenu('skill')}>添加原生技能</button> : null}
               </div>
             ) : null}
+            {menu === 'skill' ? <div className="menu up left" role="menu" data-testid="input-skill-menu">
+              {skillStatus ? <div role="status" className="menu-note">{skillStatus}</div> : null}
+              {skills.map(skill => <button type="button" role="menuitem" className="menu-item" key={skill.skillId} disabled={!skill.enabled} onClick={() => {
+                const token = controls.drafts.token(); if (token !== undefined) controls.input.appendPart(token, { type: 'skill', skillId: skill.skillId, name: skill.name }); setMenu(null);
+              }}><span className="menu-item-body">{skill.name}<span className="menu-item-sub">{skill.enabled ? skill.description : '已在原生端禁用'}</span></span></button>)}
+            </div> : null}
           </span>
           <input
             ref={imageInputRef}
@@ -457,7 +451,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             hidden
             data-testid="add-image-input"
             onChange={(event) => {
-              void uploadImages(event.target.files);
+              void attach(event.target.files, 'image');
               event.target.value = '';
             }}
           />
@@ -468,10 +462,11 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             hidden
             data-testid="add-file-input"
             onChange={(event) => {
-              void attachFiles(event.target.files);
+              void attach(event.target.files, 'file');
               event.target.value = '';
             }}
           />
+          <input ref={audioInputRef} type="file" accept="audio/*" multiple hidden data-testid="add-audio-input" onChange={event => { void attach(event.target.files, 'audio'); event.target.value = ''; }} />
 
           {/* Agent */}
           <span className="menu-anchor">
@@ -557,9 +552,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                 aria-expanded={menu === 'mode'}
                 onClick={() => setMenu(menu === 'mode' ? null : 'mode')}
                 data-testid="access-mode"
+                disabled={mode.kind === 'session' && session === undefined}
               >
                 <Icon name="shield" size={14} strokeWidth={1.9} />
-                <span className="pill-text">{currentMode?.label ?? '默认访问模式'}</span>
+                <span className="pill-text" title={permissions?.error ?? (permissions?.phase === 'pending' ? `请求：${currentMode?.label ?? '沿用原生权限'}` : undefined)}>{accessLabel}</span>
                 <Icon name="chevronDown" size={12} strokeWidth={2} className="caret" />
               </button>
               {menu === 'mode' ? (
@@ -567,7 +563,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <div className="menu-group-title">{agentText(agent).name} 自己的访问模式</div>
                   {accessModes.map((item) => {
                     // 以 root 运行时 Claude Code 不允许 bypassPermissions（MODE-claude-01）
-                    const blocked = item.id === 'bypassPermissions' && rootBlocked;
+                    const blocked = item.allowed === false || item.implemented === false || item.id === 'bypassPermissions' && rootBlocked;
                     return (
                       <button
                         key={item.id}
@@ -576,7 +572,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                         aria-checked={item.id === currentMode?.id}
                         className="menu-item"
                         disabled={blocked}
-                        title={blocked ? '以 root 运行时 Claude Code 不允许此模式' : undefined}
+                        title={item.reason ?? (blocked ? '以 root 运行时 Claude Code 不允许此模式' : undefined)}
                         data-testid={`access-mode-${item.id}`}
                         onClick={() => {
                           setMenu(null);
@@ -590,7 +586,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                       >
                         <span className="menu-item-body">
                           {item.label}
-                          <span className="menu-item-sub">{blocked ? '以 root 运行时 Claude Code 不允许此模式' : item.id}</span>
+                          <span className="menu-item-sub">{item.reason ?? (blocked ? '以 root 运行时 Claude Code 不允许此模式' : item.id)}</span>
                         </span>
                         {item.id === currentMode?.id ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}
                       </button>
@@ -713,6 +709,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               >
                 <Icon name="arrowUp" size={17} strokeWidth={2.2} />
               </button>
+              {capabilitiesRef.current.intents.includes('steer') ? <button type="button" className="btn" onClick={() => void submit('steer')} disabled={busy || controls.input.reason('steer') !== undefined} title={controls.input.reason('steer')} data-testid="steer-send-button">介入当前轮</button> : null}
               <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label="强制打断" title="强制打断" data-testid="stop-button">
                 <Icon name="stop" size={16} />
               </button>
@@ -810,7 +807,31 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {error}
         </div>
       ) : null}
+      {controls.drafts.error() !== undefined ? <div className="composer-error" role="alert">
+        {controls.drafts.error()?.message}<button type="button" onClick={() => void controls.drafts.retrySave().catch(cause => setError(String(cause)))}>重试保存</button>
+        {controls.drafts.error() instanceof DraftConflictError ? <>
+          <button type="button" onClick={() => void controls.drafts.resolveConflict('local').catch(cause => setError(String(cause)))}>使用本页草稿</button>
+          <button type="button" onClick={() => void controls.drafts.resolveConflict('stored').catch(cause => setError(String(cause)))}>使用已保存草稿</button>
+        </> : null}
+      </div> : null}
+      {controls.synced.state(draftSessionId)?.error !== undefined ? <div className="composer-error" role="status">
+        {controls.synced.state(draftSessionId)?.error}<button type="button" onClick={() => void controls.synced.sync(draftSessionId)}>重试同步</button>
+        {controls.synced.state(draftSessionId)?.conflict ? <>
+          <button type="button" onClick={() => void controls.synced.useLocal(draftSessionId).catch(cause => setError(String(cause)))}>使用本机草稿</button>
+          <button type="button" onClick={() => {
+            void controls.drafts.replaceFromRemote((id, revision) => controls.synced.useRemote(id, revision)).catch(cause => setError(String(cause)));
+          }}>使用云端草稿</button>
+        </> : null}
+      </div> : null}
       <div className="composer-stats">
+        {sessionId !== null ? <span data-testid="draft-sync-state" data-pending={controls.synced.state(draftSessionId)?.pending === true || controls.synced.state(draftSessionId)?.syncedRevision !== controls.drafts.snapshot()?.revision}>
+          {controls.synced.state(draftSessionId)?.pending === false && controls.synced.state(draftSessionId)?.syncedRevision === controls.drafts.snapshot()?.revision ? '草稿已同步' : '草稿已保存在本机，等待云端同步'}
+        </span> : null}
+        {blockedReason !== undefined && (text !== '' || attachmentParts.length > 0) ? <span role="status" data-testid="input-blocked-reason">{blockedReason}</span> : null}
+        {blockedReason?.includes('不一致') ? <button type="button" onClick={() => {
+          const current = controls.drafts.snapshot(); if (current === undefined || current.sessionId !== draftSessionId) return;
+          controls.drafts.update(current.text, { version: 1, parts: [{ type: 'text', text: current.text }, ...current.contentParts.parts.filter(part => part.type !== 'text')] });
+        }}>以当前正文重新准备</button> : null}
         {pending.length > 0 ? <span className="outbox-status">{pending.length} 条待发送</span> : null}
         {catalogHint ? (
           <span className="outbox-status" data-testid="catalog-hint">

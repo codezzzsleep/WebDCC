@@ -77,7 +77,10 @@ describe('A6-6f 可续传上传', () => {
       headers: { cookie: ctx.cookie },
       payload: { name: 'big2.bin', size: payload.byteLength, sha256: digest, mime: 'application/octet-stream' },
     });
-    expect((again.json() as { existingFileId?: string }).existingFileId).toBe(fileId);
+    const aliasId = (again.json() as { existingFileId?: string }).existingFileId!;
+    expect(ctx.store.getFile(aliasId)).toMatchObject({ name: 'big2.bin', sha256: digest });
+    expect(ctx.store.getFile(fileId)).toMatchObject({ name: 'big.bin', sha256: digest });
+    expect(ctx.store.fileStorageUsage().stored).toBe(payload.length);
 
     // Range 请求
     const ranged = await ctx.app.inject({
@@ -95,7 +98,7 @@ describe('A6-6f 可续传上传', () => {
       method: 'POST',
       url: '/api/uploads',
       headers: { cookie: ctx.cookie },
-      payload: { name: 'bad.bin', size: payload.byteLength, sha256: 'deadbeef', mime: 'application/octet-stream' },
+      payload: { name: 'bad.bin', size: payload.byteLength, sha256: '0'.repeat(64), mime: 'application/octet-stream' },
     });
     const { uploadId } = init.json() as { uploadId: string };
     await ctx.app.inject({
