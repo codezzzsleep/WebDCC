@@ -65,6 +65,7 @@ export interface QuestionItem {
   options?: { id: string; label: string; description?: string }[];
   multiSelect?: boolean;
   allowsFreeText?: boolean;
+  isSecret?: boolean;
   toolCallId?: string;
   status?: 'pending' | 'answered' | 'skipped';
   resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';

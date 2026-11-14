@@ -1243,6 +1243,7 @@ export class DshAdapter implements AgentAdapter {
             ...(option['description'] === undefined ? {} : { description: String(option['description']) }),
           })),
           multiSelect: first['multiSelect'] === true,
+          isSecret: first['isSecret'] === true,
           allowsFreeText: true,
         },
       });

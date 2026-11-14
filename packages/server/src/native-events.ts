@@ -39,6 +39,7 @@ export class NativeEventStore {
   private readonly secrets = new Set<string>();
   constructor(private readonly db: Db) {}
   addSecret(value: string | undefined): void { if (value) this.secrets.add(value); }
+  redact(value: unknown): unknown { return redactDiagnosticValue(value, [...this.secrets]); }
   diagnosticValue(value: unknown): unknown { return privateSchema(value) ? { omitted: 'sensitive-native-request' } : redactDiagnosticValue(value, [...this.secrets]); }
   private insert(context: Context, source: Row['source'], direction: 'in' | 'out', channel: string, value: unknown, disposition: string, rawEnvelopeId?: number): number {
     const root = object(value); const native = object(root['native'] ?? root['frame'] ?? value);

@@ -1240,8 +1240,9 @@ export class CodexAdapter implements AgentAdapter {
     if (runtime?.approvals.has(approvalId)) return undefined;
     runtime?.approvals.set(approvalId, { requestId: id, kind });
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
-      const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[]; isOther?: boolean }[];
-      const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, allowsFreeText: question.isOther ?? true, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }));
+      const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[] | null; isOther?: boolean; isSecret?: boolean }[];
+      const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, isSecret: question.isSecret === true,
+        allowsFreeText: question.isSecret === true || question.options == null || question.isOther !== false, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }));
       runtime?.approvals.set(approvalId, { requestId: id, kind, questionIds: questions.map(question => question.id), questions: items });
       for (const question of items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.questionId.slice(approvalId.length + 1)}`, kind: 'question', data: question, native: frame });
       return undefined;

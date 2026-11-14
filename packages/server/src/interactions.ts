@@ -33,7 +33,7 @@ export class InteractionStore {
     const id = kind === 'answer' ? question.questionId : (event.data as EventData['approval.request']).approvalId;
     const groupId = kind === 'answer' ? question.groupId ?? id : id;
     const state = kind === 'answer' && question.status === 'answered' ? 'resolved' : kind === 'answer' && question.status === 'skipped' ? 'cancelled' : question.submission ?? 'pending';
-    const request = kind === 'approve' ? { options: (event.data as EventData['approval.request']).options.map(option => ({ id: option.id })) } : {};
+    const request = kind === 'approve' ? { options: (event.data as EventData['approval.request']).options.map(option => ({ id: option.id })) } : { isSecret: question.isSecret === true };
     this.db.prepare('INSERT OR IGNORE INTO interactions (session_id, kind, id, group_id, state, revision, request) VALUES (?, ?, ?, ?, ?, 1, ?)').run(event.sessionId, kind, id, groupId, state, JSON.stringify(request));
     if (state === 'resolved' || state === 'cancelled') this.db.prepare('UPDATE interactions SET state = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?').run(state, event.sessionId, kind, id);
     else if (question.groupId !== undefined && kind === 'answer') this.db.prepare("UPDATE interactions SET group_id = ? WHERE session_id = ? AND kind = ? AND id = ? AND state IN ('pending', 'failed')").run(groupId, event.sessionId, kind, id);

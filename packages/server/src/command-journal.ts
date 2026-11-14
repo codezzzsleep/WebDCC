@@ -15,6 +15,12 @@ const input = (row: InputRow): QueuedInput => ({ ordinal: row.ordinal, commandId
 export class CommandJournal {
   constructor(private readonly db: Db) {}
 
+  isSensitive(command: Command): boolean {
+    if (command.op !== 'answer') return false;
+    const row = this.db.prepare("SELECT request FROM interactions WHERE session_id = ? AND kind = 'answer' AND id = ?").get(command.sessionId, command.questionId) as { request: string } | undefined;
+    return row !== undefined && (JSON.parse(row.request) as { isSecret?: boolean }).isSecret === true;
+  }
+
   get(commandId: string): CommandRecord | undefined {
     const row = this.db.prepare('SELECT * FROM command_journal WHERE command_id = ?').get(commandId) as Row | undefined;
     return row === undefined ? undefined : { commandId: row.command_id, payloadHash: row.payload_hash, payload: row.payload === null ? null : JSON.parse(row.payload) as Command, op: row.op, sessionId: row.session_id, state: row.state, turnId: row.turn_id, ...(row.result === null ? {} : { result: JSON.parse(row.result) as unknown }), updatedAt: row.updated_at };
@@ -22,8 +28,9 @@ export class CommandJournal {
 
   claim(command: Command): { record: CommandRecord; created: boolean; conflict: boolean } {
     const digest = payloadHash(command);
+    const stored = this.isSensitive(command) && command.op === 'answer' ? { ...command, answer: { omitted: 'sensitive-answer' } } : command;
     const result = this.db.prepare('INSERT OR IGNORE INTO command_journal (command_id, payload_hash, payload, op, session_id, state, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(command.clientCommandId, digest, JSON.stringify(command), command.op, 'sessionId' in command ? command.sessionId : null, 'received', new Date().toISOString());
+      .run(command.clientCommandId, digest, JSON.stringify(stored), command.op, 'sessionId' in command ? command.sessionId : null, 'received', new Date().toISOString());
     const record = this.get(command.clientCommandId);
     if (record === undefined) throw new Error('Command claim did not persist');
     return { record, created: result.changes === 1, conflict: record.payloadHash !== null && record.payloadHash !== digest };

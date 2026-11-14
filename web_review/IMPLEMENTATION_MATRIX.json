@@ -505,7 +505,9 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -540,7 +542,9 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1196,7 +1200,9 @@
           "packages/server/test/interaction-recorder.spec.ts",
           "packages/server/test/model-recording.spec.ts",
           "packages/server/test/native-http-recorder.spec.ts",
-          "packages/server/test/fixtures/native-recorder.ts"
+          "packages/server/test/fixtures/native-recorder.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts"
         ],
         "actualFiles": [
           "packages/server/src/config.ts",
@@ -1217,7 +1223,9 @@
           "packages/server/test/interaction-recorder.spec.ts",
           "packages/server/test/model-recording.spec.ts",
           "packages/server/test/native-http-recorder.spec.ts",
-          "packages/server/test/fixtures/native-recorder.ts"
+          "packages/server/test/fixtures/native-recorder.ts",
+          "packages/server/test/sensitive-answers.spec.ts",
+          "browser-tests/sensitive-answers.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",

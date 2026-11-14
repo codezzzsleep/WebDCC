@@ -31,6 +31,7 @@ export interface CachedCommand {
   command: unknown;
   status: 'pending' | 'sent' | 'failed' | 'uncertain';
   createdAt: number;
+  sensitive?: true;
 }
 
 interface WebdccSchema extends DBSchema {

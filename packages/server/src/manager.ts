@@ -16,7 +16,7 @@ import type {
   NativeObservation,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
-import { initialPermissions, nativeAccessMode, observePermissions, ulid } from '@webdcc/protocol';
+import { initialPermissions, nativeAccessMode, normalizeQuestionAnswer, observePermissions, ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
@@ -526,7 +526,16 @@ export class SessionManager {
     this.touchIdle(runtime);
   }
 
+  protectAnswer(sessionId: string, questionId: string, answer: unknown): void {
+    const row = this.store.interactions.get(sessionId, 'answer', questionId);
+    if (row === undefined || (JSON.parse(row.request) as { isSecret?: boolean }).isSecret !== true) return;
+    for (const value of normalizeQuestionAnswer(answer).values) {
+      this.store.nativeEvents.addSecret(value); this.options.recorder?.addSecret(value);
+    }
+  }
+
   async answer(sessionId: string, questionId: string, answer: unknown, commandId = ulid()): Promise<AnswerSubmission> {
+    this.protectAnswer(sessionId, questionId, answer);
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);

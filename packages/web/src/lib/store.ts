@@ -1,5 +1,5 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState } from '@webdcc/protocol';
+import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState } from '@webdcc/protocol';
 import { reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
@@ -77,6 +77,7 @@ export class AppStore {
   private cursors = new Map<string, number>();
   private readonly interests = new Set<string>();
   private readonly subscribed = new Set<string>();
+  private readonly sensitiveCommands = new Set<string>();
   private version = 0;
   private draftTimers = new Map<string, NodeJS.Timeout>();
 
@@ -288,7 +289,7 @@ export class AppStore {
           entry.status = message.result.ok ? 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed';
           this.outbox.set(message.clientCommandId, entry);
           if (message.result.ok) { this.outbox.delete(message.clientCommandId); void cache.deleteOutbox(message.clientCommandId); }
-          else void cache.putOutbox({ clientCommandId: message.clientCommandId, command: entry.command, status: entry.status === 'uncertain' ? 'uncertain' : 'failed', createdAt: Date.now() });
+          else void cache.putOutbox({ clientCommandId: message.clientCommandId, command: this.cachedCommand(entry.command), status: entry.status === 'uncertain' ? 'uncertain' : 'failed', createdAt: Date.now(), ...(this.sensitiveCommands.has(message.clientCommandId) ? { sensitive: true } : {}) });
         }
         for (const [sessionId, list] of this.pending) {
           const match = list.find((item) => item.clientCommandId === message.clientCommandId);
@@ -575,13 +576,18 @@ ${text}`;
 
   // ---------- 命令 ----------
 
-  private enqueue(command: Command): void {
+  private cachedCommand(command: Command): Command {
+    return command.op === 'answer' && this.sensitiveCommands.has(command.clientCommandId) ? { ...command, answer: { omitted: 'sensitive-answer' } } : command;
+  }
+
+  private enqueue(command: Command, sensitive = false): void {
+    if (sensitive) this.sensitiveCommands.add(command.clientCommandId);
     this.outbox.set(command.clientCommandId, { command, status: 'pending' });
     if (command.op === 'approve' || command.op === 'answer') {
       this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: 'pending' });
       this.notify();
     }
-    void cache.putOutbox({ clientCommandId: command.clientCommandId, command, status: 'pending', createdAt: Date.now() }).then(() => this.connection.sendCommand(command)).catch(() => {
+    void cache.putOutbox({ clientCommandId: command.clientCommandId, command: this.cachedCommand(command), status: 'pending', createdAt: Date.now(), ...(sensitive ? { sensitive: true } : {}) }).then(() => this.connection.sendCommand(command)).catch(() => {
       const entry = this.outbox.get(command.clientCommandId);
       if (entry !== undefined) entry.status = 'failed';
       if (command.op === 'approve' || command.op === 'answer') {
@@ -603,9 +609,10 @@ ${text}`;
   async restoreOutbox(): Promise<void> {
     const entries = await cache.getOutbox().catch(() => []);
     for (const entry of entries) {
-      this.outbox.set(entry.clientCommandId, { command: entry.command as Command, status: entry.status });
+      const status = entry.sensitive && entry.status !== 'uncertain' ? 'failed' : entry.status;
+      this.outbox.set(entry.clientCommandId, { command: entry.command as Command, status });
       const command = entry.command as Command;
-      if (command.op === 'approve' || command.op === 'answer') this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: entry.status === 'uncertain' ? 'uncertain' : entry.status === 'failed' ? 'failed' : 'pending' });
+      if (command.op === 'approve' || command.op === 'answer') this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: status === 'uncertain' ? 'uncertain' : status === 'failed' ? 'failed' : 'pending', ...(entry.sensitive && status === 'failed' ? { error: '敏感回答未保留，请重新输入；已送达的回应以原生状态为准。' } : {}) });
       if (command.op === 'send') {
         const list = this.pending.get(command.sessionId) ?? [];
         list.push({ clientCommandId: command.clientCommandId, text: command.text, at: new Date(entry.createdAt).toISOString(), status: entry.status });
@@ -642,7 +649,8 @@ ${text}`;
 
   answer(sessionId: string, questionId: string, answer: unknown): void {
     if (['pending', 'sent', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'answer', questionId)?.status ?? '')) return;
-    this.enqueue({ op: 'answer', clientCommandId: ulid(), sessionId, questionId, answer });
+    const question = this.getEvents(sessionId).findLast(event => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId);
+    this.enqueue({ op: 'answer', clientCommandId: ulid(), sessionId, questionId, answer }, (question?.data as EventData['question'] | undefined)?.isSecret === true);
   }
 
   interrupt(sessionId: string): void {

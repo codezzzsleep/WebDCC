@@ -696,8 +696,9 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         ))}
       </div>
       {data.allowsFreeText !== false ? (
-        <input className="text-input" placeholder="其他（可选）" aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
+        <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
       ) : null}
+      {data.isSecret ? <p>敏感回答只在本页面保留，刷新后需要重新输入。</p> : null}
       <InteractionStatus submission={submission} />
       <div className="approval-actions">
         <button
@@ -706,6 +707,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
           disabled={busy || selected.length === 0 && text.trim() === ''}
           onClick={() => {
             store.answer(event.sessionId, data.questionId, { selected, custom: text });
+            if (data.isSecret) setText('');
           }}
         >
           提交

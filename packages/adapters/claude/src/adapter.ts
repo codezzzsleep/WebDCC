@@ -666,6 +666,7 @@ export class ClaudeAdapter implements AgentAdapter {
             ...(option['description'] === undefined ? {} : { description: String(option['description']) }),
           })),
           multiSelect: question['multiSelect'] === true,
+          isSecret: question['isSecret'] === true,
           allowsFreeText: true,
           ...(options.toolUseID === undefined ? {} : { toolCallId: options.toolUseID }),
         },
