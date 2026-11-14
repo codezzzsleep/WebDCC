@@ -3,9 +3,12 @@
  * in implementation; read-only reconciliation must make zero model calls. */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { once } from 'node:events';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { arch, platform } from 'node:os';
 import { JsonRpcStdio } from '../packages/adapters/codex/src/rpc.js';
 import { CodexAdapter, PINNED_VERSION } from '../packages/adapters/codex/src/adapter.js';
 import { openDb } from '../packages/server/src/db.js';
@@ -30,8 +33,12 @@ const overrides = ['model_provider=wdcc_mock', 'model="mock-responses-1"', 'mode
 const env = { ...isolated.env, WDCC_MOCK_KEY: 'mock-key-not-a-secret' };
 const file = join(isolated.dirs.data, 'recovery.sqlite');
 let db = openDb(file); let manager: SessionManager | undefined; let rpc: JsonRpcStdio | undefined;
+const binaryHash = createHash('sha256'); for await (const chunk of createReadStream(command)) binaryHash.update(chunk);
 const evidence: Record<string, unknown> = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-  sourceFingerprint: sourceFingerprint(), kind: 'pinned-binary-with-scripted-model', baseline: PINNED_VERSION, paidModel: false, startedAt: new Date().toISOString(), passed: false };
+  sourceFingerprint: sourceFingerprint(), kind: 'pinned-binary-with-scripted-model', baseline: PINNED_VERSION,
+  nativeBinarySha256: binaryHash.digest('hex'), environment: { os: platform(), arch: arch(), node: process.version },
+  configurationFingerprint: createHash('sha256').update(JSON.stringify({ overrides, expected })).digest('hex'),
+  paidModel: false, startedAt: new Date().toISOString(), passed: false };
 try {
   let store = new Store(db); const workspace = store.createWorkspace('native recovery', workspacePath);
   const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });

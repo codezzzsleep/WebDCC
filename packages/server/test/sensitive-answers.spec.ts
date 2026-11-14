@@ -30,3 +30,22 @@ it('NP-06/14 sensitive answers reach native unchanged, leave only a durable rece
     expect(JSON.stringify(ctx.store.nativeEvents.get(receipt))).not.toContain(custom);
   } finally { await ctx.close(); }
 });
+
+it('NP-06 a secret equal to a lifecycle enum cannot corrupt native confirmation or request identity', async () => {
+  const ctx = await createTestApp();
+  try {
+    const workspace = ctx.store.createWorkspace('short secret', ctx.dataDir); const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+    ctx.store.updateSession(session.id, { nativeId: 'native' });
+    const native = CodexAdapter.replay(session.id, 'native'); native.adapter.resume = async () => undefined; native.adapter.dispose = async () => undefined;
+    native.adapter.send = async () => { native.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 'q', method: 'item/tool/requestUserInput', params: { questions: [{ id: 'secret', question: 'Enter secret', isSecret: true }] } } }); };
+    ctx.manager.registerAdapter(native.adapter); await ctx.manager.send(session.id, { text: 'ask' });
+    const question = ctx.store.allEvents(session.id).find(event => event.kind === 'question')!.data as EventData['question'];
+    const response = await ctx.app.inject({ method: 'POST', url: '/api/commands', headers: { cookie: ctx.cookie }, payload: { command: { op: 'answer', clientCommandId: 'enum-secret', sessionId: session.id, questionId: question.questionId, answer: 'answered' } } });
+    expect(response.json()).toMatchObject({ ok: true });
+    native.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: 'native', requestId: 'q' } } });
+    expect(ctx.store.allEvents(session.id).findLast(event => event.kind === 'question')?.data).toMatchObject({ status: 'answered', questionId: question.questionId, groupId: question.groupId });
+    expect(ctx.store.journal.get('enum-secret')?.state).toBe('completed');
+    const goal = ctx.store.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'goal', kind: 'goal', data: { objective: 'answered', status: 'paused', goalId: 'native:1' } });
+    expect(goal.data).toMatchObject({ objective: '********', status: 'paused', goalId: 'native:1' });
+  } finally { await ctx.close(); }
+});

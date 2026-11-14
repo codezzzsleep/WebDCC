@@ -456,7 +456,24 @@ export class Store {
 
   /** seq 分配与事件写入在同一事务（SPEC 11.2） */
   appendEvent(input: AppendEventInput): StoredEvent {
-    input = { ...input, data: this.nativeEvents.redact(input.data) as StoredEvent['data'],
+    // Redact content, while retaining IDs, lifecycle enums and form contracts.
+    // A secret such as "answered" must not turn a confirmed status into stars.
+    const data = input.data as unknown as Record<string, unknown>;
+    const contentFields: Partial<Record<EventKind, string[]>> = {
+      'user.message': ['text'], 'assistant.message': ['text'], reasoning: ['text'], error: ['message'],
+      command: ['command', 'label', 'outputTail'], 'file.read': ['label'],
+      'tool.call': ['label', 'input', 'output'], goal: ['objective'], notice: ['text'],
+      question: ['prompt', 'header'], 'approval.request': ['title', 'detail', 'reason', 'planMarkdown'],
+    };
+    const sanitized = { ...data };
+    for (const field of contentFields[input.kind] ?? []) if (field in data) sanitized[field] = this.nativeEvents.redact(data[field]);
+    if ((input.kind === 'file.change' || input.kind === 'turn.diff') && Array.isArray(data['changes'])) sanitized['changes'] = data['changes'].map((change: Record<string, unknown>) => ({
+      ...change, ...('diff' in change ? { diff: this.nativeEvents.redact(change['diff']) } : {}), ...('note' in change ? { note: this.nativeEvents.redact(change['note']) } : {}),
+    }));
+    if (input.kind === 'question' && Array.isArray(data['options'])) sanitized['options'] = data['options'].map((option: Record<string, unknown>) => ({ ...option,
+      label: this.nativeEvents.redact(option['label']), ...('description' in option ? { description: this.nativeEvents.redact(option['description']) } : {}),
+    }));
+    input = { ...input, data: sanitized as unknown as StoredEvent['data'],
       ...(input.native === undefined ? {} : { native: this.nativeEvents.policyValue(input.sessionId, input.native) }) };
     const at = input.at ?? new Date().toISOString();
     const tx = this.db.transaction((event: AppendEventInput): StoredEvent => {

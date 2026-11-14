@@ -2,7 +2,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { arch, platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from '@playwright/test';
 import { CodexAdapter, PINNED_VERSION } from '../packages/adapters/codex/src/adapter.js';
@@ -46,8 +48,12 @@ const modelRecord = join(isolated.dirs.root, 'model.jsonl');
 const model = await startResponsesMock({ plan: [{ tool: { kind: 'other', name: 'ask_details', namespace: 'mcp__webdcc_fixture', input: {} } }, { text: expectedText }], recordPath: modelRecord, log: () => undefined });
 const overrides = ['model_provider=wdcc_mock', 'model="mock-responses-1"', 'model_providers.wdcc_mock.name="WDCC mock"', `model_providers.wdcc_mock.base_url="${model.url}/v1"`, 'model_providers.wdcc_mock.wire_api="responses"', 'model_providers.wdcc_mock.env_key="WDCC_MOCK_KEY"'];
 const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+const binaryHash = createHash('sha256'); for await (const chunk of createReadStream(binary)) binaryHash.update(chunk);
 const evidence: Record<string, unknown> = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), sourceFingerprint: sourceFingerprint(),
-  kind: 'pinned-native-mcp-with-scripted-model-and-real-browser', baseline: PINNED_VERSION, paidModel: false, startedAt: new Date().toISOString(), passed: false };
+  kind: 'pinned-native-mcp-with-scripted-model-and-real-browser', baseline: PINNED_VERSION, nativeBinarySha256: binaryHash.digest('hex'),
+  schemaFingerprint: ctx.store.nativeEvents.schemaHash, environment: { os: platform(), arch: arch(), node: process.version },
+  configurationFingerprint: createHash('sha256').update(await readFile(join(isolated.dirs.CODEX_HOME, 'config.toml'))).update(await readFile(fixture)).digest('hex'),
+  paidModel: false, startedAt: new Date().toISOString(), passed: false };
 try {
   const adapter = new CodexAdapter({ command: binary, configOverrides: overrides, env: { ...isolated.env, WDCC_MOCK_KEY: 'mock-fixture-key' } });
   assert.equal((await adapter.probe()).version, PINNED_VERSION);

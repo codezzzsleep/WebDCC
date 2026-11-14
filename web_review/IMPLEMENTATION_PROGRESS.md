@@ -198,3 +198,10 @@
 - 原生声明secret/writeOnly/password后，该会话的原生正文持续受限，保留信封身份/方向/时间/覆盖原因，避免把秘密拆成多个不匹配全文的碎片落库；政策跨Store重建保留，普通会话不受影响。事件native副本也遵守政策。
 - SQLite v9防止不理解此政策和命令确认语义的旧binary打开新库；v7旧URL、events、queue、owner迁移测试通过。19项相关合同/故障/敏感回归、typecheck/lint通过。
 - 仍需完整SDK/Host原生确认、秘密在重启后无法识别的语义回显与模型HTTP诊断跨进程政策，以及全面备份恢复。NP-03/06/14/47均保持部分完成，不把本批保护扩大为全部原生功能完成。
+
+## 接续复核：内容脱敏与证据身份（2026-11-14）
+
+- 补复现：敏感回答若恰好等于answered等生命周期枚举，整对象脱敏会把已确认状态变成星号，导致问答不能收敛。现在仅脱敏内容字段，保留request/group/item身份、status、权限及schema合同；新增原生确认/journal状态回归。
+- diff/note、问答标签与描述仍按内容脱敏，文件路径和操作身份不重写。
+- 原生MCP与崩溃恢复报告新增实际binary SHA256、OS/arch/Node、schema/config指纹，与commit/source指纹绑定；不只记一个版本字符串。
+- 09116e3完整源码六门禁通过，原生MCP与SIGKILL恢复两个隔离验证通过；历史L1仍为22个golden差异、16个NOT_TRIGGERED，8/33场景通过，未改golden。当前新增修订需重新验证后发布；完整48项未验收完成。
