@@ -75,6 +75,8 @@ export class AppStore {
   private derived = new Map<string, { version: number; turns: TurnModel[] }>();
   /** 每个会话的订阅游标：新浏览器打开大会话时从服务端最新 seq 开始，不整段重拉 */
   private cursors = new Map<string, number>();
+  private readonly interests = new Set<string>();
+  private readonly subscribed = new Set<string>();
   private version = 0;
   private draftTimers = new Map<string, NodeJS.Timeout>();
 
@@ -162,7 +164,7 @@ export class AppStore {
   }
 
   private subscriptions(): { sessionId: string; afterSeq: number }[] {
-    return [...this.sessions.keys()].map((sessionId) => ({
+    return [...this.subscribed].map((sessionId) => ({
       sessionId,
       afterSeq: this.cursors.get(sessionId) ?? this.contiguousSeq(sessionId, 0),
     }));
@@ -219,7 +221,9 @@ export class AppStore {
         };
         this.sessions.set(message.sessionId, next);
         void cache.putSession(next as CachedSession);
-        if (patch['created'] === true) this.connection.subscribe(message.sessionId, 0);
+        if (patch['created'] === true && this.subscribed.has(message.sessionId)) this.connection.subscribe(message.sessionId, this.cursors.get(message.sessionId) ?? 0);
+        if (existing !== undefined && !this.subscribed.has(message.sessionId) &&
+          (next.status === 'waiting' && existing.status !== 'waiting' || next.status === 'idle' && (existing.status === 'running' || existing.status === 'waiting'))) this.bumpUnread(message.sessionId, next.title ?? '会话');
         this.notify();
         break;
       }
@@ -306,6 +310,9 @@ export class AppStore {
   setCurrentSession(sessionId: string | null, dockSessionId?: string): void {
     this.currentSessionId = sessionId;
     this.visibleSessionIds = new Set([sessionId, dockSessionId].filter((id): id is string => typeof id === 'string'));
+    for (const id of this.interests) if (!this.visibleSessionIds.has(id)) {
+      this.interests.delete(id); this.subscribed.delete(id); this.connection.unsubscribe(id);
+    }
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     let changed = false;
     for (const id of this.visibleSessionIds) changed = this.unread.delete(id) || changed;
@@ -371,6 +378,7 @@ ${text}`;
   trace: Record<string, number> = {};
 
   async ensureSession(sessionId: string): Promise<void> {
+    this.interests.add(sessionId);
     void this.refreshQueue(sessionId);
     const t0 = performance.now();
     this.trace['ensureStart'] = t0;
@@ -381,38 +389,48 @@ ${text}`;
       const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
       for (const event of cached) if (!map.has(event.seq)) map.set(event.seq, event);
       this.events.set(sessionId, map);
+      const coverage = await cache.getMeta<{ from: number; to: number }>(`coveredWindow:${sessionId}`).catch(() => undefined);
+      if (coverage !== undefined && Number.isSafeInteger(coverage.from) && Number.isSafeInteger(coverage.to) && coverage.from > 0 && coverage.to >= coverage.from &&
+        this.contiguousSeq(sessionId, coverage.from - 1) >= coverage.to) this.cursors.set(sessionId, coverage.to);
     }
     performance.mark('wdcc:ensure-start');
     let serverLastSeq: number | undefined;
-    if (this.sessions.has(sessionId) === false || (this.events.get(sessionId)?.size ?? 0) === 0) {
-      try {
-        const detail = await api.session(sessionId);
-        this.sessions.set(sessionId, detail as SessionMeta);
-        serverLastSeq = detail.lastSeq;
-        void cache.putSession(detail as CachedSession);
-      } catch {
-        // 会话可能已删除；保持现状
-      }
+    // Read the current end even with a partial cache. Joining from zero while
+    // showing cached state otherwise replays every old goal/tool update first.
+    const beforeDetail = this.sessions.get(sessionId);
+    try {
+      const detail = await api.session(sessionId);
+      const live = this.sessions.get(sessionId);
+      const next = live !== beforeDetail && live !== undefined ? { ...detail, ...live } : detail;
+      this.sessions.set(sessionId, next as SessionMeta);
+      serverLastSeq = detail.lastSeq;
+      void cache.putSession(next as CachedSession);
+    } catch {
+      // 会话可能已删除；保持现状
     }
     performance.mark('wdcc:detail-done');
     // 没有缓存时只取最近 200 条，并从服务端最新的 seq 开始订阅：不整段重拉（SPEC 7.5 / A5）
-    if ((this.events.get(sessionId)?.size ?? 0) === 0 && serverLastSeq !== undefined && serverLastSeq > 0) {
+    if (serverLastSeq !== undefined && serverLastSeq > 0 && (serverLastSeq > this.maxSeq(sessionId) ||
+      this.contiguousSeq(sessionId, this.cursors.get(sessionId) ?? 0) < serverLastSeq)) {
+      const priorCursor = this.cursors.get(sessionId) ?? 0;
       const page = await api.events(sessionId, { before: serverLastSeq + 1, limit: 200 }).catch(() => undefined);
+      const completeRecentPage = page !== undefined && page.events.length > 0 && page.events.every((event, index) => event.seq === page.events[0]!.seq + index) && page.events.at(-1)?.seq === serverLastSeq;
+      let persisted = false;
       if (page !== undefined) {
         const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
         for (const event of page.events) map.set(event.seq, event);
         this.events.set(sessionId, map);
-        void cache.putEvents(page.events);
+        persisted = await cache.putEvents(page.events, completeRecentPage ? { sessionId, from: page.events[0]!.seq, to: serverLastSeq } : undefined).then(() => true, () => false);
       }
-      const completeRecentPage = page !== undefined && page.events.length > 0 && page.events[page.events.length - 1]?.seq === serverLastSeq;
-      const cursor = completeRecentPage ? serverLastSeq : this.contiguousSeq(sessionId, this.cursors.get(sessionId) ?? 0);
+      const cursor = completeRecentPage && persisted ? this.contiguousSeq(sessionId, serverLastSeq)
+        : page !== undefined && !persisted ? priorCursor : this.contiguousSeq(sessionId, priorCursor);
       this.cursors.set(sessionId, cursor);
-      this.connection.subscribe(sessionId, cursor);
+      if (this.interests.has(sessionId)) { this.subscribed.add(sessionId); this.connection.subscribe(sessionId, cursor); }
       performance.mark('wdcc:events-done');
     } else {
       const cursor = this.contiguousSeq(sessionId, this.cursors.get(sessionId) ?? 0);
       this.cursors.set(sessionId, cursor);
-      this.connection.subscribe(sessionId, cursor);
+      if (this.interests.has(sessionId)) { this.subscribed.add(sessionId); this.connection.subscribe(sessionId, cursor); }
     }
     this.trace['ensureEnd'] = performance.now();
     this.notify();

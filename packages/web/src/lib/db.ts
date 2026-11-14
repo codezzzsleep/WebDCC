@@ -58,11 +58,12 @@ function db(): Promise<IDBPDatabase<WebdccSchema>> {
 }
 
 export const cache = {
-  async putEvents(events: StoredEvent[]): Promise<void> {
+  async putEvents(events: StoredEvent[], coverage?: { sessionId: string; from: number; to: number }): Promise<void> {
     if (events.length === 0) return;
     const database = await db();
-    const tx = database.transaction('events', 'readwrite');
-    for (const event of events) void tx.store.put(event);
+    const tx = database.transaction(['events', 'meta'], 'readwrite');
+    for (const event of events) void tx.objectStore('events').put(event);
+    if (coverage !== undefined) void tx.objectStore('meta').put(coverage, `coveredWindow:${coverage.sessionId}`);
     await tx.done;
   },
 

@@ -393,7 +393,8 @@
           "packages/server/src/rest.ts",
           "packages/web/src/lib/api.ts",
           "packages/web/src/App.tsx",
-          "packages/web/src/components/Sidebar.tsx"
+          "packages/web/src/components/Sidebar.tsx",
+          "browser-tests/goals.spec.ts"
         ],
         "actualFiles": [
           "packages/web/src/lib/store.ts",
@@ -415,7 +416,8 @@
           "packages/server/src/rest.ts",
           "packages/web/src/lib/api.ts",
           "packages/web/src/App.tsx",
-          "packages/web/src/components/Sidebar.tsx"
+          "packages/web/src/components/Sidebar.tsx",
+          "browser-tests/goals.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -2792,10 +2794,20 @@
         "F21"
       ],
       "execution": {
-        "implementation": "planned",
-        "verification": "not-run",
-        "plannedFiles": [],
-        "actualFiles": [],
+        "implementation": "in-progress",
+        "verification": "partial-local",
+        "plannedFiles": [
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store-sync.spec.ts",
+          "browser-tests/goals.spec.ts"
+        ],
+        "actualFiles": [
+          "packages/web/src/lib/store.ts",
+          "packages/web/src/lib/db.ts",
+          "packages/web/src/lib/store-sync.spec.ts",
+          "browser-tests/goals.spec.ts"
+        ],
         "evidence": [],
         "remainingAcceptance": [
           "100会话/总10万事件时，打开首页不拉全库事件；可见历史分页不超过声明窗口。",

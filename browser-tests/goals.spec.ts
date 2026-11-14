@@ -27,6 +27,16 @@ it('NP-23 goal statistics coalesce in the actual timeline; orphan pause and clea
     const address = ctx.app.server.address(); if (!address || typeof address === 'string') throw new Error('missing listener');
     const base = `http://127.0.0.1:${address.port}`;
     browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    const diagnostics: unknown[] = [];
+    page.on('pageerror', error => diagnostics.push({ pageerror: error.message }));
+    page.on('websocket', socket => {
+      socket.on('framesent', event => diagnostics.push({ sent: JSON.parse(event.payload.toString()) }));
+      socket.on('framereceived', event => {
+        const frame = JSON.parse(event.payload.toString()) as { op: string; event?: { seq: number; data: unknown } };
+        if (frame.op !== 'event' || (frame.event?.seq ?? 0) > 320) diagnostics.push({ received: frame });
+      });
+      socket.on('close', () => diagnostics.push({ socket: 'closed' }));
+    });
     await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
     await page.goto(`${base}/s/${session.id}`);
     await expect.poll(() => page.getByTestId('goal-panel').textContent()).toContain('目标进行中');
@@ -35,7 +45,8 @@ it('NP-23 goal statistics coalesce in the actual timeline; orphan pause and clea
     emitGoal('paused');
     await expect.poll(() => page.getByTestId('goal-panel').textContent()).toContain('目标已暂停');
     await page.reload();
-    await expect.poll(() => page.getByTestId('goal-panel').textContent()).toContain('目标已暂停');
+    try { await expect.poll(() => page.getByTestId('goal-panel').textContent()).toContain('目标已暂停'); }
+    catch (error) { process.stdout.write(`${JSON.stringify({ diagnostics, serverSeq: ctx.store.lastSeq(session.id), storedPause: ctx.store.allEvents(session.id).at(-1) })}\n`); throw error; }
     // A session-scoped clear must hide an earlier turn's active goal.
     const frame = { i: ++index, t: index, dir: 'in' as const, ch: 'rpc', frame: { method: 'thread/goal/cleared', params: { threadId: session.nativeId } } };
     const receipt = opts.nativeEvents!.record(frame);
