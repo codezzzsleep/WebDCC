@@ -57,6 +57,10 @@ async function boot() {
   server = await start(serverConfig, { webDist: join(release, 'packages/web/dist') });
   base = new URL(server.url).origin;
 }
+async function stop() {
+  await server?.manager.adapter('dsh')?.shutdown();
+  await server?.close(); server = undefined;
+}
 const json = async path => {
   const response = await page.request.get(base + path); assert(response.ok(), path);
   return response.json();
@@ -71,11 +75,18 @@ for (const line of Buffer.concat(source.requests.at(-1).response.chunks.map(chun
 assert(answer.includes(source.fixture.expectedText), 'No independently recorded final native model proof');
 report.finalNativeText = answer;
 async function openSession() {
+  const adapter = server.manager.adapter(source.agent);
+  assert(adapter, 'Actual target Agent adapter is absent');
+  const probe = await adapter.probe();
+  assert.equal(probe.installed, true, 'Actual native Agent is unavailable');
+  assert.equal(probe.version, source.nativeVersions[source.agent].version, 'Native version differs from capture');
+  report.actualNativeProbe = { installed: probe.installed, version: probe.version };
   await page.goto(base + '/?token=' + encodeURIComponent(serverConfig.token));
   const meta = await json('/api/meta');
   assert.equal(meta.commit, expectedCommit, 'Actual server commit mismatch');
   assert.equal(meta.build.sourceFingerprint, manifest.sourceFingerprint, 'Actual server source mismatch');
   report.actualNativeVersions = Object.fromEntries(Object.entries(meta.agents).map(([agent, value]) => [agent, value.version]));
+  assert.equal(report.actualNativeVersions[source.agent], probe.version, 'Actual Agent metadata is missing or stale');
   await page.goto(base + '/s/' + source.sessionId);
   await page.getByTestId('composer-input').waitFor();
   await page.getByText(answer, { exact: false }).first().waitFor();
@@ -97,7 +108,7 @@ try {
   await page.setViewportSize({ width: 420, height: 900 });
   await page.screenshot({ path: join(evidenceRoot, 'cached-recovery-mobile.png'), fullPage: true });
   report.checks.mobile = true;
-  await server.close(); server = undefined; await boot(); await openSession();
+  await stop(); await boot(); await openSession();
   const after = await json('/api/sessions/' + source.sessionId + '/trace');
   assert.equal(after.modelRequests, before.modelRequests, 'Recovery admitted an unexpected model request');
   assert.equal(await page.getByText(answer, { exact: false }).count(), 1, 'Final answer was duplicated');
@@ -111,7 +122,7 @@ try {
   assert.equal(report.errors.length, 0);
 } catch (error) { report.status = 'failed'; report.error = error instanceof Error ? error.stack : String(error); process.exitCode = 1; }
 finally {
-  await browser?.close(); await server?.close(); report.finishedAt = new Date().toISOString();
+  await browser?.close(); await stop(); report.finishedAt = new Date().toISOString();
   await save(); assert.equal(sha(await readFile(sourceFile)), sha(sourceBytes), 'Original failed/live report changed');
   process.stdout.write(JSON.stringify({ agent: source.agent, status: report.status, checks: report.checks,
     additionalModelRequests: report.additionalModelRequests, error: report.error, report: out })+'\n');
