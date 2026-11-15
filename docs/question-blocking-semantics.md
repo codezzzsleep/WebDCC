@@ -36,6 +36,8 @@ Claude 的 `AskUserQuestion` 按原题文本回填答案，多选为原生逗号
 
 `verify-native-codex-async.ts` 可单独执行异步场景。它使用原生 0.169.0 的实际 gpt-6.1-sol 目录，不替换目录、不注入原生事件、不替换 adapter；Responses fixture 按真正的 `functions.request_user_input_async` 调用格式发送直接函数调用。`functions.exec` 的嵌套工具、命名空间直接函数及旧同步工具分开选择；异步工具不生成无效的 `tools.request_user_input_async` 脚本。每个成功或失败场景都保存原生帧、模型请求、Web 事件及浏览器动作，报告含版本、源码/协议/配置指纹和预期清单。
 
+沿用原生工作方式时，app-server 的 `collaborationMode` 观测可能为空，页面仍保留“待确认”。异步验收从原生返回的线程 rollout 路径读取对应 `turnId` 的 `turn_context.collaboration_mode.mode`，要求实际为 `default`，并把该上下文保留在证据中；不会用空的页面观测推断模式，也不会为了通过测试修改产品中的实际状态。
+
 MCP 独立使用 `verify-native-elicitation.ts`；同步工具开关、异步模式和 MCP 不能互相代替。上述场景也不等于 NP-06 的完整 secret、双原生客户端和所有断线/unknown 故障验收，不能关闭未覆盖范围或证明付费 Provider 的模型行为。实现、场景实测和部署分别记录。
 
 刷新时缓存卡片可以先出现；显示缓存并不证明它仍可回答。问题和审批的提交控件、耐久答复的发件箱重放都等待会话回放及该交互状态完成核对。Hub 的 `snapshot.throughSeq` 记录此次实际回放的事件边界，不允许客户端据此跳过未读取的事件。重连会撤销此前的同步证明；最近事件窗口已经同步，也不能证明更旧的缓存问题在中间缺口内没有结束。
