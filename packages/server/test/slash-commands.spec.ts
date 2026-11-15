@@ -47,6 +47,19 @@ it('pre-creation discovery preserves failure and empty reasons without using ses
   } finally { await ctx.close(); }
 });
 
+it('pre-creation metadata explains a baseline preview and keeps it out of the session-bound catalog', async () => {
+  const ctx = await createTestApp();
+  try {
+    const adapter: AgentAdapter = new FakeAdapter({ id: 'dsh' });
+    adapter.previewSlashCommands = async () => ({ commands: [{ name: '/goal', source: 'native baseline' }], reason: '实际会话目录将在创建后核对' });
+    adapter.slashCommands = async () => [{ name: '/project-only', source: 'actual scoped directory' }];
+    ctx.manager.registerAdapter(adapter);
+    const preview = await ctx.app.inject({ url: '/api/agents/dsh/slash-commands', headers: { cookie: ctx.cookie } });
+    expect(preview.json()).toMatchObject({ status: 'ready', reason: '实际会话目录将在创建后核对', commands: [{ name: '/goal' }] });
+    expect(ctx.store.listSessions()).toEqual([]);
+  } finally { await ctx.close(); }
+});
+
 async function fixture() {
   const ctx = await createTestApp(); const workspace = ctx.store.createWorkspace('slash', ctx.dataDir);
   const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });

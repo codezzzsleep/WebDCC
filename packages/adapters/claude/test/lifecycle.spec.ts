@@ -28,6 +28,27 @@ function fakeQuery(onClose?: () => void) {
 }
 afterEach(() => mocks.query.mockReset());
 
+it('command preview keeps the requested project scope, disables persistence/hooks and closes its empty-input query', async () => {
+  const adapter = new ClaudeAdapter();
+  vi.spyOn(adapter, 'probe').mockResolvedValue({ installed: true, pinnedVersion: '0.3.322', auth: 'unknown', compatible: true });
+  const q = { ...fakeQuery(), supportedCommands: vi.fn(async () => [{ name: 'project-preview', aliases: ['pp'], description: 'project-specific command' }]) };
+  let options!: Options, input!: AsyncIterable<unknown>;
+  mocks.query.mockImplementation((args: { options: Options; prompt: AsyncIterable<unknown> }) => { options = args.options; input = args.prompt; return q as unknown as Query; });
+  const create = vi.spyOn(adapter, 'create');
+  const preview = await adapter.previewSlashCommands('/tmp/requested-project');
+  expect(preview.commands.find(command => command.name === '/project-preview')).toMatchObject({ source: 'Claude 项目/插件指令', route: 'native-input', aliases: ['/pp'] });
+  expect(preview.complete).toBe(false);
+  expect(options.cwd).toBe('/tmp/requested-project');
+  expect(options.persistSession).toBe(false);
+  expect(options.settings).toMatchObject({ disableAllHooks: true });
+  expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' });
+  expect(create).not.toHaveBeenCalled(); expect(q.close).toHaveBeenCalledOnce();
+  expect(await input[Symbol.asyncIterator]().next()).toMatchObject({ done: true });
+  q.supportedCommands.mockRejectedValueOnce(new Error('catalog unavailable'));
+  await expect(adapter.previewSlashCommands('/tmp/requested-project')).rejects.toThrow('catalog unavailable');
+  expect(q.close).toHaveBeenCalledTimes(2);
+});
+
 it('NP-04/07 closes the old query before model replacement and preserves confirmed permission and effort settings', async () => {
   const calls: string[] = [];
   const queries: ReturnType<typeof fakeQuery>[] = [];

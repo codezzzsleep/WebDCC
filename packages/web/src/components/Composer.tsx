@@ -329,16 +329,16 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     const expectedTurnId = intent === 'steer' ? store.getTurns(sessionId ?? '').findLast(turn => ['starting', 'running', 'waiting'].includes(turn.state) && turn.pending === undefined)?.turnId : undefined;
     try {
       const parsed = parseSlashInput(text);
-      if (parsed && sessionId === null && agent === 'codex') {
+      if (parsed && sessionId === null) {
         const token = controls.drafts.token();
         const catalog = await api.previewSlashCommands(agent, workspaceId || undefined);
         if (!token || !controls.drafts.accepts(token) || controls.drafts.token()?.revision !== token.revision) return;
         if (catalog.status === 'error') throw new Error(catalog.reason ?? '原生指令目录读取失败');
         const command = slashCommandFor(catalog.commands, text);
-        if (!command) throw new Error(catalog.reason ?? '当前原生目录没有此指令，请核对名称或重新读取目录');
-        if (command.available === false) throw new Error(command.reason ?? '此原生指令在当前平台不可用');
-        if (attachmentParts.length > 0 && command.supportsAttachments === false) throw new Error('此指令未声明附件能力，附件和正文仍保留在草稿中');
-        if (openWebCommand(command, text)) return;
+        if (!command && catalog.complete !== false) throw new Error(catalog.reason ?? '当前原生目录没有此指令，请核对名称或重新读取目录');
+        if (command?.available === false) throw new Error(command.reason ?? '此原生指令在当前平台不可用');
+        if (attachmentParts.length > 0 && command?.supportsAttachments === false) throw new Error('此指令未声明附件能力，附件和正文仍保留在草稿中');
+        if (command && openWebCommand(command, text)) return;
       }
       if (parsed && sessionId !== null) {
         const token = controls.drafts.token();
@@ -839,6 +839,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {slashOpen ? (
             <div className="menu up left mention-menu" role="menu" data-testid="slash-menu" style={{ maxHeight: 'min(60vh, 480px)', overflowY: 'auto' }}>
               <div className="menu-group-title">{agentText(agent).name} 的指令</div>
+              {slashCommands.length > 0 && slashReason ? <div className="menu-note">{slashReason}</div> : null}
               {slashCommands.length === 0 ? <div className="menu-note">{slashStatus === 'loading' ? '正在读取原生命令目录…' : slashReason || '没有返回可用的原生指令'}</div> : null}
               {slashStatus === 'error' ? <button type="button" onClick={() => setSlashCatalogRevision(value => value + 1)}>重新读取指令</button> : null}
               {slashCommands

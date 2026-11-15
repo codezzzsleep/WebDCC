@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { chmod, mkdtemp, mkdir, open, readFile, readdir, rm, stat, symlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { createBackupKeyFile, createEncryptedBackup, inspectEncryptedBackup, restoreEncryptedBackup, type BackupManifest } from '../src/backup.js';
 import { CURRENT_SCHEMA_VERSION, openDb } from '../src/db.js';
@@ -38,7 +39,7 @@ async function fixture() {
 
 async function runCli(args: string[], keyPath?: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
   const fd = keyPath === undefined ? undefined : openSync(keyPath, 'r');
-  const child = spawn(process.execPath, ['--import=tsx', 'scripts/backup.ts', ...args], { cwd: '/root/WebDCC-repair', stdio: fd === undefined ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe', fd] });
+  const child = spawn(process.execPath, ['--import=tsx', 'scripts/backup.ts', ...args], { cwd: fileURLToPath(new URL('../../../', import.meta.url)), stdio: fd === undefined ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe', fd] });
   if (fd !== undefined) closeSync(fd);
   let stdout = ''; let stderr = '';
   child.stdout!.on('data', value => { stdout += String(value); }); child.stderr!.on('data', value => { stderr += String(value); });
