@@ -204,14 +204,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   useEffect(() => {
     if (!slashOpen) return;
     let active = true;
-    if (sessionId === null) {
-      setSlashCommands([]);
-      setSlashStatus('unavailable');
-      return;
-    }
+    setSlashCommands([]); setSlashReason('');
     setSlashStatus('loading');
-    void api
-      .slashCommands(sessionId)
+    const read = sessionId === null ? api.previewSlashCommands(agent, workspaceId || undefined) : api.slashCommands(sessionId);
+    void read
       .then((result) => {
         if (!active) return;
         setSlashCommands(result.commands);
@@ -223,7 +219,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
         setSlashStatus('error'); setSlashReason('原生指令目录请求失败，请重新读取');
       });
     return () => { active = false; };
-  }, [slashOpen, sessionId, slashCatalogRevision]);
+  }, [slashOpen, sessionId, agent, workspaceId, slashCatalogRevision]);
   useEffect(() => {
     if (menu !== 'skill' || sessionId === null || agent !== 'codex') return;
     let active = true; setSkills([]); setSkillStatus('正在读取原生技能目录');
@@ -342,15 +338,35 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     textareaRef.current?.focus();
   };
 
+  const openWebCommand = (command: SlashCommand, line: string): boolean => {
+    if (agent !== 'codex' || command.route !== 'web' || parseSlashInput(line)?.rawArguments.trim() !== ''
+      || !['model', 'permissions', 'plan'].includes(command.action ?? '')) return false;
+    const draft = controls.drafts.snapshot();
+    if (!draft) return false;
+    controls.drafts.update('', { ...draft.contentParts, ...(command.action === 'plan' ? { collaborationMode: 'plan' as const } : {}), parts: draft.contentParts.parts.filter(part => part.type !== 'text') });
+    setSlashOpen(false);
+    if (command.action === 'model') setMenu('model');
+    else if (command.action === 'permissions') setMenu('mode');
+    return true;
+  };
+
   const submit = async (intent: ComposerIntent = running ? 'queue' : 'send'): Promise<void> => {
     if (busy) return;
-    if (sessionId === null && agent === 'codex' && text.trim() === '/model' && attachmentParts.length === 0) {
-      setSlashOpen(false); setMenu('model'); return;
-    }
     setError(null); setBusy(true);
     const expectedTurnId = intent === 'steer' ? store.getTurns(sessionId ?? '').findLast(turn => ['starting', 'running', 'waiting'].includes(turn.state) && turn.pending === undefined)?.turnId : undefined;
     try {
       const parsed = parseSlashInput(text);
+      if (parsed && sessionId === null && agent === 'codex') {
+        const token = controls.drafts.token();
+        const catalog = await api.previewSlashCommands(agent, workspaceId || undefined);
+        if (!token || !controls.drafts.accepts(token) || controls.drafts.token()?.revision !== token.revision) return;
+        if (catalog.status === 'error') throw new Error(catalog.reason ?? '原生指令目录读取失败');
+        const command = slashCommandFor(catalog.commands, text);
+        if (!command) throw new Error(catalog.reason ?? '当前原生目录没有此指令，请核对名称或重新读取目录');
+        if (command.available === false) throw new Error(command.reason ?? '此原生指令在当前平台不可用');
+        if (attachmentParts.length > 0 && command.supportsAttachments === false) throw new Error('此指令未声明附件能力，附件和正文仍保留在草稿中');
+        if (openWebCommand(command, text)) return;
+      }
       if (parsed && sessionId !== null) {
         const token = controls.drafts.token();
         const commandLine = text;
@@ -847,13 +863,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {slashOpen ? (
             <div className="menu up left mention-menu" role="menu" data-testid="slash-menu" style={{ maxHeight: 'min(60vh, 480px)', overflowY: 'auto' }}>
               <div className="menu-group-title">{agentText(agent).name} 的指令</div>
-              {sessionId === null && agent === 'codex' && (text === '/' || text === '/model') ? (
-                <button type="button" className="menu-item" onClick={() => { setSlashOpen(false); setMenu('model'); }}>
-                  <span className="mono" style={{ fontSize: 13 }}>/model</span>
-                  <span className="menu-item-sub">打开 Provider 和模型选择</span>
-                </button>
-              ) : null}
-              {slashCommands.length === 0 && !(sessionId === null && agent === 'codex' && (text === '/' || text === '/model')) ? <div className="menu-note">{sessionId === null ? '建立原生会话后读取此项目的指令目录' : slashStatus === 'loading' ? '正在读取原生命令目录…' : slashReason || '本会话没有返回可用的原生指令'}</div> : null}
+              {slashCommands.length === 0 ? <div className="menu-note">{slashStatus === 'loading' ? '正在读取原生命令目录…' : slashReason || '没有返回可用的原生指令'}</div> : null}
               {slashStatus === 'error' ? <button type="button" onClick={() => setSlashCatalogRevision(value => value + 1)}>重新读取指令</button> : null}
               {slashCommands
                 .filter((command) => command.name.startsWith(text) || command.aliases?.some(alias => alias.startsWith(text)))
@@ -865,6 +875,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                     disabled={command.available === false}
                     onClick={() => {
                       const selected = command.name.startsWith(text) ? command.name : command.aliases?.find(alias => alias.startsWith(text)) ?? command.name;
+                      if (sessionId === null && openWebCommand(command, selected)) return;
                       setText(selected);
                       persist(selected);
                       setSlashOpen(false);
@@ -876,6 +887,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                     </span>
                     {command.description === undefined ? null : <span className="menu-item-sub">{command.description}</span>}
                     <span className="menu-item-sub">{command.route === 'native-terminal' ? '原生终端' : command.route === 'native-control' ? '原生 API' : command.route === 'web' ? '网页入口' : '原生指令'}{command.argumentHint ? ` · ${command.argumentHint}` : ''}{command.source ? ` · ${command.source}` : ''}{command.aliases?.length ? ` · ${command.aliases.join(', ')}` : ''}</span>
+                    {sessionId === null && command.route !== 'web' ? <span className="menu-item-sub">发送时创建会话并执行</span> : null}
                   </button>
                 ))}
             </div>

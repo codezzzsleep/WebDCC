@@ -165,6 +165,8 @@ export interface AgentAdapter {
   setAccessMode?(sessionId: string, mode: string): Promise<{ accessMode: string } | void>;
   /** 斜杠命令目录（F8）：Claude 来自 init 消息，DSH 来自 commands/list */
   slashCommands?(sessionId: string): Promise<SlashCommand[]>;
+  /** Read command names before creation without activating a native writer. */
+  previewSlashCommands?(cwd?: string): Promise<SlashCommand[]>;
   executeSlashControl?(sessionId: string, line: string, options?: { replaceGoal?: boolean; editGoal?: boolean; contentParts?: ResolvedInputContent }): Promise<SlashControlResult>;
   /** Read-only mode discovery; it must not activate or resume a native writer. */
   inputModes?(sessionId?: string): Promise<CodexInputModeCatalog>;
