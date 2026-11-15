@@ -206,6 +206,7 @@ interface SessionRuntime {
   input: InputQueue;
   q: Query;
   pump: Promise<void>;
+  closePromise?: Promise<void>;
   turnStartedAt: number;
   /** 累计 Claude 模型生成片段，排除工具执行和审批等待。 */
   generationStartedAt: number | null;
@@ -503,37 +504,55 @@ export class ClaudeAdapter implements AgentAdapter {
     };
     this.sessions.set(sessionId, runtime);
     ownerRef.current = runtime;
+    let closeReason = 'sdk-stream-ended'; let activeWorkOnExit = false;
     runtime.pump = (async () => {
-      for await (const message of q as AsyncIterable<SDKMessage>) {
-        runtime.frameSeq += 1;
-        if (!this.observeNative(runtime, opts, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message })) return;
-        if (this.sessions.get(sessionId) !== runtime) return;
-        if (message.type === 'system' && message.subtype === 'init') {
-          markReady();
+      try {
+        for await (const message of q as AsyncIterable<SDKMessage>) {
+          runtime.frameSeq += 1;
+          if (!this.observeNative(runtime, opts, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message })) {
+            runtime.stdio.failed = true; runtime.state.transport = 'failed'; closeReason = 'sdk-evidence-rejected'; return;
+          }
+          if (this.sessions.get(sessionId) !== runtime) return;
+          if (message.type === 'system' && message.subtype === 'init') {
+            markReady();
+          }
+          this.onSdkMessage(sessionId, message);
         }
-        this.onSdkMessage(sessionId, message);
+      } catch (error: unknown) {
+        if (this.sessions.get(sessionId) !== runtime) return;
+        activeWorkOnExit = runtime.turnActive || runtime.backgroundTasks.size > 0;
+        closeReason = 'sdk-stream-error';
+        runtime.turnActive = false;
+        runtime.state.transport = 'failed';
+        if (!this.observeNative(runtime, opts, { i: ++runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk-error', frame: { message: error instanceof Error ? error.message : String(error) } })) return;
+        this.emit(sessionId, {
+          type: 'item.complete',
+          itemKey: `error-${runtime.frameSeq}`,
+          kind: 'error',
+          data: { message: error instanceof Error ? error.message : String(error) },
+        });
+        if (!activeWorkOnExit) this.emit(sessionId, { type: 'status', status: 'error' });
+      } finally {
+        if (this.sessions.get(sessionId) === runtime) {
+          activeWorkOnExit ||= runtime.turnActive || runtime.backgroundTasks.size > 0;
+          if (runtime.state.transport === 'live') runtime.state.transport = 'closed';
+          let closed = false;
+          try { await this.cancelPending(sessionId); }
+          finally {
+            try { await this.closeQuery(runtime); closed = true; }
+            catch (error) {
+              runtime.state.transport = 'failed'; closeReason = 'sdk-close-failed';
+              this.emit(sessionId, { type: 'item.complete', itemKey: `close-error-${++runtime.frameSeq}`, kind: 'error',
+                data: { message: error instanceof Error ? error.message : String(error) } });
+            }
+            if (this.sessions.get(sessionId) === runtime) {
+              this.emit(sessionId, { type: 'transport.closed', reason: closeReason, activeWork: activeWorkOnExit });
+              if (closed && this.sessions.get(sessionId) === runtime) this.sessions.delete(sessionId);
+            }
+          }
+        }
       }
-      if (this.sessions.get(sessionId) === runtime) {
-        runtime.state.transport = 'closed';
-        await this.cancelPending(sessionId);
-        if (runtime.turnActive || runtime.backgroundTasks.size > 0) this.emit(sessionId, { type: 'transport.closed', reason: 'sdk-stream-ended', activeWork: true });
-      }
-    })().catch((error: unknown) => {
-      if (this.sessions.get(sessionId) !== runtime) return;
-      const activeWork = runtime.turnActive || runtime.backgroundTasks.size > 0;
-      runtime.turnActive = false;
-      runtime.state.transport = 'failed';
-      void this.cancelPending(sessionId);
-      if (!this.observeNative(runtime, opts, { i: ++runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk-error', frame: { message: error instanceof Error ? error.message : String(error) } })) return;
-      this.emit(sessionId, {
-        type: 'item.complete',
-        itemKey: `error-${runtime.frameSeq}`,
-        kind: 'error',
-        data: { message: error instanceof Error ? error.message : String(error) },
-      });
-      if (activeWork) this.emit(sessionId, { type: 'transport.closed', reason: 'sdk-stream-error', activeWork });
-      else this.emit(sessionId, { type: 'status', status: 'error' });
-    });
+    })();
     return runtime;
   }
 
@@ -546,7 +565,17 @@ export class ClaudeAdapter implements AgentAdapter {
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
     if (this.sessions.has(opts.sessionId)) throw nativeError('Claude 会话已存在', 409);
     const runtime = this.startQuery(opts.sessionId, opts, opts.nativeId);
-    await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 3000))]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([runtime.ready,
+        runtime.pump.then(() => { throw nativeError('Claude 在初始化完成前断开，需要重新恢复', 503); }),
+        new Promise<void>(resolve => { timer = setTimeout(resolve, 3000); }),
+      ]);
+      if (this.sessions.get(opts.sessionId) !== runtime || runtime.state.transport !== 'live') throw nativeError('Claude 初始化连接已断开', 503);
+    } catch (error) {
+      if (this.sessions.get(opts.sessionId) === runtime) await this.dispose(opts.sessionId);
+      throw error;
+    } finally { if (timer !== undefined) clearTimeout(timer); }
   }
 
   async send(sessionId: string, input: UserInput): Promise<void> {
@@ -594,8 +623,7 @@ export class ClaudeAdapter implements AgentAdapter {
     if (previous.turnActive || previous.pending.size > 0 || [...previous.nativePending.values()].some(pending => pending.status === 'pending') || previous.backgroundTasks.size > 0) throw Object.assign(new Error('请等待当前 Claude 轮次、交互和后台任务结束后更改启动选项'), { statusCode: 409 });
     const launchOpts = { ...previous.launchOpts, ...patch };
     this.sessions.delete(sessionId);
-    previous.input.end();
-    previous.q.close();
+    await this.closeQuery(previous);
     await previous.pump;
     this.emit(sessionId, { type: 'permissions', observation: { effective: null, source: 'query:replacing', scope: 'query' } });
     const resume = previous.nativeId === '' ? undefined : previous.nativeId;
@@ -698,10 +726,16 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
     await this.cancelPending(sessionId);
-    this.sessions.delete(sessionId);
-    runtime.input.end();
-    await runtime.q.close?.();
+    if (this.sessions.get(sessionId) === runtime) this.sessions.delete(sessionId);
+    await this.closeQuery(runtime);
     await runtime.pump.catch(() => undefined);
+  }
+
+  /** Pump exit and explicit disposal may race. Share closure and never wait
+   * for the pump from inside its own shutdown. A failed close stays failed. */
+  private closeQuery(runtime: SessionRuntime): Promise<void> {
+    runtime.closePromise ??= Promise.resolve().then(async () => { runtime.input.end(); await runtime.q?.close?.(); });
+    return runtime.closePromise;
   }
 
   private require(sessionId: string): SessionRuntime {
