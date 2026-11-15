@@ -21,6 +21,13 @@ export interface SlashCommandCatalog {
   status: 'ready' | 'empty' | 'error';
   revision: string;
   reason?: string;
+  /** False for previews which cannot enumerate later session-scoped entries. */
+  complete?: boolean;
+}
+export interface SlashCommandPreview {
+  commands: SlashCommand[];
+  reason?: string;
+  complete?: boolean;
 }
 export interface SlashControlRequest {
   commandId: string;

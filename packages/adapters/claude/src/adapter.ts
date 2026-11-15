@@ -19,6 +19,7 @@ import type {
   TraceFrame,
   AnswerSubmission,
   SlashCommand,
+  SlashCommandPreview,
 } from '@webdcc/protocol';
 import {
   query,
@@ -372,6 +373,19 @@ export class ClaudeAdapter implements AgentAdapter {
     // terminal subset observed on 2.1.322 until the actual init replaces it.
     const terminalNames = runtime.slashCommands.length === 0 ? ['doctor', 'color', 'focus', 'reload-plugins'] : runtime.terminalSlashCommands;
     return claudeSlashCommands(commands, terminalNames);
+  }
+
+  async previewSlashCommands(cwd?: string): Promise<SlashCommandPreview> {
+    const probe = await this.probe();
+    if (probe.compatible !== true) throw nativeError('Claude SDK/CLI 版本未匹配，无法读取指令预览', 503);
+    const base = await this.options.catalogOptions?.(null) ?? { sessionId: 'command-preview', cwd: process.cwd(), providerId: null };
+    const input = createInputQueue();
+    const options = this.buildOptions({ ...base, cwd: cwd ?? base.cwd }, async () => ({ behavior: 'deny', message: '指令预览不执行工具' }));
+    const q = query({ prompt: input.iterable, options: { ...options, persistSession: false,
+      settings: { ...record(options.settings), disableAllHooks: true } } });
+    try { return { commands: claudeSlashCommands(await q.supportedCommands(), ['doctor', 'color', 'focus', 'reload-plugins']), complete: false,
+      reason: '预览当前用户与项目配置的指令；会话建立后会重新读取实际目录。' }; }
+    finally { input.end(); q.close(); }
   }
 
   async listModels(providerId: string | null = null): Promise<ModelOption[]> {

@@ -165,3 +165,31 @@ it('Claude /model stays on its native SDK route and is not intercepted by the We
     await expect.poll(() => lines).toEqual(['/model']);
   } finally { await h.close(); }
 });
+
+it.each(['dsh', 'claude-code'] as const)('%s reads a pre-creation catalog and executes only after an explicit send', async agent => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const workspace = ctx.store.createWorkspace('native new preview', ctx.dataDir);
+    const adapter: AgentAdapter = new FakeAdapter({ id: agent }); let creates = 0, sends = 0;
+    const create = adapter.create.bind(adapter); adapter.create = async opts => { creates++; return create(opts); };
+    const name = agent === 'dsh' ? '/goal' : '/project-preview';
+    adapter.previewSlashCommands = async () => ({ commands: [{ name: agent === 'dsh' ? '/known-baseline' : name, route: agent === 'dsh' ? 'native-control' : 'native-input', supportsAttachments: true }], complete: false, ...(agent === 'dsh' ? { reason: 'DSH 基线预览，创建后核对实际目录' } : {}) });
+    adapter.slashCommands = async () => [{ name, route: agent === 'dsh' ? 'native-control' : 'native-input', supportsAttachments: true }];
+    const originalSend = adapter.send.bind(adapter); adapter.send = async (id, input) => { sends++; await originalSend(id, input); };
+    const lines: string[] = []; adapter.executeSlashControl = async (_id, line) => { lines.push(line); return { text: 'Native DSH goal inspected' }; };
+    ctx.manager.registerAdapter(adapter); const base = await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.goto(`${base}/new?w=${workspace.id}&agent=${agent}`); const input = page.getByTestId('new-session-input'); await input.waitFor();
+    await input.fill('/');
+    if (agent === 'dsh') { await page.getByText('DSH 基线预览，创建后核对实际目录').waitFor(); await input.fill(name); }
+    else await page.getByTestId('slash-menu').getByRole('button', { name: new RegExp(name) }).click();
+    expect(await input.inputValue()).toBe(name); expect(creates).toBe(0); expect(sends).toBe(0);
+    await input.press('Enter'); await page.waitForURL('**/s/**');
+    if (agent === 'dsh') { await page.getByText('Native DSH goal inspected').first().waitFor(); expect(lines).toEqual(['/goal']); expect(sends).toBe(0); }
+    else await expect.poll(() => sends).toBe(1);
+    expect(creates).toBe(1);
+    await page.reload(); await page.getByTestId('composer-input').waitFor();
+    await page.getByTestId('composer-input').fill('/'); await page.getByTestId('slash-menu').getByRole('button', { name: new RegExp(name) }).waitFor();
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);

@@ -937,9 +937,12 @@ export class SessionManager {
     const workspace = workspaceId === undefined ? undefined : this.requireWorkspace(workspaceId);
     if (adapter.previewSlashCommands === undefined) return { agent: adapter.id, commands: [], status: 'empty', revision: '', reason: '建立原生会话后读取此 Harness 的项目指令目录' };
     try {
-      const commands = await adapter.previewSlashCommands(workspace?.path);
+      const preview = await adapter.previewSlashCommands(workspace?.path);
+      const commands = Array.isArray(preview) ? preview : preview.commands;
       return { agent: adapter.id, commands, status: commands.length === 0 ? 'empty' : 'ready',
         revision: payloadHash({ agent, workspaceId, commands, scope: 'before-creation' }),
+        ...(Array.isArray(preview) || preview.reason === undefined ? {} : { reason: preview.reason }),
+        ...(Array.isArray(preview) || preview.complete !== false ? {} : { complete: false }),
         ...(commands.length === 0 ? { reason: '原生目录已读取，没有返回可用指令' } : {}) };
     } catch (failure) {
       const safe = this.store.nativeEvents.redact({ message: failure instanceof Error ? failure.message : String(failure) }) as { message: string };

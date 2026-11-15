@@ -8,6 +8,19 @@ import type { DshHostIdentity } from '../src/identity.js';
 const host: DshHostIdentity = { url: 'http://host.test/dsh/', version: '0.2.2-rc.1', status: 'verified', source: 'native-bootstrap', fingerprint: 'build', profile: { scope: 'current-host-profile', identity: 'unavailable-in-api' } };
 const revision = 'native-revision';
 const goal = { id: 'goal', revision: 2 };
+
+it('pre-creation baseline is explicitly marked and requires a compatible Host without creating an agent', async () => {
+  const adapter = new DshAdapter({ mode: 'attach' });
+  vi.spyOn(adapter as unknown as { ensureSidecar(): Promise<DshHostClient> }, 'ensureSidecar').mockResolvedValue({} as DshHostClient);
+  const identity = vi.spyOn(adapter, 'hostIdentity').mockResolvedValue(host);
+  const create = vi.spyOn(adapter, 'create');
+  const preview = await adapter.previewSlashCommands();
+  expect(preview.commands.map(command => command.name)).toEqual(['/compact', '/export', '/feedback', '/goal', '/permission', '/plan']);
+  expect(preview.commands.every(command => command.source.includes('基线预览'))).toBe(true);
+  expect(preview.reason).toContain('实际目录核对'); expect(create).not.toHaveBeenCalled();
+  identity.mockResolvedValue({ ...host, status: 'incompatible', reason: 'unreviewed Host version' });
+  await expect(adapter.previewSlashCommands()).rejects.toThrow('unreviewed Host version');
+});
 const cases = [
   { type: 'model', provider: 'provider', model: 'model', reasoningEffort: 'high' }, { type: 'preset', agentPreset: 'standard' }, { type: 'rename', title: '  original title  ' },
   { type: 'pin', pinned: true }, { type: 'archive', archived: true, stopActivity: false }, { type: 'fork', atSeq: 10, allowMigration: false }, { type: 'compact' },
