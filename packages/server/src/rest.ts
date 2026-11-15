@@ -396,6 +396,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return manager.slashCommandCatalog(id);
   });
 
+  app.get('/api/agents/:agent/slash-commands', async request => {
+    const { agent } = request.params as { agent: string };
+    const query = request.query as { workspaceId?: string };
+    if (query.workspaceId !== undefined && (typeof query.workspaceId !== 'string' || query.workspaceId === '' || query.workspaceId.length > 256)) throw badRequest('需要有效的工作区身份');
+    return manager.previewSlashCommands(agent, query.workspaceId);
+  });
+
   app.post('/api/sessions/:id/slash-commands', async request => {
     const { id } = request.params as { id: string };
     return manager.executeSlashControl(id, request.body as SlashControlRequest);

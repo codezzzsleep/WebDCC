@@ -3,6 +3,66 @@ import { expect, it } from 'vitest';
 import type { AgentAdapter } from '@webdcc/protocol';
 import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { createSourceTestApp } from './helpers.js';
+import { codexSlashCommands } from '../packages/adapters/codex/src/slash.js';
+
+it('Codex new-session menu reads all commands, applies Web choices without creation and preserves native control routing', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const workspace = ctx.store.createWorkspace('new slash browser', ctx.dataDir);
+    const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' });
+    adapter.previewSlashCommands = async () => codexSlashCommands;
+    adapter.slashCommands = async () => codexSlashCommands;
+    adapter.inputModes = async () => ({ modes: [{ id: 'default', label: '默认' }, { id: 'plan', label: '计划' }], observedMode: null });
+    let creates = 0, sends = 0; const original = adapter.create.bind(adapter);
+    adapter.create = async opts => { creates++; return original(opts); };
+    adapter.send = async () => { sends++; };
+    const controls: string[] = [];
+    adapter.executeSlashControl = async (_id, line) => { controls.push(line); return { text: 'Status read without model input' }; };
+    ctx.manager.registerAdapter(adapter);
+    const provider = await ctx.app.inject({ method: 'POST', url: '/api/providers', headers: { cookie: ctx.cookie }, payload: { name: 'Custom fixture', baseUrl: 'https://fixture.invalid/v1', protocols: ['openai-responses'], models: ['gpt-fixture-a', 'gpt-fixture-b'], apiKey: 'fixture-only' } });
+    expect(provider.statusCode).toBe(200);
+    const base = await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.goto(`${base}/new?w=${workspace.id}&agent=codex`);
+    const input = page.getByTestId('new-session-input'); await input.waitFor();
+    await input.fill('/');
+    await expect.poll(() => page.getByTestId('slash-menu').locator('.menu-item').count(), { timeout: 5000 }).toBe(65);
+    expect(creates).toBe(0); expect(ctx.store.listSessions()).toEqual([]);
+    await input.press('Escape');
+    await page.getByTestId('agent-card-dsh').click();
+    await input.fill('');
+    await input.fill('/');
+    await page.getByText('建立原生会话后读取此 Harness 的项目指令目录').waitFor();
+    expect(await page.getByTestId('slash-menu').locator('.menu-item').count()).toBe(0);
+    await input.press('Escape');
+    await page.getByTestId('agent-card-codex').click();
+    await input.fill('');
+    await input.fill('/');
+    await expect.poll(() => page.getByTestId('slash-menu').locator('.menu-item').count()).toBe(65);
+    await page.getByTestId('slash-menu').getByRole('button', { name: /^\/model\b/ }).click();
+    await page.getByRole('menuitemradio', { name: /gpt-fixture-b/ }).click();
+    expect(await input.inputValue()).toBe(''); expect(creates).toBe(0);
+    await input.fill('/permissions');
+    await page.getByTestId('slash-menu').getByRole('button', { name: /^\/permissions\b/ }).click();
+    await page.getByTestId('access-mode-read-only').click(); expect(creates).toBe(0);
+    await input.fill('/plan');
+    await page.getByTestId('slash-menu').getByRole('button', { name: /^\/plan\b/ }).click();
+    await expect.poll(() => page.getByTestId('codex-input-mode').inputValue()).toBe('plan'); expect(creates).toBe(0);
+    await input.fill('/does-not-exist'); await input.press('Enter');
+    await page.getByText('当前原生目录没有此指令，请核对名称或重新读取目录').waitFor();
+    expect(await input.inputValue()).toBe('/does-not-exist'); expect(creates).toBe(0); expect(sends).toBe(0);
+    await input.fill('/sta');
+    await page.getByTestId('slash-menu').getByRole('button', { name: /^\/status\b/ }).click();
+    expect(await input.inputValue()).toBe('/status'); expect(creates).toBe(0);
+    await input.press('Enter'); await page.waitForURL('**/s/**');
+    await page.getByText('Status read without model input', { exact: false }).first().waitFor();
+    expect(creates).toBe(1); expect(sends).toBe(0); expect(controls).toEqual(['/status']);
+    await page.reload(); await page.getByTestId('composer-input').waitFor();
+    await page.getByTestId('composer-input').fill('/');
+    await expect.poll(() => page.getByTestId('slash-menu').locator('.menu-item').count()).toBe(65);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 60_000);
 
 async function fixture(agent: 'codex' | 'claude-code' | 'dsh' = 'codex') {
   const ctx = await createSourceTestApp();
