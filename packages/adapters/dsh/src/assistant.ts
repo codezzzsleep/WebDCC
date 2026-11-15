@@ -34,6 +34,27 @@ export function expandDshAssistantStream(records: unknown[]): Record<string, unk
   return chunks;
 }
 
+/** Preserve a failed stream's delivered prefix without creating an assistant answer. */
+export function failedDshAttemptDetails(records: unknown[]): string | undefined {
+  const text = new Map<number, string>(), reasoning = new Map<number, string>();
+  for (const chunk of expandDshAssistantStream(records)) {
+    const index = typeof chunk['index'] === 'number' ? chunk['index'] : 0;
+    if (chunk['type'] === 'text-delta' || chunk['type'] === 'reasoning-delta') {
+      if (typeof chunk['text'] !== 'string') throw new Error('Invalid assistant text delta');
+      const target = chunk['type'] === 'text-delta' ? text : reasoning;
+      target.set(index, (target.get(index) ?? '') + chunk['text']);
+    } else if (chunk['type'] === 'block-end') {
+      const block = chunk['block'] as { type?: string; text?: string } | undefined;
+      if (typeof block?.text === 'string' && (block.type === 'text' || block.type === 'reasoning')) {
+        (block.type === 'text' ? text : reasoning).set(index, block.text);
+      }
+    }
+  }
+  const answer = [...text.values()].join('\n'), thinking = [...reasoning.values()].join('');
+  const parts = [answer === '' ? '' : `部分回答：\n${answer}`, thinking === '' ? '' : `部分思考：\n${thinking}`].filter(Boolean);
+  return parts.length === 0 ? undefined : parts.join('\n\n');
+}
+
 export class DshAssistantBridge {
   attemptId?: string;
   private startedAfterSeq = -1;

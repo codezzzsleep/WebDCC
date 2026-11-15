@@ -36,7 +36,8 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'goal':
       return typeof data['objective'] === 'string' && typeof data['status'] === 'string';
     case 'notice':
-      return typeof data['text'] === 'string' && typeof data['level'] === 'string';
+      return typeof data['text'] === 'string' && typeof data['level'] === 'string'
+        && (data['details'] === undefined || typeof data['details'] === 'string');
     case 'approval.request':
       return typeof data['approvalId'] === 'string' && typeof data['title'] === 'string' && Array.isArray(data['options']);
     case 'approval.resolved':

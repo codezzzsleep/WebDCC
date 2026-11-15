@@ -538,7 +538,9 @@ function StepRow({
       return (
         <div className="notice-card" data-testid="notice-card">
           <Icon name="alert" size={15} />
-          <span>{data.text}</span>
+          <div><span>{data.text}</span>{data.details === undefined ? null : <details>
+            <summary>查看失败尝试的部分输出</summary><pre className="output">{data.details}</pre>
+          </details>}</div>
         </div>
       );
     }
