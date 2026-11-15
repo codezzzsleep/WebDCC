@@ -133,5 +133,5 @@ pnpm accept:m9                 # 含快速 e2e、L1 黄金比对和 L2 Playwrigh
 ## 安全
 
 - 不要把 API Key、Cookie、访问 token 或服务器地址提交到仓库。
-- Provider Key 只保存在服务端数据目录的权限受限 secrets 文件中，不返回原文。
+- 平台 Provider Key 只保存在服务端数据目录的权限受限 secrets 文件中，不返回原文。DSH Provider 的密钥使用所连接 Host 的原生凭据接口保存：先预览并确认独立 `apiKeyEnv` 引用，再单独确认密钥保存目标。其他 Provider 已声明使用的引用不能在此入口覆盖；新建 Provider 不改变默认模型，密钥不会写入 WebDCC 数据库或配置预览。
 - 测试和验收使用临时 HOME、配置目录、数据目录和动态端口。

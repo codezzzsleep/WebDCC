@@ -122,7 +122,7 @@ export interface EventData {
     goalId?: string; nativeStatus?: string; tokensUsed?: number; tokenBudget?: number | null; timeUsedSeconds?: number;
   };
   /** 原生提示（warning / configWarning / deprecationNotice），例如"使用兜底元数据，可能影响效果" */
-  notice: { level: 'info' | 'warning'; text: string; nativeType?: string };
+  notice: { level: 'info' | 'warning'; text: string; nativeType?: string; details?: string };
   'approval.request': {
     approvalId: string;
     title: string;

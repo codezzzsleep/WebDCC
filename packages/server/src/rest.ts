@@ -606,7 +606,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   // Native settings writes are scoped to one namespace and the editor's revision.
   const nativeSettings = new DshSettingsService(deps.dsh);
-  app.get('/api/dsh/provider', () => nativeSettings.read());
+  app.get('/api/dsh/provider', request => nativeSettings.read((request.query as { providerKey?: string }).providerKey));
+  app.post('/api/dsh/provider/create-preview', request => nativeSettings.previewCreateProvider(request.body));
+  app.post('/api/dsh/provider', request => nativeSettings.createProvider(request.body));
+  app.patch('/api/dsh/provider/credential', request => nativeSettings.updateCredential(request.body));
   app.post('/api/dsh/provider/preview', request => nativeSettings.previewProvider(request.body));
   app.patch('/api/dsh/provider', request => nativeSettings.updateProvider(request.body));
   app.post('/api/dsh/default-model/preview', request => nativeSettings.previewDefault(request.body));
