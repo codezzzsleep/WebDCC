@@ -15,6 +15,7 @@ import { nativeSurfaceError, resolveClaudeTerminalBinary, validateNativeTerminal
 import { captureNativeIdentitySnapshot, inspectNativeProcessIdentity, type NativeIdentitySnapshot } from './native-surface-identity.js';
 import { payloadHash } from './command-journal.js';
 import { holdsCodexWriter, releasedCodexWriter } from './codex-writer-lock.js';
+import { claudeTerminalPermissionMode } from './claude-terminal-permissions.js';
 
 const same = (a: RuntimeIdentity, b: RuntimeIdentity): boolean => a.generation === b.generation && a.ownerId === b.ownerId && a.hostId === b.hostId;
 async function executablePath(command: string): Promise<string> {
@@ -69,11 +70,8 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
       let settingsDirectory: string | undefined;
       const launchOptions = source.agent === 'codex' ? (spec.args ?? []).slice(1) : source.model ? ['--model', source.model] : [];
       if (source.agent === 'claude-code') {
-        if (source.accessMode && source.accessMode !== 'inherit') {
-          if (!['acceptEdits', 'auto', 'bypassPermissions', 'dontAsk', 'plan', 'manual'].includes(source.accessMode)) throw nativeSurfaceError('此 SDK 权限模式尚未验证可用于原生 CLI；请使用结构化界面');
-          if (source.accessMode === 'bypassPermissions' && process.getuid?.() === 0) throw nativeSurfaceError('原生 Claude CLI 不允许 root 使用 bypassPermissions', 400);
-          launchOptions.push('--permission-mode', source.accessMode);
-        }
+        const permissionMode = claudeTerminalPermissionMode(source.accessMode);
+        if (permissionMode !== undefined) launchOptions.push('--permission-mode', permissionMode);
         if (source.reasoningEffort) {
           if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(source.reasoningEffort)) throw nativeSurfaceError('原生 CLI 不支持当前思考强度', 400);
           launchOptions.push('--effort', source.reasoningEffort);
