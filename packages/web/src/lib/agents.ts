@@ -83,9 +83,10 @@ function readPreference(prefix: string, agent: string): string | undefined {
   }
 }
 
-function writePreference(prefix: string, agent: string, value: string): void {
+function writePreference(prefix: string, agent: string, value: string | undefined): void {
   try {
-    window.localStorage.setItem(prefix + agent, value);
+    if (value === undefined) window.localStorage.removeItem(prefix + agent);
+    else window.localStorage.setItem(prefix + agent, value);
   } catch {
     // Browser storage may be unavailable; the current session still works.
   }
@@ -96,7 +97,7 @@ export function rememberedReasoning(agent: string): string | undefined {
   return readPreference(REASONING_DEFAULT_PREFIX, agent);
 }
 
-export function rememberReasoning(agent: string, effort: string): void {
+export function rememberReasoning(agent: string, effort: string | undefined): void {
   writePreference(REASONING_DEFAULT_PREFIX, agent, effort);
 }
 
@@ -170,7 +171,10 @@ export function defaultChoice(agent: string, meta: AgentMeta | undefined, provid
     const models = (meta?.models ?? []).map((model) => model.id);
     let model = models[0] ?? '';
     if (storedModel !== undefined && storedModel.providerId === null && models.includes(storedModel.model)) model = storedModel.model;
-    return { providerId: null, model, ...withDefaultReasoning };
+    const declared = meta?.models.find(option => option.id === model)?.reasoningEfforts ?? [];
+    const reasoning = rememberedReasoningLevel !== undefined && declared.includes(rememberedReasoningLevel)
+      ? { reasoningEffort: rememberedReasoningLevel } : {};
+    return { providerId: null, model, ...reasoning };
   }
   const sameSource = agent === 'codex' ? 'codex-config' : agent === 'claude-code' ? 'claude-settings' : '';
   const compatible = providers.filter((provider) => isCompatible(agent, provider));

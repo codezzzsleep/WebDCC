@@ -43,6 +43,16 @@ it('DSH new-session reasoning uses only the exact native model levels and carrie
     await page.getByTestId('reasoning-menu').click();
     expect(await page.getByRole('menuitemradio').allTextContents()).toEqual(['沿用原生', 'off', 'high', 'max']);
     await page.getByRole('menuitemradio', { name: 'high', exact: true }).click();
+    await page.reload();
+    await expect.poll(() => page.getByTestId('reasoning-menu').textContent(), { timeout: 10_000 }).toBe('思考 high');
+    await page.getByTestId('reasoning-menu').click();
+    await page.getByRole('menuitemradio', { name: '沿用原生', exact: true }).click();
+    await page.reload();
+    await expect.poll(() => page.getByTestId('reasoning-menu').textContent(), { timeout: 10_000 }).toContain('沿用原生');
+    await page.getByTestId('reasoning-menu').click();
+    await page.getByRole('menuitemradio', { name: 'high', exact: true }).click();
+    await page.reload();
+    await expect.poll(() => page.getByTestId('reasoning-menu').textContent(), { timeout: 10_000 }).toBe('思考 high');
     await page.getByTestId('new-session-input').fill('New reasoning choice'); await page.getByTestId('new-session-send').click();
     await page.waitForURL('**/s/**'); expect(controls.starts).toHaveLength(1);
     expect(controls.starts[0]).toMatchObject({ model: 'thinking', reasoningEffort: 'high' });

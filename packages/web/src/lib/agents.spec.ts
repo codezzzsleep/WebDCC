@@ -45,4 +45,24 @@ describe('新会话默认选择', () => {
 
     expect(defaultChoice('claude-code', undefined, providers)).toMatchObject({ providerId: 'claude-one', model: 'claude-sonnet' });
   });
+
+  it('DSH restores only a declared level and clearing inheritance does not change Codex preferences', () => {
+    const meta = { installed: true, pinnedVersion: '0.2.2-rc.1', auth: 'unknown' as const, accessModes: [],
+      models: [{ id: 'thinking', label: 'Thinking', reasoningEfforts: ['off', 'high', 'max'] }] };
+    rememberReasoning('codex', 'xhigh');
+    rememberModel('dsh', null, 'thinking');
+    rememberReasoning('dsh', 'high');
+    expect(defaultChoice('dsh', meta, [])).toEqual({ providerId: null, model: 'thinking', reasoningEffort: 'high' });
+    rememberReasoning('dsh', undefined);
+    expect(defaultChoice('dsh', meta, [])).toEqual({ providerId: null, model: 'thinking' });
+    expect(defaultChoice('codex', undefined, []).reasoningEffort).toBe('xhigh');
+  });
+
+  it('DSH never restores a level absent from the current native model catalogue', () => {
+    const meta = { installed: true, pinnedVersion: '0.2.2-rc.1', auth: 'unknown' as const, accessModes: [],
+      models: [{ id: 'thinking', label: 'Thinking', reasoningEfforts: ['off', 'high'] }] };
+    rememberReasoning('dsh', 'max');
+    expect(defaultChoice('dsh', meta, []).reasoningEffort).toBeUndefined();
+    expect(defaultChoice('dsh', { ...meta, models: [{ id: 'plain', label: 'Plain' }] }, []).reasoningEffort).toBeUndefined();
+  });
 });
