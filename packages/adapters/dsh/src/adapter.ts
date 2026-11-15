@@ -359,10 +359,10 @@ export class DshAdapter implements AgentAdapter {
   }
 
   /** Recorded mux frames pass through the live stream and event handlers. */
-  static replay(sessionId = 'replay'): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: DshAdapter; replies: unknown[] } {
+  static replay(sessionId = 'replay', nativeId = ''): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: DshAdapter; replies: unknown[] } {
     const adapter = new DshAdapter();
     const runtime: SessionRuntime = {
-      nativeId: '', workspaceId: '', followStream: null, lastSeq: 0, turnStartedAt: 0,
+      nativeId, workspaceId: '', followStream: null, lastSeq: 0, turnStartedAt: 0,
       pending: new Map(), children: new Map(), approvals: new Map(), toolCalls: new Map(), toolInputs: new Map(), assistantKey: '', assistantText: '',
       reasoningKey: '', reasoningText: '', streamedAssistant: false, streamedReasoning: false, generationStartedAt: null, frameSeq: 0,
     };
@@ -371,9 +371,46 @@ export class DshAdapter implements AgentAdapter {
     adapter.client = { connect: async () => undefined, rpc: async (endpoint: string, args: unknown) => { replies.push({ endpoint, args }); return { accepted: true }; } } as unknown as DshHostClient;
     let events: AdapterEvent[] = [];
     adapter.onEvent((_id, event) => events.push(event));
+    const requests = new Map<string, { endpoint: string; args: Record<string, unknown>; context: string }>();
+    const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    const replayRpc = (frame: TraceFrame): void => {
+      const capture = object(frame.frame), transport = object(capture['dshTransport']), message = object(capture['frame']);
+      const endpoint = frame.ch.slice(4), rpcId = message['rpcId'];
+      if (!['session/modelCatalog', 'session/selectModel', 'session/projections'].includes(endpoint)
+        || transport['coverage'] !== 'complete' || transport['endpoint'] !== endpoint || typeof rpcId !== 'string' || transport['rpcId'] !== rpcId) return;
+      const context = JSON.stringify([transport['verifiedHostFingerprint'], transport['hostEpoch'], transport['muxGeneration']]);
+      if (frame.dir === 'out' && message['type'] === 'client-request' && message['method'] === endpoint) {
+        if (requests.size < 1024) requests.set(rpcId, { endpoint, args: object(object(message['payload'])['args']), context });
+        return;
+      }
+      if (frame.dir !== 'in' || message['type'] !== 'server-response') return;
+      const request = requests.get(rpcId); requests.delete(rpcId);
+      const result = object(message['result']);
+      if (request?.endpoint !== endpoint || request.context !== context || result['ok'] !== true
+        || typeof transport['httpStatus'] === 'number' && (transport['httpStatus'] < 200 || transport['httpStatus'] >= 300)) return;
+      const value = object(result['value']);
+      if (endpoint === 'session/modelCatalog') {
+        if (Array.isArray(value['groups'])) adapter.cacheModelCatalog(value as unknown as DshModelCatalog);
+        return;
+      }
+      const target = object(request.args['request']);
+      if (runtime.nativeId === '' || target['sessionId'] !== runtime.nativeId) return;
+      if (endpoint === 'session/selectModel') {
+        if (typeof target['provider'] !== 'string' || typeof target['model'] !== 'string'
+          || target['reasoningEffort'] !== undefined && typeof target['reasoningEffort'] !== 'string') return;
+        try { adapter.confirmModelSelection(sessionId, runtime, value, target['provider'], target['model'], target['reasoningEffort'] as string | undefined); }
+        catch { /* A rejected native confirmation must not create an observation. */ }
+      } else if (value['kind'] !== 'cached' && Number.isSafeInteger(value['asOfSeq']) && typeof value['asOfSeq'] === 'number'
+        && value['asOfSeq'] >= (runtime.projections?.asOfSeq ?? -1) && value['values'] !== null && typeof value['values'] === 'object' && !Array.isArray(value['values'])) {
+        adapter.applyProjections(sessionId, runtime, { asOfSeq: value['asOfSeq'], values: object(value['values']) });
+        const selected = projectedModelSelection(object(value['values'])['modelSelection']);
+        if (selected !== undefined) adapter.observeModelSelection(sessionId, runtime, selected, 'session/projections:modelSelection.next');
+      }
+    };
     return { adapter, replies, feed(frame) {
       events = []; adapter.replayTime = frame.t;
       if (frame.dir === 'in' && frame.ch.startsWith('mux:')) adapter.onEventFrame(sessionId, frame.frame as StreamFrame);
+      else if (frame.ch.startsWith('rpc:')) replayRpc(frame);
       return events.length > 0 ? [...events] : [{ type: 'item.complete', itemKey: `transport-${frame.ch}-${frame.i}`, kind: 'internal', data: { nativeType: frame.ch }, native: frame.frame }];
     } };
   }
@@ -625,6 +662,11 @@ export class DshAdapter implements AgentAdapter {
   private async modelCatalog(client: DshHostClient): Promise<DshModelCatalog> {
     const catalog = await this.call<DshModelCatalog>(client, 'session/modelCatalog', {});
     if (this.client !== client) throw dshNativeError('模型目录属于旧 Host，请重新读取', 409);
+    this.cacheModelCatalog(catalog);
+    return catalog;
+  }
+
+  private cacheModelCatalog(catalog: DshModelCatalog): void {
     const ids = new Map<string, string>();
     for (const group of catalog.groups ?? []) for (const model of group.models ?? []) {
       if (typeof group.id !== 'string' || typeof model.id !== 'string') continue;
@@ -632,7 +674,6 @@ export class DshAdapter implements AgentAdapter {
         ? `dsh:${Buffer.from(JSON.stringify([group.id, model.id])).toString('base64url')}` : model.id);
     }
     this.modelPublicIds = ids;
-    return catalog;
   }
 
   private observeModelSelection(sessionId: string, runtime: SessionRuntime, selected: DshModelSelection, source: string, force = false): void {
@@ -1138,13 +1179,7 @@ export class DshAdapter implements AgentAdapter {
     }
     let inputModalities: DshInputModality[] | undefined;
     if (parts.some(part => part.type === 'image') && !command) {
-      const projections = await this.call<{ kind?: string; asOfSeq?: number; values?: { modelSelection?: { provider: string; model: string } } }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
-      const catalog = await this.modelCatalog(client);
-      const selected = projections.values?.modelSelection ?? catalog.default;
-      if (projections.kind !== 'cached' && typeof projections.asOfSeq === 'number' && projections.asOfSeq >= (runtime.projections?.asOfSeq ?? -1) && projections.values !== undefined && typeof selected?.provider === 'string' && typeof selected.model === 'string') {
-        const inputs = await dshInputCapabilities(catalog, <T>(endpoint: string, args?: Record<string, unknown>) => this.call<T>(client, endpoint, args));
-        inputModalities = inputs.get(dshInputRoute(selected.provider, selected.model))?.inputModalities;
-      }
+      inputModalities = await this.imageInputModalities(sessionId, runtime, client);
     }
     // Command image admission belongs to its native attachment declaration,
     // independently of the LLM selected for ordinary Session prompts.
@@ -1181,6 +1216,28 @@ export class DshAdapter implements AgentAdapter {
   async steer(sessionId: string, input: UserInput): Promise<void> {
     return this.send(sessionId, { ...input, delivery: 'steer' } as UserInput & { delivery: 'steer' });
   }
+
+  private async imageInputModalities(sessionId: string, runtime: SessionRuntime, client: DshHostClient): Promise<DshInputModality[] | undefined> {
+    const epoch = this.hostEpoch, generation = this.muxGeneration;
+    const readSelection = async (): Promise<DshModelSelection> => {
+      const projection = await this.call<{ kind?: string; asOfSeq?: number; values?: Record<string, unknown> }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
+      if (this.sessions.get(sessionId) !== runtime || this.client !== client || this.hostEpoch !== epoch || this.muxGeneration !== generation) throw dshInputUnsupported('DSH Host 已变化，请保留草稿并重新读取模型');
+      if (projection.kind === 'cached' || !Number.isSafeInteger(projection.asOfSeq) || typeof projection.asOfSeq !== 'number' || projection.asOfSeq < 0
+        || projection.asOfSeq < (runtime.projections?.asOfSeq ?? -1) || projection.values === undefined || projection.values === null || Array.isArray(projection.values)) throw dshInputUnsupported('原生模型投影未同步，请保留草稿并重新读取');
+      const selected = projectedModelSelection(projection.values['modelSelection']);
+      if (selected === undefined) throw dshInputUnsupported('原生当前模型尚未确认，请保留草稿并重新读取');
+      this.applyProjections(sessionId, runtime, { asOfSeq: projection.asOfSeq, values: projection.values });
+      this.observeModelSelection(sessionId, runtime, selected, 'session/projections:modelSelection.next');
+      return selected;
+    };
+    const selected = await readSelection();
+    const catalog = await this.modelCatalog(client);
+    const inputs = await dshInputCapabilities(catalog, <T>(endpoint: string, args?: Record<string, unknown>) => this.call<T>(client, endpoint, args));
+    const current = await readSelection();
+    if (current.provider !== selected.provider || current.model !== selected.model) throw dshInputUnsupported('原生模型在图片准备期间已变化，请保留草稿并重新核对');
+    return inputs.get(dshInputRoute(current.provider, current.model))?.inputModalities;
+  }
+
   async validateInput(sessionId: string, input: UserInput): Promise<void> {
     const prepared = input as UserInput & DshResolvableInput;
     const parts = dshInputParts(prepared);
@@ -1188,12 +1245,7 @@ export class DshAdapter implements AgentAdapter {
     let modalities: DshInputModality[] | undefined = command ? ['text', 'image'] : undefined;
     if (!command && parts.some(part => part.type === 'image')) {
       const client = await this.ensureSidecar(); const runtime = this.require(sessionId);
-      const projections = await this.call<{ asOfSeq: number; values?: { modelSelection?: { provider: string; model: string } } }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
-      const catalog = await this.modelCatalog(client); const selected = projections.values?.modelSelection ?? catalog.default;
-      if (typeof selected?.provider === 'string' && typeof selected.model === 'string') {
-        const capabilities = await dshInputCapabilities(catalog, <T>(endpoint: string, args?: Record<string, unknown>) => this.call<T>(client, endpoint, args));
-        modalities = capabilities.get(dshInputRoute(selected.provider, selected.model))?.inputModalities;
-      }
+      modalities = await this.imageInputModalities(sessionId, runtime, client);
     }
     validateDshInputParts(parts, modalities);
     if (!input.text.trim() && !parts.some(part => part.type === 'file' || part.type === 'image')) throw dshInputUnsupported('请输入正文或选择附件');
