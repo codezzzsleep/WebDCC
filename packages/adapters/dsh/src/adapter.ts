@@ -264,7 +264,7 @@ interface SessionRuntime {
   assistantKeys?: Set<string>;
   assistantSettlements?: Map<number, { type: string; data: Record<string, unknown>; native: unknown; envelopeId?: number }>;
   projections?: { asOfSeq: number; values: Record<string, unknown> };
-  modelObservation?: { provider?: string; model?: string; reasoningEffort?: string; source: string; nativeSeq?: number };
+  modelObservation?: { provider?: string; model?: string; publicModelId?: string; reasoningEffort?: string; source: string; nativeSeq?: number };
   controlState?: unknown;
 }
 
@@ -286,6 +286,19 @@ interface DshModelCatalog {
   groups?: DshCatalogGroup[];
 }
 
+interface DshModelSelection { provider: string; model: string; reasoningEffort?: string }
+
+/** Native 0.2.2-rc.1 wire projection separates the next selection from last use. */
+function projectedModelSelection(value: unknown): DshModelSelection | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const projection = value as { next?: unknown; lastUsed?: unknown };
+  const selected = projection.next ?? projection.lastUsed;
+  if (selected === null || typeof selected !== 'object') return undefined;
+  const model = selected as Partial<DshModelSelection>;
+  if (typeof model.provider !== 'string' || typeof model.model !== 'string' || model.reasoningEffort !== undefined && typeof model.reasoningEffort !== 'string') return undefined;
+  return { provider: model.provider, model: model.model, ...(model.reasoningEffort === undefined ? {} : { reasoningEffort: model.reasoningEffort }) };
+}
+
 interface DshPermissionCatalog { options: { value: string; name: string; description?: string }[]; defaultOptions: { value: string; name: string; description?: string }[]; defaultPreset: string }
 
 /** Return the provider required by DSH's session/selectModel RPC. */
@@ -301,6 +314,7 @@ export class DshAdapter implements AgentAdapter {
   readonly id = 'dsh' as const;
   private readonly listeners: ((sessionId: string, event: AdapterEvent) => void)[] = [];
   private readonly sessions = new Map<string, SessionRuntime>();
+  private modelPublicIds = new Map<string, string>();
   private sidecar: Sidecar | null = null;
   private client: DshHostClient | null = null;
   private clientId = '';
@@ -379,11 +393,14 @@ export class DshAdapter implements AgentAdapter {
     const [host, state, projections] = await Promise.all([
       this.hostIdentity(), this.call(client, 'session/state', { request: { sessionId: runtime.nativeId } }, sessionId),
       this.call<{ asOfSeq: number; values: Record<string, unknown> }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId),
+      this.modelCatalog(client),
     ]);
     if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw dshNativeError('DSH runtime was replaced', 409);
     runtime.controlState = state;
     this.applyProjections(sessionId, runtime, projections);
-    const selected = runtime.projections?.values['modelSelection'] ?? runtime.modelObservation ?? { source: 'unavailable-in-api' };
+    const projected = projectedModelSelection(runtime.projections?.values['modelSelection']);
+    if (projected !== undefined) this.observeModelSelection(sessionId, runtime, projected, 'session/projections:modelSelection.next');
+    const selected = runtime.modelObservation ?? { source: 'unavailable-in-api' };
     return { revision: this.nativeRevision(runtime), nativeId: runtime.nativeId, workspaceId: runtime.workspaceId, host,
       transport: client.isConnected ? 'live' : 'reconnecting', state: dshPublicValue(state), projections: dshPublicValue(runtime.projections), selected: dshPublicValue(selected),
       credentialMode: this.options.attachBrowserCookie !== undefined || (this.options.mode ?? 'spawn') === 'spawn' ? 'native-browser-shared-peer' : 'native-operator-single-socket',
@@ -487,7 +504,7 @@ export class DshAdapter implements AgentAdapter {
         throw Object.assign(dshNativeError('DSH control outcome is uncertain; reconcile before retrying', 503), { code: 'uncertain' });
       }
       if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw Object.assign(dshNativeError('DSH action outcome belongs to a replaced runtime', 409), { code: 'uncertain' });
-      if (action.type === 'model') runtime.modelObservation = { provider: action.provider, model: action.model, reasoningEffort: action.reasoningEffort, source: 'session/selectModel' };
+      if (action.type === 'model') this.confirmModelSelection(sessionId, runtime, result, action.provider, action.model, action.reasoningEffort);
       // Native cards explicitly distinguish accepted from confirmed settlement.
       if (action.type === 'card-dismiss') {
         const outcome = result as { status?: string; reason?: string };
@@ -606,10 +623,38 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private async modelCatalog(client: DshHostClient): Promise<DshModelCatalog> {
-    return this.call<DshModelCatalog>(client, 'session/modelCatalog', {});
+    const catalog = await this.call<DshModelCatalog>(client, 'session/modelCatalog', {});
+    if (this.client !== client) throw dshNativeError('模型目录属于旧 Host，请重新读取', 409);
+    const ids = new Map<string, string>();
+    for (const group of catalog.groups ?? []) for (const model of group.models ?? []) {
+      if (typeof group.id !== 'string' || typeof model.id !== 'string') continue;
+      ids.set(JSON.stringify([group.id, model.id]), providerForModel(catalog, model.id) === undefined
+        ? `dsh:${Buffer.from(JSON.stringify([group.id, model.id])).toString('base64url')}` : model.id);
+    }
+    this.modelPublicIds = ids;
+    return catalog;
   }
 
-  private async selectModel(client: DshHostClient, runtime: SessionRuntime, model: string, reasoningEffort?: string): Promise<void> {
+  private observeModelSelection(sessionId: string, runtime: SessionRuntime, selected: DshModelSelection, source: string, force = false): void {
+    const publicModelId = this.modelPublicIds.get(JSON.stringify([selected.provider, selected.model]));
+    const previous = runtime.modelObservation;
+    const changed = previous?.provider !== selected.provider || previous.model !== selected.model || previous.reasoningEffort !== selected.reasoningEffort || previous.publicModelId !== publicModelId;
+    runtime.model = selected.model; runtime.modelProvider = selected.provider; runtime.reasoningEffort = selected.reasoningEffort;
+    runtime.modelObservation = { ...selected, ...(publicModelId === undefined ? {} : { publicModelId }), source };
+    if (changed || force) this.emit(sessionId, { type: 'item.complete', itemKey: `model-observation-${++runtime.frameSeq}`, kind: 'internal', scope: 'session',
+      data: { nativeType: source }, native: { ...runtime.modelObservation } });
+  }
+
+  private confirmModelSelection(sessionId: string, runtime: SessionRuntime, result: unknown, provider: string, model: string, reasoningEffort?: string): void {
+    const selected = (result as { selected?: { provider?: unknown; model?: unknown; reasoningEffort?: unknown } } | null)?.selected;
+    if (selected?.provider !== provider || selected.model !== model || reasoningEffort !== undefined && selected.reasoningEffort !== reasoningEffort
+      || selected.reasoningEffort !== undefined && typeof selected.reasoningEffort !== 'string') {
+      throw Object.assign(dshNativeError('原生未确认所选模型或思考等级，请重新读取状态后再操作', 409), { code: 'uncertain' });
+    }
+    this.observeModelSelection(sessionId, runtime, { provider, model, ...(selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort as string }) }, 'session/selectModel:selected', true);
+  }
+
+  private async selectModel(client: DshHostClient, runtime: SessionRuntime, model: string, reasoningEffort?: string, expectedRoute?: { provider: string; model: string }): Promise<void> {
     const catalog = await this.modelCatalog(client);
     let provider: string | undefined;
     if (model.startsWith('dsh:')) {
@@ -620,17 +665,23 @@ export class DshAdapter implements AgentAdapter {
       if (!(catalog.groups ?? []).some(group => group.id === provider && group.models?.some(candidate => candidate.id === model))) throw new Error('dsh: 原生模型路由已不可用');
     } else provider = providerForModel(catalog, model);
     if (provider === undefined) throw new Error(`dsh: 模型 ${model} 不在当前 Provider 目录中`);
+    const selectedModel = catalog.groups?.find(group => group.id === provider)?.models?.find(candidate => candidate.id === model);
+    if (reasoningEffort !== undefined && !selectedModel?.reasoning?.efforts?.some(effort => effort.id === reasoningEffort)) {
+      throw Object.assign(dshNativeError('此原生 Provider/模型未声明所选思考等级', 400), { code: 'native-control-rejected' });
+    }
     const request = {
       sessionId: runtime.nativeId,
       provider,
       model,
       ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
     };
-    await this.call(client, 'session/selectModel', { request });
-    runtime.model = model;
-    runtime.modelProvider = provider;
-    if (reasoningEffort !== undefined) runtime.reasoningEffort = reasoningEffort;
-    runtime.modelObservation = { provider, model, ...(reasoningEffort === undefined ? {} : { reasoningEffort }), source: 'session/selectModel' };
+    const sessionId = [...this.sessions].find(([, current]) => current === runtime)?.[0];
+    if (sessionId === undefined) throw dshNativeError('DSH runtime was replaced', 409);
+    const current = projectedModelSelection(runtime.projections?.values['modelSelection']) ?? runtime.modelObservation;
+    if (expectedRoute !== undefined && (current?.provider !== expectedRoute.provider || current.model !== expectedRoute.model)) throw dshNativeError('原生模型已变化，请重新读取后再调整思考等级', 409);
+    const result = await this.call(client, 'session/selectModel', { request }, sessionId);
+    if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw Object.assign(dshNativeError('模型切换结果属于旧运行实例，请重新核对', 409), { code: 'uncertain' });
+    this.confirmModelSelection(sessionId, runtime, result, provider, model, reasoningEffort);
   }
 
   accessModes(): { id: string; label: string }[] {
@@ -755,6 +806,10 @@ export class DshAdapter implements AgentAdapter {
     if (!replace && baseline.asOfSeq < (runtime.projections?.asOfSeq ?? -1)) return;
     const previous = runtime.projections;
     runtime.projections = structuredClone(baseline);
+    const selected = projectedModelSelection(baseline.values['modelSelection']);
+    if (selected !== undefined && JSON.stringify(previous?.values['modelSelection']) !== JSON.stringify(baseline.values['modelSelection'])) {
+      this.observeModelSelection(sessionId, runtime, selected, 'session/projections:modelSelection.next');
+    }
     runtime.children.clear();
     const children = baseline.values['subagentCatalog'];
     if (Array.isArray(children)) for (const entry of children as Record<string, unknown>[]) {
@@ -800,6 +855,7 @@ export class DshAdapter implements AgentAdapter {
     const host = new DshHostClient(endpoint, { onState: state => {
       if (this.client !== host) return;
       if (state === 'reconnecting' || state === 'auth-required') {
+        this.modelPublicIds.clear();
         this.clientId = ''; this.muxGeneration++; this.observedHost = undefined; this.workspaceState.invalidate();
         for (const [id, runtime] of this.sessions) { runtime.history?.invalidate(); runtime.projections = undefined; runtime.children.clear(); runtime.modelObservation = undefined; this.emit(id, { type: 'permissions', observation: { effective: null, source: 'dsh.connection', scope: 'session' } }); }
       }
@@ -963,6 +1019,12 @@ export class DshAdapter implements AgentAdapter {
     try {
       await this.permission(client, created.sessionId, opts.accessMode);
       if (opts.model !== undefined && opts.model !== '') await this.selectModel(client, runtime, opts.model, opts.reasoningEffort);
+      else if (opts.reasoningEffort !== undefined) {
+        const catalog = await this.modelCatalog(client);
+        const provider = catalog.default?.provider; const model = catalog.default?.model;
+        if (typeof provider !== 'string' || !provider || typeof model !== 'string' || !model) throw dshNativeError('原生默认 Provider/模型待确认，无法调整思考等级', 409);
+        await this.selectModel(client, runtime, `dsh:${Buffer.from(JSON.stringify([provider, model])).toString('base64url')}`, opts.reasoningEffort);
+      }
     } catch (error) { this.sessions.delete(opts.sessionId); throw error; }
     this.openFollow(opts.sessionId, runtime);
     return { nativeId: created.sessionId };
@@ -1174,15 +1236,21 @@ export class DshAdapter implements AgentAdapter {
   async setReasoningEffort(sessionId: string, effort: string): Promise<void> {
     const runtime = this.require(sessionId);
     const client = await this.ensureSidecar();
-    const selected = (runtime.projections?.values['modelSelection'] ?? runtime.modelObservation) as { provider?: string; model?: string } | undefined;
+    const projections = await this.call<{ kind?: string; asOfSeq?: number; values?: Record<string, unknown> }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
+    if (this.sessions.get(sessionId) !== runtime || this.client !== client || projections.kind === 'cached' || typeof projections.asOfSeq !== 'number'
+      || projections.asOfSeq < (runtime.projections?.asOfSeq ?? -1) || projections.values === undefined) throw dshNativeError('当前原生模型状态待确认，请重新读取后再操作', 409);
+    this.applyProjections(sessionId, runtime, { asOfSeq: projections.asOfSeq, values: projections.values });
+    const selected = projectedModelSelection(projections.values['modelSelection']) ?? runtime.modelObservation;
     let model = selected?.model ?? runtime.model;
+    let provider = selected?.provider ?? runtime.modelProvider;
     if (model === undefined || model === '') {
       const catalog = await this.modelCatalog(client);
       model = catalog.default?.model;
+      provider = catalog.default?.provider;
     }
     if (model === undefined || model === '') throw new Error('dsh: 当前会话没有可切换思考强度的模型');
-    if (selected?.provider !== undefined) model = `dsh:${Buffer.from(JSON.stringify([selected.provider, model])).toString('base64url')}`;
-    await this.selectModel(client, runtime, model, effort);
+    if (provider !== undefined) model = `dsh:${Buffer.from(JSON.stringify([provider, model])).toString('base64url')}`;
+    await this.selectModel(client, runtime, model, effort, selected?.provider === undefined || selected.model === undefined ? undefined : { provider: selected.provider, model: selected.model });
   }
 
   async interrupt(sessionId: string): Promise<void> {
@@ -1280,6 +1348,7 @@ export class DshAdapter implements AgentAdapter {
     this.observedHost = undefined;
     this.rpcWritesBlocked = false;
     this.workspaceState.invalidate();
+    this.modelPublicIds.clear();
     this.muxGeneration++;
     const boot = this.booting;
     const client = this.client;

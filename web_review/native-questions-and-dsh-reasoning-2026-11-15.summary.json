@@ -1,0 +1,470 @@
+{
+  "formatVersion": 1,
+  "createdAt": "2026-11-15T17:22:11.405799+00:00",
+  "scope": "Codex Default async questions, question acceptance probes, work-style wording and DSH native reasoning controls",
+  "issues": [
+    92,
+    93,
+    94,
+    95
+  ],
+  "testedCommit": "fa74c452a488a7e2bca9ebe1820cb1146d7955ff",
+  "integratedMain": "ec7b0802daf0f198d5b265a8c2fd77c338a3d0dd",
+  "sourceFingerprint": "df02d52779f7a50844686f96b5c0adf7fa8b639602d71038deb47075194a461c",
+  "nativeRuntimes": {
+    "codex": "0.169.0",
+    "claudeSdk": "0.3.322",
+    "claudeCli": "2.1.322 (Claude Code)",
+    "dsh": "0.2.2-rc.1",
+    "dshHostCommit": "fcc0ad4",
+    "node": "v26.13.0"
+  },
+  "sourceGate": {
+    "passed": true,
+    "runId": "58bc6714-30bd-4070-84c2-b944a5af8507",
+    "schemaFingerprint": "db4a9ff37d61ad3889051692483c833f031bb7796796c29566768616eff30091",
+    "checks": [
+      {
+        "id": "typecheck",
+        "status": "passed",
+        "evidence": [
+          "58bc6714-30bd-4070-84c2-b944a5af8507-typecheck.log"
+        ]
+      },
+      {
+        "id": "lint",
+        "status": "passed",
+        "evidence": [
+          "58bc6714-30bd-4070-84c2-b944a5af8507-lint.log"
+        ]
+      },
+      {
+        "id": "native-inventory",
+        "status": "passed",
+        "evidence": [
+          "58bc6714-30bd-4070-84c2-b944a5af8507-native-inventory.log"
+        ]
+      },
+      {
+        "id": "unit",
+        "status": "passed",
+        "evidence": [
+          "58bc6714-30bd-4070-84c2-b944a5af8507-unit.log"
+        ]
+      },
+      {
+        "id": "browser-security",
+        "status": "passed",
+        "evidence": [
+          "58bc6714-30bd-4070-84c2-b944a5af8507-browser-security.log"
+        ]
+      },
+      {
+        "id": "build",
+        "status": "passed",
+        "evidence": [
+          "58bc6714-30bd-4070-84c2-b944a5af8507-build.log"
+        ]
+      }
+    ],
+    "unitTests": 622,
+    "chromiumTests": 37,
+    "nativeAcceptance": "not-run",
+    "report": {
+      "file": "source-checks-final-integrated.json",
+      "sha256": "a3f6f411c73ec2b87b3c095a889de7a08d5167751e0168794afd778c7bdad407"
+    }
+  },
+  "questions": {
+    "passed": true,
+    "kind": "pinned-native-harness-with-loopback-scripted-model-and-chromium",
+    "paidModel": false,
+    "expectedCases": [
+      "codex-plan",
+      "codex-default",
+      "codex-default-sync-enabled",
+      "claude",
+      "dsh",
+      "codex-plan-cancel",
+      "claude-cancel",
+      "dsh-cancel",
+      "codex-default-async-idle",
+      "codex-default-async-finish-window",
+      "codex-default-async-steer",
+      "codex-default-async-queue",
+      "codex-default-async-external-queue",
+      "codex-default-async-restore",
+      "codex-default-async-stop"
+    ],
+    "results": [
+      {
+        "case": "codex-plan",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "47c22ec393ec3c9f265199cd21b7da4a5cf8ef828347c695831efcea8a6aedab",
+        "traceSha256": "2497b7bb42fd5626a5b9929f287593c93315e2b249e3e69b8630db43dc2300e3"
+      },
+      {
+        "case": "codex-default",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-default-legacy-synchronous-tool-unavailable-with-feature-off",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "a9610ebf0d68fd941c4079b391c1513116e3d23149fa8db9d0e233d7ad93145a",
+        "traceSha256": "b84ed1f27411aef3b32853ab610e49e93937ceb9d601aec080742508561302cd"
+      },
+      {
+        "case": "codex-default-sync-enabled",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "2d3aa24934942fa04570acab06dbc68a30ea1287d70f13c58be3d9e94a1cb228",
+        "traceSha256": "57083826ae86e1ee748a3e9ff05894dec34f56910da0ffcaf378ffc1d96ebe78"
+      },
+      {
+        "case": "claude",
+        "agent": "claude-code",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload",
+        "binarySha256": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+        "configurationFingerprint": "22ba86a9e40e8d3563c044a943f1d194f147def87349ca675e4cbb2650543516",
+        "traceSha256": "9ed24430dd3b3e5bcd7175dbe08d7e03081154414291971b3917a6a8b43889be"
+      },
+      {
+        "case": "dsh",
+        "agent": "dsh",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload",
+        "configurationFingerprint": "d5ca3b20154544c5e26c24bd71a5db83e1b58a92014bfc2e5d04e204008aefa1",
+        "traceSha256": "a2071056d24f830813e2af519fa52b6a1e0b36e4a91ac70055ec383b7a84af3b"
+      },
+      {
+        "case": "codex-plan-cancel",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "f02b1d363ddb856f43f0cbc2be192021bbc60529c2571fe68dc93ce38201bef8",
+        "traceSha256": "db5161a4fbf95958e286e7fa6cf2aee52c6bedf58f97fecf3aa1d23551fc6817"
+      },
+      {
+        "case": "claude-cancel",
+        "agent": "claude-code",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended",
+        "binarySha256": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+        "configurationFingerprint": "4ec4c50a7f4aef7679d308d5f8a54d9d259cd0cd11423156e8675de63e28bfe3",
+        "traceSha256": "542ab2e7370fc50101278ff155ccaa49b12adf8d252659b012f8cb770814ec06"
+      },
+      {
+        "case": "dsh-cancel",
+        "agent": "dsh",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended",
+        "configurationFingerprint": "1936d9dcf3759e10d644f785ca1db25425f9c3653320bc0426c3bb93553b34a7",
+        "traceSha256": "a21482791b0def78cb23b81343d946602667c8fba7adbd80b49850f819252dbc"
+      },
+      {
+        "case": "codex-default-async-idle",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-default-async-idle-two-answers-received-and-refreshed",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "61f40b692e5091969be5596fa41bb660c2511d53d2669358b6db328f6b5a53c7",
+        "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+        "nativePredicates": {
+          "native-default-mode": true,
+          "native-async-item": true,
+          "two-web-questions": true,
+          "native-accepted-and-continued": true,
+          "native-answer-identities": true,
+          "model-received-original-answers": true,
+          "refresh-keeps-resolved": true
+        },
+        "traceSha256": "e5956a72ecf58e7fcd91390ebf3eccad663493efe62d8383d4d8d0997e60e23e",
+        "nativeModeProof": {
+          "source": "same-native-thread-and-turn-rollout-context",
+          "modes": [
+            "default"
+          ],
+          "models": [
+            "gpt-6.1-sol"
+          ],
+          "appServerObservedMode": null
+        }
+      },
+      {
+        "case": "codex-default-async-finish-window",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-default-async-window-two-answers-received-and-refreshed",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "415f19250a83442de49fd64d5cff8c89b76e489ee96f16bfe49f74405e4f5a64",
+        "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+        "nativePredicates": {
+          "native-default-mode": true,
+          "native-async-item": true,
+          "two-web-questions": true,
+          "native-accepted-and-continued": true,
+          "native-answer-identities": true,
+          "model-received-original-answers": true,
+          "refresh-keeps-resolved": true,
+          "second-answer-in-real-finish-window": true
+        },
+        "traceSha256": "5d4b04d3727e58fb960244235187e076c9dabbe0655817d78b7ee51ba47810f2",
+        "nativeModeProof": {
+          "source": "same-native-thread-and-turn-rollout-context",
+          "modes": [
+            "default"
+          ],
+          "models": [
+            "gpt-6.1-sol"
+          ],
+          "appServerObservedMode": null
+        }
+      },
+      {
+        "case": "codex-default-async-steer",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-default-async-steer-two-answers-received-and-refreshed",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "f53c0751b5ae68f7cb958750c794dde0af424493f468434fb4e95d661c171557",
+        "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+        "nativePredicates": {
+          "native-default-mode": true,
+          "native-async-item": true,
+          "two-web-questions": true,
+          "native-accepted-and-continued": true,
+          "native-answer-identities": true,
+          "model-received-original-answers": true,
+          "refresh-keeps-resolved": true,
+          "native-steer-received": true
+        },
+        "traceSha256": "c5ef4022e5403f26442f75a8ffaab909d3307f204b794a6009b3a879253da6b6",
+        "nativeModeProof": {
+          "source": "same-native-thread-and-turn-rollout-context",
+          "modes": [
+            "default"
+          ],
+          "models": [
+            "gpt-6.1-sol"
+          ],
+          "appServerObservedMode": null
+        }
+      },
+      {
+        "case": "codex-default-async-queue",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-default-async-queue-two-answers-received-and-refreshed",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "7634d15e040b5bd4c4df436c05f87b727cb912c7afb51e841981ef553ed0e8af",
+        "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+        "nativePredicates": {
+          "native-default-mode": true,
+          "native-async-item": true,
+          "two-web-questions": true,
+          "native-accepted-and-continued": true,
+          "native-answer-identities": true,
+          "model-received-original-answers": true,
+          "refresh-keeps-resolved": true,
+          "real-queued-browser-answers": true,
+          "refresh-does-not-resend-queue": true
+        },
+        "traceSha256": "fd8a6ffb0b07bc48b37ca8f67e785df51e514ed7b917ccbd79a023aac74098e7",
+        "nativeModeProof": {
+          "source": "same-native-thread-and-turn-rollout-context",
+          "modes": [
+            "default"
+          ],
+          "models": [
+            "gpt-6.1-sol"
+          ],
+          "appServerObservedMode": null
+        }
+      },
+      {
+        "case": "codex-default-async-external-queue",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "direct-native-input-bypasses-web-command-cancels-old-web-queue-and-refreshes",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "76f25438749037bca819acac0bdd8668c94a8fab76feb6e99eba7b568c35a755",
+        "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+        "nativePredicates": {
+          "native-default-mode": true,
+          "native-async-item": true,
+          "two-web-questions": true,
+          "native-accepted-and-continued": true,
+          "native-answer-identities": true,
+          "model-received-original-answers": true,
+          "refresh-keeps-resolved": true,
+          "direct-native-input-bypasses-web-command": true,
+          "external-answer-cancels-old-web-queue": true,
+          "cancelled-web-answer-never-native-sent": true
+        },
+        "traceSha256": "628f91e1df48215c778fd3da3883263db7495c47dd6df202a8008f4ba756bb7b",
+        "nativeModeProof": {
+          "source": "same-native-thread-and-turn-rollout-context",
+          "modes": [
+            "default"
+          ],
+          "models": [
+            "gpt-6.1-sol"
+          ],
+          "appServerObservedMode": null
+        }
+      },
+      {
+        "case": "codex-default-async-restore",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-default-async-restore-two-answers-received-and-refreshed",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "7b6393df13632fe2a086f32179167914570d1f9e954838eddee8f30fcd8b7924",
+        "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+        "nativePredicates": {
+          "native-default-mode": true,
+          "native-async-item": true,
+          "two-web-questions": true,
+          "native-accepted-and-continued": true,
+          "native-answer-identities": true,
+          "model-received-original-answers": true,
+          "refresh-keeps-resolved": true,
+          "file-sqlite-and-native-reopened": true
+        },
+        "traceSha256": "bafe3f8bf27d02cb9f1e7516bb37848f46502983d0ded28bd883f610da341908",
+        "nativeModeProof": {
+          "source": "same-native-thread-and-turn-rollout-context",
+          "modes": [
+            "default"
+          ],
+          "models": [
+            "gpt-6.1-sol"
+          ],
+          "appServerObservedMode": null
+        }
+      },
+      {
+        "case": "codex-default-async-stop",
+        "agent": "codex",
+        "passed": true,
+        "outcome": "native-default-async-stop-two-answers-received-and-refreshed",
+        "nativeVersion": "0.169.0",
+        "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+        "configurationFingerprint": "3c4c7b57a7c25a3eeac3c13d4f7ce4d7bf53dadf07156f0b98c1d334e237a125",
+        "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+        "nativePredicates": {
+          "native-default-mode": true,
+          "native-async-item": true,
+          "two-web-questions": true,
+          "native-accepted-and-continued": true,
+          "native-answer-identities": true,
+          "model-received-original-answers": true,
+          "refresh-keeps-resolved": true,
+          "native-stop-before-later-answer": true
+        },
+        "traceSha256": "9c83a62651d534992a4d5ba5b2688c75894881fed6b931d874cf4bc1475d2c20",
+        "nativeModeProof": {
+          "source": "same-native-thread-and-turn-rollout-context",
+          "modes": [
+            "default"
+          ],
+          "models": [
+            "gpt-6.1-sol"
+          ],
+          "appServerObservedMode": null
+        }
+      }
+    ],
+    "report": {
+      "file": "native-questions-final-integrated.json",
+      "sha256": "8843e271c7c4d9932cf3ae768eac362d8b464f327401ced0700bc48aeb986647"
+    }
+  },
+  "mcp": {
+    "passed": true,
+    "kind": "pinned-native-mcp-with-scripted-model-and-real-browser",
+    "actualNativeVersion": "0.169.0",
+    "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+    "schemaFingerprint": "b5195a5af037f132f8a3303f467785f126d4468c8862a3d8519486458acab1e3",
+    "configurationFingerprint": "e38f0e987aba2e29c3f3034ce75872b54431501e505da28f4c98c76159ff4de0",
+    "scope": "actual native MCP form, original UTF-8 text and integer, native accept, continue, Chromium refresh",
+    "report": {
+      "file": "native-mcp-final-integrated.json",
+      "sha256": "d06006dd9d5282068d97aa3efbdf4dbed4d196ffb80903d1603e33402e52f15a"
+    },
+    "traceSha256": "8bd1ecdaf41dfea498be545d3494482a416e75dc7f46197e4805fead974ea2de"
+  },
+  "dshReasoning": {
+    "passed": true,
+    "scope": "actual native Web Host with fixture profile declaring off/high/max; production adapter and Chromium, no production profile/deployment or model request",
+    "nativeVersion": "0.2.2-rc.1",
+    "nativeHostFingerprint": "932fdfe376de37d1d0cf4c17978e066604874d2586ebd1de870cff21d65d73c2",
+    "configuration": "temporary isolated Coarena-shaped native profile",
+    "modelRequests": 0,
+    "existingNativeChoices": [
+      "high",
+      "max",
+      "off"
+    ],
+    "newChoiceConfirmed": true,
+    "omittedModelEffortConfirmed": "high",
+    "externalProviderModelAndEffortSynced": true,
+    "refreshConfirmed": true,
+    "report": {
+      "file": "native-dsh-reasoning-final-integrated.json",
+      "sha256": "dc62f58d8726ec585fb4663f8875ea31ad6eb962cc249b65b8b89ba844de0ff6"
+    }
+  },
+  "preservedEarlierEvidence": [
+    {
+      "kind": "source gate before browser regressions fixed",
+      "passed": false,
+      "report": {
+        "file": "source-checks-pre-main-merge.json",
+        "sha256": "e2e09ae847163b0e6c00c78554829b771dfc19ffa25f518b44eaf9fcae262261"
+      }
+    },
+    {
+      "kind": "7/15 native cases failed at incorrect observedMode assertion",
+      "passed": false,
+      "report": {
+        "file": "native-questions-final-d493311.json",
+        "sha256": "bbd40c1de9b3fae3b827f5db5e8a0fbbbce040ac4be9018270ebcb88370339bf"
+      }
+    },
+    {
+      "kind": "15-case native gate after mode-proof fix before latest-main integration",
+      "passed": true,
+      "report": {
+        "file": "native-questions-final-mode-proof.json",
+        "sha256": "f4a52023ef18b732b34debb7c6f84e72d4d1cace44675cf72e33d66ff0fdbd3e"
+      }
+    }
+  ],
+  "remainingAcceptance": [
+    "当前部署及121服务器未部署或重启；尚未在已连接的生产DSH Host和真实Provider上验收本次修复。",
+    "DSH等级证明覆盖实际Host选择/确认/刷新，模型请求数为0；未证明真实Provider各档推理输出。",
+    "直接原生steer绕过网页命令的场景已验收；独立OS客户端、全部跨连接故障和重启/unknown矩阵未完成。",
+    "MCP仅验收普通form接受及刷新；secret、URL、拒绝、取消、过期和完整schema矩阵仍属于开放的NP-06范围。",
+    "Codex工作方式文案、选择与观测边界已有源码/浏览器回归及既有会话原生证据；全新会话与生产环境的完整状态矩阵仍需补齐。",
+    "本次没有重跑L1全矩阵；历史1/33、32 GOLDEN和16 NOT_TRIGGERED不改写为通过。48项需求与相关完整Issue保持开放。"
+  ],
+  "deployment": "not-performed; no current/121 restart, merge or release",
+  "rawEvidence": "Private immutable reports, complete native/model/Web traces and source logs are retained; public summary includes scope and digests only."
+}

@@ -169,6 +169,16 @@ it('Codex Composer explains its native file boundary and Enter cannot submit a r
     const session = await seedWorkspaceAndSession(ctx, 'codex');
     browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
     await page.goto(`${base}/s/${session.sessionId}`);
+    for (const width of [1280, 420]) {
+      await page.setViewportSize({ width, height: 720 });
+      await page.getByTestId('attach-button').click();
+      await expect.poll(() => page.getByTestId('attach-button').getAttribute('aria-expanded')).toBe('true');
+      expect(await page.getByTestId('add-file').isDisabled()).toBe(true);
+      // Mobile menus are bottom sheets; dismiss by tapping outside the sheet.
+      await page.getByTestId('composer-input').click();
+      await expect.poll(() => page.getByTestId('attach-button').getAttribute('aria-expanded')).toBe('false');
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByTestId('attach-button').click();
     expect(await page.getByTestId('add-file').isDisabled()).toBe(true);
     await page.getByTestId('add-file-input').setInputFiles({ name: 'unsupported.txt', mimeType: 'text/plain', buffer: Buffer.from('original bytes') });

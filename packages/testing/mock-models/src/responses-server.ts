@@ -30,6 +30,8 @@ export interface ResponsesMockOptions {
   log?: MockLogger;
   recordPath?: string;
   chunkSize?: number;
+  /** Fixture-controlled latency; records the real request before awaiting. */
+  beforeReply?: (body: Record<string, unknown>) => void | Promise<void>;
 }
 
 export interface RunningResponsesMock {
@@ -121,7 +123,7 @@ export function codeModeScript(step: PlanStep, toolName: string): string {
       // human-readable `completed` status used by the UI.
       return `const r = await tools.${toolName}(${JSON.stringify({ ...input, ...(input['status'] === 'completed' ? { status: 'complete' } : {}) })});\ntext(JSON.stringify(r));`;
     case 'ask':
-      return `const r = await tools.request_user_input(${json});\ntext(JSON.stringify(r));`;
+      return `const r = await tools.${toolName}(${json});\ntext(JSON.stringify(r));`;
     case 'todo':
       return `const r = await tools.exec_command(${JSON.stringify({ cmd: 'true' })});\ntext(JSON.stringify(r));`;
     default:
@@ -278,7 +280,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     const prompt = latestUserPrompt(input);
     // Codex injects its persistent goal as an internal user context between
     // tool calls. It is not a new WebDCC prompt and must not reset the plan.
-    if (prompt !== '' && !prompt.includes('<codex_internal_context') && prompt !== replayPrompt) {
+    if (prompt !== '' && !prompt.includes('<codex_internal_context') && !prompt.includes('<send_user_message_question_reply>') && prompt !== replayPrompt) {
       replayPrompt = prompt;
       replayStep = 0;
     }
@@ -295,6 +297,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       replyHelper(res, body, modelId);
       return;
     }
+    await options.beforeReply?.(body);
     const variant = detectVariant('responses', tools ?? additionalTools, codeMode);
     const plan = control.planForVariant(variant);
     const resolvedStep = codeMode
@@ -311,10 +314,14 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
     }
     const toolName = resolvedStep.toolName;
     const toolNamespace = resolvedStep.toolNamespace;
+    // Native additional_tools may mix the custom code-mode exec with direct
+    // namespace functions such as async questions and MCP. Only nested tools
+    // belong in exec; functions.request_user_input_async has no tools.* binding.
+    const nestedCodeMode = codeMode && toolNamespace === undefined;
     const toolInput = { ...defaultToolInput(resolvedStep.kind ?? step.tool?.kind ?? 'other'), ...(resolvedStep.toolInput ?? {}) };
 
     const responseId = newId('resp');
-    const callId = newId('call');
+    const callId = step.tool?.callId ?? newId('call');
     const stepDelay = step.chunkDelayMs ?? 0;
     if (step.tool !== undefined || toolName !== undefined) replayStep = stepIndex + 1;
 
@@ -461,7 +468,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
     }
 
-    if (codeMode && step.tool !== undefined) {
+    if (nestedCodeMode && step.tool !== undefined) {
       // code mode：一个 exec 自定义工具，input 是 JavaScript 源码
       const itemId = newId('ctc');
       const index = outputIndex;
@@ -492,7 +499,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
       writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
     }
 
-    if (!codeMode && toolName) {
+    if (!nestedCodeMode && toolName) {
       const itemId = newId('fc');
       const index = outputIndex;
       writeSse(res, 'response.output_item.added', {

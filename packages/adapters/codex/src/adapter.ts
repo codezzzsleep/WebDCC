@@ -48,6 +48,7 @@ import type { InitializeResponse } from './schema/InitializeResponse.js';
 import { codexNativeCatalog, codexNativeState, executeCodexNativeControl, parseCodexNativeAction } from './native.js';
 
 import { PINNED_VERSION, isSupportedCodexVersion, CODEX_COMPATIBILITY_LABEL } from './versions.js';
+import { codexAsyncQuestions, codexAsyncQuestionEvents, nativeAsyncReplies } from './async-questions.js';
 export { PINNED_VERSION } from './versions.js';
 
 export interface CodexAdapterOptions {
@@ -110,6 +111,8 @@ function endGeneration(runtime: SessionRuntime, turnId: string | undefined, at: 
 }
 
 interface SessionRuntime {
+  asyncQuestions?: Map<string, EventData['question']>;
+  asyncAnswered?: Set<string>;
   nativeVersion: string;
   identity?: RuntimeIdentity;
   envelopeId?: number;
@@ -411,7 +414,7 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
     case 'agentMessage':
       {
         const nativePhase = typeof item['phase'] === 'string' ? item['phase'] : undefined;
-        const phase = nativePhase === 'final_answer' || nativePhase === 'partial_answer' ? 'final' : 'interim';
+        const phase = item['delivery'] !== 'async' && (nativePhase === 'final_answer' || nativePhase === 'partial_answer') ? 'final' : 'interim';
         return { text: String(item['text'] ?? ''), phase, ...(nativePhase === undefined ? {} : { nativePhase }) };
       }
     case 'reasoning':
@@ -821,11 +824,11 @@ export class CodexAdapter implements AgentAdapter {
             completedAt: turn.completedAt == null ? null : new Date(turn.completedAt * 1000).toISOString(),
             itemsComplete: turn.itemsView === 'full',
             clientCommandIds: turn.items.flatMap(item => item.type === 'userMessage' && item.clientId !== null ? [item.clientId] : []),
-            items: turn.items.map(item => ({ itemKey: item.id,
+            items: turn.items.flatMap(item => [{ itemKey: item.id,
               kind: item.type === 'userMessage' ? 'user.message' : mapItemKind(item.type),
               data: item.type === 'userMessage' ? { text: item.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'), ...(item.clientId === null ? {} : { clientCommandId: item.clientId }) }
                 : item.type === 'reasoning' ? { text: item.summary.join('\n') } : mapItemData(item as unknown as Record<string, unknown>),
-              native: item })),
+              native: item }, ...codexAsyncQuestions(item as unknown as Record<string, unknown>, opts.nativeId).map(question => ({ itemKey: `question-${question.questionId}`, kind: 'question' as const, data: question, native: item }))]),
           });
         }
         cursor = result.nextCursor;
@@ -882,6 +885,7 @@ export class CodexAdapter implements AgentAdapter {
     // thread/resume 返回后线程可能还没挂上；等 thread/started 或最多 2 秒
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (opts.restoreNativeHistory) await this.restoreHistory(opts.sessionId, runtime);
+    else await this.restoreAsyncQuestions(opts.sessionId, runtime);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resumed', runtime.nativeId);
     } catch (error) { await this.dispose(opts.sessionId); throw error; }
   }
@@ -1152,13 +1156,39 @@ export class CodexAdapter implements AgentAdapter {
       events: [{ type: 'turn.start' as const, nativeTurnId: turn.id }, ...turn.items.flatMap(item => {
         const kind = item.type === 'userMessage' ? 'user.message' : mapItemKind(item.type);
         const data = item.type === 'userMessage' ? { text: item.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'), ...(item.clientId ? { clientCommandId: item.clientId } : {}) } : mapItemData(item as unknown as Record<string, unknown>);
-        return [{ type: 'item.complete' as const, itemKey: item.id, kind, data, native: item }];
+        return [...codexAsyncQuestionEvents(item as unknown as Record<string, unknown>, runtime.nativeId), { type: 'item.complete' as const, itemKey: item.id, kind, data, native: item }];
       }), { type: 'turn.end' as const, nativeTurnId: turn.id, status: turn.status === 'failed' ? 'failed' as const : turn.status === 'interrupted' ? 'interrupted' as const : 'completed' as const }] }));
     if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生返回实例已变化'), { code: 'uncertain' });
     this.emit(sessionId, { type: 'history', nativeId: runtime.nativeId, records });
     const goal = await nativeRequest(runtime.rpc, 'thread/goal/get', { threadId: runtime.nativeId });
     this.onNotification(sessionId, goal.goal ? { method: 'thread/goal/updated', params: { threadId: runtime.nativeId, turnId: null, goal: goal.goal } }
       : { method: 'thread/goal/cleared', params: { threadId: runtime.nativeId } });
+  }
+
+  /** Recover async cards and native answer receipts without inventing a live turn. */
+  private async restoreAsyncQuestions(sessionId: string, runtime: SessionRuntime): Promise<void> {
+    let cursor: string | undefined;
+    const seen = new Set<string>();
+    do {
+      const page = await nativeRequest(runtime.rpc, 'thread/turns/list', { threadId: runtime.nativeId, limit: 100, sortDirection: 'asc', itemsView: 'full', ...(cursor ? { cursor } : {}) });
+      if (this.sessions.get(sessionId) !== runtime || page.data.some(turn => turn.itemsView !== 'full')) throw Object.assign(new Error('异步问题历史未完整确认'), { code: 'uncertain' });
+      for (const turn of page.data) for (const item of turn.items) {
+        const record = item as unknown as Record<string, unknown>;
+        for (const question of codexAsyncQuestions(record, runtime.nativeId)) {
+          (runtime.asyncQuestions ??= new Map()).set(question.questionId, question);
+          this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: question, native: item, scope: 'session' });
+        }
+        if (item.type === 'userMessage') {
+          const { text, replies } = nativeAsyncReplies(record);
+          for (const reply of replies) (runtime.asyncAnswered ??= new Set()).add(reply.questionItemId);
+          // Local receipts also identify native's oversized-ID fallback replies.
+          if (replies.length > 0 || item.clientId) this.emit(sessionId, { type: 'item.complete', itemKey: item.id, kind: 'user.message', data: { text, ...(item.clientId ? { clientCommandId: item.clientId } : {}) }, native: item, scope: 'session' });
+        }
+      }
+      cursor = page.nextCursor ?? undefined;
+      if (cursor && seen.has(cursor)) throw Object.assign(new Error('异步问题历史游标重复，请核对原生历史'), { code: 'uncertain' });
+      if (cursor) seen.add(cursor);
+    } while (cursor);
   }
 
   async nativeProcessStart(sessionId: string, params: NativeProcessStart, onOutput: (delta: NativeProcessDelta) => void): Promise<NativeProcessCompletion> {
@@ -1318,6 +1348,18 @@ export class CodexAdapter implements AgentAdapter {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
+        if (type === 'userMessage') {
+          const { text, replies } = nativeAsyncReplies(item);
+          for (const reply of replies) (runtime.asyncAnswered ??= new Set()).add(reply.questionItemId);
+          this.emit(sessionId, { type: 'item.complete', itemKey: itemId, kind: 'user.message', nativeTurnId: this.nativeTurnId(params), native: item,
+            data: { text, ...(typeof item['clientId'] === 'string' ? { clientCommandId: item['clientId'] } : {}) } });
+          return;
+        }
+        for (const question of codexAsyncQuestions(item, runtime.nativeId)) {
+          if (runtime.asyncAnswered?.has(question.questionId) || runtime.asyncQuestions?.has(question.questionId)) continue;
+          (runtime.asyncQuestions ??= new Map()).set(question.questionId, question);
+          this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: question, native: item, scope: 'session', nativeTurnId: this.nativeTurnId(params) });
+        }
         if (type === 'agentMessage') runtime.lastAssistantText = String(item['text'] ?? '');
         const kind = mapItemKind(type);
         if (kind === 'internal') {

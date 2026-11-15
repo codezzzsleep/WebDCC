@@ -38,9 +38,9 @@ for (const key of ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'DSH_HOME'] as con
 process.env['WDCC_TEST_HOOKS'] = '1';
 assertTestIsolation(process.env);
 
-export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN, configPatch: Partial<Config> = {}, options: { webDist?: string } = {}): Promise<TestApp> {
+export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN, configPatch: Partial<Config> = {}, options: { webDist?: string; dbPath?: string } = {}): Promise<TestApp> {
   const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-test-'));
-  const db: Db = openDb(':memory:');
+  const db: Db = openDb(options.dbPath ?? ':memory:');
   const store = new Store(db);
   const files = new FileStore(dataDir, store);
   await files.init();

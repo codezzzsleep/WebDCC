@@ -60,6 +60,9 @@ export interface AnswerCommand extends CommandBase {
   sessionId: string;
   questionId: string;
   answer: unknown;
+  /** Async answers use the same durable input delivery as ordinary messages. */
+  intent?: InputIntent;
+  expectedTurnId?: string;
 }
 
 export interface InterruptCommand extends CommandBase {
@@ -155,7 +158,7 @@ export interface FeedPatch {
   /** 访问模式 / 模型 / Provider 变化（F6、AG-*-12） */
   accessMode?: string;
   model?: string;
-  reasoningEffort?: string;
+  reasoningEffort?: string | null;
   providerId?: string | null;
   /** 接续会话的上一棒 */
   parentId?: string;

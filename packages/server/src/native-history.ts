@@ -86,6 +86,11 @@ export class NativeHistoryStore {
             append({ ...base, itemKey: `native-turn-end-${record.nativeSeq}`, kind: 'turn.completed', data: { status: event.status, durationMs: start === undefined ? 0 : Math.max(0, Date.parse(record.at) - Date.parse(start.at)), answerItemKeys: resolveAnswer(turnEvents).map(item => item.itemKey), ...(event.usage === undefined ? {} : { usage: event.usage }) } });
           } else if (event.type === 'item.complete' || event.type === 'item.start') {
             if (echoes.has(event.itemKey) || event.type === 'item.start' && completed.has(event.itemKey)) continue;
+            if (event.kind === 'question') {
+              const question = event.data as EventData['question'];
+              const state = this.store.interactions.get(sessionId, 'answer', question.questionId)?.state;
+              if (question.asyncReply !== undefined && question.status !== 'answered' && question.status !== 'skipped' && (state === 'resolved' || state === 'cancelled')) continue;
+            }
             // CLI roundtrips also recover items already observed live. Their
             // identity is the native turn + item, independent of history seq.
             // The full recovered source remains in native_history_records.

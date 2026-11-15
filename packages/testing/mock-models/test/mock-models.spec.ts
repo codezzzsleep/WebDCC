@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { countToolResults, createAnthropicMock, defaultToolInput, type RunningMock } from '../src/anthropic-server.js';
 import { pickToolName, resolveTool, stepAt } from '../src/plan.js';
-import { countFunctionCallOutputs } from '../src/responses-server.js';
-import { countResponses } from '../src/mock-control.js';
+import { codeModeScript, countFunctionCallOutputs, startResponsesMock } from '../src/responses-server.js';
+import { countResponses, MockControl } from '../src/mock-control.js';
 
 describe('plan 工具匹配', () => {
   const codexTools = [
@@ -48,6 +48,50 @@ describe('plan 工具匹配', () => {
 
   it('计划耗尽时返回兜底项', () => {
     expect(stepAt([{ text: 'only' }], 5).stopReason).toBe('end_turn');
+  });
+});
+
+describe('native Responses question transports', () => {
+  const questions = [{ title: 'Environment?', options: ['Stage', 'Prod'] }];
+  const tools = [{ type: 'namespace', name: 'functions', tools: [{ type: 'custom', name: 'exec' }, { type: 'function', name: 'request_user_input_async' }] }];
+  const additional = { type: 'additional_tools', tools };
+
+  it('synchronous nested ask respects the resolved tool name', () => {
+    expect(codeModeScript({ tool: { kind: 'ask', input: { questions: [] } } }, 'request_user_input')).toContain('tools.request_user_input(');
+    expect(codeModeScript({ tool: { kind: 'ask', input: { questions: [] } } }, 'ask_human')).toContain('tools.ask_human(');
+  });
+
+  it('async namespace question is a direct function even beside code-mode exec; an answer preserves the continuation cursor', async () => {
+    const plan = [{ tool: { kind: 'ask' as const, name: 'request_user_input_async', namespace: 'functions', callId: 'async-fixture', input: { questions } } }, { text: 'Continue after native accepted' }];
+    const control = new MockControl(plan, '');
+    const model = await startResponsesMock({ plan, control, log: () => undefined });
+    try {
+      const initial = await fetch(model.url + '/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'gpt-6.1-sol', input: [additional, { type: 'message', role: 'user', content: 'Ask' }] }) });
+      expect(initial.status).toBe(200);
+      const text = await initial.text();
+      expect(text).toContain('"namespace":"functions"');
+      expect(text).toContain('"name":"request_user_input_async"');
+      expect(text).toContain('"call_id":"async-fixture"');
+      expect(text).not.toContain('custom_tool_call');
+      expect(text).not.toContain('tools.request_user_input_async');
+      const answer = '<send_user_message_question_reply>\n[{"questionItemId":"id","question":"Environment?","answer":"Prod"}]\n</send_user_message_question_reply>';
+      const continuation = await fetch(model.url + '/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'gpt-6.1-sol', input: [additional, { type: 'message', role: 'user', content: answer }] }) });
+      expect(continuation.status).toBe(200);
+      const continued = await continuation.text();
+      expect(continued).toContain('Continue after native accepted');
+      expect(continued).not.toContain('function_call');
+      expect(control.requests.every(request => request.failed !== true)).toBe(true);
+    } finally { await model.close(); }
+  });
+
+  it('a positive async plan fails when the native catalog does not declare the namespace tool', async () => {
+    const plan = [{ tool: { kind: 'ask' as const, name: 'request_user_input_async', namespace: 'functions', input: { questions } } }];
+    const control = new MockControl(plan, ''); const model = await startResponsesMock({ plan, control, log: () => undefined });
+    try {
+      const response = await fetch(model.url + '/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'unsupported-native-catalog', input: [{ type: 'additional_tools', tools: [{ type: 'namespace', name: 'functions', tools: [{ type: 'custom', name: 'exec' }] }] }, { type: 'message', role: 'user', content: 'Ask' }] }) });
+      expect(response.status).toBe(500); expect(control.requests.at(-1)?.failed).toBe(true);
+      expect(await response.text()).toContain('mock_tool_mismatch');
+    } finally { await model.close(); }
   });
 });
 

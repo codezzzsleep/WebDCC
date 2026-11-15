@@ -70,6 +70,12 @@ export class CommandJournal {
 
   inputState(turnId: string, state: CommandState): void {
     this.db.transaction(() => {
+      if (state === 'completed') {
+        const row = this.db.prepare('SELECT request FROM interactions WHERE command_id = (SELECT command_id FROM input_queue WHERE turn_id = ?)').get(turnId) as { request: string } | undefined;
+        const request = row === undefined ? undefined : JSON.parse(row.request) as { asyncReply?: unknown; resolution?: string };
+        // Finishing native work cannot stand in for this answer's actual receipt.
+        if (request?.asyncReply !== undefined && request.resolution !== 'native-acknowledged') state = 'uncertain';
+      }
       this.db.prepare('UPDATE input_queue SET state = ? WHERE turn_id = ?').run(state, turnId);
       this.db.prepare('UPDATE command_journal SET state = ?, updated_at = ? WHERE turn_id = ?').run(state, new Date().toISOString(), turnId);
     })();

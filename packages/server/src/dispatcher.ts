@@ -58,7 +58,10 @@ export class CommandDispatcher {
       const blockedInput = command.op === 'send' ? this.store.journal.queue(command.sessionId).find(row => row.commandId === command.clientCommandId && row.preparationError !== undefined) : undefined;
       const interaction = command.op === 'answer' ? this.store.interactions.get(command.sessionId, 'answer', command.questionId)
         : command.op === 'approve' ? this.store.interactions.get(command.sessionId, 'approve', command.approvalId) : undefined;
-      const acceptedState = interaction === undefined ? 'completed' : interaction.state === 'collected' ? 'queued'
+      const externalAsync = interaction?.kind === 'answer' && (JSON.parse(interaction.request) as { asyncReply?: unknown; resolution?: string }).asyncReply !== undefined
+        && interaction.state === 'resolved' && (JSON.parse(interaction.request) as { resolution?: string }).resolution !== 'native-acknowledged';
+      const acceptedState = externalAsync ? state === 'cancelled' ? 'cancelled' : 'uncertain'
+        : interaction === undefined ? 'completed' : interaction.state === 'collected' || interaction.state === 'queued' ? 'queued'
         : interaction.state === 'resolved' || interaction.state === 'cancelled' ? 'completed' : interaction.state === 'uncertain' ? 'uncertain' : 'dispatching';
       this.store.journal.state(command.clientCommandId, blockedInput !== undefined ? 'queued' : result.ok ? command.op === 'send' && state !== undefined ? state : acceptedState : result.code === 'uncertain' ? 'uncertain' : 'failed', result);
       this.recorder?.record(owner, 'web', 'ack', result, 'in');
@@ -96,7 +99,8 @@ export class CommandDispatcher {
           return { ok: true };
         }
         case 'answer': {
-          const value = await this.manager.answer(command.sessionId, command.questionId, command.answer, command.clientCommandId);
+          const value = await this.manager.answer(command.sessionId, command.questionId, command.answer, command.clientCommandId,
+            { intent: command.intent, expectedTurnId: command.expectedTurnId });
           return { ok: true, value };
         }
         case 'interrupt': {
@@ -127,7 +131,7 @@ export class CommandDispatcher {
         }
         case 'set-model': {
           await this.manager.setModel(command.sessionId, command.model);
-          return { ok: true, value: { model: command.model } };
+          return { ok: true, value: { model: this.manager.requireSession(command.sessionId).model ?? command.model } };
         }
         case 'set-reasoning-effort': {
           await this.manager.setReasoningEffort(command.sessionId, command.reasoningEffort);

@@ -18,7 +18,9 @@ export function isCommand(value: unknown): value is Command {
       && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
       && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
     case 'approve': return opaqueId(value['approvalId']) && opaqueId(value['optionId']);
-    case 'answer': return opaqueId(value['questionId']) && value['answer'] !== undefined;
+    case 'answer': return opaqueId(value['questionId']) && value['answer'] !== undefined
+      && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
+      && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
     case 'interrupt': return sequence(value['createdAt']);
     case 'rename': return typeof value['title'] === 'string';
     case 'pin': return typeof value['pinned'] === 'boolean';
