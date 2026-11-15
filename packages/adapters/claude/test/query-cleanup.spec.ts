@@ -100,3 +100,34 @@ it('the actual manager releases an idle exited query and creates a new SDK consu
     await vi.waitFor(() => expect(ctx.store.getSession(session.id)?.status).toBe('idle'), { timeout: 5_000 });
   } finally { await ctx.close(); mock.query.mockReset(); }
 });
+
+it('an unsuccessful explicit close retains a fenced runtime until the same query is successfully closed', async () => {
+  const q = controller(); mock.query.mockReturnValue(q as unknown as Query);
+  const adapter = new ClaudeAdapter();
+  try {
+    await adapter.create({ sessionId: 'local', cwd: '.', providerId: null });
+    q.close.mockImplementationOnce(() => { throw new Error('Close unconfirmed'); });
+    await expect(adapter.dispose('local')).rejects.toThrow('Close unconfirmed');
+    expect(adapter.debugProcesses()).toHaveLength(1);
+    await expect(adapter.create({ sessionId: 'local', cwd: '.', providerId: null })).rejects.toMatchObject({ statusCode: 409 });
+    await expect(adapter.send('local', { text: 'cannot enter an unclosed query' })).rejects.toMatchObject({ statusCode: 503 });
+    await adapter.dispose('local');
+    expect(q.close).toHaveBeenCalledTimes(2); expect(mock.query).toHaveBeenCalledOnce(); expect(adapter.debugProcesses()).toEqual([]);
+  } finally { q.close(); await adapter.dispose('local').catch(() => undefined); mock.query.mockReset(); }
+});
+
+it('a closing query rejects late SDK approval and new writer creation before its close completes', async () => {
+  const q = controller(); let options!: Options; let release: (() => void) | undefined; let disposal: Promise<void> | undefined;
+  mock.query.mockImplementation((args: { options: Options }) => { options = args.options; return q as unknown as Query; });
+  q.close.mockImplementationOnce(async () => { await new Promise<void>(resolve => { release = resolve; }); q.push('end'); });
+  const adapter = new ClaudeAdapter(); const events: AdapterEvent[] = []; adapter.onEvent((_id, event) => events.push(event));
+  try {
+    await adapter.create({ sessionId: 'local', cwd: '.', providerId: null }); disposal = adapter.dispose('local');
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await expect(adapter.create({ sessionId: 'local', cwd: '.', providerId: null })).rejects.toMatchObject({ statusCode: 409 });
+    await expect(options.canUseTool!('Bash', { command: 'pwd' }, { signal: new AbortController().signal, toolUseID: 'late', requestId: 'late-request' })).resolves.toMatchObject({ behavior: 'deny' });
+    expect(events.some(event => event.type === 'item.complete' && event.kind === 'approval.request')).toBe(false);
+    release?.(); await disposal;
+    expect(q.close).toHaveBeenCalledOnce(); expect(adapter.debugProcesses()).toEqual([]);
+  } finally { release?.(); await disposal; await adapter.dispose('local'); mock.query.mockReset(); }
+});

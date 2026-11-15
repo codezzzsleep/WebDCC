@@ -207,6 +207,8 @@ interface SessionRuntime {
   q: Query;
   pump: Promise<void>;
   closePromise?: Promise<void>;
+  closeFailed?: boolean;
+  retiring?: boolean;
   turnStartedAt: number;
   /** 累计 Claude 模型生成片段，排除工具执行和审批等待。 */
   generationStartedAt: number | null;
@@ -465,9 +467,9 @@ export class ClaudeAdapter implements AgentAdapter {
     const ownerRef: { current?: SessionRuntime } = {};
     const canUseTool: CanUseTool = async (toolName, toolInput, options) => {
       const owner = ownerRef.current;
-      if (owner === undefined || this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换' };
+      if (owner === undefined || owner.retiring || owner.closePromise !== undefined || this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换或正在关闭' };
       const result = await this.handleCanUseTool(sessionId, toolName, toolInput, options);
-      if (this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换' };
+      if (owner.retiring || owner.closePromise !== undefined || this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换或正在关闭' };
       if (!this.observeNative(owner, opts, { i: ++owner.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, result } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
       return result;
     };
@@ -512,14 +514,14 @@ export class ClaudeAdapter implements AgentAdapter {
           if (!this.observeNative(runtime, opts, { i: runtime.frameSeq, t: this.now() - runtime.turnStartedAt, dir: 'in', ch: 'sdk', frame: message })) {
             runtime.stdio.failed = true; runtime.state.transport = 'failed'; closeReason = 'sdk-evidence-rejected'; return;
           }
-          if (this.sessions.get(sessionId) !== runtime) return;
+          if (this.sessions.get(sessionId) !== runtime || runtime.retiring) return;
           if (message.type === 'system' && message.subtype === 'init') {
             markReady();
           }
           this.onSdkMessage(sessionId, message);
         }
       } catch (error: unknown) {
-        if (this.sessions.get(sessionId) !== runtime) return;
+        if (this.sessions.get(sessionId) !== runtime || runtime.retiring) return;
         activeWorkOnExit = runtime.turnActive || runtime.backgroundTasks.size > 0;
         closeReason = 'sdk-stream-error';
         runtime.turnActive = false;
@@ -533,7 +535,7 @@ export class ClaudeAdapter implements AgentAdapter {
         });
         if (!activeWorkOnExit) this.emit(sessionId, { type: 'status', status: 'error' });
       } finally {
-        if (this.sessions.get(sessionId) === runtime) {
+        if (this.sessions.get(sessionId) === runtime && !runtime.retiring) {
           activeWorkOnExit ||= runtime.turnActive || runtime.backgroundTasks.size > 0;
           if (runtime.state.transport === 'live') runtime.state.transport = 'closed';
           let closed = false;
@@ -622,8 +624,9 @@ export class ClaudeAdapter implements AgentAdapter {
     const previous = this.require(sessionId);
     if (previous.turnActive || previous.pending.size > 0 || [...previous.nativePending.values()].some(pending => pending.status === 'pending') || previous.backgroundTasks.size > 0) throw Object.assign(new Error('请等待当前 Claude 轮次、交互和后台任务结束后更改启动选项'), { statusCode: 409 });
     const launchOpts = { ...previous.launchOpts, ...patch };
-    this.sessions.delete(sessionId);
-    await this.closeQuery(previous);
+    previous.retiring = true; previous.state.transport = 'closed';
+    await this.closeQuery(previous, true);
+    if (this.sessions.get(sessionId) === previous) this.sessions.delete(sessionId);
     await previous.pump;
     this.emit(sessionId, { type: 'permissions', observation: { effective: null, source: 'query:replacing', scope: 'query' } });
     const resume = previous.nativeId === '' ? undefined : previous.nativeId;
@@ -725,22 +728,26 @@ export class ClaudeAdapter implements AgentAdapter {
   async dispose(sessionId: string): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
+    runtime.retiring = true;
+    if (runtime.state.transport === 'live') runtime.state.transport = 'closed';
     await this.cancelPending(sessionId);
+    await this.closeQuery(runtime, true);
     if (this.sessions.get(sessionId) === runtime) this.sessions.delete(sessionId);
-    await this.closeQuery(runtime);
     await runtime.pump.catch(() => undefined);
   }
 
   /** Pump exit and explicit disposal may race. Share closure and never wait
    * for the pump from inside its own shutdown. A failed close stays failed. */
-  private closeQuery(runtime: SessionRuntime): Promise<void> {
-    runtime.closePromise ??= Promise.resolve().then(async () => { runtime.input.end(); await runtime.q?.close?.(); });
+  private closeQuery(runtime: SessionRuntime, retryFailed = false): Promise<void> {
+    if (retryFailed && runtime.closeFailed) { runtime.closePromise = undefined; runtime.closeFailed = false; }
+    runtime.closePromise ??= Promise.resolve().then(async () => { runtime.input.end(); await runtime.q?.close?.(); }).catch(error => { runtime.closeFailed = true; throw error; });
     return runtime.closePromise;
   }
 
   private require(sessionId: string): SessionRuntime {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) throw new Error('claude: 会话未创建');
+    if (runtime.retiring || runtime.closeFailed) throw Object.assign(nativeError('Claude 查询正在关闭或关闭未确认', 503), { code: 'native-runtime-unavailable' });
     return runtime;
   }
 
@@ -909,7 +916,7 @@ export class ClaudeAdapter implements AgentAdapter {
 
   private async nativeCallback(sessionId: string, runtime: SessionRuntime | undefined, kind: 'elicitation' | 'dialog', payload: ElicitationRequest | UserDialogRequest, options: { signal: AbortSignal; requestId: string }): Promise<ElicitationResult | UserDialogResult> {
     const cancelled = kind === 'elicitation' ? { action: 'cancel' as const } : { behavior: 'cancelled' as const };
-    if (runtime === undefined || this.sessions.get(sessionId) !== runtime) return cancelled;
+    if (runtime === undefined || runtime.retiring || runtime.closePromise !== undefined || this.sessions.get(sessionId) !== runtime) return cancelled;
     const existing = runtime.nativePending.get(options.requestId);
     if (existing !== undefined) {
       if (existing.kind !== kind || JSON.stringify(existing.payload) !== JSON.stringify(payload)) {
@@ -948,7 +955,7 @@ export class ClaudeAdapter implements AgentAdapter {
     if (options.signal.aborted) abort();
     try {
       const result = await promise;
-      if (this.sessions.get(sessionId) !== runtime) return cancelled;
+      if (runtime.retiring || runtime.closePromise !== undefined || this.sessions.get(sessionId) !== runtime) return cancelled;
       return result;
     } finally {
       options.signal.removeEventListener('abort', abort);
