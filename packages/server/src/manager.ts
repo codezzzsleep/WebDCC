@@ -274,11 +274,28 @@ export class SessionManager {
     return this.control(sessionId, async () => {
       const runtime = this.runtimes.get(sessionId); const process = this.store.nativeOwners.managedProcess(sessionId);
       if (!runtime || runtime.adapter.id !== 'codex' || !process || processState(process) !== 'running') throw this.nativeControlRejected('同会话接管需要可验证的原生 writer');
-      if (runtime.turnId !== null || runtime.nativeActivity || runtime.status !== 'idle' || this.store.journal.queue(sessionId).length || this.pendingApprovalIds(sessionId).length) throw this.nativeControlRejected('请先结束当前轮次、队列和交互后接管');
-      const state = await runtime.adapter.nativeState?.(sessionId) as { turnActive?: boolean; goal?: { status?: string }; interactions?: unknown[]; thread?: { status?: { type?: string } }; permissions?: { effective?: unknown } };
-      if (!state || state.turnActive !== false || state.thread?.status?.type !== 'idle' || state.permissions?.effective == null || state.goal?.status === 'active' || state.interactions?.length) throw this.nativeControlRejected('原生工作或权限状态未确认，不能接管');
-      const history = await runtime.adapter.readNativeHistory?.(sessionId, { limit: 200 }) as { nextCursor?: string | null; data?: { status: string; itemsView?: string }[] };
-      if (!history || history.nextCursor !== null || !history.data?.every(turn => turn.status !== 'inProgress' && turn.itemsView === 'full')) throw this.nativeControlRejected('原生历史未完整核对，不能接管');
+      const idleState = async () => {
+        this.assertOwner(runtime);
+        if (runtime.turnId !== null || runtime.nativeActivity || runtime.status !== 'idle' || this.store.journal.queue(sessionId).length || this.pendingApprovalIds(sessionId).length) throw this.nativeControlRejected('请先结束当前轮次、队列和交互后接管');
+        const state = await runtime.adapter.nativeState?.(sessionId) as { turnActive?: boolean; goal?: { status?: string }; interactions?: unknown[]; thread?: { status?: { type?: string } }; permissions?: { effective?: unknown } };
+        this.assertOwner(runtime);
+        if (!state || state.turnActive !== false || state.thread?.status?.type !== 'idle' || state.permissions?.effective == null || state.goal?.status === 'active' || state.interactions?.length) throw this.nativeControlRejected('原生工作或权限状态未确认，不能接管');
+        return state;
+      };
+      await idleState();
+      let cursor: string | undefined;
+      const cursors = new Set<string>();
+      for (;;) {
+        const history = await runtime.adapter.readNativeHistory?.(sessionId, { limit: 200, ...(cursor === undefined ? {} : { cursor }) }) as { nextCursor?: string | null; data?: { status: string; itemsView?: string }[] };
+        this.assertOwner(runtime);
+        if (!history || !Array.isArray(history.data) || !history.data.every(turn => turn.status !== 'inProgress' && turn.itemsView === 'full')) throw this.nativeControlRejected('原生历史未完整核对，不能接管');
+        if (history.nextCursor === null) break;
+        if (typeof history.nextCursor !== 'string' || history.nextCursor === '' || cursors.has(history.nextCursor)) throw this.nativeControlRejected('原生历史游标未完整核对，不能接管');
+        cursors.add(history.nextCursor);
+        cursor = history.nextCursor;
+      }
+      // An autonomous native turn can start while older pages are being read.
+      const state = await idleState();
       await this.dispose(sessionId);
       if (processState(process) !== 'exited') throw this.nativeControlRejected('旧原生 writer 未确认退出');
       return { state, previousProcess: process };
