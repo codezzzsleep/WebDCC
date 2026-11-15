@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DshHostClient } from '@webdcc/adapter-dsh';
-import type { DshDefaultModelUpdate, DshProviderUpdate, DshSettingsPreview, DshSettingsTarget, DshSettingsView } from '@webdcc/protocol';
+import type { DshCredentialUpdate, DshDefaultModelUpdate, DshProviderCreate, DshSettingsPreview, DshSettingsTarget, DshSettingsView } from '@webdcc/protocol';
 import type { DshConnection, DshConnectionStore } from './dsh-connection.js';
 import { dshCapabilities, OFFICIAL_DSH_PROVIDERS } from './dsh-capabilities.js';
 
@@ -14,27 +14,40 @@ interface Namespace {
 interface Description { writable: boolean; namespaces: Namespace[] }
 type SetOp = { op: 'set'; path: string[]; value: unknown };
 interface Context { client: DshHostClient; target: DshSettingsTarget; description: Description }
-interface Plan { context: Context; namespace: Namespace; ops: SetOp[]; preview: DshSettingsPreview }
+interface Plan { context: Context; namespace: Namespace; ops: SetOp[]; preview: DshSettingsPreview; providerKey?: string; creating?: boolean }
 
 const error = (message: string, statusCode = 400, code = 'invalid-settings'): Error => Object.assign(new Error(message), { statusCode, code });
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const equal = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
+function includesDeclared(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) return Array.isArray(actual) && actual.length === expected.length && expected.every((item, index) => includesDeclared(actual[index], item));
+  if (expected !== null && typeof expected === 'object') return actual !== null && typeof actual === 'object' && !Array.isArray(actual)
+    && Object.entries(record(expected)).every(([key, item]) => Object.hasOwn(actual, key) && includesDeclared(record(actual)[key], item));
+  return equal(actual, expected);
+}
 const targetOf = (connection: DshConnection): DshSettingsTarget => ({ id: createHash('sha256').update(JSON.stringify([connection.url, connection.connectedAt])).digest('hex'), url: connection.url, scope: 'host-profile', applies: 'live' });
 
-function validate(value: unknown, fields: string[]): Record<string, unknown> {
+function validate(value: unknown, fields: string[], required = ['providerKey', 'model', 'targetId']): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw error('需要配置变更对象');
   const body = record(value);
   if (Object.keys(body).some(key => !fields.includes(key))) throw error('配置字段或作用域无效；凭据和默认模型请使用各自的操作');
-  for (const field of ['providerKey', 'model', 'targetId']) if (typeof body[field] !== 'string' || body[field].trim() === '') throw error(`需要 ${field}`);
+  for (const field of required) if (typeof body[field] !== 'string' || body[field].trim() === '') throw error(`需要 ${field}`);
   if (!Number.isSafeInteger(body['expectedRevision']) || Number(body['expectedRevision']) < 0) throw error('需要读取时的 expectedRevision');
   for (const field of ['previousModel', 'name', 'reasoningEffort']) if (body[field] !== undefined && (typeof body[field] !== 'string' || body[field].trim() === '')) throw error(`${field} 必须是非空字符串`);
   return body;
 }
 
-/** Native settings own persistence. Each user action performs one namespace
- * mutation with the exact Host and revision that the editor reviewed. */
+/** Provider edits use native configuration revisions. Key writes use the
+ * explicitly selected reference on that Host and never persist a local copy. */
 export class DshSettingsService {
+  private writes: Promise<void> = Promise.resolve();
   constructor(private readonly connections: DshConnectionStore) {}
+
+  private exclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.writes.then(operation);
+    this.writes = next.then(() => undefined, () => undefined);
+    return next;
+  }
 
   private assertTarget(target: DshSettingsTarget): void {
     const current = this.connections.connection;
@@ -61,24 +74,32 @@ export class DshSettingsService {
     return namespace;
   }
 
-  private view(ctx: Context): DshSettingsView {
+  private view(ctx: Context, selectedProvider?: string): DshSettingsView {
     const llm = this.namespace(ctx, 'llm-pi-ai');
     const defaults = this.namespace(ctx, 'agent-default-model');
     const value = record(defaults.value);
     const providers = record(record(llm.value)['providers']);
-    const providerKey = typeof value['provider'] === 'string' ? value['provider'] : Object.keys(providers)[0] ?? '';
+    const providerKey = selectedProvider ?? (typeof value['provider'] === 'string' ? value['provider'] : Object.keys(providers)[0] ?? '');
+    if (selectedProvider !== undefined && !Object.hasOwn(providers, selectedProvider)) throw error('DSH Provider 已不存在，请刷新目录', 409);
     const provider = record(providers[providerKey]);
     const model = typeof value['model'] === 'string' ? value['model'] : '';
-    return { writable: ctx.description.writable, target: ctx.target, providerKey, provider, defaultModel: { provider: providerKey, model, ...(typeof value['reasoningEffort'] === 'string' ? { reasoningEffort: value['reasoningEffort'] } : {}) },
-      ...dshCapabilities(providerKey, model, provider, ctx.description.namespaces as unknown as Record<string, unknown>[]), providerRevision: llm.revision, defaultModelRevision: defaults.revision };
+    const capabilityModel = providerKey === value['provider'] ? model : Array.isArray(provider['models']) ? String(record(provider['models'][0])['id'] ?? '') : '';
+    return { writable: ctx.description.writable, target: ctx.target, providerKey, provider, providers: Object.entries(providers).map(([id, item]) => ({ id, name: String(record(item)['displayName'] ?? id) })), defaultModel: { provider: String(value['provider'] ?? providerKey), model, ...(typeof value['reasoningEffort'] === 'string' ? { reasoningEffort: value['reasoningEffort'] } : {}) },
+      ...dshCapabilities(providerKey, capabilityModel, provider, ctx.description.namespaces as unknown as Record<string, unknown>[]), providerRevision: llm.revision, defaultModelRevision: defaults.revision };
   }
 
-  async read(): Promise<DshSettingsView> { return this.view(await this.context()); }
+  async read(providerKey?: string): Promise<DshSettingsView> { return this.view(await this.context(), providerKey); }
 
-  private async providerPlan(value: unknown): Promise<Plan> {
+  private assertReference(ref: unknown, providers: Record<string, unknown>, providerKey: string): asserts ref is string {
+    if (typeof ref !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) throw error('apiKeyEnv 必须是有效的凭据引用名称');
+    if (Object.entries(providers).some(([id, provider]) => id !== providerKey && record(provider)['apiKeyEnv'] === ref)) throw error('该凭据引用已被其他 Provider 使用，请指定独立引用', 409, 'credential-shared-reference');
+  }
+
+  private async providerPlan(value: unknown, creating = false): Promise<Plan> {
     // Keep the official-provider refusal independent of connection availability.
     if (OFFICIAL_DSH_PROVIDERS.has(String(record(value)['providerKey']))) throw error('官方 Provider 由 DSH 原生设置管理', 409);
-    const body = validate(value, ['targetId', 'expectedRevision', 'providerKey', 'model', 'previousModel', 'name', 'baseURL', 'reasoningEfforts', 'contextWindow', 'maxTokens']) as unknown as DshProviderUpdate;
+    const body = validate(value, ['targetId', 'expectedRevision', 'providerKey', 'model', 'previousModel', 'name', 'baseURL', 'apiKeyEnv', 'reasoningEfforts', 'contextWindow', 'maxTokens', ...(creating ? ['api'] : [])]) as unknown as DshProviderCreate;
+    if (creating && (!['openai-completions', 'openai-responses', 'anthropic-messages'].includes(body.api) || !body.baseURL || !body.apiKeyEnv)) throw error('新增 Provider 需要接口类型、Base URL 和独立 apiKeyEnv');
     if (body.baseURL !== undefined) {
       if (typeof body.baseURL !== 'string') throw error('Base URL 必须是字符串');
       let url: URL;
@@ -91,7 +112,8 @@ export class DshSettingsService {
     const namespace = this.namespace(context, 'llm-pi-ai', body.expectedRevision);
     const providers = record(record(namespace.value)['providers']);
     const provider = record(providers[body.providerKey]);
-    if (Object.keys(provider).length === 0) throw error('DSH Provider 已不存在，请刷新目录', 409);
+    if (creating ? Object.hasOwn(providers, body.providerKey) : Object.keys(provider).length === 0) throw error(creating ? 'DSH Provider ID 已存在' : 'DSH Provider 已不存在，请刷新目录', 409);
+    if (body.apiKeyEnv !== undefined) this.assertReference(body.apiKeyEnv, providers, body.providerKey);
     const models = Array.isArray(provider['models']) ? provider['models'].map(record) : [];
     if (models.some(model => typeof model['id'] !== 'string') || new Set(models.map(model => model['id'])).size !== models.length) throw error('DSH 原生模型目录无效或存在重复 ID', 409);
     const wanted = body.previousModel ?? body.model;
@@ -108,6 +130,15 @@ export class DshSettingsService {
     for (const field of ['reasoningEfforts', 'contextWindow', 'maxTokens'] as const) if (body[field] === null) delete next[field];
     const ops: SetOp[] = [];
     const changes: DshSettingsPreview['changes'] = [];
+    if (creating) {
+      const path = ['providers', body.providerKey];
+      const created = { api: body.api, baseURL: body.baseURL, apiKeyEnv: body.apiKeyEnv, models: [next] };
+      return { context, namespace, providerKey: body.providerKey, creating: true, ops: [{ op: 'set', path, value: created }], preview: { target: context.target, namespace: 'llm-pi-ai', expectedRevision: namespace.revision, changes: [{ path, after: created }] } };
+    }
+    if (body.apiKeyEnv !== undefined && body.apiKeyEnv !== provider['apiKeyEnv']) {
+      const path = ['providers', body.providerKey, 'apiKeyEnv'];
+      ops.push({ op: 'set', path, value: body.apiKeyEnv }); changes.push({ path, before: provider['apiKeyEnv'], after: body.apiKeyEnv });
+    }
     if (body.baseURL !== undefined && body.baseURL !== provider['baseURL']) {
       const path = ['providers', body.providerKey, 'baseURL'];
       ops.push({ op: 'set', path, value: body.baseURL }); changes.push({ path, before: provider['baseURL'], after: body.baseURL });
@@ -121,7 +152,7 @@ export class DshSettingsService {
       ops.push({ op: 'set', path, value: nextModels });
       changes.push({ path: [...path, String(index < 0 ? models.length : index)], before: index < 0 ? undefined : previous, after: next });
     }
-    return { context, namespace, ops, preview: { target: context.target, namespace: 'llm-pi-ai', expectedRevision: body.expectedRevision, changes } };
+    return { context, namespace, providerKey: body.providerKey, ops, preview: { target: context.target, namespace: 'llm-pi-ai', expectedRevision: body.expectedRevision, changes } };
   }
 
   private async defaultPlan(value: unknown): Promise<Plan> {
@@ -137,6 +168,7 @@ export class DshSettingsService {
   }
 
   async previewProvider(value: unknown): Promise<DshSettingsPreview> { return (await this.providerPlan(value)).preview; }
+  async previewCreateProvider(value: unknown): Promise<DshSettingsPreview> { return (await this.providerPlan(value, true)).preview; }
   async previewDefault(value: unknown): Promise<DshSettingsPreview> { return (await this.defaultPlan(value)).preview; }
 
   private async apply(plan: Plan): Promise<DshSettingsView> {
@@ -155,11 +187,44 @@ export class DshSettingsService {
     const namespace = this.namespace(context, plan.namespace.ns);
     for (const op of plan.ops) {
       const actual = op.path.reduce<unknown>((node, part) => Array.isArray(node) ? node[Number(part)] : record(node)[part], namespace.value);
-      if (!equal(actual, op.value)) throw error('原生配置未确认目标值，请刷新后核对；不会写本机配置', 409, 'settings-unconfirmed');
+      // New providers acquire native schema defaults; every declared value
+      // must survive while those additional fields remain native-owned.
+      if (!(plan.creating ? includesDeclared(actual, op.value) : equal(actual, op.value))) throw error('原生配置未确认目标值，请刷新后核对；不会写本机配置', 409, 'settings-unconfirmed');
     }
-    return this.view(context);
+    return this.view(context, plan.providerKey);
   }
 
-  async updateProvider(value: unknown): Promise<DshSettingsView> { return this.apply(await this.providerPlan(value)); }
-  async updateDefault(value: unknown): Promise<DshSettingsView> { return this.apply(await this.defaultPlan(value)); }
+  async updateProvider(value: unknown): Promise<DshSettingsView> { return this.exclusive(async () => this.apply(await this.providerPlan(value))); }
+  async createProvider(value: unknown): Promise<DshSettingsView> { return this.exclusive(async () => this.apply(await this.providerPlan(value, true))); }
+  async updateDefault(value: unknown): Promise<DshSettingsView> { return this.exclusive(async () => this.apply(await this.defaultPlan(value))); }
+
+  /** Keys cross the wire in one direction, to the explicitly reviewed reference. */
+  async updateCredential(value: unknown): Promise<{ apiKeyEnv: string; configured: boolean }> { return this.exclusive(() => this.writeCredential(value)); }
+
+  private async writeCredential(value: unknown): Promise<{ apiKeyEnv: string; configured: boolean }> {
+    const body = validate(value, ['targetId', 'expectedRevision', 'providerKey', 'apiKeyEnv', 'apiKey'], ['targetId', 'providerKey', 'apiKeyEnv']) as unknown as DshCredentialUpdate;
+    if (typeof body.apiKey !== 'string' || body.apiKey.trim() === '') throw error('需要非空 API 密钥');
+    if (OFFICIAL_DSH_PROVIDERS.has(body.providerKey)) throw error('官方 Provider 凭据由 DSH 原生登录管理', 409);
+    const context = await this.context(body.targetId);
+    const namespace = this.namespace(context, 'llm-pi-ai', body.expectedRevision);
+    const providers = record(record(namespace.value)['providers']);
+    this.assertReference(body.apiKeyEnv, providers, body.providerKey);
+    if (record(providers[body.providerKey])['apiKeyEnv'] !== body.apiKeyEnv) throw error('Provider 凭据引用已变化，请重新读取后保存', 409, 'credential-reference-changed');
+    const info = await context.client.rpc<Record<string, { configured: boolean; writable: boolean }>>('credentials/describe', { refs: [body.apiKeyEnv] })
+      .catch(() => { throw error('无法读取该 Host 的原生凭据状态，密钥尚未提交', 502, 'credential-unavailable'); });
+    this.assertTarget(context.target);
+    if (info[body.apiKeyEnv]?.writable !== true) throw error('原生凭据不可写', 409);
+    const admitted = await this.context(body.targetId);
+    this.namespace(admitted, 'llm-pi-ai', body.expectedRevision);
+    try {
+      await context.client.rpc('credentials/set', { ref: body.apiKeyEnv, value: body.apiKey });
+      this.assertTarget(context.target);
+      const after = await context.client.rpc<Record<string, { configured: boolean }>>('credentials/describe', { refs: [body.apiKeyEnv] });
+      this.assertTarget(context.target);
+      if (after[body.apiKeyEnv]?.configured !== true) throw error('原生凭据未确认', 409);
+      return { apiKeyEnv: body.apiKeyEnv, configured: true };
+    } catch {
+      throw error('DSH 未确认凭据保存，请在该 Host 的原生设置核对；不会写入本机凭据', 502, 'credential-unconfirmed');
+    }
+  }
 }
