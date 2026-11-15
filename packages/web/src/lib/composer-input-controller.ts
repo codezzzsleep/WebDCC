@@ -4,6 +4,7 @@ import type { UploadController, UploadKind, UploadTask } from './upload-controll
 export type ComposerIntent = 'send' | 'queue' | 'steer';
 export interface PreparedPart { type: string; text?: string; fileId?: string; uploadTaskId?: string; name?: string; mime?: string; sha256?: string; size?: number; elements?: unknown[]; skillId?: string; uri?: string; server?: string }
 export interface ComposerInputCapabilities {
+  collaborationModes?: readonly ('default' | 'plan')[];
   inputModalities?: readonly ('text' | 'image' | 'audio')[];
   contentTypes: readonly string[];
   intents: readonly ComposerIntent[];
@@ -25,6 +26,8 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
     if (this.sending) return '消息正在保存';
     if (this.drafts.error() !== undefined) return this.drafts.error()!.message;
     if (capabilities.unavailableReason !== undefined) return capabilities.unavailableReason;
+    if (draft.contentParts.collaborationMode !== undefined && !capabilities.collaborationModes?.includes(draft.contentParts.collaborationMode)) return '所选输入模式尚未取得原生目录确认，请选择沿用原生或重新读取模式';
+    if (intent === 'steer' && draft.contentParts.collaborationMode !== undefined) return '介入当前轮次不能改变输入模式';
     if (!capabilities.intents.includes(intent)) return '当前原生会话不支持此发送方式';
     if (intent === 'send' && capabilities.running) return '当前会话正在运行，请选择加入队列或介入当前轮';
     if (intent === 'steer' && !capabilities.running) return '当前没有可介入的运行轮次';
@@ -57,7 +60,7 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
     // its text block. No instruction or textual stand-in for an asset is added.
     if (textParts.length === 0 && draft.text !== '') parts.unshift({ type: 'text', text: draft.text } as Part);
     if (textParts.length === 1) parts[parts.indexOf(textParts[0]!)] = { ...textParts[0]!, text: draft.text };
-    const contentParts: DraftContent<Part> = { version: 1, parts };
+    const contentParts: DraftContent<Part> = { ...draft.contentParts, version: 1, parts };
     this.sending = true;
     try {
       await this.drafts.flush(token.sessionId);
@@ -75,7 +78,7 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
   appendPart(token: { sessionId: string; generation: number }, part: Part): boolean {
     if (!this.drafts.accepts(token) || this.drafts.loading()) return false;
     const current = this.drafts.snapshot()!;
-    this.drafts.update(current.text, { version: 1, parts: [...current.contentParts.parts, structuredClone(part)] });
+    this.drafts.update(current.text, { ...current.contentParts, version: 1, parts: [...current.contentParts.parts, structuredClone(part)] });
     return true;
   }
   async addAttachment(file: File, kind: UploadKind): Promise<{ attached: boolean; task: UploadTask }> {

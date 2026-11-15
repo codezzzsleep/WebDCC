@@ -11,12 +11,19 @@ import type { ThreadReadResponse } from './schema/v2/ThreadReadResponse.js';
 import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListResponse.js';
 import type { ModelListResponse } from './schema/v2/ModelListResponse.js';
 import type { ConfigReadResponse } from './schema/v2/ConfigReadResponse.js';
+import type { ThreadSettingsUpdatedNotification } from './schema/v2/ThreadSettingsUpdatedNotification.js';
+import type { CollaborationMode } from './schema/CollaborationMode.js';
+import type { CollaborationModeListParams } from './schema-experimental/v2/CollaborationModeListParams.js';
+import type { CollaborationModeListResponse } from './schema-experimental/v2/CollaborationModeListResponse.js';
+import questionModeSchema from './schema-experimental/question-modes.schemas.json' with { type: 'json' };
 import protocolSchema from './json-schema/codex_app_server_protocol.schemas.json' with { type: 'json' };
 import type { JsonRpcStdio } from './rpc.js';
 import { nativeControlResultRefs, type NativeControlResults } from './native-results.js';
 
-type Method = ClientRequest['method'];
-export type NativeParams<M extends Method> = Extract<ClientRequest, { method: M }>['params'];
+type Method = ClientRequest['method'] | 'collaborationMode/list';
+export type NativeParams<M extends Method> = M extends 'collaborationMode/list' ? CollaborationModeListParams
+  : M extends 'turn/start' ? Extract<ClientRequest, { method: M }>['params'] & { collaborationMode?: CollaborationMode | null }
+  : Extract<ClientRequest, { method: M }>['params'];
 interface Results extends NativeControlResults {
   initialize: InitializeResponse;
   'thread/start': ThreadStartResponse;
@@ -29,6 +36,7 @@ interface Results extends NativeControlResults {
   'thread/turns/list': ThreadTurnsListResponse;
   'model/list': ModelListResponse;
   'config/read': ConfigReadResponse;
+  'collaborationMode/list': CollaborationModeListResponse;
 }
 
 const ajv = new Ajv({ strict: false, allErrors: true, allowUnionTypes: true });
@@ -47,9 +55,20 @@ const responseRefs = {
   'thread/read': '#/definitions/v2/ThreadReadResponse', 'thread/turns/list': '#/definitions/v2/ThreadTurnsListResponse',
   'model/list': '#/definitions/v2/ModelListResponse',
   'config/read': '#/definitions/v2/ConfigReadResponse',
+  'collaborationMode/list': '#/definitions/v2/CollaborationModeListResponse',
 };
 const responseValidators = new Map<string, ValidateFunction>();
 const serverValidators = new Map<string, ValidateFunction>();
+const modeDefinitions = structuredClone(questionModeSchema.definitions);
+for (const name of ['CollaborationMode', 'Settings'] as const) Object.assign(modeDefinitions.v2[name], { additionalProperties: false });
+const collaborationModeValidator = ajv.compile({ ...questionModeSchema.collaborationMode, definitions: modeDefinitions });
+let settingsValidator: ValidateFunction | undefined;
+
+export function nativeSettingsNotification(params: unknown): ThreadSettingsUpdatedNotification {
+  settingsValidator ??= ajv.compile({ $ref: '#/definitions/v2/ThreadSettingsUpdatedNotification', definitions: protocolSchema.definitions });
+  if (!settingsValidator(params)) throw new Error(`Invalid thread/settings/updated: ${ajv.errorsText(settingsValidator.errors)}`);
+  return params as ThreadSettingsUpdatedNotification;
+}
 
 export function validateNativeServerParams(method: string, params: unknown): void {
   let validate = serverValidators.get(method);
@@ -63,8 +82,20 @@ export function validateNativeServerParams(method: string, params: unknown): voi
 }
 
 export function validateNativeParams(method: string, params: unknown): void {
+  if (method === 'turn/start' && params !== null && typeof params === 'object' && 'collaborationMode' in params) {
+    const { collaborationMode, ...standard } = params;
+    validateNativeParams(method, standard);
+    if (!collaborationModeValidator(collaborationMode)) throw new Error(`Invalid native collaborationMode: ${ajv.errorsText(collaborationModeValidator.errors)}`);
+    return;
+  }
   let validate = requestValidators.get(method);
   if (validate === undefined) {
+    if (method === 'collaborationMode/list') {
+      validate = ajv.compile({ $ref: '#/definitions/v2/CollaborationModeListParams', definitions: questionModeSchema.definitions,
+        // The native params are empty; this client must not send arbitrary fields.
+        maxProperties: 0 });
+      requestValidators.set(method, validate);
+    } else {
     const branch = protocolSchema.definitions.ClientRequest.oneOf.find(branch => branch.properties.method.enum[0] === method);
     if (branch === undefined) throw new Error(`Unsupported native method: ${method}`);
     const ref = branch.properties.params.$ref;
@@ -79,6 +110,7 @@ export function validateNativeParams(method: string, params: unknown): void {
     if (parameterSchema?.type === 'object' && parameterSchema.properties !== undefined) parameterSchema.additionalProperties = false;
     validate = ajv.compile({ $ref: ref, definitions });
     requestValidators.set(method, validate);
+    }
   }
   if (!validate(params)) throw new Error(`Invalid ${method} params: ${ajv.errorsText(validate.errors)}`);
 }
@@ -86,7 +118,7 @@ export function validateNativeParams(method: string, params: unknown): void {
 export function validateNativeResult(method: keyof Results, result: unknown): void {
   let validate = responseValidators.get(method);
   if (validate === undefined) {
-    validate = ajv.compile({ $ref: responseRefs[method], definitions: protocolSchema.definitions });
+    validate = ajv.compile({ $ref: responseRefs[method], definitions: method === 'collaborationMode/list' ? questionModeSchema.definitions : protocolSchema.definitions });
     responseValidators.set(method, validate);
   }
   if (!validate(result)) throw new Error(`Invalid ${method} result: ${ajv.errorsText(validate.errors)}`);

@@ -1,6 +1,6 @@
 /** Revisioned drafts are isolated by Session. A late read cannot overwrite
  * another Session or edits accepted after that read began. */
-export interface DraftContent<Part = unknown> { version: 1; parts: Part[] }
+export interface DraftContent<Part = unknown> { version: 1; parts: Part[]; collaborationMode?: 'default' | 'plan' }
 export interface InputDraft<Part = unknown> {
   sessionId: string; revision: number; text: string; contentParts: DraftContent<Part>; updatedAt: number;
 }
@@ -67,7 +67,8 @@ export class DraftController<Part = unknown> {
   }
   clearIfUnchanged(token: { sessionId: string; generation: number; revision: number }): boolean {
     if (!this.accepts(token) || this.current?.revision !== token.revision) return false;
-    this.update('', { version: 1, parts: [] }); return true;
+    const mode = this.current?.contentParts.collaborationMode;
+    this.update('', { version: 1, parts: [], ...(mode === undefined ? {} : { collaborationMode: mode }) }); return true;
   }
   /** Retry a failed durable save only at the current revision. Native sends
    * are never retried here, and a CAS conflict stays visible until reopened. */

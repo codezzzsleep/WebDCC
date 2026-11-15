@@ -10,6 +10,13 @@ import type { InputSkillPart, ResolvedInputContent } from './input.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
+export type CodexInputMode = 'default' | 'plan';
+export interface CodexInputModeCatalog {
+  modes: { id: CodexInputMode; label: string }[];
+  observedMode: CodexInputMode | null;
+  reason?: string;
+}
+
 export interface ProbeResult {
   installed: boolean;
   version?: string;
@@ -153,6 +160,8 @@ export interface AgentAdapter {
   setAccessMode?(sessionId: string, mode: string): Promise<{ accessMode: string } | void>;
   /** 斜杠命令目录（F8）：Claude 来自 init 消息，DSH 来自 commands/list */
   slashCommands?(sessionId: string): Promise<{ name: string; description?: string }[]>;
+  /** Read-only mode discovery; it must not activate or resume a native writer. */
+  inputModes?(sessionId?: string): Promise<CodexInputModeCatalog>;
   sendSubagent?(sessionId: string, childSessionId: string, text: string): Promise<void>;
   interruptSubagent?(sessionId: string, childSessionId: string): Promise<void>;
   dispose(sessionId: string): Promise<void>;

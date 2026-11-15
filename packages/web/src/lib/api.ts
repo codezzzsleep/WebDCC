@@ -32,6 +32,7 @@ import type {
   NativeActionReceipt,
   InputContent,
   ModelOption,
+  CodexInputModeCatalog,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -60,6 +61,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  inputModes: (sessionId?: string): Promise<CodexInputModeCatalog> => request(`/api/agents/codex/input-modes${sessionId === undefined ? '' : `?sessionId=${encodeURIComponent(sessionId)}`}`),
   nativeDshSurface: () => request<{ status: string; writable: boolean }>('/api/dsh/native-surface'),
   openNativeDshSurface: (sessionId: string) => request<{ actionUrl: string; ticket: string; expiresAt: string }>('/api/dsh/native-surface/open', { method: 'POST', body: JSON.stringify({ sessionId }) }),
   nativeControls: (sessionId: string, catalog = false) => request<NativeControlSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/native${catalog ? '?catalog=1' : ''}`),

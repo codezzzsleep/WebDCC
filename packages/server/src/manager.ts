@@ -19,6 +19,7 @@ import type {
   NativeActionResponse,
   InputContent,
   ResolvedInputPart,
+  CodexInputModeCatalog,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid } from '@webdcc/protocol';
@@ -205,6 +206,16 @@ export class SessionManager {
 
   adapter(id: AgentId): AgentAdapter | undefined {
     return this.adapters.get(id);
+  }
+
+  async inputModes(sessionId?: string): Promise<CodexInputModeCatalog> {
+    if (sessionId !== undefined && this.requireSession(sessionId).agent !== 'codex') throw Object.assign(new Error('输入模式目录与会话 Agent 不一致'), { statusCode: 400 });
+    const adapter = this.adapters.get('codex');
+    if (adapter?.inputModes === undefined) return { modes: [], observedMode: null, reason: '当前 Codex 没有可验证的输入模式目录' };
+    const runtime = sessionId === undefined ? undefined : this.runtimes.get(sessionId);
+    if (runtime !== undefined) this.assertOwner(runtime);
+    try { return await adapter.inputModes(sessionId); }
+    catch { return { modes: [], observedMode: null, reason: '原生输入模式目录读取失败，请检查 Codex 版本和连接' }; }
   }
   optionsProvider(id: string): ProviderRuntimeConfig | null { return this.options.resolveProvider?.(id) ?? null; }
   holdNativeActivity(sessionId: string): () => void {
@@ -545,6 +556,8 @@ export class SessionManager {
     if (checkIntent && input.delivery === 'steer' && (current?.turnId == null || input.expectedTurnId !== current.turnId || current.adapter.steer === undefined)) throw Object.assign(new Error('介入目标轮次已变化或此 Agent 不支持介入，请刷新后重试'), { statusCode: 409 });
     const reference = input.contentParts === undefined ? undefined : publicInputContent(input.contentParts as NonNullable<UserInput['contentParts']>);
     if (reference !== undefined && (!isInputContent(reference, input.text) || input.images?.length)) throw Object.assign(new Error('结构化输入与正文不一致或混合了旧图片字段'), { statusCode: 400 });
+    if (reference?.collaborationMode !== undefined && session.agent !== 'codex') throw Object.assign(new Error('此输入模式只适用于 Codex，请重新选择目标 Agent'), { statusCode: 400 });
+    if (reference?.collaborationMode !== undefined && input.delivery === 'steer') throw Object.assign(new Error('介入当前轮次不能改变输入模式，请加入队列或发送新轮'), { statusCode: 400 });
     if (input.text.trim() === '' && !(reference?.parts.some(part => part.type !== 'text') || input.images?.length)) throw Object.assign(new Error('普通消息正文不能为空'), { statusCode: 400 });
     const output: UserInput = { text: input.text, ...(input.delivery === undefined ? {} : { delivery: input.delivery }), ...(input.expectedTurnId === undefined ? {} : { expectedTurnId: input.expectedTurnId }) };
     if (reference !== undefined) {
@@ -560,7 +573,7 @@ export class SessionManager {
         } else if (part.type === 'text' || part.type === 'resource') parts.push(structuredClone(part));
         else throw Object.assign(new Error('结构化输入类型无效'), { statusCode: 400 });
       }
-      output.contentParts = { version: 1, parts };
+      output.contentParts = { version: 1, parts, ...(reference.collaborationMode === undefined ? {} : { collaborationMode: reference.collaborationMode }) };
     } else if (input.images?.length) {
       if (input.images.length > 32 || this.files === undefined) throw Object.assign(new Error('图片附件过多或附件存储尚未绑定'), { statusCode: 400 });
       output.images = [];

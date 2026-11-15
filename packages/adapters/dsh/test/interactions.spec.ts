@@ -48,7 +48,7 @@ it('NP-11 keeps questions after failed replies and closes each card on a native 
   expect(replay.replies.at(-1)).toMatchObject({ endpoint: '$events/result', args: { eventId: 'question', outcome: { value: { answers: [{ id: 'one', selected: [], custom: 'first text' }, { id: 'two', selected: [], custom: 'second text' }] } } } });
   expect(DshHostClient.prototype.rpc).toBe(original);
   replay.feed(frame({ type: 'waterfall', event: 'user-questions/request', eventId: 'cancel-me', request: { questions: [{ id: 'one', question: 'pending' }] } }));
-  expect(replay.feed(frame({ type: 'cancel', eventId: 'cancel-me' }))).toContainEqual(expect.objectContaining({ kind: 'question', data: { questionId: 'cancel-me:one', prompt: '', status: 'skipped' } }));
+  expect(replay.feed(frame({ type: 'cancel', eventId: 'cancel-me' }))).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'cancel-me:one', prompt: 'pending', status: 'skipped', outcome: 'cancel' }) }));
   await expect(replay.adapter.answer('session', 'cancel-me:one', 'too late')).rejects.toThrow('不存在');
 });
 
@@ -74,5 +74,5 @@ it('NP-11 continued timed questions use the native late-answer RPC and wait for 
   expect(await replay.adapter.answer('session', 'dsh-continued:timed-call:one', { custom: '  late original\r\n  ' })).toEqual({ submitted: true, confirmed: false, questionIds: ['dsh-continued:timed-call:one'] });
   expect(replay.replies.at(-1)).toMatchObject({ endpoint: 'userQuestions/answer', args: { agentId: 'native-parent', callId: 'timed-call', answer: { answers: [{ id: 'one', selected: [], custom: '  late original\r\n  ' }] } } });
   await expect(replay.adapter.answer('session', 'dsh-continued:timed-call:one', 'duplicate')).rejects.toMatchObject({ statusCode: 409 });
-  expect(replay.feed(frame({ type: 'projection', seq: 1, changes: [{ key: 'userQuestions', val: { active: [], settled: [{ callId: 'timed-call', answers: [{ id: 'one', selected: [], custom: '  late original\r\n  ' }] }] } }] }))).toContainEqual(expect.objectContaining({ kind: 'question', data: { questionId: 'dsh-continued:timed-call:one', prompt: '', status: 'answered', resolution: 'native-acknowledged', toolCallId: 'timed-call' } }));
+  expect(replay.feed(frame({ type: 'projection', seq: 1, changes: [{ key: 'userQuestions', val: { active: [], settled: [{ callId: 'timed-call', answers: [{ id: 'one', selected: [], custom: '  late original\r\n  ' }] }] } }] }))).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'dsh-continued:timed-call:one', prompt: 'answer later', status: 'answered', resolution: 'native-acknowledged', toolCallId: 'timed-call' }) }));
 });

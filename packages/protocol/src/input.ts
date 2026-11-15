@@ -1,4 +1,5 @@
 /** Browser input references and their server-resolved native counterparts. */
+import type { CodexInputMode } from './adapter.js';
 export type InputIntent = 'send' | 'queue' | 'steer';
 export interface InputTextElement { byteRange: { start: number; end: number }; placeholder: string | null }
 export interface InputTextPart { type: 'text'; text: string; elements?: InputTextElement[] }
@@ -8,11 +9,11 @@ export interface InputAttachmentPart {
 export interface InputSkillPart { type: 'skill'; skillId: string; name: string }
 export interface InputResourcePart { type: 'resource'; uri: string; server?: string; name?: string }
 export type InputPart = InputTextPart | InputAttachmentPart | InputSkillPart | InputResourcePart;
-export interface InputContent { version: 1; parts: InputPart[] }
+export interface InputContent { version: 1; parts: InputPart[]; collaborationMode?: CodexInputMode }
 export interface ResolvedInputAttachmentPart extends InputAttachmentPart { path: string; mime: string; name: string; sha256: string; size: number }
 export interface ResolvedInputSkillPart extends InputSkillPart { path: string }
 export type ResolvedInputPart = InputTextPart | ResolvedInputAttachmentPart | ResolvedInputSkillPart | InputResourcePart;
-export interface ResolvedInputContent { version: 1; parts: ResolvedInputPart[] }
+export interface ResolvedInputContent { version: 1; parts: ResolvedInputPart[]; collaborationMode?: CodexInputMode }
 
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const allowed = (value: Record<string, unknown>, keys: string[]): boolean => Object.keys(value).every(key => keys.includes(key));
@@ -29,7 +30,8 @@ function elements(value: unknown, text: string): boolean {
 }
 /** No browser path, receipt, unknown field or rewritten text may enter a command. */
 export function isInputContent(value: unknown, text?: string): value is InputContent {
-  if (!object(value) || !allowed(value, ['version', 'parts']) || value['version'] !== 1 || !Array.isArray(value['parts']) || value['parts'].length > 32) return false;
+  if (!object(value) || !allowed(value, ['version', 'parts', 'collaborationMode']) || value['version'] !== 1 || !Array.isArray(value['parts']) || value['parts'].length > 32
+    || value['collaborationMode'] !== undefined && value['collaborationMode'] !== 'default' && value['collaborationMode'] !== 'plan') return false;
   for (const part of value['parts']) {
     if (!object(part)) return false;
     switch (part['type']) {
@@ -56,7 +58,7 @@ export function isInputContent(value: unknown, text?: string): value is InputCon
   return text === undefined || value['parts'].filter(part => part['type'] === 'text').map(part => part['text']).join('') === text;
 }
 export function publicInputContent(content: ResolvedInputContent): InputContent {
-  return { version: content.version, parts: content.parts.map(part => {
+  return { version: content.version, ...(content.collaborationMode === undefined ? {} : { collaborationMode: content.collaborationMode }), parts: content.parts.map(part => {
     if (part.type === 'image' || part.type === 'file' || part.type === 'audio') {
       const { path: _path, ...reference } = part; return reference;
     }

@@ -12,6 +12,10 @@
       "path": "packages/adapters/codex/src/json-schema/codex_app_server_protocol.schemas.json",
       "sha256": "021462a9bacd117f4cd40c256a4888619d059cec6a65b795198d521ba660e554"
     },
+    "codexQuestionModes": {
+      "path": "packages/adapters/codex/src/schema-experimental/question-modes.schemas.json",
+      "sha256": "b38e43aaa6d1bbce6c1ec7521e1855463bef2c6bb2e38993fca2180e7fb37fed"
+    },
     "dsh": {
       "path": "fixtures/dsh/host-api-catalog.json",
       "sha256": "b7d851bdb4e035de54dc0e849fda859cc7a5add1d93720e6697bf76248d73990"
@@ -875,6 +879,13 @@
       "method": "autoApprovalReview/strictReviewRequired",
       "role": "observation",
       "capabilityId": "codex.autoApprovalReview"
+    },
+    {
+      "agent": "codex",
+      "method": "collaborationMode/list",
+      "role": "observation",
+      "capabilityId": "codex.collaborationMode",
+      "reason": "Pinned --experimental export; capability negotiation enables the API, not native feature flags."
     },
     {
       "agent": "codex",

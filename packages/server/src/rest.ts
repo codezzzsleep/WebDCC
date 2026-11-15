@@ -382,6 +382,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return events.map((event) => JSON.stringify(event)).join('\n');
   });
 
+  app.get('/api/agents/codex/input-modes', async request => {
+    const query = request.query as { sessionId?: string };
+    if (query.sessionId !== undefined && (typeof query.sessionId !== 'string' || query.sessionId.length > 256 || query.sessionId === '')) throw badRequest('需要有效的会话身份');
+    return manager.inputModes(query.sessionId);
+  });
+
   app.get('/api/sessions/:id/slash-commands', async (request) => {
     const { id } = request.params as { id: string };
     const session = store.getSession(id);

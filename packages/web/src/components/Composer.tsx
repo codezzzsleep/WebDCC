@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { InputContent, ModelOption, ProviderDto } from '@webdcc/protocol';
+import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
@@ -67,7 +67,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     const drafts = new DraftController(synced);
     return { backend, uploads, drafts, synced, input: new ComposerInputController(drafts, uploads, () => capabilitiesRef.current) };
   });
-  const [, setPreparationVersion] = useState(0);
+  const [preparationVersion, setPreparationVersion] = useState(0);
   const [selecting, setSelecting] = useState(false);
   const [mention, setMention] = useState<MentionState>({ open: false, query: '', start: 0 });
   const [files, setFiles] = useState<{ name: string; path: string }[]>([]);
@@ -76,6 +76,8 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [skills, setSkills] = useState<{ skillId: string; name: string; description: string; enabled: boolean }[]>([]);
   const [skillStatus, setSkillStatus] = useState('');
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [inputModes, setInputModes] = useState<CodexInputModeCatalog>({ modes: [], observedMode: null });
+  const [modeCatalogRevision, setModeCatalogRevision] = useState(0);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashCommands, setSlashCommands] = useState<{ name: string; description?: string }[]>([]);
   const [slashStatus, setSlashStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable' | 'error'>('idle');
@@ -99,6 +101,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   }, [controls]);
   const draftSessionId = sessionId ?? `new:${workspaceId}`;
   useEffect(() => {
+    let active = true;
+    setInputModes({ modes: [], observedMode: null });
+    if (agent !== 'codex') return;
+    void api.inputModes(sessionId ?? undefined).then(result => { if (active) setInputModes(result); })
+      .catch(() => { if (active) setInputModes({ modes: [], observedMode: null, reason: '暂时无法读取原生输入模式' }); });
+    return () => { active = false; };
+  }, [agent, sessionId, modeCatalogRevision]);
+  useEffect(() => {
     setText(''); setError(null); setMenu(null); setMention({ open: false, query: '', start: 0 });
     void controls.drafts.open(draftSessionId).catch(cause => setError(String(cause)));
     void controls.uploads.restore(draftSessionId).catch(cause => setError(String(cause)));
@@ -115,7 +125,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
       if (current.text === '' && current.contentParts.parts.length === 0) controls.drafts.update(input.text, selected);
       else {
         const nextText = current.text === '' ? input.text : `${current.text}\n${input.text}`;
-        controls.drafts.update(nextText, { version: 1, parts: [{ type: 'text', text: nextText }, ...current.contentParts.parts.filter(part => part.type !== 'text'), ...selected.parts.filter(part => part.type !== 'text')] });
+        controls.drafts.update(nextText, { ...current.contentParts, version: 1, parts: [{ type: 'text', text: nextText }, ...current.contentParts.parts.filter(part => part.type !== 'text'), ...selected.parts.filter(part => part.type !== 'text')] });
       }
       return true;
     });
@@ -211,6 +221,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const currentModel = mode.kind === 'session' ? (session?.model ?? '') : mode.choice.model;
   const selectedModel = modelOptions.find(option => option.id === currentModel) ?? (currentModel === '' ? modelOptions.find(option => option.isDefault) : undefined);
   capabilitiesRef.current = { contentTypes: agent === 'codex' ? ['text', 'image', 'audio', 'skill'] : ['text', 'image', 'file'], inputModalities: selectedModel?.inputModalities,
+    collaborationModes: agent === 'codex' ? inputModes.modes.map(mode => mode.id) : [],
     intents: running ? agent === 'codex' || agent === 'dsh' ? ['queue', 'steer'] : ['queue'] : ['send'], running,
     ...(mode.kind === 'new' && workspaceId === '' ? { unavailableReason: '请先选择工作区' } : {}) };
   const attachmentParts = (controls.drafts.snapshot()?.sessionId === draftSessionId ? controls.drafts.snapshot()?.contentParts.parts ?? [] : []).filter(part => part.type !== 'text');
@@ -247,6 +258,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     if (controls.drafts.snapshot()?.sessionId !== draftSessionId || controls.drafts.loading()) return;
     controls.drafts.update(value);
   };
+  useEffect(() => {
+    const draft = controls.drafts.snapshot();
+    if (mode.kind === 'session' && session === undefined) return;
+    if (agent !== 'codex' && draft?.sessionId === draftSessionId && draft.contentParts.collaborationMode !== undefined) {
+      const { collaborationMode: _mode, ...contentParts } = draft.contentParts;
+      controls.drafts.update(draft.text, contentParts);
+    }
+  }, [agent, draftSessionId, controls, preparationVersion, mode.kind, session]);
 
   const updateText = (value: string): void => {
     setText(value);
@@ -307,7 +326,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const removeAttachment = (part: PreparedPart): void => {
     const current = controls.drafts.snapshot();
     if (current?.sessionId !== draftSessionId) return;
-    controls.drafts.update(current.text, { version: 1, parts: current.contentParts.parts.filter(candidate =>
+    controls.drafts.update(current.text, { ...current.contentParts, version: 1, parts: current.contentParts.parts.filter(candidate =>
       part.uploadTaskId !== undefined ? candidate.uploadTaskId !== part.uploadTaskId
         : part.type === 'skill' ? candidate.skillId !== part.skillId
         : part.type === 'resource' ? candidate.uri !== part.uri
@@ -681,6 +700,22 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             ) : null}
           </span>
 
+          {agent === 'codex' ? <label className="pill" title={inputModes.reason ?? '计划模式支持原生提问；默认模式按原生配置决定。模式随消息保存。'}>
+            <span className="pill-text">输入模式</span>
+            <select aria-label="Codex 输入模式" data-testid="codex-input-mode" value={controls.drafts.snapshot()?.contentParts.collaborationMode ?? ''}
+              disabled={controls.drafts.loading() || controls.drafts.snapshot()?.sessionId !== draftSessionId}
+              onChange={event => {
+                const draft = controls.drafts.snapshot(); if (draft?.sessionId !== draftSessionId) return;
+                const { collaborationMode: _old, ...contentParts } = draft.contentParts;
+                const selected = event.target.value;
+                controls.drafts.update(draft.text, { ...contentParts, ...(selected === 'default' || selected === 'plan' ? { collaborationMode: selected } : {}) });
+              }}>
+              <option value="">沿用原生{inputModes.observedMode === 'plan' ? '（计划）' : inputModes.observedMode === 'default' ? '（默认）' : ''}</option>
+              <option value="default" disabled={!inputModes.modes.some(mode => mode.id === 'default')}>默认</option>
+              <option value="plan" disabled={!inputModes.modes.some(mode => mode.id === 'plan')}>计划</option>
+            </select>
+          </label> : null}
+          {agent === 'codex' && inputModes.reason !== undefined ? <span className="muted" role="status">{inputModes.reason} <button type="button" onClick={() => setModeCatalogRevision(value => value + 1)}>重新读取模式</button></span> : null}
           {agent === 'codex' || agent === 'claude-code' ? (
             <span className="menu-anchor">
               <button type="button" className="pill" aria-haspopup="menu" aria-expanded={menu === 'reasoning'} onClick={() => setMenu(menu === 'reasoning' ? null : 'reasoning')} data-testid="reasoning-menu">
@@ -830,7 +865,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
         {blockedReason !== undefined && (text !== '' || attachmentParts.length > 0) ? <span role="status" data-testid="input-blocked-reason">{blockedReason}</span> : null}
         {blockedReason?.includes('不一致') ? <button type="button" onClick={() => {
           const current = controls.drafts.snapshot(); if (current === undefined || current.sessionId !== draftSessionId) return;
-          controls.drafts.update(current.text, { version: 1, parts: [{ type: 'text', text: current.text }, ...current.contentParts.parts.filter(part => part.type !== 'text')] });
+          controls.drafts.update(current.text, { ...current.contentParts, version: 1, parts: [{ type: 'text', text: current.text }, ...current.contentParts.parts.filter(part => part.type !== 'text')] });
         }}>以当前正文重新准备</button> : null}
         {pending.length > 0 ? <span className="outbox-status">{pending.length} 条待发送</span> : null}
         {catalogHint ? (

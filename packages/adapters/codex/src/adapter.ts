@@ -24,6 +24,8 @@ import type {
   NativeProcessDelta,
   NativeProcessCompletion,
   NativeProcessStart,
+  CodexInputModeCatalog,
+  CodexInputMode,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -31,7 +33,7 @@ import { normalizeQuestionAnswer } from '@webdcc/protocol';
 import { nativeAccessMode, schemaHasSecrets } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
-import { nativeRequest, validateNativeServerParams, type NativeParams } from './controls.js';
+import { nativeRequest, nativeSettingsNotification, validateNativeServerParams, type NativeParams } from './controls.js';
 import { codexInputParts, encodeCodexInput, unsupportedCodexInput } from './input.js';
 import { elicitationResponse } from './elicitation.js';
 import type { McpServerElicitationRequestParams } from './schema/v2/McpServerElicitationRequestParams.js';
@@ -122,6 +124,9 @@ interface SessionRuntime {
   /** 当前模型：换模型后下一次 turn/start 带上（AG-*-12） */
   model: string | null;
   reasoningEffort: string | null;
+  nativeModel?: string;
+  nativeEffort?: string | null;
+  observedMode?: CodexInputMode | null;
   turnId: string | null;
   observedTurns?: Set<string>;
   reasoningSummaries?: Map<string, ReasoningSummary>;
@@ -759,10 +764,10 @@ export class CodexAdapter implements AgentAdapter {
     return runtime;
   }
 
-  private async handshake(rpc: JsonRpcStdio): Promise<InitializeResponse> {
+  private async handshake(rpc: JsonRpcStdio, questionModes = false): Promise<InitializeResponse> {
     const initialized = await nativeRequest(rpc, 'initialize', {
       clientInfo: { name: 'webdcc', title: 'WebDCC', version: '0.1.0' },
-      capabilities: null,
+      capabilities: questionModes ? { experimentalApi: true, requestAttestation: false } : null,
     });
     rpc.notify('initialized');
     return initialized;
@@ -819,9 +824,10 @@ export class CodexAdapter implements AgentAdapter {
     await this.requirePinnedVersion();
     const runtime = this.startProcess(opts.sessionId, opts);
     try {
-    await this.handshake(runtime.rpc);
+    await this.handshake(runtime.rpc, true);
     const response = await nativeRequest(runtime.rpc, 'thread/start', buildThreadStartParams(opts));
     runtime.nativeId = response.thread.id;
+    this.observeMode(runtime, response);
     runtime.permissions = codexPermissionObservation(response, 'thread/start');
     this.emit(opts.sessionId, { type: 'permissions', observation: runtime.permissions });
     return { nativeId: runtime.nativeId };
@@ -833,7 +839,7 @@ export class CodexAdapter implements AgentAdapter {
     const runtime = this.startProcess(opts.sessionId, opts);
     try {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resume process started');
-    await this.handshake(runtime.rpc);
+    await this.handshake(runtime.rpc, true);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] initialize done, resuming');
     const response = await nativeRequest(runtime.rpc, 'thread/resume', {
       threadId: opts.nativeId,
@@ -842,6 +848,7 @@ export class CodexAdapter implements AgentAdapter {
       ...accessParams(opts.accessMode),
     });
     runtime.nativeId = response.thread.id;
+    this.observeMode(runtime, response);
     runtime.permissions = codexPermissionObservation(response, 'thread/resume');
     this.emit(opts.sessionId, { type: 'permissions', observation: runtime.permissions });
     // thread/resume 返回后线程可能还没挂上；等 thread/started 或最多 2 秒
@@ -863,9 +870,19 @@ export class CodexAdapter implements AgentAdapter {
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] turn/start →', runtime.nativeId, 'model=', runtime.model);
     const mode = runtime.accessMode;
-    const params = buildTurnStartParams(runtime.nativeId, input.text, mode, runtime.model, runtime.reasoningEffort, input.images, runtime.cwd);
+    const params: NativeParams<'turn/start'> = buildTurnStartParams(runtime.nativeId, input.text, mode, runtime.model, runtime.reasoningEffort, input.images, runtime.cwd);
     const modalities = await this.inputModalities(sessionId, input);
     params.input = await encodeCodexInput(input, modalities);
+    if (input.contentParts?.collaborationMode !== undefined) {
+      const selected = input.contentParts.collaborationMode;
+      await this.validateMode(runtime, selected);
+      const model = runtime.model ?? runtime.nativeModel;
+      if (!model) throw Object.assign(new Error('尚未读取原生模型，不能选择输入模式'), { statusCode: 409 });
+      params.collaborationMode = { mode: selected, settings: { model,
+        reasoning_effort: runtime.reasoningEffort ?? runtime.nativeEffort ?? null,
+        // Native null selects the built-in mode instructions, never a Web prompt.
+        developer_instructions: null } };
+    }
     if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('Codex 运行实例在输入准备期间已替换'), { code: 'uncertain' });
     if (input.nativeRequestId !== undefined) params.clientUserMessageId = input.nativeRequestId;
     const response = await nativeRequest(runtime.rpc, 'turn/start', params);
@@ -902,6 +919,36 @@ export class CodexAdapter implements AgentAdapter {
   }
   async validateInput(sessionId: string, input: UserInput): Promise<void> {
     await encodeCodexInput(input, await this.inputModalities(sessionId, input));
+    if (input.contentParts?.collaborationMode !== undefined) await this.validateMode(this.require(sessionId), input.contentParts.collaborationMode);
+  }
+
+  private observeMode(runtime: SessionRuntime, response: { model: string; reasoningEffort: string | null; collaborationMode?: { mode: CodexInputMode } | null }): void {
+    runtime.nativeModel = response.model;
+    runtime.nativeEffort = response.reasoningEffort;
+    runtime.observedMode = response.collaborationMode?.mode ?? null;
+  }
+
+  private async validateMode(runtime: SessionRuntime, mode: CodexInputMode): Promise<void> {
+    const result = await nativeRequest(runtime.rpc, 'collaborationMode/list', {});
+    if (!result.data.some(preset => preset.mode === mode)) throw Object.assign(new Error('原生目录不支持所选输入模式'), { statusCode: 400 });
+    if (runtime.rpc.isClosed) throw Object.assign(new Error('原生连接已断开，不能改变模式'), { statusCode: 409 });
+  }
+
+  async inputModes(sessionId?: string): Promise<CodexInputModeCatalog> {
+    const runtime = sessionId === undefined ? undefined : this.sessions.get(sessionId);
+    if (runtime !== undefined && !runtime.rpc.isClosed) {
+      const result = await nativeRequest(runtime.rpc, 'collaborationMode/list', {});
+      if (this.sessions.get(sessionId!) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('模式目录属于旧运行实例'), { statusCode: 409 });
+      return { modes: result.data.flatMap(preset => preset.mode === 'plan' || preset.mode === 'default' ? [{ id: preset.mode, label: preset.mode === 'plan' ? '计划' : '默认' }] : []), observedMode: runtime.observedMode ?? null };
+    }
+    await this.requirePinnedVersion();
+    const rpc = JsonRpcStdio.start({ command: this.options.command ?? 'codex',
+      args: ['app-server', ...(this.options.configOverrides ?? []).flatMap(value => ['-c', value])], env: { ...(this.options.env ?? process.env) } });
+    try {
+      await this.handshake(rpc, true);
+      const result = await nativeRequest(rpc, 'collaborationMode/list', {});
+      return { modes: result.data.flatMap(preset => preset.mode === 'plan' || preset.mode === 'default' ? [{ id: preset.mode, label: preset.mode === 'plan' ? '计划' : '默认' }] : []), observedMode: null };
+    } finally { await rpc.kill(); }
   }
   async resolveInputSkill(sessionId: string, selection: InputSkillPart): Promise<{ path: string }> {
     const runtime = this.require(sessionId);
@@ -926,6 +973,7 @@ export class CodexAdapter implements AgentAdapter {
     const response = await nativeRequest(runtime.rpc, 'thread/resume', { threadId: runtime.nativeId, excludeTurns: true });
     if (this.sessions.get(sessionId) !== runtime || response.thread.id !== runtime.nativeId) throw Object.assign(new Error('原生权限读取属于旧运行实例或其他会话'), { statusCode: 409 });
     runtime.permissions = codexPermissionObservation(response, 'thread/resume:policy-readback');
+    this.observeMode(runtime, response);
     this.emit(sessionId, { type: 'permissions', observation: runtime.permissions });
   }
 
@@ -1447,6 +1495,12 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'internal': {
+        if (method === 'thread/settings/updated' && params['threadId'] === runtime.nativeId) {
+          try {
+            const { threadSettings } = nativeSettingsNotification(params);
+            this.observeMode(runtime, { model: threadSettings.model, reasoningEffort: threadSettings.effort, collaborationMode: threadSettings.collaborationMode });
+          } catch { /* Keep malformed observations in the native ledger without claiming a mode. */ }
+        }
         this.emit(sessionId, {
           type: 'item.complete',
           itemKey: `internal-${method}-${frameKey}`,

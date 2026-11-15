@@ -672,7 +672,12 @@
           "packages/server/src/native-actions.ts",
           "packages/server/test/native-actions.spec.ts",
           "packages/server/test/native-controls.spec.ts",
-          "browser-tests/native-controls.spec.ts"
+          "browser-tests/native-controls.spec.ts",
+          "scripts/verify-native-questions.ts",
+          "packages/server/test/input-modes.spec.ts",
+          "packages/adapters/codex/test/input-modes.spec.ts",
+          "browser-tests/composer-input.spec.ts",
+          "packages/adapters/claude/src/handler.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/question-answer.ts",
@@ -728,7 +733,12 @@
           "docs/question-blocking-semantics.md",
           "packages/server/test/interaction-lookup.spec.ts",
           "packages/web/src/lib/store-interaction-sync.spec.ts",
-          "browser-tests/interaction-sync.spec.ts"
+          "browser-tests/interaction-sync.spec.ts",
+          "scripts/verify-native-questions.ts",
+          "packages/server/test/input-modes.spec.ts",
+          "packages/adapters/codex/test/input-modes.spec.ts",
+          "browser-tests/composer-input.spec.ts",
+          "packages/adapters/claude/src/handler.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -741,14 +751,15 @@
           "docs/question-blocking-semantics.md",
           "packages/server/test/interaction-lookup.spec.ts",
           "packages/web/src/lib/store-interaction-sync.spec.ts",
-          "browser-tests/interaction-sync.spec.ts"
+          "browser-tests/interaction-sync.spec.ts",
+          "web_review/QUESTION_ADAPTATION_2026-11-15.md"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
           "三种结局允许/拒绝/取消都验证；两个浏览器同时回应只有一次native决定。",
           "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
         ],
-        "remainingWork": "Native blocking/actual thread waiting retained. Cached cards and durable interaction replay wait verified HTTP/WS boundaries; per-ID real stored native results reconcile history gaps without inventing completion. Controlled Chromium and deterministic before/after regressions passed. Ordinary Plan-mode UI/experimental negotiation and full actual native-Web multi-provider cancellation/secret/restart acceptance remain incomplete; Issue41 stays open.",
+        "remainingWork": "Codex Plan input mode and pinned experimental API negotiation implemented. Actual Codex0.167.0, ClaudeSDK0.3.322/CLI2.1.322 and DSH0.2.2-rc.1 with loopback scripted models and Chromium verify two questions, exact free text, applicable multi-select, native confirmation/continuation, stop and reload. Claude question groups wait for SDK tool_result; cancelled/continued DSH cards retain original text. Default Codex questions remain governed by native feature defaults. Full secret/elicitation/dual-native-UI/provider/network-loss/server-restart acceptance still incomplete; Issues29/41 and NP06 remain open until reviewed/merged and full scope is accepted.",
         "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
       },
       "dependencyIds": [
@@ -911,7 +922,7 @@
       ],
       "execution": {
         "implementation": "in-progress",
-        "verification": "partial-local",
+        "verification": "partial-local-and-native",
         "plannedFiles": [
           "packages/adapters/codex/src/adapter.ts",
           "packages/adapters/codex/src/rpc.ts",
@@ -928,7 +939,11 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "scripts/export-codex-question-contract.ts",
+          "packages/adapters/codex/src/schema-experimental/question-modes.schemas.json",
+          "packages/adapters/codex/src/controls.ts",
+          "packages/adapters/codex/test/input-modes.spec.ts"
         ],
         "actualFiles": [
           "packages/adapters/codex/src/adapter.ts",
@@ -955,7 +970,11 @@
           "scripts/verify-native-reasoning.ts",
           "packages/server/test/question-blocking.spec.ts",
           "browser-tests/question-blocking.spec.ts",
-          "docs/question-blocking-semantics.md"
+          "docs/question-blocking-semantics.md",
+          "scripts/export-codex-question-contract.ts",
+          "packages/adapters/codex/src/schema-experimental/question-modes.schemas.json",
+          "packages/adapters/codex/src/controls.ts",
+          "packages/adapters/codex/test/input-modes.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -969,14 +988,15 @@
           "scripts/verify-native-reasoning.ts",
           "packages/server/test/question-blocking.spec.ts",
           "browser-tests/question-blocking.spec.ts",
-          "docs/question-blocking-semantics.md"
+          "docs/question-blocking-semantics.md",
+          "web_review/QUESTION_ADAPTATION_2026-11-15.md"
         ],
         "remainingAcceptance": [
           "summary=[a,b]与plan.text均完整显示且只出现一次。",
           "MCP elicitation、permissions和auth refresh不会走command卡片；没有合法handler时无假成功。",
           "原生turn/started后不经send也能interrupt；请求ID字符串往返不变。"
         ],
-        "remainingWork": "Remaining notification and reverse-request cases require contract and native verification."
+        "remainingWork": "Pinned experimental collaborationMode/list and turn/start mode field implemented using a separately exported contract without editing standard schema. Actual native Plan question/answer/continue/stop/reload passed against Codex0.167.0 with a loopback scripted model. Remaining notification and reverse-request cases still require full native verification."
       },
       "dependencyIds": [
         "NP-02",
@@ -1019,7 +1039,7 @@
       ],
       "execution": {
         "implementation": "in-progress",
-        "verification": "partial-local",
+        "verification": "partial-local-and-native",
         "plannedFiles": [
           "packages/adapters/claude/src/adapter.ts",
           "packages/adapters/claude/src/content.ts",
@@ -1036,7 +1056,9 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/adapters/claude/src/handler.spec.ts",
+          "scripts/verify-native-questions.ts"
         ],
         "actualFiles": [
           "packages/adapters/claude/src/adapter.ts",
@@ -1054,19 +1076,23 @@
           "scripts/verify-native-recovery.ts",
           "packages/adapters/codex/test/observation.spec.ts",
           "packages/adapters/claude/src/managed-process.ts",
-          "packages/adapters/claude/test/managed-process.spec.ts"
+          "packages/adapters/claude/test/managed-process.spec.ts",
+          "packages/adapters/claude/src/handler.spec.ts",
+          "scripts/verify-native-questions.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-e493ec4.json",
-          "web_review/evidence/native-recovery-current.json"
+          "web_review/evidence/native-recovery-current.json",
+          "web_review/QUESTION_ADAPTATION_2026-11-15.md",
+          "docs/question-blocking-semantics.md"
         ],
         "remainingAcceptance": [
           "两个text block完成态保持各自内容，主子输出交错不串线。",
           "compact/task/status生产listener与replay具有相同保留策略。",
           "权限切换后换模型保持effective权限；工具失败不产生成功任务或用户中断假象。"
         ],
-        "remainingWork": "已完成块级 reducer/系统消息保留与局部 query 控制：权限和 effort 写入下一实例启动配置，完整后台任务快照阻止错误替换，失败初始化关闭新实例并恢复旧配置。仍需完整 SDK 输出/任务实体、全部初始化和退出故障、真实原生模型与权限结果验证。"
+        "remainingWork": "已补 Claude 问题组的 SDK tool_result 确认：正常回答不提前完成，取消和原生终态使旧卡失效；真实 SDK0.3.322/CLI2.1.322 + 本机脚本模型 + Chromium 验证自由文本、多选、多题、继续、取消和刷新。块级 reducer/系统消息、权限/effort 与 query 替换的既有修复保留。完整 SDK 输出/任务实体、全部初始化/退出故障和真实 Provider 模型与权限结果仍待验收。"
       },
       "dependencyIds": [
         "NP-02",
@@ -1215,7 +1241,8 @@
           "packages/adapters/dsh/src/identity.ts",
           "packages/adapters/dsh/src/workspaces.ts",
           "packages/server/src/dsh-connection.ts",
-          "packages/server/src/adapters.ts"
+          "packages/server/src/adapters.ts",
+          "scripts/verify-native-questions.ts"
         ],
         "actualFiles": [
           "packages/adapters/dsh/src/adapter.ts",
@@ -1227,19 +1254,22 @@
           "packages/adapters/dsh/src/identity.ts",
           "packages/adapters/dsh/src/workspaces.ts",
           "packages/server/src/dsh-connection.ts",
-          "packages/server/src/adapters.ts"
+          "packages/server/src/adapters.ts",
+          "scripts/verify-native-questions.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-e493ec4.json",
-          ".artifacts/dsh-native-smoke.json"
+          ".artifacts/dsh-native-smoke.json",
+          "web_review/QUESTION_ADAPTATION_2026-11-15.md",
+          "docs/question-blocking-semantics.md"
         ],
         "remainingAcceptance": [
           "所有调用通过锁定catalog参数校验，父身份不匹配返回拒绝。",
           "首次答案网络失败后可安全重试，不丢问题。",
           "fixture的{id,outcome}决定生成resolved；原版UI解决或取消后Web只有一个最终状态。"
         ],
-        "remainingWork": "已修复父会话包装/continuable 方法、one-shot 控制限制、durable id/callId/waterfall 映射、{id,outcome} 和原生 cancel、答案失败保留。计时问题 attachWait/继续回答、跨连接交互对账、真实原生操作验收与完整表单闭环仍待完成。",
+        "remainingWork": "已修复父会话包装/continuable 方法、durable id/callId/waterfall 关联、原生 cancel 和答案失败保留。真实 DSH0.2.2-rc.1 + 本机脚本模型 + Chromium 验证多题/自由文本/原生 multi_select、继续、停止和刷新；取消及晚答投影保留原题与分组。计时等待/跨原生界面/跨连接完整恢复和子Agent全范围仍待原生验收。",
         "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
       },
       "dependencyIds": [

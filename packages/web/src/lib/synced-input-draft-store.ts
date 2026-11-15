@@ -96,7 +96,7 @@ export class SyncedInputDraftStore implements InputDraftStore<PreparedPart> {
     if (textParts.length === 1 && textParts[0]!.elements?.length && textParts[0]!.text !== draft.text) throw new Error('原生文字元素与编辑后的正文不一致，请重新准备');
     if (textParts.length === 0 && draft.text !== '') parts.unshift({ type: 'text', text: draft.text });
     if (textParts.length === 1) parts[parts.indexOf(textParts[0]!)] = { ...textParts[0]!, text: draft.text };
-    const content = { version: 1, parts };
+    const content = { ...draft.contentParts, version: 1, parts };
     if (!isInputContent(content, draft.text)) throw new Error('草稿的结构化内容需要核对后才能同步');
     return content;
   }
@@ -106,7 +106,7 @@ export class SyncedInputDraftStore implements InputDraftStore<PreparedPart> {
     let baseline = await this.local.getRemoteDraft(sessionId);
     if (baseline === undefined) {
       const remote = await api.draft(sessionId); const remoteContent = contentOf(remote);
-      if (remote.text !== '' || remoteContent.parts.length > 0) {
+      if (remote.text !== '' || remoteContent.parts.length > 0 || remoteContent.collaborationMode !== undefined) {
         if (remote.text !== draft.text || JSON.stringify(remoteContent) !== JSON.stringify(content)) throw Object.assign(new Error('云端已有另一份草稿，本机内容已保留，请核对后处理'), { status: 409 });
       }
       baseline = { sessionId, revision: remote.revision, text: remote.text, contentParts: remoteContent };

@@ -1,0 +1,149 @@
+{
+  "provenance": {
+    "nativeVersion": "0.167.0",
+    "nativeBinarySha256": "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda",
+    "nativeSchemaSha256": "486c7c8daa5dc7f3ab2a1fb56de5316804caf7a4210fda1dc28d3f0f4e90cfe1",
+    "command": "codex app-server generate-json-schema --experimental",
+    "scope": "Original collaborationMode field and its referenced definitions; original collaborationMode/list request and response."
+  },
+  "collaborationMode": {
+    "anyOf": [
+      {
+        "$ref": "#/definitions/v2/CollaborationMode"
+      },
+      {
+        "type": "null"
+      }
+    ],
+    "description": "EXPERIMENTAL - Set a pre-set collaboration mode. Takes precedence over model, reasoning_effort, and developer instructions if set.\n\nFor `collaboration_mode.settings.developer_instructions`, `null` means \"use the built-in instructions for the selected mode\"."
+  },
+  "definitions": {
+    "v2": {
+      "CollaborationModeListParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "EXPERIMENTAL - list collaboration mode presets.",
+        "title": "CollaborationModeListParams",
+        "type": "object"
+      },
+      "CollaborationModeListResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "EXPERIMENTAL - collaboration mode presets response.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/CollaborationModeMask"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "CollaborationModeListResponse",
+        "type": "object"
+      },
+      "CollaborationMode": {
+        "description": "Collaboration mode for a Codex session.",
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/v2/ModeKind"
+          },
+          "settings": {
+            "$ref": "#/definitions/v2/Settings"
+          }
+        },
+        "required": [
+          "mode",
+          "settings"
+        ],
+        "type": "object"
+      },
+      "CollaborationModeMask": {
+        "description": "EXPERIMENTAL - collaboration mode preset metadata for clients.",
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ModeKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/v2/ReasoningEffort"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ModeKind": {
+        "description": "Initial collaboration mode to use when the TUI starts.",
+        "enum": [
+          "plan",
+          "default"
+        ],
+        "type": "string"
+      },
+      "Settings": {
+        "description": "Settings for a collaboration mode.",
+        "properties": {
+          "developer_instructions": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ReasoningEffort"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "type": "object"
+      },
+      "ReasoningEffort": {
+        "description": "A non-empty reasoning effort value advertised by the model.",
+        "minLength": 1,
+        "type": "string"
+      }
+    }
+  }
+}

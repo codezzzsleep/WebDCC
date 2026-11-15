@@ -69,3 +69,18 @@ it('editing native text elements cannot submit stale byte spans and can explicit
   drafts.update('different text', { version: 1, parts: [{ type: 'text', text: 'different text' }] });
   expect(await composer.submit('send', async input => { expect(input.text).toBe('different text'); return { commandId: 'durable' }; })).toEqual({ submitted: true });
 });
+
+it('a native input mode survives attachments, durable submission and draft clearing; an unverified mode or steer cannot be submitted', async () => {
+  const { drafts, composer, capability } = controls(); await drafts.open('A');
+  drafts.update('  原文  ', { version: 1, parts: [], collaborationMode: 'plan' });
+  expect(composer.reason('send')).toContain('原生目录');
+  capability.collaborationModes = ['plan', 'default'];
+  expect(composer.reason('steer')).toContain('不能改变输入模式');
+  expect(composer.appendPart(drafts.token()!, { type: 'text', text: '  原文  ' })).toBe(true);
+  let submitted: unknown;
+  expect(await composer.submit('send', async input => { submitted = input; return { commandId: 'mode-input' }; })).toEqual({ submitted: true });
+  expect(submitted).toMatchObject({ text: '  原文  ', contentParts: { collaborationMode: 'plan', parts: [{ type: 'text', text: '  原文  ' }] } });
+  expect(drafts.snapshot()?.contentParts).toEqual({ version: 1, parts: [], collaborationMode: 'plan' });
+  await drafts.open('B'); expect(drafts.snapshot()?.contentParts.collaborationMode).toBeUndefined();
+  await drafts.open('A'); expect(drafts.snapshot()?.contentParts.collaborationMode).toBe('plan');
+});

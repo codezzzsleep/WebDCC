@@ -5,7 +5,7 @@ import { writeFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { seedWorkspaceAndSession } from '../packages/server/test/helpers.js';
-import type { EventData } from '@webdcc/protocol';
+import type { AgentAdapter, EventData } from '@webdcc/protocol';
 import { createSourceTestApp } from './helpers.js';
 
 async function listener(ctx: Awaited<ReturnType<typeof createSourceTestApp>>, browser: Browser): Promise<{ page: Page; base: string }> {
@@ -20,6 +20,31 @@ function declaredAdapter(id: 'dsh' | 'codex' = 'dsh') {
   adapter.listModels = async () => [{ id: 'fixture', label: 'Fixture input model', isDefault: true, inputModalities: ['text', 'image'] }];
   return adapter;
 }
+
+it('Codex mode persists through sending, empty-draft clearing and refresh before Session metadata has loaded', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const adapter: AgentAdapter = declaredAdapter('codex');
+    adapter.inputModes = async () => ({ modes: [{ id: 'plan', label: '计划' }, { id: 'default', label: '默认' }], observedMode: 'plan' });
+    ctx.manager.registerAdapter(adapter);
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
+    await page.goto(`${base}/s/${sessionId}`);
+    const mode = page.getByTestId('codex-input-mode');
+    await expect.poll(() => mode.locator('option[value="plan"]').isEnabled()).toBe(true);
+    await mode.selectOption('plan');
+    await page.getByTestId('composer-input').fill('  原文  ');
+    await page.getByTestId('send-button').click();
+    await expect.poll(() => ctx.store.allEvents(sessionId).filter(event => event.kind === 'user.message').length).toBe(1);
+    expect((ctx.store.allEvents(sessionId).find(event => event.kind === 'user.message')!.data as EventData['user.message']).contentParts?.collaborationMode).toBe('plan');
+    await expect.poll(() => page.getByTestId('composer-input').inputValue()).toBe('');
+    await expect.poll(() => page.getByTestId('draft-sync-state').getAttribute('data-pending')).toBe('false');
+    await page.reload();
+    await expect.poll(() => mode.inputValue()).toBe('plan');
+    expect(await page.getByTestId('composer-input').inputValue()).toBe('');
+    expect(ctx.store.getDraft(sessionId).contentParts?.collaborationMode).toBe('plan');
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
 it('product Composer keeps failed uploads in A across B/refresh, resumes exact bytes and renders sent attachments', async () => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
   const fixture = Buffer.alloc(2 * 1024 * 1024 + 37); for (let index = 0; index < fixture.length; index++) fixture[index] = index * 31 % 251;

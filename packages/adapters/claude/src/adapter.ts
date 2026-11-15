@@ -190,6 +190,7 @@ interface SessionRuntime {
   state: ClaudeNativeState;
   capabilities: string[];
   nativePending: Map<string, NativePending>;
+  questionGroups: Map<string, { items: EventData['question'][]; submitted: boolean; cancelled?: boolean }>;
   envelopeId?: number;
   turnActive: boolean;
   backgroundTasks: Map<string, string | undefined>;
@@ -273,7 +274,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const decisions: PermissionResult[] = [];
     const runtime: SessionRuntime = {
       stdio: { enabled: false, failed: false },
-      nativeOptions: {}, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(),
+      nativeOptions: {}, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
       pump: Promise.resolve(), turnActive: false, backgroundTasks: new Map(), hasBackgroundSnapshot: false, turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
       pending: new Map(), toolItems: new Map(),
@@ -458,7 +459,7 @@ export class ClaudeAdapter implements AgentAdapter {
     this.generations.set(sessionId, generation);
     const runtime: SessionRuntime = {
       stdio,
-      nativeOptions, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(),
+      nativeOptions, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
       nativeId: resume ?? '',
       turnActive: false,
       backgroundTasks: new Map(),
@@ -654,8 +655,10 @@ export class ClaudeAdapter implements AgentAdapter {
     if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'out', ch: 'control', frame: { questionId, answer } })) throw Object.assign(new Error('原生回应未持久化'), { code: 'uncertain' });
     if (Object.keys(pending.answers).length < questions.length) return { submitted: false };
     runtime.pending.delete(requestId);
+    const group = runtime.questionGroups.get(requestId);
+    if (group !== undefined) group.submitted = true;
     pending.resolve({ approved: true, optionId: 'answer', answers: pending.answers });
-    return { submitted: true, questionIds: questions.map((_, index) => `${requestId}:${index}`) };
+    return { submitted: true, confirmed: false, questionIds: questions.map((_, index) => `${requestId}:${index}`) };
   }
 
   debugProcesses(): { sessionId: string; pid: number; dirs: Record<string, string> }[] {
@@ -939,11 +942,7 @@ export class ClaudeAdapter implements AgentAdapter {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
       const questionId = `${options.toolUseID ?? `q-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
       const questionPromise = this.waitForDecision(runtime, questionId, 'question', toolName, input, options.signal);
-      for (const [index, question] of questions.entries()) this.emit(sessionId, {
-        type: 'item.complete',
-        itemKey: `question-${questionId}-${index}`,
-        kind: 'question',
-        data: {
+      const items: EventData['question'][] = questions.map((question, index) => ({
           questionId: `${questionId}:${index}`,
           groupId: questionId,
           prompt: String(question['question'] ?? '请回答'),
@@ -957,10 +956,14 @@ export class ClaudeAdapter implements AgentAdapter {
           isSecret: question['isSecret'] === true,
           allowsFreeText: true,
           ...(options.toolUseID === undefined ? {} : { toolCallId: options.toolUseID }),
-        },
-      });
+      }));
+      runtime.questionGroups.set(questionId, { items, submitted: false });
+      for (const [index, data] of items.entries()) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${questionId}-${index}`, kind: 'question', data });
       const decision = await questionPromise;
-      if (!decision.approved) return { behavior: 'deny', message: '用户取消问题', interrupt: true };
+      if (!decision.approved) {
+        const group = runtime.questionGroups.get(questionId); if (group !== undefined) group.cancelled = true;
+        return { behavior: 'deny', message: '用户取消问题', interrupt: true };
+      }
       const answers = decision.answers ?? {};
       return { behavior: 'allow', updatedInput: { ...input, answers } } as PermissionResult;
     }
@@ -1064,6 +1067,12 @@ export class ClaudeAdapter implements AgentAdapter {
         for (const block of content) {
           if (block['type'] !== 'tool_result') continue;
           const toolId = String(block['tool_use_id'] ?? '');
+          const group = runtime.questionGroups.get(toolId);
+          if (group !== undefined) {
+            const rejected = group.cancelled === true && block['is_error'] === true;
+            this.settleQuestionGroup(sessionId, runtime, toolId, group.submitted && block['is_error'] !== true ? 'answered' : 'skipped', message,
+              block['is_error'] === true && !rejected ? 'outcome-unknown' : group.submitted || rejected ? 'native-acknowledged' : 'external');
+          }
           const item = runtime.toolItems.get(toolId);
           runtime.toolItems.delete(toolId);
           const output = typeof block['content'] === 'string' ? block['content'] : JSON.stringify(block['content']);
@@ -1107,6 +1116,7 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'result': {
+        for (const toolId of runtime.questionGroups.keys()) this.settleQuestionGroup(sessionId, runtime, toolId, 'skipped', message, 'outcome-unknown');
         runtime.turnActive = message.queued_turn_count !== undefined && message.queued_turn_count > 0;
         for (const event of runtime.content.flush(message.session_id)) this.emit(sessionId, event);
         const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; modelUsage?: Record<string, unknown>; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
@@ -1143,6 +1153,15 @@ export class ClaudeAdapter implements AgentAdapter {
         this.emit(sessionId, { type: 'item.complete', itemKey: `unknown-sdk-${runtime.frameSeq}`, kind: 'unknown', data: { nativeType: message.type }, native: message });
         return;
     }
+  }
+
+  private settleQuestionGroup(sessionId: string, runtime: SessionRuntime, toolId: string, status: 'answered' | 'skipped', native: unknown,
+    resolution: NonNullable<EventData['question']['resolution']>): void {
+    const group = runtime.questionGroups.get(toolId);
+    if (group === undefined) return;
+    runtime.questionGroups.delete(toolId);
+    for (const data of group.items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-resolved-${data.questionId}`, kind: 'question',
+      data: { ...data, status, resolution, ...(status === 'skipped' && resolution === 'native-acknowledged' ? { outcome: 'cancel' as const } : {}) }, native });
   }
 }
 

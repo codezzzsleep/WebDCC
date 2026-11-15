@@ -213,6 +213,7 @@ interface PendingInteraction {
   kind: 'approval' | 'question';
   eventId: string;
   questionIds?: string[];
+  questionItems?: EventData['question'][];
   answers?: Map<string, { id: string; selected: string[]; custom?: string }>;
   callId?: string;
   durableId?: string;
@@ -773,19 +774,20 @@ export class DshAdapter implements AgentAdapter {
       const eventId = `dsh-continued:${question.callId}`;
       const existing = runtime.pending.get(eventId);
       if (existing !== undefined) { if (existing.continued) existing.generation = this.muxGeneration; continue; }
-      runtime.pending.set(eventId, { kind: 'question', eventId, callId: question.callId, questionIds: question.questions.map(item => item.id), generation: this.muxGeneration, continued: true });
-      for (const item of question.questions) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${eventId}-${item.id}`, kind: 'question', data: {
+      const questionItems: EventData['question'][] = question.questions.map(item => ({
         questionId: `${eventId}:${item.id}`, groupId: eventId, toolCallId: question.callId, prompt: item.question, header: item.header,
         options: item.options?.map(option => ({ id: option.label, label: option.label, description: option.description })), multiSelect: item.multiSelect, allowsFreeText: true,
-      }, native: question });
+      }));
+      runtime.pending.set(eventId, { kind: 'question', eventId, callId: question.callId, questionIds: question.questions.map(item => item.id), questionItems, generation: this.muxGeneration, continued: true });
+      for (const data of questionItems) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${data.questionId}`, kind: 'question', data, native: question });
     }
     for (const settled of projection?.settled ?? []) {
       const eventId = `dsh-continued:${settled.callId}`;
       const pending = runtime.pending.get(eventId);
       if (pending === undefined) continue;
       runtime.pending.delete(eventId);
-      for (const questionId of pending.questionIds ?? []) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${eventId}-${questionId}`, kind: 'question', data: {
-        questionId: `${eventId}:${questionId}`, prompt: '', status: 'answered', resolution: pending.sent ? 'native-acknowledged' : 'external', toolCallId: settled.callId,
+      for (const question of pending.questionItems ?? []) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: {
+        ...question, status: 'answered', resolution: pending.sent ? 'native-acknowledged' : 'external',
       }, native: settled });
     }
   }
@@ -1341,7 +1343,7 @@ export class DshAdapter implements AgentAdapter {
         runtime.pending.delete(eventId);
         if (pending.waitStream !== undefined) this.client?.closeStream(pending.waitStream);
         if (pending.kind === 'approval') this.emit(id, { type: 'item.complete', itemKey: `approval-cancelled-${eventId}`, kind: 'approval.resolved', data: { approvalId: eventId, optionId: 'cancelled', by: 'other' }, native: value });
-        else for (const question of pending.questionIds ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-cancelled-${eventId}-${question}`, kind: 'question', data: { questionId: `${eventId}:${question}`, prompt: '', status: 'skipped' }, native: value });
+        else for (const question of pending.questionItems ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-cancelled-${question.questionId}`, kind: 'question', data: { ...question, status: 'skipped', outcome: 'cancel', resolution: 'native-acknowledged' }, native: value });
       }
       return;
     }
@@ -1824,11 +1826,7 @@ export class DshAdapter implements AgentAdapter {
           if (frame.type === 'item' && typeof remaining === 'number') pending.remainingMs = Math.max(0, remaining);
         });
       }
-      for (const [index, first] of questions.entries()) this.emit(target, {
-        type: 'item.complete',
-        itemKey: `question-${eventId}-${ids[index]}`,
-        kind: 'question',
-        data: {
+      pending.questionItems = questions.map((first, index) => ({
           questionId: `${eventId}:${ids[index]}`,
           groupId: eventId,
           ...(wait?.callId === undefined ? {} : { toolCallId: wait.callId }),
@@ -1842,8 +1840,8 @@ export class DshAdapter implements AgentAdapter {
           multiSelect: first['multiSelect'] === true,
           isSecret: first['isSecret'] === true,
           allowsFreeText: true,
-        },
-      });
+      }));
+      for (const [index, data] of pending.questionItems.entries()) this.emit(target, { type: 'item.complete', itemKey: `question-${eventId}-${ids[index]}`, kind: 'question', data, native: value });
       return;
     }
     this.emit(target, { type: 'item.complete', itemKey: `dsh-unknown-waterfall-${eventId}`, kind: 'unknown', data: { nativeType: event }, native: value });
