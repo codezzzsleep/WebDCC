@@ -261,7 +261,7 @@ interface SessionRuntime {
   assistantKeys?: Set<string>;
   assistantSettlements?: Map<number, { type: string; data: Record<string, unknown>; native: unknown; envelopeId?: number }>;
   projections?: { asOfSeq: number; values: Record<string, unknown> };
-  modelObservation?: { provider?: string; model?: string; reasoningEffort?: string; source: string; nativeSeq?: number };
+  modelObservation?: { provider?: string; model?: string; publicModelId?: string; reasoningEffort?: string; source: string; nativeSeq?: number };
   controlState?: unknown;
 }
 
@@ -311,6 +311,7 @@ export class DshAdapter implements AgentAdapter {
   readonly id = 'dsh' as const;
   private readonly listeners: ((sessionId: string, event: AdapterEvent) => void)[] = [];
   private readonly sessions = new Map<string, SessionRuntime>();
+  private modelPublicIds = new Map<string, string>();
   private sidecar: Sidecar | null = null;
   private client: DshHostClient | null = null;
   private clientId = '';
@@ -389,13 +390,14 @@ export class DshAdapter implements AgentAdapter {
     const [host, state, projections] = await Promise.all([
       this.hostIdentity(), this.call(client, 'session/state', { request: { sessionId: runtime.nativeId } }, sessionId),
       this.call<{ asOfSeq: number; values: Record<string, unknown> }>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId),
+      this.modelCatalog(client),
     ]);
     if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw dshNativeError('DSH runtime was replaced', 409);
     runtime.controlState = state;
     this.applyProjections(sessionId, runtime, projections);
     const projected = projectedModelSelection(runtime.projections?.values['modelSelection']);
-    const selected = projected === undefined ? runtime.modelObservation ?? { source: 'unavailable-in-api' }
-      : { ...projected, source: 'session/projections:modelSelection.next' };
+    if (projected !== undefined) this.observeModelSelection(sessionId, runtime, projected, 'session/projections:modelSelection.next');
+    const selected = runtime.modelObservation ?? { source: 'unavailable-in-api' };
     return { revision: this.nativeRevision(runtime), nativeId: runtime.nativeId, workspaceId: runtime.workspaceId, host,
       transport: client.isConnected ? 'live' : 'reconnecting', state: dshPublicValue(state), projections: dshPublicValue(runtime.projections), selected: dshPublicValue(selected),
       credentialMode: this.options.attachBrowserCookie !== undefined || (this.options.mode ?? 'spawn') === 'spawn' ? 'native-browser-shared-peer' : 'native-operator-single-socket',
@@ -618,7 +620,26 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private async modelCatalog(client: DshHostClient): Promise<DshModelCatalog> {
-    return this.call<DshModelCatalog>(client, 'session/modelCatalog', {});
+    const catalog = await this.call<DshModelCatalog>(client, 'session/modelCatalog', {});
+    if (this.client !== client) throw dshNativeError('模型目录属于旧 Host，请重新读取', 409);
+    const ids = new Map<string, string>();
+    for (const group of catalog.groups ?? []) for (const model of group.models ?? []) {
+      if (typeof group.id !== 'string' || typeof model.id !== 'string') continue;
+      ids.set(JSON.stringify([group.id, model.id]), providerForModel(catalog, model.id) === undefined
+        ? `dsh:${Buffer.from(JSON.stringify([group.id, model.id])).toString('base64url')}` : model.id);
+    }
+    this.modelPublicIds = ids;
+    return catalog;
+  }
+
+  private observeModelSelection(sessionId: string, runtime: SessionRuntime, selected: DshModelSelection, source: string, force = false): void {
+    const publicModelId = this.modelPublicIds.get(JSON.stringify([selected.provider, selected.model]));
+    const previous = runtime.modelObservation;
+    const changed = previous?.provider !== selected.provider || previous.model !== selected.model || previous.reasoningEffort !== selected.reasoningEffort || previous.publicModelId !== publicModelId;
+    runtime.model = selected.model; runtime.modelProvider = selected.provider; runtime.reasoningEffort = selected.reasoningEffort;
+    runtime.modelObservation = { ...selected, ...(publicModelId === undefined ? {} : { publicModelId }), source };
+    if (changed || force) this.emit(sessionId, { type: 'item.complete', itemKey: `model-observation-${++runtime.frameSeq}`, kind: 'internal', scope: 'session',
+      data: { nativeType: source }, native: { ...runtime.modelObservation } });
   }
 
   private confirmModelSelection(sessionId: string, runtime: SessionRuntime, result: unknown, provider: string, model: string, reasoningEffort?: string): void {
@@ -627,12 +648,7 @@ export class DshAdapter implements AgentAdapter {
       || selected.reasoningEffort !== undefined && typeof selected.reasoningEffort !== 'string') {
       throw Object.assign(dshNativeError('原生未确认所选模型或思考等级，请重新读取状态后再操作', 409), { code: 'uncertain' });
     }
-    runtime.model = model;
-    runtime.modelProvider = provider;
-    runtime.reasoningEffort = selected.reasoningEffort as string | undefined;
-    runtime.modelObservation = { provider, model, ...(runtime.reasoningEffort === undefined ? {} : { reasoningEffort: runtime.reasoningEffort }), source: 'session/selectModel:selected' };
-    this.emit(sessionId, { type: 'item.complete', itemKey: `model-selected-${++runtime.frameSeq}`, kind: 'internal', scope: 'session',
-      data: { nativeType: 'session/selectModel' }, native: { ...runtime.modelObservation } });
+    this.observeModelSelection(sessionId, runtime, { provider, model, ...(selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort as string }) }, 'session/selectModel:selected', true);
   }
 
   private async selectModel(client: DshHostClient, runtime: SessionRuntime, model: string, reasoningEffort?: string, expectedRoute?: { provider: string; model: string }): Promise<void> {
@@ -789,10 +805,7 @@ export class DshAdapter implements AgentAdapter {
     runtime.projections = structuredClone(baseline);
     const selected = projectedModelSelection(baseline.values['modelSelection']);
     if (selected !== undefined && JSON.stringify(previous?.values['modelSelection']) !== JSON.stringify(baseline.values['modelSelection'])) {
-      runtime.modelObservation = { ...selected, source: 'session/projections:modelSelection.next' };
-      runtime.model = selected.model; runtime.modelProvider = selected.provider; runtime.reasoningEffort = selected.reasoningEffort;
-      this.emit(sessionId, { type: 'item.complete', itemKey: `model-projection-${++runtime.frameSeq}`, kind: 'internal', scope: 'session',
-        data: { nativeType: 'modelSelection' }, native: { ...runtime.modelObservation } });
+      this.observeModelSelection(sessionId, runtime, selected, 'session/projections:modelSelection.next');
     }
     runtime.children.clear();
     const children = baseline.values['subagentCatalog'];
@@ -839,6 +852,7 @@ export class DshAdapter implements AgentAdapter {
     const host = new DshHostClient(endpoint, { onState: state => {
       if (this.client !== host) return;
       if (state === 'reconnecting' || state === 'auth-required') {
+        this.modelPublicIds.clear();
         this.clientId = ''; this.muxGeneration++; this.observedHost = undefined; this.workspaceState.invalidate();
         for (const [id, runtime] of this.sessions) { runtime.history?.invalidate(); runtime.projections = undefined; runtime.children.clear(); runtime.modelObservation = undefined; this.emit(id, { type: 'permissions', observation: { effective: null, source: 'dsh.connection', scope: 'session' } }); }
       }
@@ -995,6 +1009,12 @@ export class DshAdapter implements AgentAdapter {
     try {
       await this.permission(client, created.sessionId, opts.accessMode);
       if (opts.model !== undefined && opts.model !== '') await this.selectModel(client, runtime, opts.model, opts.reasoningEffort);
+      else if (opts.reasoningEffort !== undefined) {
+        const catalog = await this.modelCatalog(client);
+        const provider = catalog.default?.provider; const model = catalog.default?.model;
+        if (typeof provider !== 'string' || !provider || typeof model !== 'string' || !model) throw dshNativeError('原生默认 Provider/模型待确认，无法调整思考等级', 409);
+        await this.selectModel(client, runtime, `dsh:${Buffer.from(JSON.stringify([provider, model])).toString('base64url')}`, opts.reasoningEffort);
+      }
     } catch (error) { this.sessions.delete(opts.sessionId); throw error; }
     this.openFollow(opts.sessionId, runtime);
     return { nativeId: created.sessionId };
@@ -1318,6 +1338,7 @@ export class DshAdapter implements AgentAdapter {
     this.observedHost = undefined;
     this.rpcWritesBlocked = false;
     this.workspaceState.invalidate();
+    this.modelPublicIds.clear();
     this.muxGeneration++;
     const boot = this.booting;
     const client = this.client;

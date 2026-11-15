@@ -1,6 +1,6 @@
 import { chromium, type Browser } from '@playwright/test';
 import { expect, it } from 'vitest';
-import type { AgentAdapter, CreateOpts, UserInput } from '@webdcc/protocol';
+import type { AdapterEvent, AgentAdapter, CreateOpts, UserInput } from '@webdcc/protocol';
 import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { createSourceTestApp } from './helpers.js';
 
@@ -95,15 +95,25 @@ it('DSH existing-session efforts follow the observed native Provider when anothe
     const route = (provider: string) => `dsh:${Buffer.from(JSON.stringify([provider, 'same'])).toString('base64url')}`;
     const adapter: AgentAdapter = new FakeAdapter({ id: 'dsh' });
     adapter.listModels = async () => [{ id: route('one'), label: 'Same · one', reasoningEfforts: ['high'] }, { id: route('two'), label: 'Same · two', reasoningEfforts: ['off', 'max'] }];
-    adapter.nativeState = async () => ({ selected: { provider: 'two', model: 'same', reasoningEffort: 'max' } });
+    const observers: ((id: string, event: AdapterEvent) => void)[] = []; const subscribe = adapter.onEvent.bind(adapter); let synchronized = false;
+    adapter.onEvent = callback => { subscribe(callback); observers.push(callback); };
+    adapter.nativeState = async id => {
+      const selected = { provider: 'two', model: 'same', publicModelId: route('two'), reasoningEffort: 'max', source: 'session/projections:modelSelection.next' };
+      if (!synchronized) { synchronized = true; for (const callback of observers) callback(id, { type: 'item.complete', itemKey: 'native-external-model', kind: 'internal', scope: 'session', data: { nativeType: 'modelSelection' }, native: selected }); }
+      return { selected };
+    };
     ctx.manager.registerAdapter(adapter); const workspace = ctx.store.createWorkspace('native route', ctx.dataDir);
     const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent: 'dsh', model: route('one'), reasoningEffort: 'high' });
     browser = await chromium.launch({ headless: true }); const { page, base } = await pageFor(ctx, browser);
     await page.goto(`${base}/s/${session.id}`);
     await expect.poll(() => page.getByTestId('reasoning-menu').textContent(), { timeout: 10_000 }).toBe('思考 max');
     await page.getByTestId('reasoning-menu').click();
+    await page.getByRole('menuitemradio').first().waitFor();
     expect(await page.getByRole('menuitemradio').allTextContents()).toEqual(['off', 'max']);
-    expect(ctx.store.getSession(session.id)?.model).toBe(route('one'));
+    expect(ctx.store.getSession(session.id)?.model).toBe(route('two'));
+    expect(await page.getByTestId('model-menu').getAttribute('data-model')).toBe(route('two'));
+    await page.reload(); await expect.poll(() => page.getByTestId('model-menu').getAttribute('data-model'), { timeout: 10_000 }).toBe(route('two'));
+    await expect.poll(() => page.getByTestId('reasoning-menu').textContent(), { timeout: 10_000 }).toBe('思考 max');
   } finally { await browser?.close(); await ctx.close(); }
 }, 60_000);
 

@@ -107,6 +107,38 @@ try {
   const created = ctx.store.listSessions(true).find(value => value.id !== session.id)!;
   assert.equal(created.reasoningEffort, 'high');
   const createdState = await adapter.nativeState(created.id) as { selected: { reasoningEffort?: string } }; assert.equal(createdState.selected.reasoningEffort, 'high');
+  stage = 'new-native-default-model-omitted';
+  const defaultModel = await ctx.manager.createSession({ workspaceId: workspace.id, agent: 'dsh', reasoningEffort: 'high' });
+  const defaultState = await adapter.nativeState(defaultModel.id) as { selected: { provider?: string; model?: string; reasoningEffort?: string } };
+  assert.equal(defaultState.selected.provider, provider); assert.equal(defaultState.selected.model, model); assert.equal(defaultState.selected.reasoningEffort, 'high');
+  assert.equal(ctx.store.getSession(defaultModel.id)?.reasoningEffort, 'high');
+  await page.goto(`${base}/s/${defaultModel.id}`); await expect(page.getByTestId('reasoning-menu')).toHaveText('思考 high', { timeout: 15_000 });
+  await page.reload(); await expect(page.getByTestId('reasoning-menu')).toHaveText('思考 high', { timeout: 15_000 });
+  evidence['newSessionOmittedModelNativeSelection'] = defaultState.selected;
+  stage = 'external-native-same-model-other-provider';
+  const externalProvider = 'isolated-secondary-profile';
+  const currentSettings = await setup.rpc<{ namespaces: { ns: string; revision: number }[] }>('settings/describe');
+  const currentNamespace = currentSettings.namespaces.find(value => value.ns === 'llm-pi-ai'); assert.ok(currentNamespace);
+  await setup.rpc('settings/mutate', { ns: currentNamespace.ns, expectedRevision: currentNamespace.revision, ops: [{ op: 'set', path: ['providers', externalProvider], value: {
+    displayName: 'Isolated same-model alternate route', apiKeyEnv: 'WEB_DCC_DSH_REASONING_FIXTURE_KEY', api: 'openai-completions',
+    baseURL: 'http://127.0.0.1:1/v1', models: [{ id: model, name: model, contextWindow: 65536, maxTokens: 1024, reasoningEfforts: { low: 'low' } }],
+  } }] });
+  await adapter.nativeState(defaultModel.id);
+  const externalSelection = await setup.rpc<{ selected: { provider: string; model: string; reasoningEffort: string } }>('session/selectModel', { request: {
+    sessionId: defaultModel.nativeId, provider: externalProvider, model, reasoningEffort: 'low',
+  } });
+  const externalPublicModel = `dsh:${Buffer.from(JSON.stringify([externalProvider, model])).toString('base64url')}`;
+  await expect.poll(() => ctx!.store.getSession(defaultModel.id)?.model, { timeout: 15_000 }).toBe(externalPublicModel);
+  assert.equal(ctx.store.getSession(defaultModel.id)?.reasoningEffort, 'low');
+  await expect(page.getByTestId('model-menu')).toHaveAttribute('data-model', externalPublicModel, { timeout: 15_000 });
+  await expect(page.getByTestId('reasoning-menu')).toHaveText('思考 low', { timeout: 15_000 });
+  await page.reload(); await expect(page.getByTestId('model-menu')).toHaveAttribute('data-model', externalPublicModel, { timeout: 15_000 });
+  await expect(page.getByTestId('reasoning-menu')).toHaveText('思考 low', { timeout: 15_000 });
+  await page.getByTestId('reasoning-menu').click(); await page.getByRole('menuitemradio').first().waitFor();
+  assert.deepEqual(await page.getByRole('menuitemradio').allTextContents(), ['low']);
+  await page.getByTestId('reasoning-menu').click();
+  evidence['externalNativeModelSelection'] = externalSelection.selected;
+  evidence['externalNativeProviderModelAndEffortSyncedToDbAndBrowser'] = true;
   evidence['existingChoices'] = chosen; evidence['newSessionChoiceConfirmed'] = true;
   evidence['browserRefreshPreservedActualLevel'] = true; evidence['newSessionNativeSelection'] = createdState.selected;
   evidence['newSessionFollowingPromptPreventedByTestBoundary'] = preventedPrompts;

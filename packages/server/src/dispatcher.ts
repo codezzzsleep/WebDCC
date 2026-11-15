@@ -131,7 +131,7 @@ export class CommandDispatcher {
         }
         case 'set-model': {
           await this.manager.setModel(command.sessionId, command.model);
-          return { ok: true, value: { model: command.model } };
+          return { ok: true, value: { model: this.manager.requireSession(command.sessionId).model ?? command.model } };
         }
         case 'set-reasoning-effort': {
           await this.manager.setReasoningEffort(command.sessionId, command.reasoningEffort);

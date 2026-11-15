@@ -4,17 +4,19 @@ import { DshAdapter } from '../src/adapter.js';
 import type { DshHostClient } from '../src/host.js';
 
 const route = (provider: string, model = 'same') => `dsh:${Buffer.from(JSON.stringify([provider, model])).toString('base64url')}`;
-function host(options: { cached?: boolean; result?: unknown; error?: Error } = {}) {
+function host(options: { cached?: boolean; result?: unknown; error?: Error; noDefault?: boolean } = {}) {
   const replay = DshAdapter.replay('web');
   replay.feed({ i: 1, t: 0, dir: 'in', ch: 'mux:$events', frame: { value: { type: 'snapshot', header: { id: 'native' }, cursor: -1, records: [], hasMore: false } } });
   let next: { provider: string; model: string; reasoningEffort?: string } = { provider: 'two', model: 'same', reasoningEffort: 'max' };
   const writes: unknown[] = []; const events: AdapterEvent[] = [];
   replay.adapter.onEvent((_id, event) => events.push(event));
   const rpc = async (endpoint: string, args: Record<string, unknown>) => {
+    if (endpoint === 'workspace/create') return { workspace: { workspaceId: 'native-workspace' } };
+    if (endpoint === 'session/create') return { sessionId: 'native-new-session' };
     if (endpoint === 'session/state') return { cursor: 2, active: true, running: false, queue: [], pendingInput: [] };
     if (endpoint === 'session/projections') return { ...(options.cached ? { kind: 'cached' } : {}), asOfSeq: 2,
       values: { modelSelection: { lastUsed: { provider: 'one', model: 'same', reasoningEffort: 'low' }, next } } };
-    if (endpoint === 'session/modelCatalog') return { groups: [
+    if (endpoint === 'session/modelCatalog') return { ...(options.noDefault ? {} : { default: { provider: 'two', model: 'same' } }), groups: [
       { id: 'one', models: [{ id: 'same', reasoning: { efforts: [{ id: 'low' }] } }] },
       { id: 'two', models: [{ id: 'same', reasoning: { efforts: [{ id: 'off' }, { id: 'high' }, { id: 'max' }], defaultEffort: 'off' } }, { id: 'plain' }] },
     ] };
@@ -29,7 +31,7 @@ function host(options: { cached?: boolean; result?: unknown; error?: Error } = {
     }
     return {};
   };
-  Object.assign(replay.adapter, { client: { connect: async () => undefined, isConnected: true, rpc } as unknown as DshHostClient });
+  Object.assign(replay.adapter, { client: { connect: async () => undefined, isConnected: true, rpc, openStream: () => 'native-stream' } as unknown as DshHostClient });
   vi.spyOn(replay.adapter, 'hostIdentity').mockResolvedValue({ status: 'verified', version: '0.2.2-rc.1', source: 'native-bootstrap', fingerprint: 'test-host', url: 'http://host.test/' });
   return { adapter: replay.adapter, writes, events };
 }
@@ -85,4 +87,14 @@ it('an observed native route change during catalog preflight cannot make a reaso
   };
   await expect(ctx.adapter.setReasoningEffort('web', 'high')).rejects.toMatchObject({ statusCode: 409 });
   expect(ctx.writes).toEqual([]);
+});
+
+it('a new DSH session with an omitted model applies the effort to the exact native default route and confirms it', async () => {
+  const ctx = host();
+  await ctx.adapter.create({ sessionId: 'default-model', cwd: '/tmp/isolated-workspace', reasoningEffort: 'high' });
+  expect(ctx.writes).toEqual([{ request: { sessionId: 'native-new-session', provider: 'two', model: 'same', reasoningEffort: 'high' } }]);
+  expect(ctx.events.some(event => event.type === 'item.complete' && (event.native as { source?: string })?.source === 'session/selectModel:selected')).toBe(true);
+  const missing = host({ noDefault: true });
+  await expect(missing.adapter.create({ sessionId: 'missing-model', cwd: '/tmp/isolated-workspace', reasoningEffort: 'high' })).rejects.toMatchObject({ statusCode: 409 });
+  expect(missing.writes).toEqual([]);
 });

@@ -1004,6 +1004,8 @@ export class SessionManager {
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.setModel !== undefined) await runtime.adapter.setModel(sessionId, model);
     this.assertOwner(runtime);
+    // DSH's confirmed source event already stores the catalog's canonical route.
+    if (runtime.adapter.id === 'dsh' && runtime.adapter.kind !== 'fake') return;
     // 推给所有客户端：否则输入框里的模型胶囊要等刷新才变
     this.updateSessionAndFeed(sessionId, { model }, { model });
   }
@@ -1292,10 +1294,11 @@ export class SessionManager {
       return;
     }
     if (runtime.adapter.id === 'dsh' && event.type === 'item.complete' && event.native !== null && typeof event.native === 'object') {
-      const selected = event.native as { source?: string; reasoningEffort?: unknown };
+      const selected = event.native as { source?: string; reasoningEffort?: unknown; publicModelId?: unknown };
       if (selected.source === 'session/selectModel:selected' || selected.source === 'session/projections:modelSelection.next') {
         const reasoningEffort = typeof selected.reasoningEffort === 'string' ? selected.reasoningEffort : null;
-        this.updateSessionAndFeed(sessionId, { reasoningEffort }, { reasoningEffort });
+        const model = typeof selected.publicModelId === 'string' ? selected.publicModelId : undefined;
+        this.updateSessionAndFeed(sessionId, { reasoningEffort, ...(model === undefined ? {} : { model }) }, { reasoningEffort, ...(model === undefined ? {} : { model }) });
       }
     }
     if (event.type === 'history') {
