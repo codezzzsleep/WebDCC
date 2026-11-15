@@ -4,6 +4,8 @@ import type { CapabilitySnapshot } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { agentText } from '../lib/agents.js';
 
+const compatibilityText = { compatible: '版本兼容', incompatible: '版本不兼容', unknown: '版本尚未确认', 'test-only': '测试运行时' };
+
 export function CapabilitiesPage(): React.ReactElement {
   const [snapshot, setSnapshot] = useState<CapabilitySnapshot | null>(null);
   const [error, setError] = useState('');
@@ -19,7 +21,7 @@ export function CapabilitiesPage(): React.ReactElement {
     <div className="row-actions"><h1>原生能力</h1><button className="btn" onClick={refresh} disabled={loading}>{loading ? '正在检查…' : '重新检查'}</button></div>
     <p>用于开发与验收的 Harness 功能接入清单。这里列出目标版本的接口及登记状态，部分状态仍待核验。</p>
     {error ? <p role="alert" className="error-card">{error}</p> : null}
-    {snapshot?.runtimes.map(runtime => <p key={runtime.agent}><strong>{agentText(runtime.agent).name}</strong> · {runtime.probe.version ?? '版本未知'} · {runtime.compatibility === 'compatible' ? '版本匹配' : runtime.compatibility === 'test-only' ? '测试运行时' : '版本尚未确认或不兼容'} · 插件配置{runtime.pluginStatus === 'verified' ? '已验证' : '待核对'}</p>)}
+    {snapshot?.runtimes.map(runtime => <p key={runtime.agent}><strong>{agentText(runtime.agent).name}</strong> · {runtime.probe.version ?? '版本未知'} · {compatibilityText[runtime.compatibility]} · 插件配置{runtime.pluginStatus === 'verified' ? '已验证' : '待核对'}</p>)}
     <label>搜索能力<input className="text-input" value={query} onChange={event => setQuery(event.target.value)} /></label>
     {snapshot?.capabilities.filter(capability => `${capability.title} ${capability.agent} ${capability.methods.join(' ')}`.toLowerCase().includes(query.toLowerCase())).map(capability => <details key={capability.id}>
       <summary>{agentText(capability.agent).name} · {capability.title} · {capability.structuredVerified || capability.fallbackVerified ? '已验证' : capability.structuredImplemented ? '待验收' : '待实现'}</summary>
