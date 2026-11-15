@@ -11,6 +11,7 @@ import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { URL, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { closeVerifiedServer } from './deployed-native-cleanup.mjs';
 const [configFile, sourceFile] = process.argv.slice(2);
 const config = JSON.parse(await readFile(configFile, 'utf8'));
 const sourceBytes = await readFile(sourceFile);
@@ -58,8 +59,8 @@ async function boot() {
   base = new URL(server.url).origin;
 }
 async function stop() {
-  const adapter = server?.manager.adapter('dsh');
-  await server?.close(); await adapter?.shutdown(); server = undefined;
+  const stopped = await closeVerifiedServer(server, join(root, 'profile/dsh'));
+  (report.cleanup ??= []).push({ stoppedOwnedDshPids: stopped }); server = undefined;
 }
 const json = async path => {
   const response = await page.request.get(base + path); assert(response.ok(), path);

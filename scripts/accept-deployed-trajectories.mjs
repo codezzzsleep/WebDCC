@@ -15,6 +15,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, rename, realpath, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { URL, pathToFileURL } from 'node:url';
+import { closeVerifiedServer } from './deployed-native-cleanup.mjs';
 
 const [configPath, agent, flag] = process.argv.slice(2);
 assert(['codex', 'claude-code', 'dsh'].includes(agent), 'Select one of all three Agents');
@@ -400,7 +401,7 @@ try {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({ path: join(root, 'reply-refresh.png'), fullPage: true });
     const beforeRestore = report.requests.length;
-    await server.close(); await server.manager.adapter('dsh')?.shutdown();
+    await closeVerifiedServer(server, environment.DSH_HOME);
     server = undefined; await boot(); await authenticate();
     await page.goto(base + '/s/' + sid); await page.getByTestId('composer-input').waitFor();
     await page.getByText('NATIVE_TOOL_OK:' + fixture, { exact: false }).first().waitFor();
@@ -435,8 +436,7 @@ try {
     } catch (error) { report.captureError = String(error); }
   }
   await browser?.close();
-  await server?.close().catch(error => report.cleanupError = String(error));
-  await server?.manager.adapter('dsh')?.shutdown().catch(error => { report.cleanupError = String(error); report.status = 'failed'; process.exitCode = 1; });
+  await closeVerifiedServer(server, environment.DSH_HOME).then(pids => { report.cleanup = { stoppedOwnedDshPids: pids }; }).catch(error => { report.cleanupError = String(error); report.status = 'failed'; process.exitCode = 1; });
   await new Promise(resolveClose => bridge.close(resolveClose));
   report.finishedAt = new Date().toISOString();
   await save();
