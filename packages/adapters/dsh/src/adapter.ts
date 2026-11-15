@@ -12,6 +12,7 @@ import type {
   LaunchSpec,
   ModelOption,
   ProbeResult,
+  NativeRuntimeContext,
   UserInput,
   TraceSink,
   TraceFrame,
@@ -323,6 +324,7 @@ export class DshAdapter implements AgentAdapter {
   private options: DshAdapterOptions;
   private traceSeq = 0;
   private readonly nativeSinks = new Map<string, NonNullable<CreateOpts['nativeEvents']>>();
+  private readonly capabilityGeneration = ulid();
   private globalNativeSink?: NonNullable<CreateOpts['nativeEvents']>;
   private rpcWritesBlocked = false;
   private readonly traceSinks = new Map<string, TraceSink>();
@@ -573,7 +575,8 @@ export class DshAdapter implements AgentAdapter {
       const identity = await this.hostIdentity().catch(() => undefined);
       return { installed: identity !== undefined, ...(identity?.version === undefined ? {} : { version: identity.version }), pinnedVersion: PINNED_VERSION,
         auth: this.options.attachCookie ? 'ok' : 'missing', compatible: identity?.status === 'verified',
-        notes: identity?.status === 'verified' ? [] : [identity?.reason ?? '目标 DSH Host 身份尚未验证'] };
+        notes: identity?.status === 'verified' ? [] : [identity?.reason ?? '目标 DSH Host 身份尚未验证'],
+        runtimeContext: this.capabilityContext(identity) };
     }
     if ((this.options.mode ?? 'spawn') === 'spawn') {
       const dshHome = this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? join(homedir(), '.dsh');
@@ -763,9 +766,23 @@ export class DshAdapter implements AgentAdapter {
   private muxGeneration = 0;
   private controlStream?: string;
   private observedHost?: DshHostIdentity;
+  private hostEndpoint(): string {
+    return dshBaseUrl(this.options.attachUrl ?? (this.sidecar?.port ?? this.options.port ?? 3091));
+  }
+  private capabilityContext(identity?: DshHostIdentity): NativeRuntimeContext {
+    return {
+      hostId: dshRevision({ endpoint: identity?.url ?? this.hostEndpoint() }),
+      source: 'native-bootstrap',
+      status: identity?.fingerprint === undefined ? 'unverified' : 'observed',
+      ...(identity?.fingerprint === undefined ? {} : { hostFingerprint: identity.fingerprint }),
+      // The pinned native bootstrap exposes neither OS nor a profile name/path.
+      profile: { scope: 'current-host-profile', status: identity?.status === 'verified' ? 'unavailable-in-api' : 'unverified' },
+      connectionRevision: dshRevision({ adapter: this.capabilityGeneration, hostEpoch: this.hostEpoch, muxGeneration: this.muxGeneration }),
+    };
+  }
   async hostIdentity(): Promise<DshHostIdentity> {
     const epoch = this.hostEpoch;
-    const endpoint = this.options.attachUrl ?? (this.sidecar === null ? `http://127.0.0.1:${this.options.port ?? 3091}/` : dshBaseUrl(this.sidecar.port));
+    const endpoint = this.hostEndpoint();
     const cookie = (this.options.mode ?? 'spawn') === 'attach' ? this.options.attachBrowserCookie : this.client?.cookieHeader;
     const identity = await readDshHostIdentity(endpoint, cookie);
     if (epoch !== this.hostEpoch) throw dshNativeError('DSH Host was replaced during identity verification', 409);

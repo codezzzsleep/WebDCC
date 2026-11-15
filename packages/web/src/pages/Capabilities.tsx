@@ -22,6 +22,11 @@ export function CapabilitiesPage(): React.ReactElement {
     <p>用于开发与验收的 Harness 功能接入清单。这里列出目标版本的接口及登记状态，部分状态仍待核验。</p>
     {error ? <p role="alert" className="error-card">{error}</p> : null}
     {snapshot?.runtimes.map(runtime => <p key={runtime.agent}><strong>{agentText(runtime.agent).name}</strong> · {runtime.probe.version ?? '版本未知'} · {compatibilityText[runtime.compatibility]} · 插件配置{runtime.pluginStatus === 'verified' ? '已验证' : '待核对'}</p>)}
+    {snapshot?.runtimes.map(runtime => runtime.runtimeContext === undefined ? null : <p key={`${runtime.agent}-context`}>
+      {agentText(runtime.agent).name} · Host {runtime.hostId.slice(0, 12)} · {runtime.runtimeContext.status === 'observed' ? '已观察原生发布清单' : '发布清单未确认'}
+      {' · '}profile：{runtime.runtimeContext.profile.status === 'unavailable-in-api' ? '原生未提供标识' : runtime.runtimeContext.profile.identity ?? '待核验'}
+      {' · '}OS：{runtime.os === 'unknown' ? '原生未提供' : runtime.os}
+    </p>)}
     <label>搜索能力<input className="text-input" value={query} onChange={event => setQuery(event.target.value)} /></label>
     {snapshot?.capabilities.filter(capability => `${capability.title} ${capability.agent} ${capability.methods.join(' ')}`.toLowerCase().includes(query.toLowerCase())).map(capability => <details key={capability.id}>
       <summary>{agentText(capability.agent).name} · {capability.title} · {capability.structuredVerified || capability.fallbackVerified ? '已验证' : capability.structuredImplemented ? '待验收' : '待实现'}</summary>
