@@ -1,6 +1,6 @@
 # 三 Harness 提问适配
 
-本次修复在 `fix/native-parity-repair` 分支及草稿 PR #39，尚未合并或部署。原始 48 项需求仍由 #42 和 48 张子 Issue 追踪；本报告只更新提问适配这一范围。
+本报告保留首次提问验证时的候选快照；本轮补充验证与交付状态见 [斜杠适配报告](SLASH_ADAPTATION_2026-11-15.md) 和 [PR #39](https://github.com/codezzzsleep/WebDCC/pull/39)。原始 48 项需求仍由 #42 和 48 张子 Issue 追踪；本报告只更新提问适配这一范围。
 
 | Harness | 当前行为 | 本次原生验证 |
 | --- | --- | --- |

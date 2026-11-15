@@ -86,7 +86,10 @@ export class NativeHistoryStore {
             append({ ...base, itemKey: `native-turn-end-${record.nativeSeq}`, kind: 'turn.completed', data: { status: event.status, durationMs: start === undefined ? 0 : Math.max(0, Date.parse(record.at) - Date.parse(start.at)), answerItemKeys: resolveAnswer(turnEvents).map(item => item.itemKey), ...(event.usage === undefined ? {} : { usage: event.usage }) } });
           } else if (event.type === 'item.complete' || event.type === 'item.start') {
             if (echoes.has(event.itemKey) || event.type === 'item.start' && completed.has(event.itemKey)) continue;
-            if (existing.some(candidate => candidate.nativeSeq === record.nativeSeq && candidate.itemKey === event.itemKey)) continue;
+            // CLI roundtrips also recover items already observed live. Their
+            // identity is the native turn + item, independent of history seq.
+            // The full recovered source remains in native_history_records.
+            if (existing.some(candidate => candidate.turnId === turnId && candidate.itemKey === event.itemKey && candidate.kind === event.kind)) continue;
             append({ ...base, itemKey: event.itemKey, kind: event.kind, data: event.data as EventData[typeof event.kind] });
           }
         }

@@ -18,6 +18,26 @@ const turn = (text: string, nativeTurnId = 'native:1'): NativeHistoryRecord[] =>
   record(3, { type: 'turn.end', status: 'completed' }, nativeTurnId),
 ];
 
+it('returning native history preserves live item identities while retaining the full source snapshot', () => {
+  const db = openDb(':memory:');
+  try {
+    const store = new Store(db);
+    const workspace = store.createWorkspace('workspace', '/tmp/isolated-roundtrip');
+    const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+    store.updateSession(session.id, { nativeId: 'native' });
+    store.nativeHistory.bind(session.id, 'native:1', 'live-turn');
+    store.appendEvent({ sessionId: session.id, turnId: 'live-turn', itemKey: 'native-answer', kind: 'assistant.message', data: { text: 'answer' } });
+    // Another native turn can legitimately use the same item key.
+    store.appendEvent({ sessionId: session.id, turnId: 'other-turn', itemKey: 'native-user', kind: 'user.message', data: { text: 'other' } });
+    const imported = store.nativeHistory.import(session.id, 'native', turn('CLI input'));
+    expect(imported.some(event => event.kind === 'assistant.message')).toBe(false);
+    expect(imported.some(event => event.kind === 'user.message')).toBe(true);
+    expect(store.allEvents(session.id).filter(event => event.turnId === 'live-turn' && event.itemKey === 'native-answer')).toHaveLength(1);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM native_history_records').get()).toEqual({ count: 4 });
+    expect(store.nativeHistory.import(session.id, 'native', turn('CLI input'))).toEqual([]);
+  } finally { db.close(); }
+});
+
 it('NP-05/10 durably joins native echoes to local prewrites and imports each source once after reopening SQLite', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-native-history-'));
   let db = openDb(join(directory, 'db.sqlite'));

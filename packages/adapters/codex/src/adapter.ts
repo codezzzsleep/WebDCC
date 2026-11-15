@@ -26,6 +26,7 @@ import type {
   NativeProcessStart,
   CodexInputModeCatalog,
   CodexInputMode,
+  NativeHistoryRecord,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -118,8 +119,10 @@ interface SessionRuntime {
   processToken: string;
   /** resume 之后等线程真正挂上（thread/started）再发首轮 */
   ready: Promise<void>;
+  markReady?: () => void;
   rpc: JsonRpcStdio;
   cwd: string;
+  codexHome?: string;
   /** 当前访问模式：在下一次 turn/start 里带上（F6） */
   accessMode: string | null;
   /** 当前模型：换模型后下一次 turn/start 带上（AG-*-12） */
@@ -133,6 +136,7 @@ interface SessionRuntime {
   reasoningSummaries?: Map<string, ReasoningSummary>;
   completedReasoning?: Set<string>;
   goalId?: string;
+  goalVersion?: { createdAt: number; updatedAt: number };
   frameSeq: number;
   turnStartedAt: number;
   /** 模型输出开始时间；用于把 tok/s 的分母限制在生成阶段。 */
@@ -630,10 +634,10 @@ export class CodexAdapter implements AgentAdapter {
     return codexSlashCommands;
   }
 
-  async executeSlashControl(sessionId: string, line: string, options: { replaceGoal?: boolean; editGoal?: boolean } = {}) {
+  async executeSlashControl(sessionId: string, line: string, options: { replaceGoal?: boolean; editGoal?: boolean; contentParts?: UserInput['contentParts'] } = {}) {
     const runtime = this.require(sessionId); await runtime.ready;
     if (/^\/compact(?:\s|$)/.test(line) && (runtime.turnId !== null || runtime.approvals.size > 0)) throw Object.assign(new Error('请等待原生轮次和交互结束后压缩'), { statusCode: 409, code: 'native-control-rejected' });
-    const result = await executeCodexSlash(runtime.rpc, runtime.nativeId, runtime.cwd, line, options);
+    const result = await executeCodexSlash(runtime.rpc, runtime.nativeId, runtime.cwd, line, { ...options, codexHome: runtime.codexHome });
     if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已变化，指令结果需核对'), { code: 'uncertain' });
     return result;
   }
@@ -746,6 +750,7 @@ export class CodexAdapter implements AgentAdapter {
       pid: rpc.child.pid ?? 0,
       processToken: randomUUID(),
       ready,
+      markReady,
       rpc,
       cwd: opts.cwd,
       accessMode: opts.accessMode ?? null,
@@ -833,9 +838,11 @@ export class CodexAdapter implements AgentAdapter {
     await this.requirePinnedVersion();
     const runtime = this.startProcess(opts.sessionId, opts);
     try {
-    await this.handshake(runtime.rpc, true);
+    runtime.codexHome = (await this.handshake(runtime.rpc, true)).codexHome;
     const response = await nativeRequest(runtime.rpc, 'thread/start', buildThreadStartParams(opts));
     runtime.nativeId = response.thread.id;
+    runtime.cwd = response.thread.cwd;
+    runtime.markReady?.();
     this.observeMode(runtime, response);
     runtime.permissions = codexPermissionObservation(response, 'thread/start');
     this.emit(opts.sessionId, { type: 'permissions', observation: runtime.permissions });
@@ -848,7 +855,7 @@ export class CodexAdapter implements AgentAdapter {
     const runtime = this.startProcess(opts.sessionId, opts);
     try {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resume process started');
-    await this.handshake(runtime.rpc, true);
+    runtime.codexHome = (await this.handshake(runtime.rpc, true)).codexHome;
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] initialize done, resuming');
     const response = await nativeRequest(runtime.rpc, 'thread/resume', {
       threadId: opts.nativeId,
@@ -856,12 +863,18 @@ export class CodexAdapter implements AgentAdapter {
       ...(opts.model === undefined ? {} : { model: opts.model }),
       ...accessParams(opts.accessMode),
     });
+    if (response.thread.id !== opts.nativeId) throw Object.assign(new Error('原生恢复返回了不同会话身份'), { code: 'uncertain' });
     runtime.nativeId = response.thread.id;
+    runtime.cwd = response.thread.cwd;
+    // A validated resume response acknowledges a loaded thread. The pinned
+    // native server need not send a second thread/started notification.
+    runtime.markReady?.();
     this.observeMode(runtime, response);
     runtime.permissions = codexPermissionObservation(response, 'thread/resume');
     this.emit(opts.sessionId, { type: 'permissions', observation: runtime.permissions });
     // thread/resume 返回后线程可能还没挂上；等 thread/started 或最多 2 秒
     await Promise.race([runtime.ready, new Promise((resolve) => setTimeout(resolve, 2000))]);
+    if (opts.restoreNativeHistory) await this.restoreHistory(opts.sessionId, runtime);
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resumed', runtime.nativeId);
     } catch (error) { await this.dispose(opts.sessionId); throw error; }
   }
@@ -1084,7 +1097,7 @@ export class CodexAdapter implements AgentAdapter {
     await runtime.ready;
     const current = (): void => { if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已更换或断开'), { statusCode: 409 }); };
     const state = await codexNativeState(runtime.rpc, runtime.nativeId, current);
-    return { ...state, model: runtime.model, effort: runtime.reasoningEffort, permissions: runtime.permissions,
+    return { ...state, model: runtime.model ?? runtime.nativeModel ?? null, effort: runtime.reasoningEffort ?? runtime.nativeEffort ?? null, permissions: runtime.permissions,
       transport: 'live', turnActive: runtime.turnId !== null, activeTurnId: runtime.turnId,
       interactions: [...runtime.approvals].map(([id, pending]) => ({ id, kind: pending.kind, submitted: pending.submitted === true })) };
   }
@@ -1116,6 +1129,28 @@ export class CodexAdapter implements AgentAdapter {
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }), sortDirection: 'desc', itemsView: 'full' });
     if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生运行实例已变化'), { statusCode: 409 });
     return result;
+  }
+  private async restoreHistory(sessionId: string, runtime: SessionRuntime): Promise<void> {
+    const turns: Awaited<ReturnType<typeof nativeRequest<'thread/turns/list'>>>['data'] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await nativeRequest(runtime.rpc, 'thread/turns/list', { threadId: runtime.nativeId, limit: 100, sortDirection: 'asc', itemsView: 'full', ...(cursor ? { cursor } : {}) });
+      turns.push(...page.data); cursor = page.nextCursor ?? undefined;
+      if (turns.length > 500 || turns.some(turn => turn.itemsView !== 'full' || turn.status === 'inProgress')) throw Object.assign(new Error('原生历史未完整结束，返回状态需核对'), { code: 'uncertain' });
+    } while (cursor);
+    const records: NativeHistoryRecord[] = turns.map((turn, index) => ({ nativeSeq: index, nativeTurnId: turn.id,
+      at: new Date((turn.completedAt ?? turn.startedAt ?? 0) * 1000).toISOString(), native: turn,
+      admittedInputs: turn.items.flatMap(item => item.type === 'userMessage' && item.clientId ? [{ nativeRequestId: item.clientId, text: item.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n') }] : []),
+      events: [{ type: 'turn.start' as const, nativeTurnId: turn.id }, ...turn.items.flatMap(item => {
+        const kind = item.type === 'userMessage' ? 'user.message' : mapItemKind(item.type);
+        const data = item.type === 'userMessage' ? { text: item.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n'), ...(item.clientId ? { clientCommandId: item.clientId } : {}) } : mapItemData(item as unknown as Record<string, unknown>);
+        return [{ type: 'item.complete' as const, itemKey: item.id, kind, data, native: item }];
+      }), { type: 'turn.end' as const, nativeTurnId: turn.id, status: turn.status === 'failed' ? 'failed' as const : turn.status === 'interrupted' ? 'interrupted' as const : 'completed' as const }] }));
+    if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生返回实例已变化'), { code: 'uncertain' });
+    this.emit(sessionId, { type: 'history', nativeId: runtime.nativeId, records });
+    const goal = await nativeRequest(runtime.rpc, 'thread/goal/get', { threadId: runtime.nativeId });
+    this.onNotification(sessionId, goal.goal ? { method: 'thread/goal/updated', params: { threadId: runtime.nativeId, turnId: null, goal: goal.goal } }
+      : { method: 'thread/goal/cleared', params: { threadId: runtime.nativeId } });
   }
 
   async nativeProcessStart(sessionId: string, params: NativeProcessStart, onOutput: (delta: NativeProcessDelta) => void): Promise<NativeProcessCompletion> {
@@ -1419,7 +1454,14 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'goal/updated': {
-        const goal = (params['goal'] ?? {}) as { threadId?: string; createdAt?: number; objective?: string; status?: string; tokensUsed?: number; tokenBudget?: number | null; timeUsedSeconds?: number };
+        const goal = (params['goal'] ?? {}) as { threadId?: string; createdAt?: number; updatedAt?: number; objective?: string; status?: string; tokensUsed?: number; tokenBudget?: number | null; timeUsedSeconds?: number };
+        if (typeof goal.createdAt === 'number' && typeof goal.updatedAt === 'number') {
+          if (runtime.goalVersion?.createdAt === goal.createdAt && runtime.goalVersion.updatedAt > goal.updatedAt) {
+            this.emit(sessionId, { type: 'item.complete', itemKey: `outdated-goal-${frameKey}`, kind: 'internal', data: { nativeType: 'thread/goal/updated' }, native: params });
+            return;
+          }
+          runtime.goalVersion = { createdAt: goal.createdAt, updatedAt: goal.updatedAt };
+        }
         const status = goal.status === 'complete' || goal.status === 'completed' ? 'completed'
           : goal.status === 'active' || goal.status === 'paused' || goal.status === 'blocked' || goal.status === 'usageLimited' || goal.status === 'budgetLimited' ? goal.status : 'unknown';
         runtime.goalId = `${goal.threadId ?? runtime.nativeId}:${goal.createdAt ?? 'legacy'}`;
@@ -1443,6 +1485,7 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'goal/cleared': {
+        runtime.goalVersion = undefined;
         this.emit(sessionId, {
           type: 'item.complete',
           itemKey: `goal-${runtime.nativeId}`,

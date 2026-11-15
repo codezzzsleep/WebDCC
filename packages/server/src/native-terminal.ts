@@ -95,6 +95,7 @@ interface TerminalRecord {
 /** Browser sockets attach to an existing PTY; they never create/resume it. */
 export class NativeTerminalSupervisor {
   private readonly records = new Map<string, TerminalRecord>();
+  private readonly retired = new Map<string, NativeTerminalView>();
   private readonly opening = new Set<string>();
   private readonly ownerId = `pty:${randomUUID()}`;
   private disposed = false;
@@ -161,7 +162,11 @@ export class NativeTerminalSupervisor {
       active.renew.unref();
       if (this.deps.verifyNativeIdentity !== undefined) {
         active.inspectionTask = this.checkIdentity(active);
-        const verified = await active.inspectionTask;
+        let verified = await active.inspectionTask;
+        const deadline = Date.now() + 10_000;
+        while (!verified && intent === 'same-session' && active.view.state === 'running' && !active.identityCompromised && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 100)); active.inspectionTask = this.checkIdentity(active); verified = await active.inspectionTask;
+        }
         if (!verified && intent === 'same-session') throw nativeSurfaceError('CLI 实际原生身份尚未确认，同会话接管受阻');
         this.scheduleIdentityCheck(active);
       }
@@ -179,7 +184,7 @@ export class NativeTerminalSupervisor {
   list(sourceSessionId: string): NativeTerminalView[] {
     return [...this.records.values()].filter(record => record.target.sourceSessionId === sourceSessionId || record.target.ownerSessionId === sourceSessionId).map(record => this.view(record));
   }
-  get(id: string): NativeTerminalView { return this.view(this.require(id)); }
+  get(id: string): NativeTerminalView { return this.retired.get(id) ?? this.view(this.require(id)); }
   snapshot(id: string, afterSeq = 0): Extract<NativeTerminalFrame, { type: 'snapshot' }> {
     const record = this.require(id);
     return { type: 'snapshot', terminal: this.view(record), ...record.output.snapshot(afterSeq) };
@@ -198,6 +203,11 @@ export class NativeTerminalSupervisor {
     if (typeof data !== 'string' || Buffer.byteLength(data) > 64 * 1024) throw nativeSurfaceError('终端输入超出单帧限制', 400);
     record.process.write(data);
   }
+  async confirmIdentity(id: string): Promise<boolean> {
+    const record = this.require(id);
+    record.inspectionTask = this.checkIdentity(record);
+    return record.inspectionTask;
+  }
   resize(id: string, generation: number, rows: number, cols: number): void {
     const record = this.writable(id, generation);
     const size = terminalSize(rows, cols);
@@ -211,6 +221,7 @@ export class NativeTerminalSupervisor {
     return this.stopRecord(record);
   }
   async close(id: string): Promise<NativeTerminalView> {
+    const retired = this.retired.get(id); if (retired) return retired;
     const record = this.require(id);
     const result = await this.stopRecord(record);
     await record.inspectionTask?.catch(() => undefined);
@@ -220,7 +231,10 @@ export class NativeTerminalSupervisor {
     record.clients.clear();
     record.output.dispose();
     this.records.delete(id);
-    return { ...result, logDownloadAvailable: false };
+    const closed = { ...result, logDownloadAvailable: false };
+    this.retired.set(id, closed);
+    while (this.retired.size > 16) this.retired.delete(this.retired.keys().next().value!);
+    return closed;
   }
   log(id: string): { path: string; truncated: boolean } {
     const record = this.require(id);

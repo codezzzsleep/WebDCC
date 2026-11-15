@@ -11,6 +11,7 @@ export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
   const [recordOutput, setRecordOutput] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [takeoverState, setTakeoverState] = useState(takeover ?? { allowed: false, reason: '正在核对同会话接管条件' });
   const currentSession = useRef(sessionId); currentSession.current = sessionId;
   useEffect(() => {
     let cancelled = false;
@@ -18,6 +19,12 @@ export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
     void nativeSurfaceRequest<{ terminals: NativeTerminalInfo[] }>(`/api/native-terminal?sessionId=${encodeURIComponent(sessionId)}`).then(result => { if (!cancelled) setTerminals(result.terminals); }).catch(failure => { if (!cancelled) setError(failure instanceof Error ? failure.message : '原生终端读取失败'); });
     return () => { cancelled = true; };
   }, [sessionId]);
+  useEffect(() => {
+    let active = true;
+    if (takeover) { setTakeoverState(takeover); return; }
+    void nativeSurfaceRequest<{ allowed: boolean; reason: string }>(`/api/native-terminal/takeover-status?sessionId=${encodeURIComponent(sessionId)}`).then(value => { if (active) setTakeoverState(value); }).catch(() => { if (active) setTakeoverState({ allowed: false, reason: '同会话接管条件无法核对' }); });
+    return () => { active = false; };
+  }, [sessionId, terminals.length, takeover]);
   const open = async (intent: 'new-native' | 'same-session'): Promise<void> => {
     setPending(true); setError('');
     try {
@@ -32,9 +39,9 @@ export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
     <p style={{ margin: 0 }}>在浏览器中操作服务器上的原生终端。新建会话拥有独立历史；同会话接管需要确认原生身份、旧进程释放及历史与设置。</p>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
       <button type="button" disabled={pending} onClick={() => { void open('new-native'); }}>创建新原生会话</button>
-      <button type="button" disabled={pending || !takeover?.allowed} onClick={() => { void open('same-session'); }}>接管当前原生会话</button>
+      <button type="button" disabled={pending || !takeoverState.allowed} onClick={() => { void open('same-session'); }}>接管当前原生会话</button>
     </div>
-    {!takeover?.allowed && <p role="status" style={{ margin: 0 }}>当前会话接管受阻：{takeover?.reason ?? '尚未验证旧 writer 与外部 writer 的释放。'}</p>}
+    {!takeoverState.allowed && <p role="status" style={{ margin: 0 }}>当前会话接管受阻：{takeoverState.reason}</p>}
     <label><input type="checkbox" checked={recordOutput} onChange={event => setRecordOutput(event.currentTarget.checked)} /> 临时保留日志供下载（可能含敏感内容，关闭终端时删除）</label>
     {error && <p role="alert">{error}</p>}
     {terminals.map(terminal => <NativeTerminal key={terminal.id} terminal={terminal} initialCommand={initialCommand} onChanged={next => setTerminals(values => values.map(value => value.id === next.id ? next : value))} onClosed={() => setTerminals(values => values.filter(value => value.id !== terminal.id))} />)}

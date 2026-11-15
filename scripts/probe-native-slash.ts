@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { AgentAdapter, AgentId, TraceFrame } from '../packages/protocol/src/index.js';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
@@ -14,8 +14,11 @@ import { startAnthropicMock } from '../packages/testing/mock-models/src/anthropi
 import { startResponsesMock } from '../packages/testing/mock-models/src/responses-server.js';
 import { MockControl } from '../packages/testing/mock-models/src/mock-control.js';
 import { sourceFingerprint } from './lib/gate-report.js';
-import { chromium, type Browser } from '@playwright/test';
+import { chromium, expect, type Browser } from '@playwright/test';
 import { createSourceTestApp } from '../browser-tests/helpers.js';
+import { processState } from '../packages/server/src/process-identity.js';
+import { JsonRpcStdio } from '../packages/adapters/codex/src/rpc.js';
+import { nativeRequest } from '../packages/adapters/codex/src/controls.js';
 
 const option = (name: string): string | undefined => { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1]; };
 const binary = resolve(option('--binary') ?? '.artifacts/native-baseline/package/vendor/x86_64-unknown-linux-musl/bin/codex');
@@ -36,12 +39,14 @@ for (const agent of agents.filter(agent => !selected || agent === selected)) {
   const result: Record<string, unknown> = { agent, passed: false };
   try {
     if (agent === 'codex') {
+      await writeFile(join(isolated.dirs.CODEX_HOME, 'config.toml'), `[projects.${JSON.stringify(cwd)}]\ntrust_level="trusted"\n`);
       adapter = new CodexAdapter({ command: binary, env: { ...env, WDCC_MOCK_KEY: 'fixture-only' }, traceSink, configOverrides: ['model_provider=wdcc_mock', 'model="mock-responses-1"', 'model_providers.wdcc_mock.name="WDCC isolated mock"',
         `model_providers.wdcc_mock.base_url="${model.url}/v1"`, 'model_providers.wdcc_mock.wire_api="responses"', 'model_providers.wdcc_mock.env_key="WDCC_MOCK_KEY"'] });
     } else if (agent === 'claude-code') adapter = new ClaudeAdapter({ env: { ...env, ANTHROPIC_API_KEY: 'fixture-only', ANTHROPIC_BASE_URL: model.url }, model: 'mock-anthropic-1', traceSink });
     else adapter = new DshAdapter({ env: { ...env, DEEPSEEK_API_KEY: 'fixture-only', DEEPSEEK_BASE_URL: model.url }, port: 0, traceSink });
     ctx.manager.registerAdapter(adapter); result['probe'] = await adapter.probe();
-    const workspace = ctx.store.createWorkspace('native slash', cwd); const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent });
+    const workspace = ctx.store.createWorkspace('native slash', cwd); const accessMode = option('--access-mode');
+    const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent, ...(accessMode ? { accessMode } : {}) });
     const catalog = await ctx.manager.slashCommandCatalog(session.id); result['catalog'] = catalog;
     assert.equal(catalog.status, 'ready', catalog.reason ?? 'Native catalog is not ready');
     const goal = catalog.commands.find(command => command.name === '/goal'); assert.ok(goal, 'Native goal missing from the catalog');
@@ -82,6 +87,78 @@ for (const agent of agents.filter(agent => !selected || agent === selected)) {
           (result['browserCommands'] as unknown[]).push({ line: command });
         }
       }
+      if (agent === 'codex' && process.argv.includes('--attachments')) {
+        const original = '附件目标🐈'.repeat(801);
+        const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6n1sAAAAASUVORK5CYII=', 'base64');
+        const document = Buffer.from('\ufeff原始文档\r\nexact bytes');
+        const submit = async (command: string) => {
+          await input.fill(command);
+          const response = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/slash-commands'));
+          await input.press('Enter'); const reply = await response; assert.equal(reply.status(), 200);
+          let body = await reply.json();
+          while (body.receipt.state === 'dispatching') { await new Promise(resolve => setTimeout(resolve, 50)); body = ctx.manager.slashControlResult(session.id, body.receipt.commandId); }
+          assert.equal(body.receipt.state, 'completed'); return body;
+        };
+        await input.fill('/goal ' + original);
+        await page.getByTestId('add-image-input').setInputFiles({ name: 'reference.png', mimeType: 'image/png', buffer: image });
+        await page.getByTestId('add-file-input').setInputFiles({ name: 'reference.md', mimeType: 'text/markdown', buffer: document });
+        await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);
+        const created = await submit('/goal ' + original);
+        await submit('/goal pause');
+        const reference = created.result.result.goal.objective as string;
+        assert.ok(reference.startsWith('Read the Codex goal objective file at '));
+        const objectiveFile = reference.slice('Read the Codex goal objective file at '.length, -' before continuing.'.length);
+        const expanded = await readFile(objectiveFile, 'utf8'); assert.ok(expanded.startsWith(original));
+        const imagePath = expanded.match(/- \[Image #\d+\]: (.+)/)?.[1]; const filePath = expanded.match(/- \[File #\d+\]: (.+)/)?.[1]; assert.ok(imagePath && filePath);
+        assert.ok((await readFile(imagePath)).equals(image)); assert.ok((await readFile(filePath)).equals(document));
+        await submit('/goal edit');
+        await page.getByLabel('原生目标', { exact: true }).waitFor(); assert.equal(await page.getByLabel('原生目标', { exact: true }).inputValue(), expanded);
+        await page.reload(); await page.getByLabel('原生目标', { exact: true }).waitFor(); assert.equal(await page.getByLabel('原生目标', { exact: true }).inputValue(), expanded);
+        await submit('/goal clear');
+        result['goalAttachments'] = { passed: true, imageBytes: image.length, documentBytes: document.length, unicodeObjectiveChars: [...original].length, fullEditAfterRefresh: true };
+      }
+      if (agent === 'codex' && process.argv.includes('--takeover')) {
+        await expect.poll(() => ctx.manager.getRuntime(session.id)?.status).toBe('idle');
+        const originalPermissions = ctx.store.getSession(session.id)?.permissions?.policy;
+        const originalProcess = ctx.store.nativeOwners.managedProcess(session.id); assert.ok(originalProcess);
+        await input.fill('/theme'); await input.press('Enter');
+        await expect.poll(() => page.getByRole('button', { name: '接管当前原生会话' }).isEnabled()).toBe(true);
+        const response = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/api/native-terminal'));
+        await page.getByRole('button', { name: '接管当前原生会话' }).click(); const opened = await response;
+        const terminal = await opened.json(); assert.equal(opened.status(), 200, JSON.stringify(terminal));
+        assert.equal(terminal.nativeId, session.nativeId); assert.equal(terminal.ownerSessionId, session.id); assert.equal(terminal.nativeIdentityVerified, true);
+        assert.equal(processState(originalProcess), 'exited'); assert.equal(ctx.manager.getRuntime(session.id), undefined);
+        await page.getByText('已连接 · running', { exact: false }).waitFor();
+        await page.getByRole('button', { name: '填入原生指令' }).click(); await page.keyboard.press('Enter');
+        await page.getByText('Select Syntax Theme', { exact: false }).waitFor(); await page.keyboard.press('Escape');
+        const nativeText = 'native CLI roundtrip message';
+        (control.currentPlan[0] as { text: string }).text = 'Native terminal roundtrip response.';
+        await page.locator('.xterm-helper-textarea').focus(); await page.keyboard.type(nativeText, { delay: 30 }); await page.keyboard.press('Enter');
+        await page.getByRole('list').getByText('Native terminal roundtrip response.', { exact: false }).waitFor();
+        const returning = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/return'));
+        await page.getByRole('button', { name: '结束 CLI 并返回结构化会话' }).click();
+        const returned = await returning; assert.equal(returned.status(), 200, JSON.stringify(await returned.json()));
+        await expect.poll(() => ctx.manager.getRuntime(session.id)?.nativeId).toBe(session.nativeId);
+        const restored = ctx.store.allEvents(session.id).filter(event => event.kind === 'user.message').map(event => (event.data as { text: string }).text);
+        assert.ok(restored.includes(nativeText)); assert.equal(ctx.store.getSession(session.id)?.model, 'mock-responses-1');
+        const answers = ctx.store.allEvents(session.id).filter(event => event.kind === 'assistant.message');
+        const identities = answers.map(event => JSON.stringify([event.turnId, event.itemKey]));
+        assert.equal(new Set(identities).size, identities.length, 'Returning history duplicated a live answer');
+        assert.deepEqual(ctx.store.getSession(session.id)?.permissions?.policy, originalPermissions);
+        const restoredPid = ctx.store.nativeOwners.managedProcess(session.id)?.pid;
+        const repeated = await page.evaluate(async ({ url, body }) => {
+          const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+          return { status: response.status, body: await response.json() };
+        }, { url: returned.url(), body: returned.request().postDataJSON() });
+        assert.equal(repeated.status, 200, JSON.stringify(repeated.body)); assert.equal(ctx.store.nativeOwners.managedProcess(session.id)?.pid, restoredPid);
+        const external = JsonRpcStdio.start({ command: binary, args: adapter.buildLaunchSpec({ sessionId: session.id, cwd, providerId: null }).args ?? ['app-server'], env: { ...env, WDCC_MOCK_KEY: 'fixture-only' } });
+        try {
+          await nativeRequest(external, 'initialize', { clientInfo: { name: 'writer-lock-verification', version: '1', title: null }, capabilities: { experimentalApi: true, requestAttestation: false } }); external.notify('initialized', {});
+          await assert.rejects(nativeRequest(external, 'thread/resume', { threadId: session.nativeId!, excludeTurns: true }), /active writer|locked/);
+        } finally { await external.kill(); }
+        await page.reload(); await page.getByTestId('composer-input').waitFor(); await page.getByText(nativeText, { exact: true }).waitFor();
+        result['sameSessionTakeover'] = { passed: true, nativeId: session.nativeId, oldWriterReleased: true, nativeKernelLockVerified: true, terminalCommand: '/theme', nativeInputImported: true, liveAnswersDeduplicated: true, refresh: true, repeatedReturnPreservesPid: true, nativeExternalWriterRejected: true };
+      }
       process.stdout.write(JSON.stringify({ agent, browserStep: 'refresh' }) + '\n');
       const mutations = () => frames.filter(frame => frame.dir === 'out' && typeof frame.frame === 'object' && frame.frame !== null
         && ['thread/goal/set', 'thread/goal/clear', 'commands/execute'].includes(String((frame.frame as { method?: string }).method))).length;
@@ -108,6 +185,7 @@ for (const agent of agents.filter(agent => !selected || agent === selected)) {
     if (browser) await browser.contexts()[0]?.pages()[0]?.screenshot({ path: reportPath + '.' + agent + '.failed.png', fullPage: true }).catch(() => undefined);
   }
   finally {
+    result['events'] = ctx.store.allEvents((result['catalog'] as { sessionId?: string } | undefined)?.sessionId ?? ctx.store.listSessions(true)[0]?.id ?? '');
     result['frames'] = frames; result['observedFrames'] = observedFrames; result['traceComplete'] = observedFrames === frames.length;
     result['modelBodies'] = control.requests.slice(0, 20).map(request => request.body);
     await browser?.close(); await ctx.close(); if (adapter instanceof DshAdapter) await adapter.shutdown();

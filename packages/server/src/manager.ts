@@ -33,6 +33,8 @@ import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import type { ModelRecording } from './model-recording.js';
 import type { CreateOpts } from '@webdcc/protocol';
+import type { InputAttachmentPart } from '@webdcc/protocol';
+import { processState } from './process-identity.js';
 import type { InteractionRow } from './interactions.js';
 import { payloadHash } from './command-journal.js';
 import type { FileStore } from './files.js';
@@ -267,6 +269,28 @@ export class SessionManager {
 
   getRuntime(sessionId: string): Runtime | undefined {
     return this.runtimes.get(sessionId);
+  }
+  async releaseNativeWriter(sessionId: string): Promise<{ state: unknown; previousProcess: NonNullable<ReturnType<Store['nativeOwners']['managedProcess']>> }> {
+    return this.control(sessionId, async () => {
+      const runtime = this.runtimes.get(sessionId); const process = this.store.nativeOwners.managedProcess(sessionId);
+      if (!runtime || runtime.adapter.id !== 'codex' || !process || processState(process) !== 'running') throw this.nativeControlRejected('同会话接管需要可验证的原生 writer');
+      if (runtime.turnId !== null || runtime.nativeActivity || runtime.status !== 'idle' || this.store.journal.queue(sessionId).length || this.pendingApprovalIds(sessionId).length) throw this.nativeControlRejected('请先结束当前轮次、队列和交互后接管');
+      const state = await runtime.adapter.nativeState?.(sessionId) as { turnActive?: boolean; goal?: { status?: string }; interactions?: unknown[]; thread?: { status?: { type?: string } }; permissions?: { effective?: unknown } };
+      if (!state || state.turnActive !== false || state.thread?.status?.type !== 'idle' || state.permissions?.effective == null || state.goal?.status === 'active' || state.interactions?.length) throw this.nativeControlRejected('原生工作或权限状态未确认，不能接管');
+      const history = await runtime.adapter.readNativeHistory?.(sessionId, { limit: 200 }) as { nextCursor?: string | null; data?: { status: string; itemsView?: string }[] };
+      if (!history || history.nextCursor !== null || !history.data?.every(turn => turn.status !== 'inProgress' && turn.itemsView === 'full')) throw this.nativeControlRejected('原生历史未完整核对，不能接管');
+      await this.dispose(sessionId);
+      if (processState(process) !== 'exited') throw this.nativeControlRejected('旧原生 writer 未确认退出');
+      return { state, previousProcess: process };
+    });
+  }
+  async returnFromNativeTerminal(sessionId: string): Promise<NativeControlSnapshot> {
+    return this.control(sessionId, async () => {
+      const owner = this.store.nativeOwners.get(sessionId);
+      if (!owner?.ownerId.startsWith('pty:') || owner.state !== 'released' || processState(this.store.nativeOwners.managedProcess(sessionId)) !== 'exited') throw this.nativeControlRejected('原生 CLI 的释放和身份未确认，不能返回');
+      await this.ensureReady(this.requireSession(sessionId), this.requireWorkspace(this.requireSession(sessionId).workspaceId).path);
+      return this.nativeControls(sessionId, true);
+    });
   }
 
   /** Opening native controls is an explicit user operation. Reading a page
@@ -516,7 +540,8 @@ export class SessionManager {
   private async activate(session: SessionDto, workspacePath: string): Promise<Runtime> {
     const adapter = this.adapters.get(session.agent);
     if (adapter === undefined) throw Object.assign(new Error(`没有可用的 ${session.agent} adapter`), { statusCode: 400 });
-    const accessMode = session.accessMode ?? this.defaultAccessMode(adapter);
+    const returningFromCli = this.store.nativeOwners.get(session.id)?.ownerId.startsWith('pty:') === true;
+    const accessMode = returningFromCli ? 'inherit' : session.accessMode ?? this.defaultAccessMode(adapter);
     await this.assertAccessMode(adapter, accessMode);
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) return existing;
@@ -527,13 +552,18 @@ export class SessionManager {
       cwd: workspacePath,
       providerId: session.providerId ?? null,
       provider: this.options.resolveProvider?.(session.providerId ?? null) ?? null,
-      ...(session.model === undefined ? {} : { model: session.model }),
-      ...(session.reasoningEffort === undefined ? {} : { reasoningEffort: session.reasoningEffort }),
+      ...(returningFromCli || session.model === undefined ? {} : { model: session.model }),
+      ...(returningFromCli || session.reasoningEffort === undefined ? {} : { reasoningEffort: session.reasoningEffort }),
       ...(accessMode === undefined ? {} : { accessMode }),
       nativeId: session.nativeId,
+      ...(returningFromCli ? { restoreNativeHistory: true } : {}),
     })); } catch (error) { await this.dispose(session.id); throw error; }
     this.assertOwner(runtime);
     this.store.nativeOwners.activate(session.id, runtime.identity, session.nativeId);
+    if (returningFromCli) {
+      const state = await adapter.nativeState?.(session.id) as { model?: string | null; effort?: string | null };
+      this.updateSessionAndFeed(session.id, { accessMode: 'inherit', model: state?.model ?? undefined, reasoningEffort: state?.effort ?? undefined }, { accessMode: 'inherit', model: state?.model ?? undefined, reasoningEffort: state?.effort ?? undefined });
+    }
     if (this.activationStops.delete(session.id)) {
       await runtime.adapter.interrupt(session.id);
       await runtime.adapter.cancelPending?.(session.id);
@@ -551,7 +581,7 @@ export class SessionManager {
 
   /** May run before command acceptance and is repeated before native send.
    * Only current server CAS/catalog identities determine native paths. */
-  async prepareInput(sessionId: string, input: { text: string; images?: { fileId: string; mime?: string }[]; contentParts?: InputContent | UserInput['contentParts']; delivery?: UserInput['delivery']; expectedTurnId?: string }, checkIntent = true): Promise<UserInput> {
+  async prepareInput(sessionId: string, input: { text: string; images?: { fileId: string; mime?: string }[]; contentParts?: InputContent | UserInput['contentParts']; delivery?: UserInput['delivery']; expectedTurnId?: string }, checkIntent = true, validateAdapter = true): Promise<UserInput> {
     const session = this.requireSession(sessionId); const adapter = this.adapters.get(session.agent);
     if (typeof input.text !== 'string' || input.delivery !== undefined && !['send', 'queue', 'steer'].includes(input.delivery)) throw Object.assign(new Error('输入格式无效'), { statusCode: 400 });
     const current = this.runtimes.get(sessionId);
@@ -582,7 +612,7 @@ export class SessionManager {
       output.images = [];
       for (const image of input.images) output.images.push(await this.files.resolveAttachment({ type: 'image', fileId: image.fileId, ...(image.mime === undefined ? {} : { mime: image.mime }) }, sessionId));
     }
-    if (adapter?.validateInput !== undefined) { await this.ensureReady(session, this.requireWorkspace(session.workspaceId).path); await adapter.validateInput(sessionId, output); }
+    if (validateAdapter && adapter?.validateInput !== undefined) { await this.ensureReady(session, this.requireWorkspace(session.workspaceId).path); await adapter.validateInput(sessionId, output); }
     if (checkIntent && input.delivery === 'send' && this.runtimes.get(sessionId)?.turnId != null) throw Object.assign(new Error('会话已开始执行，输入未发送，请明确选择排队'), { statusCode: 409 });
     return output;
   }
@@ -933,13 +963,14 @@ export class SessionManager {
       if (request.contentParts?.parts.some(part => part.type !== 'text') && command.supportsAttachments !== true) throw this.nativeControlRejected('此原生指令没有声明附件能力', 400);
       let contentParts: UserInput['contentParts'];
       if (request.contentParts !== undefined) {
-        try { contentParts = (await this.prepareInput(sessionId, { text: request.line, contentParts: request.contentParts })).contentParts; }
+        try { contentParts = (await this.prepareInput(sessionId, { text: request.line, contentParts: request.contentParts }, false, false)).contentParts; }
         catch (failure) { throw this.nativeControlRejected(failure instanceof Error ? failure.message : '原生指令附件未通过核对', 400); }
       }
       this.assertOwner(runtime); this.store.nativeActions.bind(request.commandId, runtime.identity, runtime.nativeId);
       if (parsed.name === '/goal' && ['pause', 'clear'].includes(parsed.rawArguments.trim().toLowerCase())) this.watchdog.cancel(sessionId, '用户暂停或清除了原生目标');
       const result = await runtime.adapter.executeSlashControl(sessionId, request.line, { replaceGoal: request.replaceGoal, editGoal: request.editGoal, contentParts });
       this.assertOwner(runtime);
+      if (result.form === 'goal-replace' && request.contentParts) result.attachments = request.contentParts.parts.filter((part): part is InputAttachmentPart => part.type === 'file' || part.type === 'image');
       if (result.text && !result.form) {
         const event = this.store.appendEvent({ sessionId, turnId: null, itemKey: `slash-result-${request.commandId}`, kind: 'notice',
           data: { level: result.failed ? 'warning' : 'info', text: `${request.line}\n\n${result.text}`, nativeType: 'slash.command' } });

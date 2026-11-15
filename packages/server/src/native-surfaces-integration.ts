@@ -14,6 +14,7 @@ import { registerNativeProcessRoutes, type NativeProcessControlAction } from './
 import { nativeSurfaceError, resolveClaudeTerminalBinary, validateNativeTerminalTarget, type NativeTerminalTarget } from './native-surface.js';
 import { captureNativeIdentitySnapshot, inspectNativeProcessIdentity, type NativeIdentitySnapshot } from './native-surface-identity.js';
 import { payloadHash } from './command-journal.js';
+import { holdsCodexWriter, releasedCodexWriter } from './codex-writer-lock.js';
 
 const same = (a: RuntimeIdentity, b: RuntimeIdentity): boolean => a.generation === b.generation && a.ownerId === b.ownerId && a.hostId === b.hostId;
 async function executablePath(command: string): Promise<string> {
@@ -39,7 +40,7 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
       const configuration = (value: SessionDto): unknown => [value.workspaceId, value.agent, value.providerId, value.model, value.reasoningEffort, value.accessMode];
       const sourceRevision = payloadHash(configuration(source));
       if (source.agent !== 'codex' && source.agent !== 'claude-code') throw nativeSurfaceError('此 Agent 使用原生 Web 入口', 400);
-      if (intent === 'same-session') throw nativeSurfaceError('外部 writer 释放与完整历史/设置对账尚未验证，同会话接管受阻');
+      if (intent === 'same-session' && source.agent !== 'codex') throw nativeSurfaceError('此版本 Claude 本地会话没有已验证的跨进程 writer 仲裁；请使用独立原生会话');
       const workspace = store.getWorkspace(source.workspaceId);
       const adapter = manager.adapter(source.agent);
       if (!workspace || !adapter) throw nativeSurfaceError('原生工作区或 Adapter 不可用', 404);
@@ -58,6 +59,12 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
         if (selectedEnv[key] !== undefined) env[key] = selectedEnv[key]!;
       }
       Object.assign(env, spec.env, { HOME: env['HOME'] ?? homedir(), [profileVariable]: profilePath });
+      // Honor native provider env_key references selected by the adapter;
+      // the browser cannot nominate environment variable names or values.
+      for (const option of spec.args ?? []) {
+        const key = /^model_providers\.[A-Za-z0-9_.-]+\.env_key=["']([A-Za-z_][A-Za-z0-9_]*)["']$/.exec(option)?.[1];
+        if (key && selectedEnv[key] !== undefined) env[key] = selectedEnv[key]!;
+      }
       const executable = source.agent === 'codex' ? await executablePath(spec.command ?? 'codex') : resolveClaudeTerminalBinary();
       let settingsDirectory: string | undefined;
       const launchOptions = source.agent === 'codex' ? (spec.args ?? []).slice(1) : source.model ? ['--model', source.model] : [];
@@ -86,15 +93,33 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
         executable, nativeVersion: source.agent === 'codex' ? '0.167.0' : '2.1.322', cwd: workspace.path, profilePath, env,
         launchOptions };
       let baseline: NativeIdentitySnapshot;
-      try { await validateNativeTerminalTarget(authorized, intent); baseline = await captureNativeIdentitySnapshot(authorized); }
+      try {
+        // Validate executable/config before releasing the structured writer.
+        await validateNativeTerminalTarget(authorized, 'new-native');
+        baseline = await captureNativeIdentitySnapshot(authorized);
+        if (intent === 'same-session') {
+          const previous = store.nativeOwners.managedProcess(sessionId);
+          if (!source.nativeId || !previous || !await holdsCodexWriter(profilePath, source.nativeId, previous)) throw nativeSurfaceError('原生线程写锁未关联当前托管 writer，不能接管');
+          if (!(await releasedCodexWriter(profilePath, source.nativeId)).verified) throw nativeSurfaceError('此环境无法核对原生线程写锁，旧 writer 保留');
+          const release = await manager.releaseNativeWriter(sessionId);
+          const lock = await releasedCodexWriter(profilePath, source.nativeId);
+          if (!lock.released) throw nativeSurfaceError('原生写锁仍被占用或无法核对，接管未启动');
+          authorized.ownerSessionId = sessionId; authorized.nativeId = source.nativeId;
+          authorized.takeoverEvidence = { nativeId: source.nativeId, cwd: authorized.cwd, profilePath, nativeVersion: authorized.nativeVersion,
+            checkedAt: new Date().toISOString(), previousOwnerReleased: true, previousProcess: release.previousProcess,
+            historyReconciled: true, effectiveSettingsReconciled: true, externalWriter: 'released-verified',
+            externalReleaseEvidence: { authority: 'native-lock', reference: lock.reference } };
+          await validateNativeTerminalTarget(authorized, intent);
+        }
+      }
       catch (error) { if (settingsDirectory) await rm(settingsDirectory, { recursive: true, force: true }); throw error; }
       let child: SessionDto;
       try {
         if (payloadHash(configuration(manager.requireSession(sessionId))) !== sourceRevision) throw nativeSurfaceError('原生启动配置已变化，请核对后重新打开');
-        child = store.createSession({ workspaceId: source.workspaceId, agent: source.agent, providerId: source.providerId,
+        child = intent === 'same-session' ? source : store.createSession({ workspaceId: source.workspaceId, agent: source.agent, providerId: source.providerId,
           model: source.model, reasoningEffort: source.reasoningEffort, accessMode: source.accessMode, title: '新原生 CLI 会话' });
       } catch (error) { if (settingsDirectory) await rm(settingsDirectory, { recursive: true, force: true }); throw error; }
-      manager.updateSessionAndFeed(child.id, { status: 'idle' }, { created: true, agent: child.agent, workspaceId: child.workspaceId, title: child.title, createdAt: child.createdAt, status: 'idle' });
+      manager.updateSessionAndFeed(child.id, { status: 'idle' }, { ...(intent === 'new-native' ? { created: true } : {}), agent: child.agent, workspaceId: child.workspaceId, title: child.title, createdAt: child.createdAt, status: 'idle' });
       const target: NativeTerminalTarget = { ...authorized, ownerSessionId: child.id };
       baselines.set(child.id, baseline);
       if (settingsDirectory) temporarySettings.set(child.id, settingsDirectory);
@@ -104,6 +129,7 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
       const baseline = baselines.get(target.ownerSessionId);
       if (!baseline) return undefined;
       const result = await inspectNativeProcessIdentity(target, process, baseline);
+      if (target.agent === 'codex' && target.takeoverEvidence && !await holdsCodexWriter(target.profilePath, target.nativeId!, process)) return undefined;
       return result.status === 'verified' ? { nativeId: result.nativeId!, evidence: result.evidence! } : undefined;
     },
     onNativeIdentity: (target, nativeId) => { manager.updateSessionAndFeed(target.ownerSessionId, { nativeId }, {}); },
@@ -170,6 +196,7 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
       return view as T;
     }
     if (response.result !== undefined) return response.result as T;
+    if (kind === 'native-terminal.return' && response.receipt.state === 'completed') return await manager.nativeControls(sessionId, true) as T;
     if (response.receipt.state !== 'completed') throw nativeSurfaceError('原生命令仍在执行或结果未确认，禁止重发');
     if (kind.endsWith('.close')) return { closed: true } as T;
     const reference = response.receipt.reference;
@@ -177,6 +204,11 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
     try { return (kind.startsWith('native-terminal.') ? terminals.get(reference.id) : processes.get(reference.id)) as T; }
     catch { throw nativeSurfaceError('此原生资源已不在当前服务中，不能重复启动', 410); }
   };
-  registerNativeTerminalRoutes(app, { supervisor: terminals, config, executeControl });
+  registerNativeTerminalRoutes(app, { supervisor: terminals, config, executeControl,
+    takeoverStatus: sessionId => {
+      const session = manager.requireSession(sessionId); const runtime = manager.getRuntime(sessionId);
+      return { allowed: session.agent === 'codex' && runtime?.status === 'idle' && runtime.turnId === null && !store.journal.queue(sessionId).length,
+        reason: session.agent !== 'codex' ? '此版本未验证本地会话跨进程仲裁，请使用独立原生会话' : '接管时将核对原生线程写锁、历史与设置；请先结束当前工作' };
+    }, returnToStructured: sessionId => manager.returnFromNativeTerminal(sessionId) });
   registerNativeProcessRoutes(app, { supervisor: processes, config, executeControl });
 }

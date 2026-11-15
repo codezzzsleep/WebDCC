@@ -60,6 +60,8 @@ export interface CreateOpts {
   model?: string;
   reasoningEffort?: string;
   accessMode?: string;
+  /** Server-owned roundtrip from a verified CLI writer; preserve native settings. */
+  restoreNativeHistory?: boolean;
   /** Optional side-channel recorder; it never changes Agent input/output. */
   traceSink?: TraceSink;
   /** Observer-only endpoint override; keeps the native provider/auth identity. */

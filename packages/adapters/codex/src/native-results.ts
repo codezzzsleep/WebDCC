@@ -16,8 +16,16 @@ import type { ListMcpServerStatusResponse } from './schema/v2/ListMcpServerStatu
 import type { SkillsListResponse } from './schema/v2/SkillsListResponse.js';
 import type { GetAccountResponse } from './schema/v2/GetAccountResponse.js';
 import type { GetAccountRateLimitsResponse } from './schema/v2/GetAccountRateLimitsResponse.js';
+import type { FsReadFileResponse } from './schema/v2/FsReadFileResponse.js';
+import type { FsWriteFileResponse } from './schema/v2/FsWriteFileResponse.js';
+import type { FsCreateDirectoryResponse } from './schema/v2/FsCreateDirectoryResponse.js';
+import type { FsRemoveResponse } from './schema/v2/FsRemoveResponse.js';
 
 export interface NativeControlResults {
+  'fs/readFile': FsReadFileResponse;
+  'fs/writeFile': FsWriteFileResponse;
+  'fs/createDirectory': FsCreateDirectoryResponse;
+  'fs/remove': FsRemoveResponse;
   'command/exec': CommandExecResponse;
   'command/exec/write': CommandExecWriteResponse;
   'command/exec/resize': CommandExecResizeResponse;
@@ -38,6 +46,10 @@ export interface NativeControlResults {
   'account/rateLimits/read': GetAccountRateLimitsResponse;
 }
 export const nativeControlResultRefs: Record<keyof NativeControlResults, string> = {
+  'fs/readFile': '#/definitions/v2/FsReadFileResponse',
+  'fs/writeFile': '#/definitions/v2/FsWriteFileResponse',
+  'fs/createDirectory': '#/definitions/v2/FsCreateDirectoryResponse',
+  'fs/remove': '#/definitions/v2/FsRemoveResponse',
   'command/exec': '#/definitions/v2/CommandExecResponse',
   'command/exec/write': '#/definitions/v2/CommandExecWriteResponse',
   'command/exec/resize': '#/definitions/v2/CommandExecResizeResponse',

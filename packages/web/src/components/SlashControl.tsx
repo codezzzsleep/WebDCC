@@ -38,7 +38,9 @@ export function SlashControl({ sessionId, request, onAccepted, onClose, initialR
     const { contentParts: _parts, ...original } = request;
     // The edited objective is a new user input. Never reuse text/attachment
     // metadata describing the command that opened this form.
-    await send({ ...original, ...options, revision: catalog.revision, commandId: crypto.randomUUID() });
+    const line = options.line ?? original.line;
+    const attachments = options.replaceGoal === true ? result?.attachments : undefined;
+    await send({ ...original, ...options, ...(attachments?.length ? { contentParts: { version: 1 as const, parts: [{ type: 'text' as const, text: line }, ...attachments] } } : {}), revision: catalog.revision, commandId: crypto.randomUUID() });
   };
   return <section aria-label="原生指令结果" className="panel" style={{ padding: 12 }}>
     <div className="row-actions"><strong>{request.line || '原生指令结果'}</strong><button type="button" disabled={busy} onClick={() => { try { sessionStorage.removeItem(`slash-action:${sessionId}`); } catch { /* Optional browser pointer. */ } onClose(); }}>关闭指令结果</button></div>

@@ -44,6 +44,7 @@ import { managedClaudeProcess } from './managed-process.js';
 import type { ClaudeStdioCaptureState } from './stdio-capture.js';
 import { ClaudeNativeHistory, claudeNativeActionCatalog, elicitationResult, nativeError, nativeValidationError, parseClaudeNativeAction, record, type ClaudeNativeOptions } from './native.js';
 import { ClaudeNativeState } from './native-state.js';
+import { claudeSlashCommands } from './slash.js';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -370,10 +371,7 @@ export class ClaudeAdapter implements AgentAdapter {
     // not emitted system/init, which owns terminal_slash_commands. Use the
     // terminal subset observed on 2.1.322 until the actual init replaces it.
     const terminalNames = runtime.slashCommands.length === 0 ? ['doctor', 'color', 'focus', 'reload-plugins'] : runtime.terminalSlashCommands;
-    const terminals = new Set(terminalNames.map(name => name.startsWith('/') ? name : `/${name}`));
-    return commands.map(command => ({ ...command, name: command.name.startsWith('/') ? command.name : `/${command.name}`, source: command.builtin === true ? 'Claude 原生指令' : 'Claude 项目/插件指令',
-      route: terminals.has(command.name.startsWith('/') ? command.name : `/${command.name}`) ? 'native-terminal' : 'native-input',
-      aliases: command.aliases?.map(name => name.startsWith('/') ? name : `/${name}`), argumentHint: command.argumentHint }));
+    return claudeSlashCommands(commands, terminalNames);
   }
 
   async listModels(providerId: string | null = null): Promise<ModelOption[]> {

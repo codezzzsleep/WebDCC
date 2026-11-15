@@ -30,3 +30,11 @@ it.each([
   const data = (mapped as { data: EventData['goal'] }).data;
   expect(data).toMatchObject({ status, nativeStatus }); expect(goalLabel(data)).toBe(label);
 });
+it('late older native goal snapshots cannot undo a confirmed pause', () => {
+  const replay = CodexAdapter.replay('s', 'native');
+  const frame = (i: number, status: string, updatedAt: number) => ({ i, t: i, dir: 'in' as const, ch: 'rpc', frame: { method: 'thread/goal/updated', params: {
+    threadId: 'native', turnId: null, goal: { threadId: 'native', objective: 'native goal', createdAt: 1, updatedAt, status } } } });
+  expect(replay.feed(frame(1, 'paused', 20)).some(event => event.type === 'item.complete' && event.kind === 'goal')).toBe(true);
+  expect(replay.feed(frame(2, 'active', 10)).some(event => event.type === 'item.complete' && event.kind === 'goal')).toBe(false);
+  expect(replay.feed(frame(3, 'active', 30)).some(event => event.type === 'item.complete' && event.kind === 'goal')).toBe(true);
+});

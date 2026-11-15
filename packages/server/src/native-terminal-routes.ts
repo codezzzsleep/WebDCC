@@ -11,11 +11,13 @@ export interface NativeTerminalRoutesDeps {
   config: RequestBoundary & { token: string };
   /** Persistent command receipt/idempotence belongs to the common action journal. */
   executeControl<T>(action: NativeTerminalControlAction, run: () => Promise<T>): Promise<T>;
+  takeoverStatus?(sessionId: string): { allowed: boolean; reason: string };
+  returnToStructured?(sessionId: string): Promise<unknown>;
 }
 
 export type NativeTerminalControlAction =
   | { kind: 'native-terminal.create'; commandId: string; sessionId: string; intent: 'new-native' | 'same-session'; recordOutput: boolean; rows: number; cols: number }
-  | { kind: 'native-terminal.stop' | 'native-terminal.close'; commandId: string; sessionId: string; terminalId: string; generation: number };
+  | { kind: 'native-terminal.stop' | 'native-terminal.close' | 'native-terminal.return'; commandId: string; sessionId: string; terminalId: string; generation: number };
 
 export function nativeControlCommandId(value: unknown): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(value)) throw nativeSurfaceError('缺少合法的持久命令身份', 400);
@@ -32,6 +34,11 @@ export function registerNativeTerminalRoutes(app: FastifyInstance, deps: NativeT
     if (!isAuthenticated(config.token, request.headers.cookie, authorityOf(request.headers, config.host, config.port))) await reply.status(401).send({ error: 'unauthorized' });
   };
   const base = '/api/native-terminal';
+  app.get(`${base}/takeover-status`, { onRequest: boundary }, request => {
+    const { sessionId } = request.query as { sessionId?: string };
+    if (!sessionId) throw nativeSurfaceError('缺少来源会话', 400);
+    return deps.takeoverStatus?.(sessionId) ?? { allowed: false, reason: '此入口未配置已验证的同会话接管' };
+  });
   app.get(base, { onRequest: boundary }, async request => {
     const { sessionId } = request.query as { sessionId?: string };
     if (typeof sessionId !== 'string' || !sessionId) throw nativeSurfaceError('缺少来源会话', 400);
@@ -51,6 +58,16 @@ export function registerNativeTerminalRoutes(app: FastifyInstance, deps: NativeT
     if (!Number.isSafeInteger(generation)) throw nativeSurfaceError('缺少终端运行代际', 400);
     const terminal = supervisor.get((request.params as { id: string }).id);
     return deps.executeControl({ kind: 'native-terminal.stop', commandId: nativeControlCommandId(commandId), sessionId: terminal.ownerSessionId, terminalId: terminal.id, generation: generation! }, () => supervisor.stop(terminal.id, generation!));
+  });
+  app.post(`${base}/:id/return`, { onRequest: boundary, bodyLimit: 1_024 }, async request => {
+    const terminal = supervisor.get((request.params as { id: string }).id);
+    const { commandId, generation } = (request.body ?? {}) as { commandId?: string; generation?: number };
+    if (generation !== terminal.generation || terminal.intent !== 'same-session' || !deps.returnToStructured) throw nativeSurfaceError('此终端没有同会话返回合同');
+    return deps.executeControl({ kind: 'native-terminal.return', commandId: nativeControlCommandId(commandId), sessionId: terminal.ownerSessionId, terminalId: terminal.id, generation }, async () => {
+      if (!await supervisor.confirmIdentity(terminal.id)) throw nativeSurfaceError('原生 CLI 当前身份无法确认，返回未执行');
+      await supervisor.close(terminal.id);
+      return deps.returnToStructured!(terminal.ownerSessionId);
+    });
   });
   app.delete(`${base}/:id`, { onRequest: boundary }, async request => {
     const { generation, commandId } = request.query as { generation?: string; commandId?: string };

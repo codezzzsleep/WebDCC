@@ -1,5 +1,5 @@
 import type { AgentId } from './adapter.js';
-import type { InputContent } from './input.js';
+import type { InputContent, InputAttachmentPart } from './input.js';
 
 export interface SlashCommand {
   name: string;
@@ -36,6 +36,7 @@ export interface SlashControlResult {
   result?: unknown;
   form?: 'goal-edit' | 'goal-replace' | 'rename';
   objective?: string;
+  attachments?: InputAttachmentPart[];
   confirmed?: boolean;
   failed?: boolean;
 }

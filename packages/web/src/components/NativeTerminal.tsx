@@ -141,6 +141,14 @@ export function NativeTerminal({ terminal, endpoint = '/api/native-terminal', on
     } catch (failure) { setError(failure instanceof Error ? failure.message : '原生操作失败'); }
     finally { setPending(false); }
   };
+  const returnToStructured = async (): Promise<void> => {
+    setPending(true); setError('');
+    try {
+      await nativeSurfaceRequest(`${endpoint}/${encodeURIComponent(view.id)}/return`, { method: 'POST', body: JSON.stringify({ generation: view.generation, commandId: crypto.randomUUID() }) });
+      callbacks.current.onClosed?.();
+    } catch (failure) { setError(failure instanceof Error ? failure.message : '原生返回状态需核对'); }
+    finally { setPending(false); }
+  };
   const paste = async (): Promise<void> => {
     setError('');
     try {
@@ -155,6 +163,7 @@ export function NativeTerminal({ terminal, endpoint = '/api/native-terminal', on
       <strong>{view.agent} {view.nativeVersion}</strong>
       <span role="status">{connection === 'connected' ? '已连接' : connection === 'blocked' ? '连接受阻' : connection === 'connecting' ? '正在连接' : '连接已断开'} · {view.state}{view.exitCode !== null ? ` · exit ${view.exitCode}` : ''}</span>
       <button type="button" disabled={pending || !['starting', 'running'].includes(view.state)} onClick={() => { void control('stop'); }}>停止进程</button>
+      {view.intent === 'same-session' ? <button type="button" disabled={pending || !view.nativeIdentityVerified || view.state !== 'running'} onClick={() => void returnToStructured()}>结束 CLI 并返回结构化会话</button> : null}
       <button type="button" disabled={connection !== 'connected' || !['starting', 'running'].includes(view.state)} onClick={() => { void paste(); }}>粘贴剪贴板</button>
       {initialCommand ? <button type="button" disabled={connection !== 'connected' || !['starting', 'running'].includes(view.state) || view.intent === 'same-session' && !view.nativeIdentityVerified}
         onClick={() => { if (socket.current?.readyState === WebSocket.OPEN && (view.intent !== 'same-session' || view.nativeIdentityVerified)) { xterm.current?.paste(initialCommand); xterm.current?.focus(); } }}>填入原生指令</button> : null}

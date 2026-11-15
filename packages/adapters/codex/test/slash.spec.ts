@@ -3,12 +3,21 @@ import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { codexSlashCommands, executeCodexSlash } from '../src/slash.js';
 import type { JsonRpcStdio } from '../src/rpc.js';
 import type { ThreadGoal } from '../src/schema/v2/ThreadGoal.js';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 function native() {
   let goal: ThreadGoal | null = null;
   const calls: { method: string; params: Record<string, unknown> }[] = [];
+  const files = new Map<string, Buffer>();
   const rpc = { request: async (method: string, params: Record<string, unknown>) => {
     calls.push({ method, params });
+    if (method === 'fs/createDirectory') return {};
+    if (method === 'fs/writeFile') { files.set(String(params['path']), Buffer.from(String(params['dataBase64']), 'base64')); return {}; }
+    if (method === 'fs/readFile') return { dataBase64: files.get(String(params['path']))!.toString('base64') };
+    if (method === 'fs/remove') return {};
     if (method === 'thread/goal/get') return { goal };
     if (method === 'thread/goal/clear') { const cleared = goal !== null; goal = null; return { cleared }; }
     if (method === 'thread/goal/set') {
@@ -18,7 +27,7 @@ function native() {
     }
     throw new Error('Unexpected native method ' + method);
   } } as unknown as JsonRpcStdio;
-  return { rpc, calls, goal: () => goal };
+  return { rpc, calls, files, goal: () => goal };
 }
 it('exports every pinned native command and alias with an explicit execution route', () => {
   expect(codexSlashCommands).toHaveLength(65);
@@ -29,6 +38,31 @@ it('exports every pinned native command and alias with an explicit execution rou
   expect(slashCommandFor(codexSlashCommands, '/clean')?.name).toBe('/stop');
   expect(parseSlashInput('/goal\n  原文\n next')).toEqual({ name: '/goal', rawArguments: '\n  原文\n next', line: '/goal\n  原文\n next' });
   expect(parseSlashInput(' /goal')).toBeUndefined();
+});
+it('oversized Unicode goals and image/file attachments preserve native bytes and recover full objectives for editing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-goal-files-')); const ctx = native();
+  try {
+    const bytes = Buffer.from('\ufeff中文\r\noriginal'); const path = join(root, 'reference.md'); await writeFile(path, bytes);
+    const contentParts = { version: 1 as const, parts: [{ type: 'file' as const, fileId: 'reference', name: 'reference.md', mime: 'text/markdown', size: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'), path }] };
+    const objective = '🐈'.repeat(4001);
+    await executeCodexSlash(ctx.rpc, 'native', root, '/goal ' + objective, { codexHome: root, contentParts });
+    expect([...ctx.goal()!.objective].length).toBeLessThanOrEqual(4000);
+    const copied = [...ctx.files].find(([path]) => path.endsWith('file-1.md')); expect(copied?.[1].equals(bytes)).toBe(true);
+    const edited = await executeCodexSlash(ctx.rpc, 'native', root, '/goal edit', { codexHome: root });
+    expect(edited.objective).toContain(objective); expect(edited.objective).toContain(copied![0]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+it('changed attachment bytes and attachments on pause reject before any native write or replacement', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-goal-changed-')); const ctx = native();
+  try {
+    const path = join(root, 'image.png'); await writeFile(path, 'changed');
+    const options = { codexHome: root, replaceGoal: true, contentParts: { version: 1 as const, parts: [{ type: 'image' as const, fileId: 'image', name: 'image.png', mime: 'image/png', size: 7, sha256: '0'.repeat(64), path }] } };
+    await executeCodexSlash(ctx.rpc, 'native', root, '/goal old'); const before = ctx.calls.length;
+    await expect(executeCodexSlash(ctx.rpc, 'native', root, '/goal new', options)).rejects.toThrow('内容已变化');
+    await expect(executeCodexSlash(ctx.rpc, 'native', root, '/goal pause', options)).rejects.toThrow('设置或编辑');
+    expect(ctx.goal()?.objective).toBe('old'); expect(ctx.calls.slice(before).every(call => call.method === 'thread/goal/get')).toBe(true);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 it('goal show/set/pause/resume/clear use the fixed native APIs and never turn the command into a model prompt', async () => {
   const ctx = native();
