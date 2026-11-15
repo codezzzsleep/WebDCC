@@ -608,6 +608,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
     if (resolution === undefined) return null;
     const resolved = resolution.data as EventData['approval.resolved'];
     if (resolved.optionId === 'outcome-unknown') return '原生轮次已结束，审批结果未确认';
+    if (resolved.optionId === 'allow-native-suggestions') return '已允许一次并提交原生权限建议';
     const option = resolved.optionId.toLowerCase();
     if (option === 'grant-turn') return '已允许本轮额外权限';
     if (option === 'grant-session') return '已允许本会话额外权限';
