@@ -6,6 +6,13 @@ import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
 
 const fingerprint = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+function runtimeCompatibility(probe: ProbeResult, kind: CapabilityRuntime['adapterKind'], expected: string): CapabilityRuntime['compatibility'] {
+  if (kind === 'fake') return 'test-only';
+  if (!probe.installed || probe.version === undefined) return 'unknown';
+  // Adapters review runtime compatibility; the inventory version pins the schema.
+  if (probe.compatible !== undefined) return probe.compatible ? 'compatible' : 'incompatible';
+  return probe.version === expected ? 'compatible' : 'incompatible';
+}
 const titles: Record<string, string> = {
   thread: '会话、历史与分叉', turn: '轮次、输入与停止', item: '工具、审批与问答', account: '账号与登录', model: '模型目录', mcpServer: 'MCP 服务与认证',
   session: '会话与历史', agent: 'Agent 控制', settings: '原生设置', configuration: '启动设置', interrupt: '停止当前轮次', setPermissionMode: '切换权限', setModel: '切换模型',
@@ -27,7 +34,7 @@ export class CapabilityRegistry {
       const probe: ProbeResult = await adapter.probe().catch(() => ({ installed: false, pinnedVersion: nativeInventory.baseline[adapter.id], auth: 'unknown' as const, notes: ['原生探测失败'] }));
       const kind = adapter.kind ?? 'real';
       const expected = nativeInventory.baseline[adapter.id];
-      const compatibility = kind === 'fake' ? 'test-only' : probe.compatible === false ? 'incompatible' : probe.version === undefined ? 'unknown' : probe.version === expected ? 'compatible' : 'incompatible';
+      const compatibility = runtimeCompatibility(probe, kind, expected);
       const source = nativeInventory.sources[adapter.id === 'claude-code' ? 'claude' : adapter.id];
       runtimes.push({ agent: adapter.id, hostId: fingerprint({ hostname: hostname(), agent: adapter.id }).slice(0, 24), os: platform(), profile: 'native-default', probe, adapterKind: kind, compatibility, schemaHash: source.sha256, configurationFingerprint: fingerprint({ providers, workspaceId }), pluginStatus: 'unverified' });
       const groups = new Map<string, NativeMethodInventoryEntry[]>();
@@ -43,7 +50,7 @@ export class CapabilityRegistry {
           nativeAvailability: !probe.installed || probe.auth === 'missing' ? 'environment-blocked' : compatibility === 'compatible' ? 'available' : 'unknown',
           apiExposure: surface ? 'unsupported-in-api' : compatibility === 'compatible' ? 'public' : 'unverified',
           structuredImplemented: false, structuredVerified: false, fallbackVerified: false,
-          reason: compatibility === 'incompatible' ? `实际版本 ${probe.version} 与基线 ${expected} 不兼容` : surface ? '原生入口待实现与同会话验证' : '已列入原生库存；结构化操作与配置/插件状态须逐项验证', evidence: [],
+          reason: compatibility === 'incompatible' ? [`实际原生运行时未通过兼容检查（探测版本 ${probe.version}，协议基线 ${expected}）`, ...(probe.notes ?? [])].join('；') : surface ? '原生入口待实现与同会话验证' : '已列入原生库存；结构化操作与配置/插件状态须逐项验证', evidence: [],
         });
       }
     }

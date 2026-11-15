@@ -1,5 +1,6 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AdapterEvent, EventData, EventKind, OpenItem, StoredEvent, TraceFrame, TurnView } from '../packages/protocol/src/index.js';
 import { checkTurnInvariants, findUserEcho, reduceTurn, resolveAnswer, nativePredicates, scenarioNativePredicates, traceInputIdentity } from '../packages/protocol/src/index.js';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
@@ -59,7 +60,7 @@ function viewFor(events: StoredEvent[], open: Map<string, OpenItem>, turnId: str
   return reduceTurn(events.filter((item) => item.turnId === turnId), [...open.values()].filter((item) => item.turnId === turnId));
 }
 
-async function runFixture(fixture: string, writeExpected: boolean): Promise<Result> {
+export async function runFixture(fixture: string, writeExpected = false): Promise<Result> {
   const meta = JSON.parse(await readFile(join(fixture, 'meta.json'), 'utf8')) as { agent: string; scenario: string; prompt?: string };
   const frames = parseFrames(await readFile(join(fixture, 'native.jsonl'), 'utf8'));
   const { feed, deltas } = adapterFor(meta.agent);
@@ -77,11 +78,14 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
   const startTurn = (prompt: string): string => {
     const turnId = `${sessionId}:turn:${++turnNumber}`;
     activeTurn = turnId;
-    events.push(event(sessionId, ++seq, turnId, 'user.message', `user-${turnId}`, { text: prompt }));
+    // Codex's production reducer supplies the actual native user input. These
+    // native-only traces contain no persisted Web command to seed alongside it.
+    // Keep native client IDs when present; never fabricate an ID or text-dedupe.
+    if (meta.agent !== 'codex') events.push(event(sessionId, ++seq, turnId, 'user.message', `user-${turnId}`, { text: prompt }));
     events.push(event(sessionId, ++seq, turnId, 'turn.started', `turn-start-${turnId}`, {}));
     return turnId;
   };
-  // The server writes these two events before it invokes adapter.send().
+  // Model the server turn boundary; only seed input where native does not echo it.
   startTurn(meta.prompt ?? '');
 
   for (const [frameIndex, frame] of frames.entries()) {
@@ -149,6 +153,7 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
   const views = turnIds.map((turnId) => viewFor(events, open, turnId));
   for (const [index, view] of views.entries()) {
     if (!['completed', 'interrupted', 'failed'].includes(view.state)) failures.push({ id: 'I1', frame: frames.length, message: `轮次 ${index + 1} 没有终止事件` });
+    if (meta.agent === 'codex' && !events.some(item => item.turnId === turnIds[index] && item.kind === 'user.message')) failures.push({ id: 'I3', frame: frames.length, message: `轮次 ${index + 1} 缺少原生输入证据；不能从 meta 补造` });
   }
   const finalView = views.at(-1);
   const finalPath = join(fixture, 'reference', 'final.txt');
@@ -177,15 +182,19 @@ async function runFixture(fixture: string, writeExpected: boolean): Promise<Resu
   return { fixture, frames: total, invariants: { passed: Math.max(0, total - failures.length), total, failures }, views, notTriggered };
 }
 
-const root = process.argv[2] ?? 'fixtures/traces';
-const writeExpected = process.argv.includes('--write-expected');
-const results: Result[] = [];
-async function walk(path: string): Promise<void> {
-  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
-  if (entries.some((entry) => entry.name === 'native.jsonl')) { results.push(await runFixture(path, writeExpected)); return; }
-  for (const entry of entries) if (entry.isDirectory()) await walk(join(path, entry.name));
+async function main(): Promise<void> {
+  const root = process.argv[2] ?? 'fixtures/traces';
+  const writeExpected = process.argv.includes('--write-expected');
+  const results: Result[] = [];
+  async function walk(path: string): Promise<void> {
+    const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+    if (entries.some((entry) => entry.name === 'native.jsonl')) { results.push(await runFixture(path, writeExpected)); return; }
+    for (const entry of entries) if (entry.isDirectory()) await walk(join(path, entry.name));
+  }
+  await walk(root);
+  const failures = results.flatMap((result) => [...result.invariants.failures, ...result.notTriggered].map((failure) => ({ fixture: result.fixture, ...failure })));
+  process.stdout.write(JSON.stringify({ fixtures: results.length, frames: results.reduce((sum, result) => sum + result.frames, 0), passed: results.reduce((sum, result) => sum + result.invariants.passed, 0), total: results.reduce((sum, result) => sum + result.invariants.total, 0), scenarios: { passed: results.filter(result => result.notTriggered.length === 0 && result.invariants.failures.length === 0).length, total: results.length }, failures }, null, 2) + '\n');
+  if (failures.length > 0 || results.length === 0) process.exitCode = 1;
 }
-await walk(root);
-const failures = results.flatMap((result) => [...result.invariants.failures, ...result.notTriggered].map((failure) => ({ fixture: result.fixture, ...failure })));
-process.stdout.write(JSON.stringify({ fixtures: results.length, frames: results.reduce((sum, result) => sum + result.frames, 0), passed: results.reduce((sum, result) => sum + result.invariants.passed, 0), total: results.reduce((sum, result) => sum + result.invariants.total, 0), scenarios: { passed: results.filter(result => result.notTriggered.length === 0 && result.invariants.failures.length === 0).length, total: results.length }, failures }, null, 2) + '\n');
-if (failures.length > 0 || results.length === 0) process.exitCode = 1;
+
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

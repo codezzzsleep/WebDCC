@@ -59,3 +59,24 @@ it('NP-14 file quotas leave durable incomplete evidence and retention prunes onl
   const restarted = new InteractionRecorder(root); await restarted.init();
   expect(await restarted.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('file size')] });
 });
+
+it('exports original DSH Host catalog context in causal order without foreign runs, session data or future refreshes', async () => {
+  root = await mkdtemp(join(tmpdir(), 'wdcc-recorder-dsh-context-'));
+  const recorder = new InteractionRecorder(root); await recorder.init();
+  recorder.bind({ sessionId: 's', agent: 'dsh', workspaceId: 'w', cwd: root });
+  const catalog = (i: number) => ({ i, t: 0, dir: 'in' as const, ch: 'rpc:session/modelCatalog', frame: { originalRpcId: `catalog-${i}` } });
+  recorder.sink('dsh-host').record?.(catalog(1));
+  recorder.sink('dsh-host').record?.({ i: 2, t: 0, dir: 'in', ch: 'rpc:settings/describe', frame: { privateSetting: 'exclude' } });
+  recorder.sink('s').record?.({ i: 3, t: 0, dir: 'in', ch: 'mux:session/control', frame: {} });
+  recorder.sink('dsh-host').record?.(catalog(4));
+  await recorder.flush();
+  const hostPath = join(recorder.directory, 'dsh-host.jsonl');
+  const original = (await readFile(hostPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  await writeFile(hostPath, [...original, { ...original[0], runId: 'different-native-run', seq: 0 }, { ...original[0], source: 'mapped', seq: 0 }].map(row => JSON.stringify(row)).join('\n') + '\n');
+  const rows = (await recorder.read('s')).trim().split('\n').map(line => JSON.parse(line));
+  expect(rows.map(row => row.value.i)).toEqual([1, 3]);
+  expect(rows[0]).toEqual(original[0]);
+  expect(await recorder.summary('s')).toMatchObject({ nativeFrames: 2, incomplete: false });
+  const restarted = new InteractionRecorder(root); await restarted.init();
+  expect(await restarted.read('s')).toBe(await recorder.read('s'));
+});

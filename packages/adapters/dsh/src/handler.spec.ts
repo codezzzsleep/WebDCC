@@ -6,7 +6,7 @@ import { DshAdapter } from './adapter.js';
 import type { UserInput } from '@webdcc/protocol';
 function imageClient(dispatch: (endpoint: string, args: unknown) => unknown) {
   return { connect: async () => undefined, rpc: async (endpoint: string, args: unknown) => {
-    if (endpoint === 'session/projections') return { asOfSeq: 0, values: { modelSelection: { provider: 'fixture', model: 'vision' } } };
+    if (endpoint === 'session/projections') return { kind: 'sequenced', asOfSeq: 0, values: { modelSelection: { lastUsed: null, next: { provider: 'fixture', model: 'vision' } } } };
     if (endpoint === 'session/modelCatalog') return { groups: [{ id: 'fixture', models: [{ id: 'vision' }] }] };
     if (endpoint === 'llm/listConfigurableProviders') return [{ provider: 'fixture', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'fixture'], declared: true }];
     if (endpoint === 'settings/describe') return { namespaces: [{ ns: 'llm-pi-ai', revision: 1, value: { providers: { fixture: { models: [{ id: 'vision', input: ['text', 'image'] }], modelOverrides: {}, defaultInput: ['text'] } } } }] };
