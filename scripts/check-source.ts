@@ -8,10 +8,18 @@ const identity = createRunIdentity();
 const out = join(process.cwd(), 'web_review/evidence');
 const build = join(process.cwd(), '.artifacts', identity.runId);
 mkdirSync(out, { recursive: true });
-const checks: [string, string[]][] = [['typecheck', ['typecheck']], ['lint', ['lint']], ['native-inventory', ['native:inventory']], ['unit', ['test']], ['browser-security', ['test:browser']], ['build', ['build']]];
+const checks: [string, string[]][] = [['native-test-baseline', ['setup:native-baseline']], ['typecheck', ['typecheck']], ['lint', ['lint']], ['native-inventory', ['native:inventory']], ['unit', ['test']], ['browser-security', ['test:browser']], ['build', ['build']]];
 const report: GateReport = { formatVersion: 1, gate: 'source-only', identity, expectedIds: checks.map(([id]) => id), results: [], issues: [], steps: [] };
 for (const [name, args] of checks) {
   const file = `${identity.runId}-${name}.log`;
+  if (name === 'browser-security' && report.results.find(result => result.id === 'native-test-baseline')?.status !== 'passed') {
+    const error = '固定原生测试基线未通过校验，浏览器检查未启动';
+    writeFileSync(join(out, file), `${error}\n`);
+    report.results.push({ id: name, status: 'blocked', evidence: [file] });
+    report.steps.push({ name, status: 'blocked', error });
+    process.stdout.write(`${name}: blocked\n`);
+    continue;
+  }
   try {
     const output = execFileSync('pnpm', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, WDCC_COMMIT: identity.commit, WDCC_BUILT_AT: new Date().toISOString(), WDCC_BUILD_DIR: join(build, 'web'), WDCC_SERVER_OUT: join(build, 'server/main.js') } });
     writeFileSync(join(out, file), output);

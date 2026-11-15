@@ -14,6 +14,7 @@
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "native:inventory": "tsx scripts/native-inventory.ts --check",
     "check:source": "tsx scripts/check-source.ts",
+    "setup:native-baseline": "tsx scripts/setup-native-baseline.ts",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "mock:anthropic": "tsx packages/testing/mock-models/src/anthropic-cli.ts",

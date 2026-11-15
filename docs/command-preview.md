@@ -15,3 +15,7 @@ DSH 的 `commands/list` 要求实际 `agentId`，因此创建前不能读取完�
 回归覆盖创建前读取、选择、发送、实际目录核对和刷新恢复。另有隔离的实际 DSH Web Host、Claude SDK 与 Chromium 验证，模型端使用本地受控流式接口；该验证不代表外部 Provider 或真实模型服务可用。
 
 完整源码检查使用当前检出中的组件、备份 CLI 和 Git 提交记录。原生终端浏览器测试可通过 `WDCC_CODEX_BASELINE_BINARY` 指定隔离安装的 Codex 0.167.0；默认使用当前检出的 `.artifacts/native-baseline/package/vendor/x86_64-unknown-linux-musl/bin/codex`。
+
+全新 Linux x64 检出在 `pnpm install --frozen-lockfile` 后运行 `pnpm setup:native-baseline`，再运行单独的浏览器测试。`pnpm check:source` 会先执行该准备步骤并分别记录结果。它下载固定官方发行包，校验归档完整性、所有文件和链接及执行权限的指纹、原始二进制和实际版本；缓存复用也校验，现有损坏资源保留并拒绝作为基线，不改测试断言或全局 CLI。
+
+离线环境可用 `pnpm setup:native-baseline --archive /path/to/openai-codex-0.167.0-linux-x64.tgz`；显式 `WDCC_CODEX_BASELINE_BINARY` 或 `--binary` 必须指向该完整原始发行包中的二进制，也经过相同校验。准备步骤只执行 `--version`，不发送模型输入。实际原生终端、模型和发布验收仍分别记账；其它平台的固定测试发行包尚未提供。
