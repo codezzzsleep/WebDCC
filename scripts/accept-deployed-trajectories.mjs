@@ -400,8 +400,8 @@ try {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({ path: join(root, 'reply-refresh.png'), fullPage: true });
     const beforeRestore = report.requests.length;
-    await server.manager.adapter('dsh')?.shutdown();
-    await server.close(); server = undefined; await boot(); await authenticate();
+    await server.close(); await server.manager.adapter('dsh')?.shutdown();
+    server = undefined; await boot(); await authenticate();
     await page.goto(base + '/s/' + sid); await page.getByTestId('composer-input').waitFor();
     await page.getByText('NATIVE_TOOL_OK:' + fixture, { exact: false }).first().waitFor();
     const restored = await api('/api/sessions/' + sid);
@@ -435,8 +435,8 @@ try {
     } catch (error) { report.captureError = String(error); }
   }
   await browser?.close();
-  await server?.manager.adapter('dsh')?.shutdown().catch(error => { report.cleanupError = String(error); report.status = 'failed'; process.exitCode = 1; });
   await server?.close().catch(error => report.cleanupError = String(error));
+  await server?.manager.adapter('dsh')?.shutdown().catch(error => { report.cleanupError = String(error); report.status = 'failed'; process.exitCode = 1; });
   await new Promise(resolveClose => bridge.close(resolveClose));
   report.finishedAt = new Date().toISOString();
   await save();

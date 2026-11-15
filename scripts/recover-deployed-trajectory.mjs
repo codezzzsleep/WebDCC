@@ -58,8 +58,8 @@ async function boot() {
   base = new URL(server.url).origin;
 }
 async function stop() {
-  await server?.manager.adapter('dsh')?.shutdown();
-  await server?.close(); server = undefined;
+  const adapter = server?.manager.adapter('dsh');
+  await server?.close(); await adapter?.shutdown(); server = undefined;
 }
 const json = async path => {
   const response = await page.request.get(base + path); assert(response.ok(), path);
