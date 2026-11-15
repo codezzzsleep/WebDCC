@@ -18,6 +18,7 @@ import { startAnthropicMock } from '../packages/testing/mock-models/src/anthropi
 import { MockControl } from '../packages/testing/mock-models/src/mock-control.js';
 import type { Plan } from '../packages/testing/mock-models/src/plan.js';
 import { sourceFingerprint } from './lib/gate-report.js';
+import { isSupportedCodexVersion } from '../packages/adapters/codex/src/versions.js';
 
 const option = (name: string): string | undefined => { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1]; };
 const binary = resolve(option('--binary') ?? '.artifacts/native-baseline/package/vendor/x86_64-unknown-linux-musl/bin/codex');
@@ -51,7 +52,9 @@ for (const name of selectedCases) {
   result['configurationFingerprint'] = createHash('sha256').update(JSON.stringify({ env, agent, name, modelUrl: model.url, questions })).digest('hex');
   try {
     if (agent === 'codex') {
-      assert.equal(execFileSync(binary, ['--version'], { encoding: 'utf8' }).trim(), 'codex-cli 0.167.0');
+      const nativeVersion = execFileSync(binary, ['--version'], { encoding: 'utf8' }).trim().replace(/^codex-cli\s+/, '');
+      assert.ok(isSupportedCodexVersion(nativeVersion), 'Codex binary is outside the reviewed compatibility range');
+      result['nativeVersion'] = nativeVersion;
       result['binarySha256'] = createHash('sha256').update(await readFile(binary)).digest('hex');
       const overrides = ['model_provider=wdcc_mock', 'model="mock-responses-1"', 'model_providers.wdcc_mock.name="WDCC isolated mock"',
         'model_providers.wdcc_mock.base_url="' + model.url + '/v1"', 'model_providers.wdcc_mock.wire_api="responses"', 'model_providers.wdcc_mock.env_key="WDCC_MOCK_KEY"',

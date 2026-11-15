@@ -17,6 +17,7 @@ import type { CollaborationModeListParams } from './schema-experimental/v2/Colla
 import type { CollaborationModeListResponse } from './schema-experimental/v2/CollaborationModeListResponse.js';
 import questionModeSchema from './schema-experimental/question-modes.schemas.json' with { type: 'json' };
 import protocolSchema from './json-schema/codex_app_server_protocol.schemas.json' with { type: 'json' };
+import compatibilitySchema from './json-schema/compatibility-0.169.0.schemas.json' with { type: 'json' };
 import type { JsonRpcStdio } from './rpc.js';
 import { nativeControlResultRefs, type NativeControlResults } from './native-results.js';
 
@@ -65,7 +66,7 @@ const collaborationModeValidator = ajv.compile({ ...questionModeSchema.collabora
 let settingsValidator: ValidateFunction | undefined;
 
 export function nativeSettingsNotification(params: unknown): ThreadSettingsUpdatedNotification {
-  settingsValidator ??= ajv.compile({ $ref: '#/definitions/v2/ThreadSettingsUpdatedNotification', definitions: protocolSchema.definitions });
+  settingsValidator ??= ajv.compile({ $ref: '#/definitions/v2/ThreadSettingsUpdatedNotification', definitions: compatibilitySchema.definitions });
   if (!settingsValidator(params)) throw new Error(`Invalid thread/settings/updated: ${ajv.errorsText(settingsValidator.errors)}`);
   return params as ThreadSettingsUpdatedNotification;
 }
@@ -73,9 +74,9 @@ export function nativeSettingsNotification(params: unknown): ThreadSettingsUpdat
 export function validateNativeServerParams(method: string, params: unknown): void {
   let validate = serverValidators.get(method);
   if (validate === undefined) {
-    const branch = protocolSchema.definitions.ServerRequest.oneOf.find(branch => branch.properties.method.enum[0] === method);
+    const branch = compatibilitySchema.definitions.ServerRequest.oneOf.find(branch => branch.properties.method.enum[0] === method);
     if (branch === undefined) throw Object.assign(new Error('Unknown native reverse request'), { code: -32601 });
-    validate = ajv.compile({ $ref: branch.properties.params.$ref, definitions: protocolSchema.definitions });
+    validate = ajv.compile({ $ref: branch.properties.params.$ref, definitions: compatibilitySchema.definitions });
     serverValidators.set(method, validate);
   }
   if (!validate(params)) throw Object.assign(new Error(`Invalid ${method} native request: ${ajv.errorsText(validate.errors)}`), { code: -32602 });
@@ -118,7 +119,7 @@ export function validateNativeParams(method: string, params: unknown): void {
 export function validateNativeResult(method: keyof Results, result: unknown): void {
   let validate = responseValidators.get(method);
   if (validate === undefined) {
-    validate = ajv.compile({ $ref: responseRefs[method], definitions: method === 'collaborationMode/list' ? questionModeSchema.definitions : protocolSchema.definitions });
+    validate = ajv.compile({ $ref: responseRefs[method], definitions: method === 'collaborationMode/list' ? questionModeSchema.definitions : compatibilitySchema.definitions });
     responseValidators.set(method, validate);
   }
   if (!validate(result)) throw new Error(`Invalid ${method} result: ${ajv.errorsText(validate.errors)}`);

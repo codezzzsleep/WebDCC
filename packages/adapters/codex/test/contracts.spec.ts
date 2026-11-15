@@ -33,6 +33,13 @@ describe('NP-02/07 pinned Codex contracts', () => {
     expect(() => validateNativeResult('turn/start', { turn: { id: 't' } })).toThrow('Invalid');
   });
 
+  it('accepts 0.169 response additions while checking their original types', () => {
+    const response = { data: [{ id: 'turn', status: 'completed', items: [{ type: 'agentMessage', id: 'item', text: 'answer', moderation: { moderated: true } }] }], nextCursor: null, backwardsCursor: null };
+    expect(() => validateNativeResult('thread/turns/list', response)).not.toThrow();
+    response.data[0]!.items[0]!.moderation.moderated = 'invalid' as unknown as boolean;
+    expect(() => validateNativeResult('thread/turns/list', response)).toThrow('Invalid');
+  });
+
   it('NP-12 provider names, model IDs and catalog paths cannot escape their quoted native values', () => {
     const name = 'Provider "one"\nmodel = "unexpected"'; const model = 'quoted "model"'; const path = '/tmp/with "quotes"/catalog.json';
     const spec = new CodexAdapter().buildLaunchSpec({ sessionId: 's', cwd: '/tmp', providerId: 'provider', model,

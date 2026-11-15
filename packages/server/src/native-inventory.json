@@ -7,10 +7,22 @@
     "dsh": "0.2.2-rc.1",
     "os": "linux"
   },
+  "compatibleVersions": {
+    "codex": [
+      "0.167.0",
+      "0.168.0",
+      "0.169.0"
+    ]
+  },
   "sources": {
     "codex": {
       "path": "packages/adapters/codex/src/json-schema/codex_app_server_protocol.schemas.json",
       "sha256": "021462a9bacd117f4cd40c256a4888619d059cec6a65b795198d521ba660e554"
+    },
+    "codexCompatibility": {
+      "nativeVersion": "0.169.0",
+      "path": "packages/adapters/codex/src/json-schema/compatibility-0.169.0.schemas.json",
+      "sha256": "96ad5012f080b182a7ecfe2a0179ef04a8f9be80ff5e680f28afb37d9b4cf995"
     },
     "codexQuestionModes": {
       "path": "packages/adapters/codex/src/schema-experimental/question-modes.schemas.json",

@@ -4,7 +4,7 @@
 
 ## 锁定版本
 
-锁定含义：本仓库的 adapter、fixtures 与测试都以这些版本为准。**升级任何一个都要重新导出 Codex schema、重跑 fixtures 测试和第 15 节验收。**
+锁定含义：本仓库的 adapter、fixtures 与测试以这些基线为准；已审核的运行兼容版本单独记录在 `native-inventory.json` 的 `compatibleVersions` 中。**扩展兼容范围要比较原生 schema，并重跑相关原生交互与恢复验收；版本号不同不自动等于协议不兼容。**
 
 | 组件 | 锁定版本 | 检测命令 | 备注 |
 |---|---|---|---|
@@ -12,7 +12,7 @@
 | pnpm | **12.18.0** | `pnpm -v` | `packageManager` 字段已锁定；`onlyBuiltDependencies: [esbuild]` |
 | TypeScript | **5.9.3** | `npx tsc -v` | 未用 7.0.2：`typescript-eslint@8.72.2` 明确拒绝 TS 7（`typescript-eslint does not support TS 7.0`） |
 | DeepSeek Harness（DSH） | **0.2.2-rc.1** | `dsh --version` | 与 SPEC 中【已实测】结论对应的版本 |
-| Codex CLI | **0.167.0** | `codex --version` | `codex app-server` 的类型与 schema 从该版本导出 |
+| Codex CLI | **0.167.0–0.169.0** | `codex --version` | 原始协议/fixtures 基线为 0.167.0；响应兼容 schema 从 0.169.0 原生导出；未知版本及预发布仍受限 |
 | Claude Code | **2.1.322** | `claude --version` | 我们只通过 Agent SDK 驱动，不直接调 `claude -p` |
 | Claude Agent SDK | **0.3.322** | `node -p "require('@anthropic-ai/claude-agent-sdk/package.json').version"` | `@webdcc/adapter-claude` 的依赖 |
 | Vitest | **3.2.7** | `npx vitest --version` | 不能用 5.x：它依赖 rolldown 原生二进制，本机 Xeon 6266C 无 AVX2，直接 `Illegal instruction (core dumped)` |
@@ -31,7 +31,7 @@ node -v
 npm install -g pnpm@12.18.0
 
 # 3. 三个 Agent（DSH 已随镜像安装）
-npm install -g @openai/codex@0.167.0 @anthropic-ai/claude-code@2.1.322
+npm install -g @openai/codex@0.169.0 @anthropic-ai/claude-code@2.1.322
 dsh --version && codex --version && claude --version
 
 # 4. 仓库依赖

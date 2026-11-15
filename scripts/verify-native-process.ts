@@ -6,7 +6,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { arch, platform } from 'node:os';
-import { CodexAdapter, PINNED_VERSION } from '../packages/adapters/codex/src/adapter.js';
+import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
 import { isolatedEnv } from '../packages/server/src/test-isolation.js';
 import { sourceFingerprint } from './lib/gate-report.js';
 
@@ -21,7 +21,7 @@ const adapter = new CodexAdapter({ command: binary, env: isolated.env, traceSink
 } } });
 const hash = createHash('sha256'); for await (const bytes of createReadStream(binary)) hash.update(bytes);
 const report: Record<string, unknown> = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), sourceFingerprint: sourceFingerprint(),
-  nativeVersion: PINNED_VERSION, nativeBinarySha256: hash.digest('hex'), environment: { os: platform(), arch: arch(), node: process.version },
+  nativeVersion: (await adapter.probe()).version, nativeBinarySha256: hash.digest('hex'), environment: { os: platform(), arch: arch(), node: process.version },
   paidModel: false, modelPrompts: 0, passed: false };
 const sessionId = 'native-process-proof';
 let output = '';

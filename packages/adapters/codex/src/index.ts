@@ -1,4 +1,5 @@
 export * from './adapter.js';
+export * from './versions.js';
 export * from './translator.js';
 export type { Frame } from './rpc.js';
 export { JsonRpcStdio } from './rpc.js';
