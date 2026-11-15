@@ -19,7 +19,9 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'command':
       return typeof data['command'] === 'string' && typeof data['status'] === 'string';
     case 'file.read':
-      return typeof data['path'] === 'string';
+      return typeof data['path'] === 'string'
+        && (data['status'] === undefined || ['running', 'completed', 'failed'].includes(String(data['status'])))
+        && (data['error'] === undefined || typeof data['error'] === 'string');
     case 'file.change':
       return Array.isArray(data['changes']) && typeof data['status'] === 'string';
     case 'turn.diff':

@@ -1117,13 +1117,15 @@ export class ClaudeAdapter implements AgentAdapter {
               native: message,
             });
           } else if (item.kind === 'file.read') {
-            this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'], native: message });
+            this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read',
+              data: { ...(item.data as EventData['file.read']), status: failed ? 'failed' : 'completed', ...(failed ? { error: output } : {}) }, native: message });
           } else if (item.kind === 'file.change') {
             this.emit(sessionId, {
               type: 'item.complete',
               itemKey: item.itemKey,
               kind: 'file.change',
-              data: { changes: buildFileChanges(item.name, item.input), status: block['is_error'] === true ? 'failed' : 'completed' },
+              data: { changes: failed ? [] : buildFileChanges(item.name, item.input), status: failed ? 'failed' : 'completed',
+                ...(failed ? { path: String(item.input['file_path'] ?? item.input['path'] ?? ''), error: output } : {}) },
               native: message,
             });
           } else {

@@ -1,5 +1,6 @@
 import type { EventData, EventKind, StoredEvent, UsageData } from './events.js';
 import { isBlockingQuestion } from './events.js';
+import { failedFileOperation } from './file-operation.js';
 import type { InputContent } from './input.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
@@ -125,12 +126,12 @@ export function resolveAnswer(events: readonly StoredEvent[]): { itemKey: string
 }
 
 function changesFor(events: readonly StoredEvent[]): TurnView['changes'] {
-  const cumulative = [...events].filter((event) => event.kind === 'turn.diff');
+  const cumulative = [...events].filter((event) => event.kind === 'turn.diff' && !failedFileOperation(event));
   const source = cumulative.length > 0 ? cumulative[cumulative.length - 1] : undefined;
   const lists: EventData['file.change']['changes'][] = source !== undefined
     ? [(source.data as EventData['turn.diff']).changes ?? []]
     : events
-        .filter((event) => event.kind === 'file.change')
+        .filter((event) => event.kind === 'file.change' && !failedFileOperation(event))
         .map((event) => (event.data as EventData['file.change']).changes ?? []);
   const byPath = new Map<string, TurnView['changes'][number]>();
   for (const list of lists) {
@@ -229,8 +230,8 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
   const latestGoal = [...events].reverse().find((event) => event.kind === 'goal');
   const summary = {
     commands: steps.filter((event) => event.kind === 'command').length,
-    reads: steps.filter((event) => event.kind === 'file.read').length,
-    edits: steps.filter((event) => event.kind === 'file.change' || event.kind === 'turn.diff').length,
+    reads: steps.filter((event) => event.kind === 'file.read' && !failedFileOperation(event)).length,
+    edits: steps.filter((event) => (event.kind === 'file.change' || event.kind === 'turn.diff') && !failedFileOperation(event)).length,
     tools: steps.filter((event) => event.kind === 'tool.call').length,
   };
   const startedAt = started?.at ?? userEvent?.at ?? first?.at ?? new Date(0).toISOString();

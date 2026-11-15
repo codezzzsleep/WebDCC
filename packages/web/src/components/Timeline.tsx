@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData, displayCodexAsyncReply } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -214,7 +214,8 @@ function TurnView({
               </ErrorBoundary>
             ))
           : steps
-              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey))
+              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey)
+                || failedFileOperation(event))
               .map((event) => (
                 <ErrorBoundary key={`always-${event.itemKey}-${event.seq}`} label="timeline-item">
                   <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
@@ -444,7 +445,8 @@ function StepRow({
       const data = event.data as EventData['file.read'];
       return (
         <div className={className}>
-          <StepLine icon="fileText" label="读取" detail={data.label ?? data.path} />
+          <StepLine icon="fileText" label={failedFileOperation(event) ? '读取失败' : '读取'} detail={data.label ?? data.path} failed={failedFileOperation(event)} />
+          {fileOperationError(event) === undefined ? null : <pre className="output">{fileOperationError(event)}</pre>}
         </div>
       );
     }
@@ -452,16 +454,17 @@ function StepRow({
       const data = event.data as EventData['file.change'];
       const first = data.changes[0];
       const detail =
-        first === undefined ? '' : data.changes.length > 1 ? `${first.path} 等 ${data.changes.length} 个文件` : first.path;
+        first === undefined ? data.path ?? '' : data.changes.length > 1 ? `${first.path} 等 ${data.changes.length} 个文件` : first.path;
       return (
         <div className={className}>
           <StepLine
             icon="edit"
-            label="编辑"
+            label={failedFileOperation(event) ? '编辑失败' : '编辑'}
             detail={detail}
-            failed={data.status === 'failed'}
-            {...(first?.diffFileId === undefined ? {} : { onClick: () => onOpenDiff(first.diffFileId ?? '', first.path) })}
+            failed={failedFileOperation(event)}
+            {...(failedFileOperation(event) || first?.diffFileId === undefined ? {} : { onClick: () => onOpenDiff(first.diffFileId ?? '', first.path) })}
           />
+          {fileOperationError(event) === undefined ? null : <pre className="output">{fileOperationError(event)}</pre>}
         </div>
       );
     }
