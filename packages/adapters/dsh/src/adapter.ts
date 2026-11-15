@@ -27,7 +27,8 @@ import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestion
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
 import type { DshHistoryRecord, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
 import { DshHistoryBridge, type DshOpening } from './history.js';
-import { DshAssistantBridge } from './assistant.js';
+import { DshAssistantBridge, failedDshAttemptDetails } from './assistant.js';
+import { DshRetryDisplay } from './retry.js';
 import { readDshHostIdentity, requireDshBaseline, type DshHostIdentity } from './identity.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
@@ -256,6 +257,7 @@ interface SessionRuntime {
   streamedReasoning: boolean;
   generationStartedAt: number | null;
   frameSeq: number;
+  retries?: DshRetryDisplay;
   assistantBridge?: DshAssistantBridge;
   assistantBuffered?: Record<string, unknown>[];
   assistantKeys?: Set<string>;
@@ -1423,6 +1425,14 @@ export class DshAdapter implements AgentAdapter {
     };
 
     switch (type) {
+      case 'llm/retry':
+      case 'llm/retry-started': {
+        const retries = runtime.retries ??= new DshRetryDisplay();
+        const view = type === 'llm/retry' ? retries.scheduled(data) : retries.started(data);
+        if (view === undefined) complete(`unknown-${type}-${nativeSeq}`, 'unknown', { nativeType: type });
+        else complete(view.itemKey, 'notice', view.data);
+        return;
+      }
       case 'request/header': {
         const header = data['header'] as { config?: { provider?: string; model?: string; reasoningEffort?: string } } | undefined;
         if (header?.config !== undefined) runtime.modelObservation = { ...header.config, source: 'request/header', nativeSeq };
@@ -1471,10 +1481,27 @@ export class DshAdapter implements AgentAdapter {
         const reason = (data['reason'] ?? {}) as { kind?: string };
         const interrupted = reason.kind === 'interrupted' || reason.kind === 'cancelled' || reason.kind === 'aborted';
         const status = interrupted ? 'interrupted' : reason.kind === 'failed' || reason.kind === 'error' ? 'failed' : 'completed';
+        for (const view of runtime.retries?.ended(data, status) ?? []) complete(view.itemKey, 'notice', view.data);
         this.emit(sessionId, { type: 'turn.end', nativeTurnId: this.nativeTurnId(data), status, native });
         return;
       }
+      case 'assistant/attempt': {
+        this.cancelAssistantAttempt(sessionId, runtime);
+        let details: string | undefined;
+        try {
+          if (!Array.isArray(data['stream'])) throw new Error('Missing assistant attempt stream');
+          details = failedDshAttemptDetails(data['stream']);
+        } catch {
+          complete(`unknown-attempt-${nativeSeq}`, 'unknown', { nativeType: type }); return;
+        }
+        if (details === undefined) complete(`internal-attempt-${nativeSeq}`, 'internal', { nativeType: type });
+        else complete(`failed-attempt-${nativeSeq}`, 'notice', {
+          level: 'warning', text: '本次模型请求未完成；保留失败前的部分输出。', nativeType: type, details,
+        });
+        return;
+      }
       case 'assistant/message': {
+        if (data['interrupted'] !== true) for (const view of runtime.retries?.succeeded(data) ?? []) complete(view.itemKey, 'notice', view.data);
         const message = (data['message'] ?? {}) as { content?: Record<string, unknown>[] };
         const content = message.content ?? [];
         const text = content.filter((block) => block['type'] === 'text').map((block) => String(block['text'] ?? '')).join('\n');
