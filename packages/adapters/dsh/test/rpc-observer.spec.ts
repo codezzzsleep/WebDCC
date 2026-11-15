@@ -198,6 +198,34 @@ it('keeps the received native result when inbound capture fails and revokes subs
   } finally { await host.close(); await server.close(); }
 });
 
+it('records a fenced old runtime response without revoking the replacement runtime write admission', async () => {
+  let finish: (() => void) | undefined;
+  const server = await rpcServer((request, response) => {
+    const value = request['method'] === 'session/state' ? { cursor: 0, active: true, running: false, queue: [], pendingInput: [] } : 'native-result';
+    const reply = () => response.end(JSON.stringify({ type: 'server-response', rpcId: request['rpcId'], result: { ok: true, value } }));
+    if (server.requests.length === 1) finish = reply; else reply();
+  });
+  const local: TraceFrame[] = []; const global: TraceFrame[] = []; const replacement: TraceFrame[] = [];
+  const { harness } = capturedAdapter(local, global);
+  harness.nativeSinks.set('web-A', { record: frame => { local.push(frame); return { envelopeId: local.length, accepted: frame.dir !== 'in' }; } });
+  const host = new DshHostClient(server.endpoint);
+  try {
+    const pending = harness.call(host, 'session/state', { request: { sessionId: 'native-A' } });
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    const nextRuntime = { nativeId: 'native-A' };
+    harness.sessions.set('web-A', nextRuntime);
+    harness.nativeSinks.set('web-A', { record: frame => { replacement.push(frame); return { envelopeId: 999, accepted: true }; } });
+    const release = finish!; finish = undefined; release();
+    expect(await pending).toMatchObject({ running: false, cursor: 0 });
+    expect(local.filter(frame => frame.ch === 'rpc:session/state')).toHaveLength(2);
+    expect(replacement).toHaveLength(0);
+    expect(nextRuntime).not.toHaveProperty('envelopeId');
+    expect(await harness.call(host, 'commands/execute', args)).toBe('native-result');
+    expect(replacement.filter(frame => frame.ch === 'rpc:commands/execute')).toHaveLength(2);
+    expect(server.requests).toHaveLength(2);
+  } finally { finish?.(); await host.close(); await server.close(); }
+});
+
 it('an ambiguous native id stays global and a delayed response cannot acquire a replacement Session owner', async () => {
   let finish: (() => void) | undefined;
   const server = await rpcServer((request, response) => {

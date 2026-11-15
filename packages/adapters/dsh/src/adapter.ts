@@ -1001,12 +1001,17 @@ export class DshAdapter implements AgentAdapter {
     const epoch = this.hostEpoch; const generation = this.muxGeneration;
     const sink = owner === '' ? this.globalNativeSink : this.nativeSinks.get(owner);
     const runtime = this.sessions.get(owner);
+    const currentCapture = (): boolean => this.hostEpoch === epoch && this.muxGeneration === generation
+      && (runtime === undefined || this.sessions.get(owner) === runtime);
     return client.rpc<T>(endpoint, args, observation => {
       if (observation.dir !== 'in') return;
-      if (sink !== undefined && observation.capture.coverage !== 'complete') this.rpcWritesBlocked = true;
+      // A closed owner still receives its original rejected evidence. It
+      // cannot revoke admission for the replacement runtime or Host.
+      if (currentCapture() && sink !== undefined && observation.capture.coverage !== 'complete') this.rpcWritesBlocked = true;
       try {
-        if (!this.recordRpc(owner, observation, host, epoch, generation, sink, runtime, inputReference)) this.rpcWritesBlocked = true;
-      } catch { this.rpcWritesBlocked = true; }
+        const accepted = this.recordRpc(owner, observation, host, epoch, generation, sink, runtime, inputReference);
+        if (!accepted && currentCapture()) this.rpcWritesBlocked = true;
+      } catch { if (currentCapture()) this.rpcWritesBlocked = true; }
       // The response has already arrived. A failed observer revokes later
       // writes and must not replace this native result with an invented error.
     }, observation => {
