@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createReadStream } from 'node:fs';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { chromium } from '@playwright/test';
 import { expect, it } from 'vitest';
@@ -23,7 +24,7 @@ async function terminalBrowserFixture(options: Parameters<typeof createTerminalF
   const ctx = await createTerminalFixture(options);
   const web = await mkdtemp(join(tmpdir(), 'wdcc-terminal-browser-'));
   try {
-    await build({ stdin: { contents: `import {createRoot} from 'react-dom/client'; import {NativeSurface} from './src/components/NativeSurface.tsx'; createRoot(document.getElementById('root')).render(<NativeSurface sessionId=${JSON.stringify(ctx.source.id)} agent=${JSON.stringify(options.agent ?? 'codex')} initialCommand={${JSON.stringify(options.initialCommand)}} />);`, resolveDir: '/root/WebDCC-repair/packages/web', loader: 'tsx' }, bundle: true, outfile: join(web, 'ui.js'), format: 'esm', platform: 'browser', jsx: 'automatic' });
+    await build({ stdin: { contents: `import {createRoot} from 'react-dom/client'; import {NativeSurface} from './src/components/NativeSurface.tsx'; createRoot(document.getElementById('root')).render(<NativeSurface sessionId=${JSON.stringify(ctx.source.id)} agent=${JSON.stringify(options.agent ?? 'codex')} initialCommand={${JSON.stringify(options.initialCommand)}} />);`, resolveDir: fileURLToPath(new URL('../packages/web/', import.meta.url)), loader: 'tsx' }, bundle: true, outfile: join(web, 'ui.js'), format: 'esm', platform: 'browser', jsx: 'automatic' });
   } catch (error) { await ctx.close(); await rm(web, { recursive: true, force: true }); throw error; }
   const app = Fastify(); const token = 'isolated-terminal-browser-token'; await app.register(websocket);
   app.get('/', async (request, reply) => {
@@ -78,7 +79,7 @@ it('operates the real PTY through source xterm, rejects HTML, and refreshes with
 
 it('operates fixed Codex 0.167.0 native keymap/theme/vim in Chromium without a model request', async () => {
   const sourceFingerprint = await nativeTerminalSourceFingerprint(); let passed = false;
-  const ctx = await terminalBrowserFixture({ nativeExecutable: '/root/WebDCC-repair/.artifacts/native-baseline/package/vendor/x86_64-unknown-linux-musl/bin/codex', initialCommand: '/keymap' });
+  const ctx = await terminalBrowserFixture({ nativeExecutable: process.env['WDCC_CODEX_BASELINE_BINARY'] ?? fileURLToPath(new URL('../.artifacts/native-baseline/package/vendor/x86_64-unknown-linux-musl/bin/codex', import.meta.url)), initialCommand: '/keymap' });
   let modelRequests = 0;
   const model = createServer((request, reply) => { modelRequests++; request.resume(); reply.writeHead(503, { 'content-type': 'application/json' }); reply.end('{"error":{"message":"No model requests are permitted in this terminal control test"}}'); });
   await new Promise<void>(resolve => model.listen(0, '127.0.0.1', resolve)); const modelAddress = model.address();

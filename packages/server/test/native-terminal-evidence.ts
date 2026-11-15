@@ -3,6 +3,9 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 const SOURCE_FILES = [
   'packages/server/src/auth.ts', 'packages/server/src/process-identity.ts', 'packages/server/src/native-owners.ts',
@@ -16,16 +19,16 @@ const SOURCE_FILES = [
 ];
 export async function nativeTerminalSourceFingerprint(): Promise<string> {
   const hash = createHash('sha256');
-  for (const path of SOURCE_FILES) { hash.update(path); hash.update(await readFile(path)); }
+  for (const path of SOURCE_FILES) { hash.update(path); hash.update(await readFile(join(REPO_ROOT, path))); }
   return hash.digest('hex');
 }
 export async function writeNativeTerminalEvidence(name: string, sourceFingerprint: string, details: Record<string, unknown>): Promise<void> {
-  const { stdout } = await promisify(execFile)('git', ['rev-parse', 'HEAD'], { cwd: '/root/WebDCC-repair' });
+  const { stdout } = await promisify(execFile)('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT });
   const currentFingerprint = await nativeTerminalSourceFingerprint();
   const report = { recordedAt: new Date().toISOString(), sourceCommit: stdout.trim(), sourceFingerprint,
     sourceFiles: SOURCE_FILES, sourceStableDuringTest: sourceFingerprint === currentFingerprint,
     scope: 'current source components + native terminal routes at an isolated temporary origin; production App wiring is separate',
     ...details, state: sourceFingerprint === currentFingerprint ? details['state'] : 'source-changed-during-test' };
-  await mkdir('.artifacts/native-terminal-validation', { recursive: true });
-  await writeFile(join('.artifacts/native-terminal-validation', `${name}-validation.json`), JSON.stringify(report, null, 2) + '\n');
+  await mkdir(join(REPO_ROOT, '.artifacts/native-terminal-validation'), { recursive: true });
+  await writeFile(join(REPO_ROOT, '.artifacts/native-terminal-validation', `${name}-validation.json`), JSON.stringify(report, null, 2) + '\n');
 }

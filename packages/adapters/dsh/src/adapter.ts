@@ -30,6 +30,7 @@ import { DshHistoryBridge, type DshOpening } from './history.js';
 import { DshAssistantBridge, failedDshAttemptDetails } from './assistant.js';
 import { DshRetryDisplay } from './retry.js';
 import { readDshHostIdentity, requireDshBaseline, type DshHostIdentity } from './identity.js';
+import slashCatalog from './slash-catalog.json' with { type: 'json' };
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
@@ -867,6 +868,13 @@ export class DshAdapter implements AgentAdapter {
   }
 
   /** 斜杠命令目录（F8 / SL-02）：来自 DSH 的 commands/list */
+  async previewSlashCommands() {
+    await this.ensureSidecar();
+    requireDshBaseline(await this.hostIdentity());
+    return { commands: slashCatalog.commands.map(command => ({ ...command, route: 'native-control' as const, source: `DSH ${slashCatalog.nativeVersion} 基线预览` })), complete: false,
+      reason: '创建前展示 DSH 原生基线指令；发送时创建会话，并按该会话的实际目录核对。' };
+  }
+
   async slashCommands(sessionId: string): Promise<SlashCommand[]> {
     const runtime = this.sessions.get(sessionId);
     const client = await this.ensureSidecar();

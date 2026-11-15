@@ -1,0 +1,47 @@
+{
+  "nativeVersion": "0.2.2-rc.1",
+  "sourceEndpoint": "commands/list",
+  "source": "Default isolated native Web Host descriptor capture; project scope is re-read after creation",
+  "commands": [
+    {
+      "name": "/compact",
+      "route": "native-control",
+      "supportsAttachments": false,
+      "description": "Compact older conversation history"
+    },
+    {
+      "name": "/export",
+      "route": "native-control",
+      "supportsAttachments": false,
+      "description": "Download this Session log as a ZIP archive"
+    },
+    {
+      "name": "/feedback",
+      "route": "native-control",
+      "argumentHint": "<text>",
+      "supportsAttachments": false,
+      "description": "Record feedback about this session"
+    },
+    {
+      "name": "/goal",
+      "route": "native-control",
+      "argumentHint": "[<objective>|clear|edit <objective>|pause|resume]",
+      "supportsAttachments": true,
+      "description": "Set or view the goal for a long-running task"
+    },
+    {
+      "name": "/permission",
+      "route": "native-control",
+      "argumentHint": "<preset>",
+      "supportsAttachments": false,
+      "description": "Switch the permission preset (sandbox mode + approval policy)"
+    },
+    {
+      "name": "/plan",
+      "route": "native-control",
+      "argumentHint": "[off|message]",
+      "supportsAttachments": true,
+      "description": "Enter or leave plan mode"
+    }
+  ]
+}

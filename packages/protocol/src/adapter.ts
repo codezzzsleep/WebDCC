@@ -7,7 +7,7 @@ import type { NativeFrameSink } from './native-events.js';
 import type { NativeObservation } from './native-observation.js';
 import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } from './native-controls.js';
 import type { InputSkillPart, ResolvedInputContent } from './input.js';
-import type { SlashCommand, SlashControlResult } from './slash.js';
+import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './slash.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -166,7 +166,7 @@ export interface AgentAdapter {
   /** 斜杠命令目录（F8）：Claude 来自 init 消息，DSH 来自 commands/list */
   slashCommands?(sessionId: string): Promise<SlashCommand[]>;
   /** Read command names before creation without activating a native writer. */
-  previewSlashCommands?(cwd?: string): Promise<SlashCommand[]>;
+  previewSlashCommands?(cwd?: string): Promise<SlashCommand[] | SlashCommandPreview>;
   executeSlashControl?(sessionId: string, line: string, options?: { replaceGoal?: boolean; editGoal?: boolean; contentParts?: ResolvedInputContent }): Promise<SlashControlResult>;
   /** Read-only mode discovery; it must not activate or resume a native writer. */
   inputModes?(sessionId?: string): Promise<CodexInputModeCatalog>;
