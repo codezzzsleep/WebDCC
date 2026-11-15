@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.ts';
 import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.ts';
 import { DshAdapter } from '../packages/adapters/dsh/src/adapter.ts';
+import { createRunIdentity } from './lib/gate-report.ts';
 
 const path = process.argv[2];
 assert(path, 'Supply one immutable captured real-run report');
@@ -62,6 +63,7 @@ const result = {
   formatVersion: 1, mode: 'offline replay of captured real official native behavior',
   sourceReportSha256: hash(bytes), traceSha256: hash(traceBytes), agent: report.agent,
   deployment: report.deployment, nativeVersions: report.nativeVersions, provider: report.provider,
+  replayIdentity: createRunIdentity(),
   additionalModelRequests: 0, originalStatus: report.status, nativeFrames: native.length,
   originalProjection: projection(mapped), replayProjection: projection(replayed),
   identityNormalization: 'none; native tool/item/call IDs and event sequence are retained',
