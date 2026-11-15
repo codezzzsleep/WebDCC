@@ -171,7 +171,7 @@ export function defaultChoice(agent: string, meta: AgentMeta | undefined, provid
     const models = (meta?.models ?? []).map((model) => model.id);
     let model = models[0] ?? '';
     if (storedModel !== undefined && storedModel.providerId === null && models.includes(storedModel.model)) model = storedModel.model;
-    const declared = meta?.models.find(option => option.id === model)?.reasoningEfforts ?? [];
+    const declared = meta?.models?.find(option => option.id === model)?.reasoningEfforts ?? [];
     const reasoning = rememberedReasoningLevel !== undefined && declared.includes(rememberedReasoningLevel)
       ? { reasoningEffort: rememberedReasoningLevel } : {};
     return { providerId: null, model, ...reasoning };
