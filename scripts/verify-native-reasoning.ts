@@ -47,7 +47,8 @@ async function until(predicate: () => boolean, message: string): Promise<void> {
 }
 try {
   const adapter = new CodexAdapter({ command: binary, configOverrides: overrides, env });
-  assert.equal((await adapter.probe()).version, PINNED_VERSION);
+  const probe = await adapter.probe(); assert.equal(probe.compatible, true);
+  evidence['nativeVersion'] = probe.version;
   const direct: Frame[] = [];
   rpc = JsonRpcStdio.start({ command: binary, args: ['app-server', ...overrides.flatMap(value => ['-c', value])], env, cwd: workspacePath });
   rpc.onNotification(frame => direct.push(frame));

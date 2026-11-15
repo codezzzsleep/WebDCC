@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ManagedProcessIdentity } from '@webdcc/protocol';
 import { processState } from './process-identity.js';
+import { isSupportedCodexVersion } from '@webdcc/adapter-codex';
 
 export type NativeTerminalAgent = 'codex' | 'claude-code';
 export type NativeSurfaceIntent = 'new-native' | 'same-session';
@@ -78,7 +79,7 @@ export function nativeTerminalArgv(target: NativeTerminalTarget, intent: NativeS
 }
 
 export async function validateNativeTerminalTarget(target: NativeTerminalTarget, intent: NativeSurfaceIntent): Promise<NativeTerminalTarget> {
-  if (!(target.agent in PINNED) || target.nativeVersion !== PINNED[target.agent]) throw nativeSurfaceError('原生 CLI 版本与锁定基线不一致');
+  if (!(target.agent in PINNED) || (target.agent === 'codex' ? !isSupportedCodexVersion(target.nativeVersion) : target.nativeVersion !== PINNED[target.agent])) throw nativeSurfaceError('原生 CLI 版本不在已审核兼容范围内');
   if (!target.sourceSessionId || !target.ownerSessionId) throw nativeSurfaceError('缺少授权的 Web 会话身份', 400);
   if (intent === 'new-native' && target.sourceSessionId === target.ownerSessionId) throw nativeSurfaceError('新原生会话必须使用独立的 Web 会话身份');
   if (intent === 'same-session' && (target.sourceSessionId !== target.ownerSessionId || !target.nativeId)) throw nativeSurfaceError('同会话接管缺少原生身份');
@@ -94,7 +95,7 @@ export async function validateNativeTerminalTarget(target: NativeTerminalTarget,
   if (intent === 'same-session') validateNativeTakeover(canonical);
   const result = await exec(executable, ['--version'], { cwd, env: canonical.env, timeout: 10_000, maxBuffer: 16_384 });
   const version = (result.stdout + result.stderr).match(/\b(\d+\.\d+\.\d+)\b/)?.[1];
-  if (version !== PINNED[target.agent]) throw nativeSurfaceError(`实际原生 CLI 版本 ${version ?? 'unknown'} 与锁定基线不一致`);
+  if (version !== target.nativeVersion) throw nativeSurfaceError(`实际原生 CLI 版本 ${version ?? 'unknown'} 与授权版本 ${target.nativeVersion} 不一致`);
   nativeTerminalArgv(canonical, intent);
   return canonical;
 }

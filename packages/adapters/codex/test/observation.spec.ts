@@ -10,7 +10,7 @@ it('NP-04 Codex observes full paginated turns in a real RPC child without resume
   await writeFile(command, `#!${process.execPath}
 import { createInterface } from 'node:readline';
 import { appendFileSync } from 'node:fs';
-if (process.argv.includes('--version')) { process.stdout.write('codex-cli 0.167.0\\n'); process.exit(0); }
+if (process.argv.includes('--version')) { process.stdout.write('codex-cli 0.169.0\\n'); process.exit(0); }
 const thread = { id: 'thread', sessionId: 'thread', cliVersion: '0.167.0', createdAt: 1, updatedAt: 1, cwd: ${JSON.stringify(directory)}, ephemeral: false, modelProvider: 'fixture', preview: '', projectId: null, source: 'appServer', status: { type: 'notLoaded' }, turns: [] };
 createInterface({ input: process.stdin }).on('line', line => {
  const frame = JSON.parse(line); appendFileSync(process.env.WDCC_OBSERVE_RECORD, line + '\\n');
@@ -27,7 +27,7 @@ createInterface({ input: process.stdin }).on('line', line => {
   try {
     const adapter = new CodexAdapter({ command, env: { ...process.env, WDCC_OBSERVE_RECORD: record } });
     const result = await adapter.observe({ sessionId: 's', nativeId: 'thread', cwd: directory, providerId: null });
-    expect(result).toMatchObject({ authority: 'history-only', state: 'unknown', releasePolicy: 'managed-process' });
+    expect(result).toMatchObject({ authority: 'history-only', state: 'unknown', releasePolicy: 'managed-process', version: '0.169.0' });
     expect(result.turns).toHaveLength(2);
     expect(result.turns[0]).toMatchObject({ itemsComplete: true, clientCommandIds: ['command'], items: [{ kind: 'user.message', data: { text: '  原文  ', clientCommandId: 'command' } }] });
     const { readFile } = await import('node:fs/promises');

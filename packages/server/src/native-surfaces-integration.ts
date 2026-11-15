@@ -89,8 +89,10 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
           } catch (error) { await rm(settingsDirectory, { recursive: true, force: true }); throw error; }
         }
       }
+      const nativeProbe = source.agent === 'codex' ? await adapter.probe() : undefined;
+      if (nativeProbe !== undefined && (!nativeProbe.installed || nativeProbe.compatible !== true || !nativeProbe.version)) throw nativeSurfaceError('原生 Codex CLI 版本未确认兼容', 503);
       const authorized: NativeTerminalTarget = { sourceSessionId: sessionId, ownerSessionId: `pending:${sessionId}`, agent: source.agent,
-        executable, nativeVersion: source.agent === 'codex' ? '0.167.0' : '2.1.322', cwd: workspace.path, profilePath, env,
+        executable, nativeVersion: source.agent === 'codex' ? nativeProbe!.version! : '2.1.322', cwd: workspace.path, profilePath, env,
         launchOptions };
       let baseline: NativeIdentitySnapshot;
       try {

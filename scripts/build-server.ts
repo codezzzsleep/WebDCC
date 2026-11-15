@@ -19,7 +19,7 @@ const sdkPackage = JSON.parse(await readFile(join(dirname(require.resolve('@anth
 const packageInfo = JSON.parse(await readFile('package.json', 'utf8')) as { packageManager: string };
 if (sdkPackage.version !== inventory.baseline['claude-code']) throw new Error('SDK 版本与冻结协议不兼容');
 const manifest: BuildManifest = { formatVersion: 1, commit: identity.commit, builtAt: process.env['WDCC_BUILT_AT'] ?? new Date().toISOString(), sourceFingerprint: identity.sourceFingerprint, schemaFingerprint: identity.schemaFingerprint,
-  nativeBaseline: inventory.baseline, database: { minimum: 0, maximum: CURRENT_SCHEMA_VERSION }, toolchain: { node: process.version, packageManager: packageInfo.packageManager, sdk: sdkPackage.version } };
+  nativeBaseline: inventory.baseline, nativeCompatibility: inventory.compatibleVersions, database: { minimum: 0, maximum: CURRENT_SCHEMA_VERSION }, toolchain: { node: process.version, packageManager: packageInfo.packageManager, sdk: sdkPackage.version } };
 await mkdir(output.slice(0, output.lastIndexOf('/')) || '.', { recursive: true });
 await build({
   entryPoints: ['packages/server/src/main.ts'],

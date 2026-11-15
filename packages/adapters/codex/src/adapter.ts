@@ -47,7 +47,8 @@ import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListRespons
 import type { InitializeResponse } from './schema/InitializeResponse.js';
 import { codexNativeCatalog, codexNativeState, executeCodexNativeControl, parseCodexNativeAction } from './native.js';
 
-export const PINNED_VERSION = '0.167.0';
+import { PINNED_VERSION, isSupportedCodexVersion, CODEX_COMPATIBILITY_LABEL } from './versions.js';
+export { PINNED_VERSION } from './versions.js';
 
 export interface CodexAdapterOptions {
   command?: string;
@@ -109,6 +110,7 @@ function endGeneration(runtime: SessionRuntime, turnId: string | undefined, at: 
 }
 
 interface SessionRuntime {
+  nativeVersion: string;
   identity?: RuntimeIdentity;
   envelopeId?: number;
   permissions?: NativePermissionObservation;
@@ -523,7 +525,7 @@ export class CodexAdapter implements AgentAdapter {
     const adapter = new CodexAdapter();
     const replies: unknown[] = [];
     const runtime: SessionRuntime = {
-      nativeId, pid: 0, processToken: 'replay', ready: Promise.resolve(),
+      nativeId, nativeVersion: 'replay', pid: 0, processToken: 'replay', ready: Promise.resolve(),
       rpc: { respond: (id: string | number, result: unknown) => replies.push({ id, result }) } as unknown as JsonRpcStdio,
       cwd: '.', accessMode: null, model: null, reasoningEffort: null, turnId: null,
       frameSeq: 0, turnStartedAt: 0, generationStartedAt: null, approvals: new Map(), lastAssistantText: '', started: new Set(),
@@ -598,14 +600,14 @@ export class CodexAdapter implements AgentAdapter {
       installed: true,
       version,
       pinnedVersion: PINNED_VERSION,
-      compatible: version === PINNED_VERSION,
+      compatible: isSupportedCodexVersion(version),
       auth: 'unknown',
-      notes: version === PINNED_VERSION ? [] : [`版本 ${version} 与锁定版本 ${PINNED_VERSION} 不一致`],
+      notes: isSupportedCodexVersion(version) ? [] : [`版本 ${version} 不在已审核兼容范围 ${CODEX_COMPATIBILITY_LABEL} 内`],
     };
   }
 
   async listModels(): Promise<ModelOption[]> {
-    await this.requirePinnedVersion();
+    const version = await this.requireCompatibleVersion();
     const spec = this.buildLaunchSpec({ sessionId: 'model-catalog', cwd: process.cwd(), providerId: null });
     let frameIndex = 0;
     const rpc = JsonRpcStdio.start({ command: spec.command!, args: spec.args, env: { ...(this.options.env ?? process.env), ...spec.env },
@@ -618,7 +620,7 @@ export class CodexAdapter implements AgentAdapter {
         const result = await nativeRequest(rpc, 'model/list', { limit: 100, ...(cursor === undefined ? {} : { cursor }), includeHidden: false });
         for (const model of result.data) models.push({ id: model.model, label: model.displayName,
           reasoningEfforts: model.supportedReasoningEfforts.map(option => option.reasoningEffort), defaultReasoningEffort: model.defaultReasoningEffort,
-          inputModalities: model.inputModalities, isDefault: model.isDefault, source: `codex:${PINNED_VERSION}:model/list` });
+          inputModalities: model.inputModalities, isDefault: model.isDefault, source: `codex:${version}:model/list` });
         if (result.nextCursor === null) return models;
         if (seen.has(result.nextCursor)) throw new Error('原生模型目录分页游标循环');
         cursor = result.nextCursor; seen.add(cursor);
@@ -630,7 +632,7 @@ export class CodexAdapter implements AgentAdapter {
   /** The pinned CLI owns command names; explicit routes separate native
    * controls, Web pickers and commands requiring its interactive terminal. */
   async slashCommands() {
-    await this.requirePinnedVersion();
+    await this.requireCompatibleVersion();
     return codexSlashCommands;
   }
 
@@ -714,7 +716,7 @@ export class CodexAdapter implements AgentAdapter {
     return { command: this.options.command ?? 'codex', args, env };
   }
 
-  private startProcess(sessionId: string, opts: CreateOpts): SessionRuntime {
+  private startProcess(sessionId: string, opts: CreateOpts, nativeVersion: string): SessionRuntime {
     const spec = this.buildLaunchSpec(opts);
     let traceIndex = 0;
     const traceStarted = this.now();
@@ -738,7 +740,7 @@ export class CodexAdapter implements AgentAdapter {
     });
     const launchEnv = { ...(this.options.env ?? process.env), ...spec.env };
     const profilePath = resolve(opts.cwd, launchEnv['CODEX_HOME'] ?? resolve(launchEnv['HOME'] ?? homedir(), '.codex'));
-    try { if (rpc.child.pid !== undefined) opts.onManagedProcess?.(rpc.child.pid, profilePath, PINNED_VERSION); }
+    try { if (rpc.child.pid !== undefined) opts.onManagedProcess?.(rpc.child.pid, profilePath, nativeVersion); }
     catch (error) { rpc.child.kill('SIGKILL'); void rpc.kill(); throw error; }
     let markReady: () => void = () => undefined;
     const ready = new Promise<void>((resolve) => {
@@ -752,6 +754,7 @@ export class CodexAdapter implements AgentAdapter {
       ready,
       markReady,
       rpc,
+      nativeVersion,
       cwd: opts.cwd,
       accessMode: opts.accessMode ?? null,
       model: opts.model ?? null,
@@ -790,7 +793,7 @@ export class CodexAdapter implements AgentAdapter {
   /** Read rollout history without resuming, changing settings, or sending input.
    * Thread status belongs to this observer, not to another app-server process. */
   async observe(opts: CreateOpts & { nativeId: string }): Promise<NativeObservation> {
-    await this.requirePinnedVersion();
+    const nativeVersion = await this.requireCompatibleVersion();
     const spec = this.buildLaunchSpec({ sessionId: opts.sessionId, cwd: opts.cwd, providerId: null });
     let index = 0;
     const rpc = JsonRpcStdio.start({ command: spec.command!, args: spec.args, cwd: opts.cwd,
@@ -801,7 +804,7 @@ export class CodexAdapter implements AgentAdapter {
       const initialized = await this.handshake(rpc);
       const { thread } = await nativeRequest(rpc, 'thread/read', { threadId: opts.nativeId, includeTurns: false });
       if (thread.id !== opts.nativeId) throw new Error('原生观察返回了不同线程');
-      if (thread.cliVersion !== PINNED_VERSION) throw new Error('原生历史版本与当前锁定协议不一致，不能推断恢复结果');
+      if (!isSupportedCodexVersion(thread.cliVersion)) throw new Error('原生历史版本不在已审核兼容范围内，不能推断恢复结果');
       const turns: NativeObservation['turns'] = [];
       let cursor: string | null = null;
       const cursors = new Set<string>();
@@ -826,7 +829,7 @@ export class CodexAdapter implements AgentAdapter {
         if (cursors.has(cursor)) throw new Error('原生轮次分页游标循环');
         cursors.add(cursor);
       }
-      return { nativeId: thread.id, agent: this.id, cwd: thread.cwd, version: PINNED_VERSION,
+      return { nativeId: thread.id, agent: this.id, cwd: thread.cwd, version: nativeVersion,
         profilePath: initialized.codexHome,
         capturedAt: new Date().toISOString(), state: thread.status.type === 'active' ? 'running' : 'unknown',
         authority: 'history-only', releasePolicy: 'managed-process', turns,
@@ -835,8 +838,8 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async create(opts: CreateOpts): Promise<{ nativeId: string }> {
-    await this.requirePinnedVersion();
-    const runtime = this.startProcess(opts.sessionId, opts);
+    const nativeVersion = await this.requireCompatibleVersion();
+    const runtime = this.startProcess(opts.sessionId, opts, nativeVersion);
     try {
     runtime.codexHome = (await this.handshake(runtime.rpc, true)).codexHome;
     const response = await nativeRequest(runtime.rpc, 'thread/start', buildThreadStartParams(opts));
@@ -851,8 +854,8 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
-    await this.requirePinnedVersion();
-    const runtime = this.startProcess(opts.sessionId, opts);
+    const nativeVersion = await this.requireCompatibleVersion();
+    const runtime = this.startProcess(opts.sessionId, opts, nativeVersion);
     try {
     if (process.env['WDCC_DEBUG_CODEX'] === '1') console.error('[codex] resume process started');
     runtime.codexHome = (await this.handshake(runtime.rpc, true)).codexHome;
@@ -879,9 +882,10 @@ export class CodexAdapter implements AgentAdapter {
     } catch (error) { await this.dispose(opts.sessionId); throw error; }
   }
 
-  private async requirePinnedVersion(): Promise<void> {
+  private async requireCompatibleVersion(): Promise<string> {
     const probe = await this.probe();
-    if (!probe.installed || probe.version !== PINNED_VERSION) throw Object.assign(new Error(`Codex 版本不兼容：需要 ${PINNED_VERSION}，实际 ${probe.version ?? '未知'}`), { statusCode: 503, code: 'native-version-incompatible' });
+    if (!probe.installed || !isSupportedCodexVersion(probe.version)) throw Object.assign(new Error(`Codex 版本不兼容：支持 ${CODEX_COMPATIBILITY_LABEL}，实际 ${probe.version ?? '未知'}`), { statusCode: 503, code: 'native-version-incompatible' });
+    return probe.version!;
   }
 
   async send(sessionId: string, input: UserInput): Promise<void> {
@@ -963,7 +967,7 @@ export class CodexAdapter implements AgentAdapter {
       if (this.sessions.get(sessionId!) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('模式目录属于旧运行实例'), { statusCode: 409 });
       return { modes: result.data.flatMap(preset => preset.mode === 'plan' || preset.mode === 'default' ? [{ id: preset.mode, label: preset.mode === 'plan' ? '计划' : '默认' }] : []), observedMode: runtime.observedMode ?? null };
     }
-    await this.requirePinnedVersion();
+    await this.requireCompatibleVersion();
     const rpc = JsonRpcStdio.start({ command: this.options.command ?? 'codex',
       args: ['app-server', ...(this.options.configOverrides ?? []).flatMap(value => ['-c', value])], env: { ...(this.options.env ?? process.env) } });
     try {
@@ -1107,7 +1111,7 @@ export class CodexAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     await runtime.ready;
     const current = (): void => { if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已更换或断开'), { statusCode: 409 }); };
-    return { nativeId: runtime.nativeId, version: PINNED_VERSION, ...(await codexNativeCatalog(runtime.rpc, runtime.nativeId, runtime.cwd, current)) };
+    return { nativeId: runtime.nativeId, version: runtime.nativeVersion, ...(await codexNativeCatalog(runtime.rpc, runtime.nativeId, runtime.cwd, current)) };
   }
 
   async executeNativeControl(sessionId: string, value: unknown): Promise<unknown> {
