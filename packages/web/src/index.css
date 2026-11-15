@@ -1001,7 +1001,12 @@ button.step-line:hover {
 .approval-card.resolved svg {
   color: var(--success);
 }
+.approval-card.resolved .approval-result {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .approval-card.resolved .what {
+  flex: 1 1 0;
   font-family: var(--font-code);
   font-size: 13px;
   color: var(--text-2);
