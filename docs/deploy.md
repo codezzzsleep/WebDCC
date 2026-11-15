@@ -47,6 +47,8 @@ pnpm install
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
 
+工作区文本保存使用 Linux 的 `/proc/self/fd` 核验根目录、父目录和文件描述符；其他平台或缺少该挂载时返回 501，不退回字符串路径写入。原子替换后路径、内容或目录同步无法确认时返回 409，错误说明文件已经替换，操作记录保留实际写入 hash/bytes 和 `replaced: true`。核对原目录与当前文件后再重新加载，不自动重试或回滚。外部目录移动仍可能与文件系统操作并发，这些已发生的原目录写入需要保留为失败证据。
+
 
 ## 本机按生产方式运行（M7 已验收）
 
