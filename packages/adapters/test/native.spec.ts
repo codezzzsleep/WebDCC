@@ -5,7 +5,9 @@ import {
   CodexAdapter,
 } from '../codex/src/adapter.js';
 import { ClaudeAdapter } from '../claude/src/adapter.js';
+import { codexSlashCommands } from '../codex/src/slash.js';
 import { ALLOWED_ENDPOINTS, DshAdapter, isAllowedCommandLine, isAllowedEndpoint, providerForModel } from '../dsh/src/adapter.js';
+import frozenDshCatalog from '../../../fixtures/dsh/host-api-catalog.json' with { type: 'json' };
 
 const FORBIDDEN = ['baseInstructions', 'developerInstructions'];
 const ALLOWED_CONFIG_KEYS = [
@@ -80,8 +82,8 @@ describe('原装原则：Codex（SPEC 3.3）', () => {
     });
   });
 
-  it('Codex 指令目录至少提供 WebDCC 映射的 /model', async () => {
-    expect(await new CodexAdapter().slashCommands()).toContainEqual({ name: '/model', description: '打开 Provider 和模型选择' });
+  it('固定的 Codex 原生目录保留 /model 的显式网页路由', () => {
+    expect(codexSlashCommands.find(command => command.name === '/model')).toMatchObject({ route: 'web', action: 'model' });
   });
 });
 
@@ -144,33 +146,14 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
     expect(spec.env).toEqual({});
   });
 
-  it('端点白名单就是 5.4.8 列出的那些', () => {
-    expect([...ALLOWED_ENDPOINTS].sort()).toEqual(
-      [
-        '$events',
-        '$events/result',
-        'commands/execute',
-        'commands/list',
-        'subagents/prompt',
-        'subagents/interruptByUser',
-        'session/cancel',
-        'session/create',
-        'session/follow',
-        'session/list',
-        'session/modelCatalog',
-        'session/page',
-        'session/prompt',
-        'session/selectModel',
-        'settings/describe',
-        'settings/update',
-        'credentials/set',
-        'userQuestions/answer',
-        'workspace/create',
-        'workspace/follow',
-      ].sort(),
-    );
+  it('端点白名单遵循原生基线；子 Agent 使用 NP-11 的父身份方法', () => {
+    const transportExtensions = new Set(['$events', '$events/result']);
+    for (const endpoint of ALLOWED_ENDPOINTS) expect(transportExtensions.has(endpoint) || Object.hasOwn(frozenDshCatalog.endpoints, endpoint), endpoint).toBe(true);
+    expect(ALLOWED_ENDPOINTS.size).toBeLessThan(Object.keys(frozenDshCatalog.endpoints).length);
+    expect(isAllowedEndpoint('subagents/interruptByParent')).toBe(true);
+    expect(isAllowedEndpoint('subagents/interruptByUser')).toBe(false);
     expect(isAllowedEndpoint('host/describe')).toBe(false);
-    expect(isAllowedEndpoint('settings/mutate')).toBe(false);
+    expect(isAllowedEndpoint('settings/mutate')).toBe(true);
     expect(isAllowedEndpoint('pluginManager/install')).toBe(false);
   });
 

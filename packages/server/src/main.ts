@@ -10,7 +10,7 @@ import { DshConnectionStore } from './dsh-connection.js';
 import { Store } from './store.js';
 import { assertTestIsolation } from './test-isolation.js';
 import { discoverRunningDsh } from './dsh-discovery.js';
-import { attachToDsh } from '@webdcc/adapter-dsh';
+import { attachToDshCredentials } from '@webdcc/adapter-dsh';
 import { InteractionRecorder } from './interaction-recorder.js';
 import { ModelRecording } from './model-recording.js';
 import { dirname } from 'node:path';
@@ -44,8 +44,9 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   await providers.init();
   const dshStore = new DshConnectionStore(config.dataDir);
   await dshStore.init();
-  const recorder = config.recordInteractions === false || config.dataDir === ':memory:' || process.env['WDCC_TEST_HOOKS'] === '1' ? undefined : new InteractionRecorder(config.dataDir);
-  await recorder?.init();
+  let candidateRecorder = config.recordInteractions !== true || config.dataDir === ':memory:' || process.env['WDCC_TEST_HOOKS'] === '1' ? undefined : new InteractionRecorder(config.dataDir, config.diagnosticLimits);
+  try { await candidateRecorder?.init(); } catch { candidateRecorder = undefined; process.stderr.write('webdcc: 诊断目录不可用，继续使用原生运行配置\n'); }
+  const recorder = candidateRecorder;
   recorder?.addSecret(config.token);
   const modelRecording = recorder === undefined ? undefined : new ModelRecording(recorder);
   const manager = new SessionManager(store, {
@@ -72,10 +73,10 @@ export async function start(config: Config = loadConfig(), options: ServerOption
       const discovered = await discoverRunningDsh({ service: process.env['WDCC_DSH_SERVICE'] }).catch(() => null);
       if (discovered !== null) {
         try {
-          const cookie = await attachToDsh(discovered.origin, discovered.token);
+          const credentials = await attachToDshCredentials(discovered.origin, discovered.token);
           connection = {
             url: discovered.origin,
-            cookie,
+            ...credentials,
             connectedAt: new Date().toISOString(),
           };
           await dshStore.save(connection);
@@ -87,10 +88,15 @@ export async function start(config: Config = loadConfig(), options: ServerOption
       }
     }
     adapters = await build({
-      ...(recorder === undefined ? {} : { traceSink: (sessionId: string) => recorder.sink(sessionId), nativeRecorder: { directory: recorder.directory, module: process.env['WDCC_NATIVE_RECORDER_MODULE'] ?? join(dirname(fileURLToPath(import.meta.url)), 'native-http-recorder.cjs') } }),
+      ...(recorder === undefined ? {} : { traceSink: (sessionId: string) => recorder.sink(sessionId), nativeRecorder: { directory: recorder.directory, module: process.env['WDCC_NATIVE_RECORDER_MODULE'] ?? join(dirname(fileURLToPath(import.meta.url)), 'native-http-recorder.cjs'), env: {
+        WDCC_TRACE_MAX_CAPTURE_BYTES: String(config.diagnosticLimits?.maxCaptureBytes ?? 8 * 1024 * 1024),
+        WDCC_TRACE_MAX_CAPTURE_CHUNKS: String(config.diagnosticLimits?.maxCaptureChunks ?? 4096),
+        WDCC_TRACE_MAX_FILE_BYTES: String(config.diagnosticLimits?.maxFileBytes ?? 64 * 1024 * 1024),
+        WDCC_TRACE_MAX_QUEUED_BYTES: String(config.diagnosticLimits?.maxQueuedBytes ?? 32 * 1024 * 1024),
+      } } }),
       dsh: {
         mode: dshMode,
-        ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie }),
+        ...(connection === null ? {} : { url: connection.url, cookie: connection.cookie, browserCookie: connection.browserCookie }),
       },
     });
   }
@@ -112,7 +118,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
   manager.setHooks({
     onFeed: (sessionId, patch, feedSeq) => hub.broadcastFeed(sessionId, patch, feedSeq),
     onEvent: (event) => hub.broadcastEvent(event),
-    onDelta: (sessionId, itemKey, field, append) => hub.broadcastDelta(sessionId, itemKey, field, append),
+    onDelta: (sessionId, itemKey, field, append, turnId) => hub.broadcastDelta(sessionId, itemKey, field, append, turnId),
     onUpdate: (sessionId, itemKey, data, turnId) => hub.broadcastUpdate(sessionId, itemKey, data, turnId),
     onStatus: () => undefined,
   });

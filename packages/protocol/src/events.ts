@@ -1,4 +1,6 @@
 /** 统一事件模型（SPEC 第 6 节） */
+import type { ElicitationForm, ElicitationAction } from './elicitation.js';
+import type { InputContent, InputIntent } from './input.js';
 
 export type EventKind =
   | 'user.message'
@@ -58,13 +60,26 @@ export interface ApprovalOption {
 
 export interface QuestionItem {
   questionId: string;
+  /** Native multi-question request identity. */
+  groupId?: string;
   prompt: string;
   header?: string;
   options?: { id: string; label: string; description?: string }[];
   multiSelect?: boolean;
   allowsFreeText?: boolean;
+  isSecret?: boolean;
+  /** Native blocking declaration; absence in old events means blocking. */
+  isBlocking?: boolean;
+  elicitation?: ElicitationForm;
+  outcome?: ElicitationAction;
   toolCallId?: string;
   status?: 'pending' | 'answered' | 'skipped';
+  resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';
+  submission?: 'sent' | 'uncertain' | 'collected';
+}
+
+export function isBlockingQuestion(question: Pick<QuestionItem, 'isBlocking' | 'status'>): boolean {
+  return question.isBlocking !== false && question.status !== 'answered' && question.status !== 'skipped';
 }
 
 export interface PlanItem {
@@ -73,7 +88,7 @@ export interface PlanItem {
 }
 
 export interface EventData {
-  'user.message': { text: string; images?: string[]; clientCommandId?: string };
+  'user.message': { text: string; images?: string[]; contentParts?: InputContent; intent?: InputIntent; clientCommandId?: string };
   /** `phase` is retained for old rows. New translations preserve the native
    * phase in `nativePhase`; the turn reducer is the sole final-answer authority. */
   'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string };
@@ -99,7 +114,10 @@ export interface EventData {
   'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' };
   plan: { items: PlanItem[] };
   /** Codex 的"目标"（thread/goal/updated）：原生界面会显示，WebDCC 也必须显示 */
-  goal: { objective: string; status: 'active' | 'completed' | 'paused' | 'cleared'; tokensUsed?: number };
+  goal: {
+    objective: string; status: 'active' | 'completed' | 'paused' | 'cleared' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'unknown';
+    goalId?: string; nativeStatus?: string; tokensUsed?: number; tokenBudget?: number | null; timeUsedSeconds?: number;
+  };
   /** 原生提示（warning / configWarning / deprecationNotice），例如"使用兜底元数据，可能影响效果" */
   notice: { level: 'info' | 'warning'; text: string; nativeType?: string };
   'approval.request': {
@@ -113,6 +131,7 @@ export interface EventData {
     reason?: string;
     /** 计划模式下提交的计划（Markdown） */
     planMarkdown?: string;
+    submission?: 'sent' | 'uncertain' | 'collected';
   };
   'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' | 'other' };
   question: QuestionItem;
@@ -141,6 +160,7 @@ export interface StoredEvent<K extends EventKind = EventKind> {
   data: EventData[K];
   native?: unknown;
   nativeSeq?: number;
+  nativeEnvelopeId?: number;
   late?: boolean;
 }
 

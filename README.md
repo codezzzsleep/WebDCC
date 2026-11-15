@@ -59,7 +59,7 @@ Node.js + TypeScript 服务端
 
 ## 本地开发
 
-要求 Node.js 24+、pnpm 12+。
+要求 Node.js 24+、pnpm **12.18.0**（由 `packageManager` 锁定）。原生依赖的构建策略在 `pnpm-workspace.yaml` 中声明。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -68,6 +68,14 @@ pnpm lint
 pnpm test
 pnpm build
 ```
+
+原生协议库存可用 `pnpm native:inventory` 核对。浏览器安全验收单独运行：先执行 `pnpm exec playwright install --with-deps chromium`，再执行 `pnpm test:browser`。单元测试和构建通过不代表真实原生能力验收完成。
+
+本轮修复合同和 48 项进度见 [实施 SPEC](web_review/WebDCC_NATIVE_PARITY_SPEC.md) 和 [修复进度](web_review/IMPLEMENTATION_PROGRESS.md)。该合同替代旧 SPEC 中与原生历史、PTY 和 DSH 原生入口冲突的范围条款。
+
+使用域名或 HTTPS 代理时，设置 `WDCC_PUBLIC_ORIGINS=https://你的域名`，并用 `WDCC_TRUST_PROXY` 指定实际代理地址/CIDR；代理保留外部 Host 头。默认不信任 forwarded headers，非法 Host/Origin 被拒绝。HTTPS 响应使用 Secure Cookie。上传的 HTML/SVG 作为下载返回。
+
+服务端产物包含 `build-manifest.json`，绑定提交、源码和原生 schema 指纹及数据库兼容范围。M8/M9 失败仍生成本轮报告，跳过 E2E 或原生场景未触发会阻止相应验收通过。
 
 分别启动服务端和前端：
 

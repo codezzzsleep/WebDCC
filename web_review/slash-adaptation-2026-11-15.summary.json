@@ -1,0 +1,2093 @@
+{
+  "date": "2026-11-15",
+  "verificationBaseCommit": "e299773679ef43edf98c85efab7efe3fedfca17b",
+  "verificationUsedWorkingTree": true,
+  "sourceFingerprint": "528db650b7f5bb225a2f58f2465eeae6d870af809f926e279dc9f98152400698",
+  "paidModel": false,
+  "sourceGate": {
+    "passed": true,
+    "runId": "06887812-82c9-4926-811c-4e3179ce9923",
+    "checks": [
+      "typecheck",
+      "lint",
+      "native-inventory",
+      "unit",
+      "browser-security",
+      "build"
+    ],
+    "unitTests": 578,
+    "browserTests": 30
+  },
+  "catalogs": [
+    {
+      "agent": "codex",
+      "count": 65,
+      "routes": {
+        "web": 4,
+        "native-terminal": 56,
+        "native-control": 5
+      },
+      "commands": [
+        {
+          "name": "/model",
+          "aliases": [],
+          "description": "choose what model and reasoning effort to use",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "web",
+          "action": "model"
+        },
+        {
+          "name": "/presets",
+          "aliases": [],
+          "description": "run or save reusable prompts and slash commands",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/daybreak",
+          "aliases": [],
+          "description": "turn Daybreak on or off",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/ide",
+          "aliases": [],
+          "description": "include current selection, open files, and other context from your IDE",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/permissions",
+          "aliases": [],
+          "description": "choose what Codex is allowed to do",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "web",
+          "action": "permissions"
+        },
+        {
+          "name": "/keymap",
+          "aliases": [],
+          "description": "remap TUI shortcuts",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/vim",
+          "aliases": [],
+          "description": "toggle Vim mode for the composer",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/setup-default-sandbox",
+          "aliases": [],
+          "description": "set up elevated agent sandbox",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/experimental",
+          "aliases": [],
+          "description": "toggle experimental features",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/approve",
+          "aliases": [],
+          "description": "approve one retry of a recent auto-review denial",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/memories",
+          "aliases": [],
+          "description": "configure memory use and generation",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/skills",
+          "aliases": [],
+          "description": "use skills to improve how Codex performs specific tasks",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "web",
+          "action": "skills"
+        },
+        {
+          "name": "/import",
+          "aliases": [],
+          "description": "import setup, this project, and recent chats from Claude Code",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/hooks",
+          "aliases": [],
+          "description": "view and manage lifecycle hooks",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/review",
+          "aliases": [],
+          "description": "review my current changes and find issues",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/rename",
+          "aliases": [],
+          "description": "rename the current thread",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-control",
+          "action": "rename"
+        },
+        {
+          "name": "/new",
+          "aliases": [],
+          "description": "start a new chat during a conversation",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/archive",
+          "aliases": [],
+          "description": "archive this session",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/delete",
+          "aliases": [],
+          "description": "permanently delete this session",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/resume",
+          "aliases": [],
+          "description": "resume a saved chat",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/fork",
+          "aliases": [],
+          "description": "fork the current chat",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/worktree",
+          "aliases": [],
+          "description": "start or continue a conversation in a new worktree",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/app",
+          "aliases": [],
+          "description": "continue this session in the Desktop app",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": false,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/init",
+          "aliases": [],
+          "description": "create an AGENTS.md file with instructions for Codex",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/compact",
+          "aliases": [],
+          "description": "summarize conversation to prevent hitting the context limit",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-control",
+          "action": "compact"
+        },
+        {
+          "name": "/config",
+          "aliases": [],
+          "description": "configure Codex preferences",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/recap",
+          "aliases": [],
+          "description": "summarize the current conversation now",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/plan",
+          "aliases": [],
+          "description": "switch to Plan mode",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "web",
+          "action": "plan"
+        },
+        {
+          "name": "/voice",
+          "aliases": [],
+          "description": "start or stop voice; use /voice settings to choose a voice",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/goal",
+          "aliases": [],
+          "description": "set or view the goal for a long-running task",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": true,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-control",
+          "action": "goal"
+        },
+        {
+          "name": "/agents",
+          "aliases": [],
+          "description": "open the agent command center",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/side",
+          "aliases": [],
+          "description": "start a side conversation in an ephemeral fork",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/btw",
+          "aliases": [],
+          "description": "start a side conversation in an ephemeral fork",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/copy",
+          "aliases": [],
+          "description": "copy the last response or part of it",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/export",
+          "aliases": [],
+          "description": "export the conversation as markdown",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/raw",
+          "aliases": [],
+          "description": "toggle raw scrollback mode for copy-friendly terminal selection",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/tui",
+          "aliases": [],
+          "description": "choose the TUI mode for the next launch",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/diff",
+          "aliases": [],
+          "description": "show git diff (including untracked files)",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/mention",
+          "aliases": [],
+          "description": "mention a file",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/status",
+          "aliases": [],
+          "description": "show current session configuration and token usage",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-control",
+          "action": "status"
+        },
+        {
+          "name": "/daemon",
+          "aliases": [],
+          "description": "Manage the local background server",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/warnings",
+          "aliases": [],
+          "description": "view retained warnings and diagnostic details",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/cd",
+          "aliases": [],
+          "description": "change the current working directory",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/pwd",
+          "aliases": [
+            "/cwd"
+          ],
+          "description": "show the current working directory",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-control",
+          "action": "pwd"
+        },
+        {
+          "name": "/usage",
+          "aliases": [],
+          "description": "view account usage or use a usage limit reset",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/debug-config",
+          "aliases": [],
+          "description": "show config layers and requirement sources for debugging",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/title",
+          "aliases": [],
+          "description": "configure which items appear in the terminal title",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/statusline",
+          "aliases": [],
+          "description": "configure which items appear in the status line",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/theme",
+          "aliases": [],
+          "description": "choose a syntax highlighting theme",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/pets",
+          "aliases": [
+            "/pet"
+          ],
+          "description": "choose or hide the terminal pet",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/mcp",
+          "aliases": [],
+          "description": "list MCP tools; use /mcp verbose or /mcp login <name>",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/apps",
+          "aliases": [],
+          "description": "manage apps",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/plugins",
+          "aliases": [],
+          "description": "browse plugins",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/logout",
+          "aliases": [],
+          "description": "log out of Codex",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/quit",
+          "aliases": [],
+          "description": "exit Codex",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/exit",
+          "aliases": [],
+          "description": "exit Codex",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/feedback",
+          "aliases": [],
+          "description": "send logs to maintainers",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/rollout",
+          "aliases": [],
+          "description": "print the rollout file path",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/ps",
+          "aliases": [],
+          "description": "list background terminals",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/stop",
+          "aliases": [
+            "/clean"
+          ],
+          "description": "stop all background terminals",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/clear",
+          "aliases": [],
+          "description": "clear the terminal and start a new chat",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "argumentHint": "原生参数",
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/test-approval",
+          "aliases": [],
+          "description": "test approval request",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/subagents",
+          "aliases": [],
+          "description": "switch between this session's subagents",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": true,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/debug-m-drop",
+          "aliases": [],
+          "description": "DO NOT USE",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        },
+        {
+          "name": "/debug-m-update",
+          "aliases": [],
+          "description": "DO NOT USE",
+          "source": "Codex 0.167.0 原生 CLI",
+          "availableDuringTurn": false,
+          "supportsAttachments": false,
+          "available": true,
+          "route": "native-terminal",
+          "reason": "此指令由原生交互终端执行"
+        }
+      ]
+    },
+    {
+      "agent": "claude-code",
+      "count": 127,
+      "routes": {
+        "native-input": 47,
+        "native-terminal": 80
+      },
+      "commands": [
+        {
+          "name": "/deep-research",
+          "description": "Deep research harness — fan-out web searches, fetch sources, adversarially verify claims, synthesize a cited report. (dynamic workflow)",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/design",
+          "description": "Grant or revoke Claude agent access to your Design projects",
+          "argumentHint": "consent | revoke",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/design-sync",
+          "description": "Push a React design system to claude.ai/design. This runs a converter that bundles the real component code (from Storybook or a bare package) and uploads it. Use when the user runs /design-sync or says \"sync my design system to Claude Design\".",
+          "argumentHint": "[<project hint, e.g. \"Acme DS\">]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/dataviz",
+          "description": "Use this skill whenever you are about to create ANY chart, graph, plot, dashboard, or data visualization, in ANY output medium — an HTML or React artifact, inline SVG, plotting code in any library (matplotlib, plotly, d3, Recharts, …), an image/PNG you will render and upload, or a chart shared into Slack. Read it BEFORE writing the first line of chart code, choosing chart colors, building a stat tile / meter / KPI row, or laying out a dashboard. When the destination is a first-party document connector (host-designated, never self-described) that renders live charts, hand it the rows (inline, or as an uploaded data file the chart cites) rather than a rendered PNG/SVG — a picture of a chart loses hover, data inspection and per-value comments. Produces visualizations that read as one system — elegant, accessible, consistent in light and dark — using a brand-neutral placeholder palette you swap for your own. Teaches a design-system-agnostic method: a form heuristic, a color formula with a runnable validator, mark specs, and interaction rules. A validated default palette is documented in `references/palette.md` — swap that file's values for your brand's. Triggers on: \"chart\", \"graph\", \"plot\", \"data viz\", \"visualization\", \"dashboard\", \"analytics\", \"visualize data\", \"categorical colors\", \"sequential / diverging palette\", \"stat tile\", \"sparkline\", \"heatmap\", \"legend\", \"axis\", \"tooltip\", \"chart colors\", \"color by series\".",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/update-config",
+          "description": "Use this skill to configure the Claude Code harness via settings.json. Automated behaviors (\"from now on when X\", \"each time X\", \"whenever X\", \"before/after X\") require hooks configured in settings.json - the harness executes these, not Claude, so memory/preferences cannot fulfill them. Also use for: permissions (\"allow X\", \"add permission\", \"move permission to\"), env vars (\"set X=Y\"), hook troubleshooting, or any changes to settings.json/settings.local.json files. Examples: \"allow npm commands\", \"add bq permission to global settings\", \"move permission to user settings\", \"set DEBUG=true\", \"when claude stops show X\". For simple settings like theme/model, suggest the /config command.",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/verify",
+          "description": "Verify that a code change actually does what it's supposed to by exercising it end-to-end and observing behavior — drive the affected flow, not just tests or typecheck. Run before committing nontrivial changes; bootstraps this repo's project verify skill if none exists yet. Don't invoke it on a diff that only touches tests, docs, or other code with no runtime surface to drive (a change to product source always has one) — there's nothing to observe.",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/debug",
+          "description": "Enable debug logging for this session and help diagnose issues",
+          "argumentHint": "[issue description]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/code-review",
+          "description": "Review the current diff, or a PR number/branch/path target, for correctness bugs (plus reuse/simplification/efficiency cleanups where the model's recipe covers them) at the effort level given first, before any target (low|medium|high|xhigh|max: from few high-confidence findings to many, some uncertain); with no level given, it reuses the level you typed last. Pass --comment to post findings as inline PR comments, or --fix to apply them to the working tree after the review. Pass --max-findings <n> to report up to n findings, or --max-findings all for every finding. The choice stays until you pass --max-findings default.",
+          "argumentHint": "[low|medium|high|xhigh|max] [--fix] [--comment] [<pr#>|<branch>|<path>] [--max-findings <n>|all]",
+          "aliases": [
+            "/review"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/simplify",
+          "description": "Review the changed code for reuse, simplification, efficiency, and altitude cleanups, then apply the fixes. Quality only — it does not hunt for bugs; use /code-review for that.",
+          "argumentHint": "[<target>]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/batch",
+          "description": "Research and plan a large-scale change, then execute it in parallel across 5–30 isolated worktree agents that each open a PR.",
+          "argumentHint": "<instruction>",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/fewer-permission-prompts",
+          "description": "Scan your transcripts for common read-only Bash and MCP tool calls, then add a prioritized allowlist to project .claude/settings.json to reduce permission prompts.",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/doctor",
+          "description": "Health-check the user's Claude Code setup and fix issues: diagnose installation health — what the `claude doctor` terminal diagnostics cover — from local data (duplicate or leftover installs, PATH, unparseable settings files, broken or colliding agent definitions, skills whose frontmatter fails to parse); find unused skills, MCP servers, and plugins versus their context cost and disable dead weight; deduplicate local CLAUDE.md files against checked-in ones; trim checked-in CLAUDE.md files by cutting content a session could derive from the codebase (directory layouts, tech-stack lists, architecture overviews) while keeping gotchas, rationale, and non-standard conventions; migrate always-loaded CLAUDE.md guidance into lazy skills and nested CLAUDE.md files; flag slow hooks and context-heavy extensions; check the installed version is current; make auto mode the default permission mode; and pre-approve frequently denied read-only commands. Use when the user asks for a doctor run, checkup, audit, tune-up, or cleanup of their Claude Code setup or configuration.",
+          "argumentHint": "[prompt-audit [<path>]]",
+          "aliases": [
+            "/checkup"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-terminal"
+        },
+        {
+          "name": "/loop",
+          "description": "Run a prompt or slash command on a recurring interval (e.g. /loop 5m /foo). Omit the interval to let the model self-pace.",
+          "argumentHint": "[interval] [prompt]",
+          "aliases": [
+            "/proactive"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/claude-api",
+          "description": "Reference for the Claude API / Anthropic SDK — model ids, pricing, params, streaming, tool use, MCP, agents, caching, token counting, model migration.\nTRIGGER — read FIRST, before you answer, run a command or open a file (already started? read it now); don't skip because it \"looks like a one-liner\" — whenever: the prompt names Claude/Anthropic in any form (Claude, Anthropic, Fable, Opus, Sonnet, Haiku, `anthropic`, `@anthropic-ai`, `claude-*`, `us.anthropic.*`, `[1m]`); the user asks about an LLM (pricing/model choice/limits/caching) — never answer from memory; OR the task is LLM-shaped with provider unstated (agent/MCP/tool-definition/multi-agent/RAG/LLM-judge/computer-use; generate/summarize/extract/classify/rewrite/converse over NL; debugging refusals/cutoffs/streaming/tool-calls/tokens).\nSKIP only when another provider is being worked on (overrides all triggers): OpenAI/GPT/Gemini/Llama/Mistral/Cohere/Ollama named in the query; OR `grep -rE 'openai|langchain_openai|google.generativeai|genai|mistralai|cohere|ollama'` over the project hits (run this grep FIRST if no provider named — don't Read the file; if nothing hits, load this skill).",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/workflow-authoring",
+          "description": "Reference for writing a Workflow tool script (script API and gotchas, resume, quality patterns, worked examples). Load before authoring a script for a workflow the user already opted into; it does not itself authorize running one.",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/run",
+          "description": "Launch and drive this project's app to see a change working. Use when asked to run, start, or screenshot the app, or to confirm a change works in the real app (not just tests). First looks for a project skill that already covers launching the app; otherwise falls back to built-in patterns per project type (CLI, server, TUI, Electron, browser-driven, library).",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/run-skill-generator",
+          "description": "Author or improve the run-<unit> skill - a per-project skill that tells agents how to build, launch, and drive this project's app. Use when the user asks to set up the project, get it running, write run instructions, or verify build/run steps work from a clean environment.",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/plugin-authoring",
+          "description": "Make a mod: a change to Claude's own interface or behaviour, such as a panel or pane that stays beside the chat and updates, a band, status line, toast, slash command, or hook on tool calls. Use to make, change or debug a mod or its hooks module.",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/advisor",
+          "description": "Let Claude consult a stronger model at key moments",
+          "argumentHint": "[fable|opus|sonnet|off]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/agents",
+          "description": "(removed) Ask Claude to create/manage subagents, or edit .claude/agents/",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/auto-mode-setup",
+          "description": "Teach auto mode about your environment, plus optional rule tweaks",
+          "argumentHint": "[--request-id <uuid>] (--wizard posture=… scope=… depth=… --propose | --expect-sha256 <64-hex> --apply-file <path>)",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/autocompact",
+          "description": "Configure the auto-compact window size",
+          "argumentHint": "[auto|<tokens>]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/clear",
+          "description": "Start a new session with empty context; previous session stays on disk (resumable with /resume)",
+          "argumentHint": "[name]",
+          "aliases": [
+            "/reset",
+            "/new"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/color",
+          "description": "Set the prompt bar color for this session",
+          "argumentHint": "[red|blue|green|yellow|purple|orange|pink|cyan|default]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-terminal"
+        },
+        {
+          "name": "/compact",
+          "description": "Free up context by summarizing the conversation so far",
+          "argumentHint": "<optional custom summarization instructions>",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/config",
+          "description": "Set a setting by key",
+          "argumentHint": "key=value",
+          "aliases": [
+            "/settings"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/output-style",
+          "description": "List output styles or switch to one",
+          "argumentHint": "[style]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/context",
+          "description": "Show current context usage",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/effort",
+          "description": "Set effort level for model usage",
+          "argumentHint": "<low|medium|high|xhigh|max|auto|ultracode [on|off]>",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/fast",
+          "description": "Toggle fast mode (Opus 5.5)",
+          "argumentHint": "[on|off]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/focus",
+          "description": "Toggle focus view: just your prompt, summary, and response",
+          "argumentHint": "[on|off]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-terminal"
+        },
+        {
+          "name": "/heapdump",
+          "description": "Dump the JS heap to the Desktop; on Linux with no Desktop folder, the home directory",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/init",
+          "description": "Initialize a new CLAUDE.md file with codebase documentation",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/mcp",
+          "description": "Manage MCP servers",
+          "argumentHint": "[reconnect|enable|disable [<server>|all]]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/import",
+          "description": "Import config from another AI coding agent",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/model",
+          "description": "Set the AI model for Claude Code",
+          "argumentHint": "<model>",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/__remote-workflow",
+          "description": "Run the workflow script delivered in this session environment (server-launched sessions only)",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/workflow-launch-exec",
+          "description": "Execute a server-launched workflow handoff (workflow_launch event sessions only)",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/reload-plugins",
+          "description": "Activate pending plugin changes in the current session",
+          "argumentHint": "[--force]",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-terminal"
+        },
+        {
+          "name": "/reload-skills",
+          "description": "Pick up skills added or changed on disk during this session",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/rename",
+          "description": "Rename the current conversation",
+          "argumentHint": "[name]",
+          "aliases": [
+            "/name"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/security-review",
+          "description": "Complete a security review of the pending changes on the current branch",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/usage",
+          "description": "Show session cost, plan usage, and what's contributing to your limits",
+          "argumentHint": "",
+          "aliases": [
+            "/cost",
+            "/stats"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/insights",
+          "description": "Generate a report analyzing your Claude Code sessions",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/recap",
+          "description": "Generate a one-line session recap now",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/skill-doctor",
+          "description": "Show which loaded skills are unused and costing context",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/goal",
+          "description": "Set a goal — keep working until the condition is met",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/design-consent",
+          "description": "Grant Claude agent access to your Design projects",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/design-revoke",
+          "description": "Revoke Claude agent access to your Design projects",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/list-agents",
+          "description": "List subagents, teammates, and other Claude sessions you can message",
+          "argumentHint": "",
+          "aliases": [
+            "/peers"
+          ],
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/team-onboarding",
+          "description": "Help teammates ramp on Claude Code with a guide from your usage",
+          "argumentHint": "",
+          "builtin": true,
+          "source": "Claude 原生 SDK 指令",
+          "route": "native-input"
+        },
+        {
+          "name": "/web-setup",
+          "aliases": [],
+          "description": "Set up cloud sessions with your GitHub account",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/add-dir",
+          "aliases": [],
+          "description": "Add a new working directory",
+          "argumentHint": "<path>",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/cloud-plugins",
+          "aliases": [],
+          "description": "Choose whether cloud sessions use the plugins enabled on this machine",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/artifacts",
+          "aliases": [],
+          "description": "Browse your published and shared artifacts",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/autofix-pr",
+          "aliases": [],
+          "description": "Monitor and autofix any issues with the current PR",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/btw",
+          "aliases": [],
+          "description": "Ask a quick side question without interrupting the main conversation",
+          "argumentHint": "[question]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/project",
+          "aliases": [],
+          "description": "Set the claude.ai Project for this session's usage reports",
+          "argumentHint": "[Project ID or claude.ai address] [--save] | clear [--save]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/feedback",
+          "aliases": [],
+          "description": "Send feedback to Anthropic or report a bug",
+          "argumentHint": "[report]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/bug",
+          "aliases": [
+            "/share"
+          ],
+          "description": "Report a bug or share your conversation",
+          "argumentHint": "[report]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/cd",
+          "aliases": [],
+          "description": "Move this session to a new working directory",
+          "argumentHint": "<path>",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/copy",
+          "aliases": [],
+          "description": "Copy Claude's last response to clipboard (or /copy N for the Nth-latest)",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/desktop",
+          "aliases": [
+            "/app"
+          ],
+          "description": "Continue the current session in Claude Desktop",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/diff",
+          "aliases": [],
+          "description": "Claude CLI 原生 diff 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/memory",
+          "aliases": [],
+          "description": "Edit CLAUDE.md files and memory settings",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/pause-memory",
+          "aliases": [
+            "/memory-pause",
+            "/toggle-memory"
+          ],
+          "description": "Claude CLI 原生 pause-memory 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/help",
+          "aliases": [],
+          "description": "Show help and available commands",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/ide",
+          "aliases": [],
+          "description": "Manage IDE integrations and show status",
+          "argumentHint": "[open]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/keybindings",
+          "aliases": [],
+          "description": "Open your keyboard shortcuts file",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/design-login",
+          "aliases": [],
+          "description": "Authorize design-system access for /design-sync with your claude.ai account",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/login",
+          "aliases": [],
+          "description": "Claude CLI 原生 login 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/logout",
+          "aliases": [],
+          "description": "Sign out from your Anthropic account",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/install-github-app",
+          "aliases": [],
+          "description": "Set up Claude GitHub Actions for a repository",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/install-slack-app",
+          "aliases": [],
+          "description": "Install the Claude Slack app",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/mobile",
+          "aliases": [
+            "/ios",
+            "/android"
+          ],
+          "description": "Show QR code to download the Claude mobile app",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/voice",
+          "aliases": [],
+          "description": "Toggle voice mode",
+          "argumentHint": "[hold|tap|off]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/powerup",
+          "aliases": [],
+          "description": "Discover Claude Code features through quick interactive lessons",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/release-notes",
+          "aliases": [],
+          "description": "View release notes",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/resume",
+          "aliases": [
+            "/continue"
+          ],
+          "description": "Claude CLI 原生 resume 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/setup-bedrock",
+          "aliases": [],
+          "description": "Reconfigure Amazon Bedrock authentication, region, or model pins",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/setup-vertex",
+          "aliases": [],
+          "description": "Reconfigure Google Vertex AI authentication, project, region, or model pins",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/ultrareview",
+          "aliases": [],
+          "description": "Claude CLI 原生 ultrareview 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/session",
+          "aliases": [
+            "/remote"
+          ],
+          "description": "Show cloud session URL and QR code",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/scroll-speed",
+          "aliases": [],
+          "description": "Adjust mouse wheel scroll speed",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/skills",
+          "aliases": [],
+          "description": "List available skills",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/status",
+          "aliases": [],
+          "description": "Show Claude Code status including version, model, account, API connectivity, and tool statuses",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/tasks",
+          "aliases": [
+            "/bashes"
+          ],
+          "description": "View and manage everything running in the background",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/teleport",
+          "aliases": [
+            "/tp"
+          ],
+          "description": "Send this session to the cloud, or resume one from claude.ai",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/terminal-setup",
+          "aliases": [],
+          "description": "Claude CLI 原生 terminal-setup 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/ultraplan",
+          "aliases": [],
+          "description": "Claude CLI 原生 ultraplan 指令",
+          "argumentHint": "<prompt>",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/theme",
+          "aliases": [],
+          "description": "Change the theme",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/tui",
+          "aliases": [],
+          "description": "Set the terminal UI renderer (default | fullscreen)",
+          "argumentHint": "[default|fullscreen]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/permissions",
+          "aliases": [
+            "/allowed-tools"
+          ],
+          "description": "Manage allow and deny tool permission rules",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/plan",
+          "aliases": [],
+          "description": "Enable plan mode or view the current session plan",
+          "argumentHint": "[open|<description>]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/passes",
+          "aliases": [],
+          "description": "Claude CLI 原生 passes 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/privacy-settings",
+          "aliases": [],
+          "description": "View and update your privacy settings",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/hooks",
+          "aliases": [],
+          "description": "View hook configurations for tool events",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/loops",
+          "aliases": [],
+          "description": "List, create, and delete loops",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/branch",
+          "aliases": [],
+          "description": "Create a branch of the current conversation at this point",
+          "argumentHint": "[name]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/fork",
+          "aliases": [],
+          "description": "Spawn a background agent that inherits the full conversation",
+          "argumentHint": "<directive>",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/subtask",
+          "aliases": [],
+          "description": "Send a subagent off with your full context; its result comes back here",
+          "argumentHint": "<task>",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/plugin",
+          "aliases": [
+            "/plugins",
+            "/marketplace"
+          ],
+          "description": "Manage Claude Code plugins",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/rewind",
+          "aliases": [
+            "/checkpoint",
+            "/undo"
+          ],
+          "description": "Restore the code and/or conversation to a previous point",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/version",
+          "aliases": [],
+          "description": "Show this session's version (autoupdate may have a newer one)",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/sandbox",
+          "aliases": [],
+          "description": "Claude CLI 原生 sandbox 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/chrome",
+          "aliases": [],
+          "description": "Open Claude in Chrome settings",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/stickers",
+          "aliases": [],
+          "description": "Order Claude Code stickers",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/radio",
+          "aliases": [],
+          "description": "Listen to Claude FM lo-fi radio",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/exit",
+          "aliases": [
+            "/quit"
+          ],
+          "description": "Claude CLI 原生 exit 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/restart",
+          "aliases": [
+            "/update"
+          ],
+          "description": "Claude CLI 原生 restart 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/export",
+          "aliases": [],
+          "description": "Export the current conversation to a file or clipboard",
+          "argumentHint": "[filename]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/remote-env",
+          "aliases": [],
+          "description": "Choose the default environment for cloud agents",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/use-case",
+          "aliases": [],
+          "description": "Choose the Life Sciences use case that applies to your requests",
+          "argumentHint": "[use case]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/upgrade",
+          "aliases": [],
+          "description": "Upgrade your plan for higher rate limits and more Opus",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/usage-credits",
+          "aliases": [],
+          "description": "Configure usage credits or request them from your admin when you hit a limit",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/extra-usage",
+          "aliases": [],
+          "description": "Renamed to /usage-credits",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/pro-trial-expired",
+          "aliases": [],
+          "description": "Options shown when the Pro plan Claude Code trial has ended",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/rate-limit-options",
+          "aliases": [],
+          "description": "Manage usage limits and upgrade options",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/statusline",
+          "aliases": [],
+          "description": "Set up Claude Code's status line UI",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/wellbeing",
+          "aliases": [
+            "/breaks",
+            "/break-reminder",
+            "/downtime"
+          ],
+          "description": "Configure optional break reminders and quiet-hours nudges",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/background",
+          "aliases": [
+            "/bg"
+          ],
+          "description": "Send this session to the background and free the terminal",
+          "argumentHint": "[prompt]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/stop",
+          "aliases": [],
+          "description": "Stop this background session; transcript and worktree are kept",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/workflows",
+          "aliases": [],
+          "description": "Browse running and completed workflows",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/brief",
+          "aliases": [],
+          "description": "Toggle brief-only mode",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/remote-control",
+          "aliases": [
+            "/rc"
+          ],
+          "description": "Claude CLI 原生 remote-control 指令",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/daemon",
+          "aliases": [],
+          "description": "Manage background services and routines",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        },
+        {
+          "name": "/install",
+          "aliases": [],
+          "description": "Install Claude Code native build",
+          "argumentHint": "[options]",
+          "source": "Claude 2.1.322 原生 CLI",
+          "route": "native-terminal",
+          "reason": "在原生 CLI 执行；可用性由当前账号、平台与原生配置决定"
+        }
+      ]
+    },
+    {
+      "agent": "dsh",
+      "count": 6,
+      "routes": {
+        "native-control": 6
+      },
+      "commands": [
+        {
+          "name": "/compact",
+          "source": "DSH commands/list",
+          "route": "native-control",
+          "supportsAttachments": false,
+          "description": "Compact older conversation history"
+        },
+        {
+          "name": "/export",
+          "source": "DSH commands/list",
+          "route": "native-control",
+          "supportsAttachments": false,
+          "description": "Download this Session log as a ZIP archive"
+        },
+        {
+          "name": "/feedback",
+          "source": "DSH commands/list",
+          "route": "native-control",
+          "argumentHint": "<text>",
+          "supportsAttachments": false,
+          "description": "Record feedback about this session"
+        },
+        {
+          "name": "/goal",
+          "source": "DSH commands/list",
+          "route": "native-control",
+          "argumentHint": "[<objective>|clear|edit <objective>|pause|resume]",
+          "supportsAttachments": true,
+          "description": "Set or view the goal for a long-running task"
+        },
+        {
+          "name": "/permission",
+          "source": "DSH commands/list",
+          "route": "native-control",
+          "argumentHint": "<preset>",
+          "supportsAttachments": false,
+          "description": "Switch the permission preset (sandbox mode + approval policy)"
+        },
+        {
+          "name": "/plan",
+          "source": "DSH commands/list",
+          "route": "native-control",
+          "argumentHint": "[off|message]",
+          "supportsAttachments": true,
+          "description": "Enter or leave plan mode"
+        }
+      ]
+    }
+  ],
+  "nativeBrowser": [
+    {
+      "agent": "codex",
+      "passed": true,
+      "commands": [
+        "/goal",
+        "/goal 原生适配验证\n第二行",
+        "/goal pause",
+        "/goal resume",
+        "/goal clear",
+        "/goal"
+      ],
+      "refresh": "result restored without native resubmission",
+      "scriptedModelRequests": 35,
+      "traceComplete": true,
+      "goalAttachments": {
+        "passed": true,
+        "imageBytes": 68,
+        "documentBytes": 28,
+        "unicodeObjectiveChars": 4005,
+        "fullEditAfterRefresh": true
+      },
+      "sameSessionTakeover": {
+        "passed": true,
+        "nativeId": "01a1df7c-2a98-7a21-bee7-8bf7fd89b151",
+        "oldWriterReleased": true,
+        "nativeKernelLockVerified": true,
+        "terminalCommand": "/theme",
+        "nativeInputImported": true,
+        "liveAnswersDeduplicated": true,
+        "refresh": true,
+        "repeatedReturnPreservesPid": true,
+        "nativeExternalWriterRejected": true
+      }
+    },
+    {
+      "agent": "claude-code",
+      "passed": true,
+      "commands": [
+        "/goal"
+      ],
+      "refresh": "result restored without native resubmission",
+      "scriptedModelRequests": 0,
+      "traceComplete": true
+    },
+    {
+      "agent": "dsh",
+      "passed": true,
+      "commands": [
+        "/goal",
+        "/goal 原生适配验证\n第二行",
+        "/goal pause",
+        "/goal resume",
+        "/goal clear",
+        "/goal"
+      ],
+      "refresh": "result restored without native resubmission",
+      "scriptedModelRequests": 21,
+      "traceComplete": true
+    }
+  ],
+  "claudeTerminal": {
+    "paidModel": false,
+    "passed": true,
+    "probe": {
+      "installed": true,
+      "version": "0.3.322",
+      "pinnedVersion": "0.3.322",
+      "auth": "unknown",
+      "compatible": true,
+      "notes": [
+        "Claude Agent SDK 0.3.322 / CLI 2.1.322 (Claude Code)"
+      ]
+    },
+    "catalog": {
+      "count": 127,
+      "cliOnlyCommandsPresent": true
+    },
+    "terminal": {
+      "nativeVersion": "2.1.322",
+      "intent": "new-native"
+    },
+    "apiKeyModeModelTurn": true,
+    "permissions": true,
+    "color": true,
+    "doctor": {
+      "dispatchedNativeModel": true,
+      "nativeExpansion": true
+    },
+    "reloadPlugins": true,
+    "refreshPreservesPid": true,
+    "modelRequests": 5
+  },
+  "nativeQuestions": {
+    "passed": true,
+    "cases": [
+      {
+        "case": "codex-plan",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload"
+      },
+      {
+        "case": "codex-default",
+        "passed": true,
+        "outcome": "native-default-question-unavailable-with-feature-defaults"
+      },
+      {
+        "case": "claude",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload"
+      },
+      {
+        "case": "dsh",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload"
+      },
+      {
+        "case": "codex-plan-cancel",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended"
+      },
+      {
+        "case": "claude-cancel",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended"
+      },
+      {
+        "case": "dsh-cancel",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended"
+      }
+    ]
+  },
+  "l1": {
+    "passed": false,
+    "scenarios": {
+      "passed": 1,
+      "total": 33
+    },
+    "failures": {
+      "GOLDEN": 32,
+      "NOT_TRIGGERED": 16
+    },
+    "invariantFailures": 0,
+    "goldensModified": false
+  },
+  "limitations": [
+    "CLI declaration/route coverage does not certify each business effect; native account/platform/configuration predicates decide availability.",
+    "Claude same-session arbitration, full secret/MCP/restart/paid-provider and remaining NP acceptance remain open.",
+    "No deployment performed."
+  ]
+}

@@ -1,0 +1,199 @@
+Harness,指令,别名,路由,参数提示,可用性,来源
+codex,/model,,网页入口,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/presets,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/daybreak,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/ide,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/permissions,,网页入口,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/keymap,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/vim,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/setup-default-sandbox,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/experimental,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/approve,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/memories,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/skills,,网页入口,,已发现,Codex 0.167.0 原生 CLI
+codex,/import,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/hooks,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/review,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/rename,,原生 API,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/new,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/archive,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/delete,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/resume,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/fork,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/worktree,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/app,,原生 CLI 终端,,否,Codex 0.167.0 原生 CLI
+codex,/init,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/compact,,原生 API,,已发现,Codex 0.167.0 原生 CLI
+codex,/config,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/recap,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/plan,,网页入口,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/voice,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/goal,,原生 API,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/agents,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/side,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/btw,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/copy,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/export,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/raw,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/tui,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/diff,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/mention,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/status,,原生 API,,已发现,Codex 0.167.0 原生 CLI
+codex,/daemon,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/warnings,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/cd,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/pwd,/cwd,原生 API,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/usage,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/debug-config,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/title,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/statusline,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/theme,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/pets,/pet,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/mcp,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/apps,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/plugins,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/logout,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/quit,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/exit,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/feedback,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/rollout,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/ps,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/stop,/clean,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/clear,,原生 CLI 终端,原生参数,已发现,Codex 0.167.0 原生 CLI
+codex,/test-approval,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/subagents,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/debug-m-drop,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+codex,/debug-m-update,,原生 CLI 终端,,已发现,Codex 0.167.0 原生 CLI
+claude-code,/deep-research,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/design,,原生 SDK 输入,consent | revoke,已发现,Claude 原生 SDK 指令
+claude-code,/design-sync,,原生 SDK 输入,"[<project hint, e.g. ""Acme DS"">]",已发现,Claude 原生 SDK 指令
+claude-code,/dataviz,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/update-config,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/verify,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/debug,,原生 SDK 输入,[issue description],已发现,Claude 原生 SDK 指令
+claude-code,/code-review,/review,原生 SDK 输入,[low|medium|high|xhigh|max] [--fix] [--comment] [<pr#>|<branch>|<path>] [--max-findings <n>|all],已发现,Claude 原生 SDK 指令
+claude-code,/simplify,,原生 SDK 输入,[<target>],已发现,Claude 原生 SDK 指令
+claude-code,/batch,,原生 SDK 输入,<instruction>,已发现,Claude 原生 SDK 指令
+claude-code,/fewer-permission-prompts,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/doctor,/checkup,原生 CLI 终端,[prompt-audit [<path>]],原生条件判定,Claude 原生 SDK 指令
+claude-code,/loop,/proactive,原生 SDK 输入,[interval] [prompt],已发现,Claude 原生 SDK 指令
+claude-code,/claude-api,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/workflow-authoring,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/run,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/run-skill-generator,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/plugin-authoring,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/advisor,,原生 SDK 输入,[fable|opus|sonnet|off],已发现,Claude 原生 SDK 指令
+claude-code,/agents,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/auto-mode-setup,,原生 SDK 输入,[--request-id <uuid>] (--wizard posture=… scope=… depth=… --propose | --expect-sha256 <64-hex> --apply-file <path>),已发现,Claude 原生 SDK 指令
+claude-code,/autocompact,,原生 SDK 输入,[auto|<tokens>],已发现,Claude 原生 SDK 指令
+claude-code,/clear,"/reset, /new",原生 SDK 输入,[name],已发现,Claude 原生 SDK 指令
+claude-code,/color,,原生 CLI 终端,[red|blue|green|yellow|purple|orange|pink|cyan|default],原生条件判定,Claude 原生 SDK 指令
+claude-code,/compact,,原生 SDK 输入,<optional custom summarization instructions>,已发现,Claude 原生 SDK 指令
+claude-code,/config,/settings,原生 SDK 输入,key=value,已发现,Claude 原生 SDK 指令
+claude-code,/output-style,,原生 SDK 输入,[style],已发现,Claude 原生 SDK 指令
+claude-code,/context,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/effort,,原生 SDK 输入,<low|medium|high|xhigh|max|auto|ultracode [on|off]>,已发现,Claude 原生 SDK 指令
+claude-code,/fast,,原生 SDK 输入,[on|off],已发现,Claude 原生 SDK 指令
+claude-code,/focus,,原生 CLI 终端,[on|off],原生条件判定,Claude 原生 SDK 指令
+claude-code,/heapdump,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/init,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/mcp,,原生 SDK 输入,[reconnect|enable|disable [<server>|all]],已发现,Claude 原生 SDK 指令
+claude-code,/import,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/model,,原生 SDK 输入,<model>,已发现,Claude 原生 SDK 指令
+claude-code,/__remote-workflow,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/workflow-launch-exec,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/reload-plugins,,原生 CLI 终端,[--force],原生条件判定,Claude 原生 SDK 指令
+claude-code,/reload-skills,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/rename,/name,原生 SDK 输入,[name],已发现,Claude 原生 SDK 指令
+claude-code,/security-review,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/usage,"/cost, /stats",原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/insights,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/recap,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/skill-doctor,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/goal,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/design-consent,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/design-revoke,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/list-agents,/peers,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/team-onboarding,,原生 SDK 输入,,已发现,Claude 原生 SDK 指令
+claude-code,/web-setup,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/add-dir,,原生 CLI 终端,<path>,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/cloud-plugins,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/artifacts,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/autofix-pr,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/btw,,原生 CLI 终端,[question],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/project,,原生 CLI 终端,[Project ID or claude.ai address] [--save] | clear [--save],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/feedback,,原生 CLI 终端,[report],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/bug,/share,原生 CLI 终端,[report],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/cd,,原生 CLI 终端,<path>,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/copy,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/desktop,/app,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/diff,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/memory,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/pause-memory,"/memory-pause, /toggle-memory",原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/help,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/ide,,原生 CLI 终端,[open],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/keybindings,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/design-login,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/login,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/logout,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/install-github-app,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/install-slack-app,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/mobile,"/ios, /android",原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/voice,,原生 CLI 终端,[hold|tap|off],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/powerup,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/release-notes,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/resume,/continue,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/setup-bedrock,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/setup-vertex,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/ultrareview,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/session,/remote,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/scroll-speed,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/skills,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/status,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/tasks,/bashes,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/teleport,/tp,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/terminal-setup,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/ultraplan,,原生 CLI 终端,<prompt>,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/theme,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/tui,,原生 CLI 终端,[default|fullscreen],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/permissions,/allowed-tools,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/plan,,原生 CLI 终端,[open|<description>],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/passes,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/privacy-settings,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/hooks,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/loops,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/branch,,原生 CLI 终端,[name],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/fork,,原生 CLI 终端,<directive>,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/subtask,,原生 CLI 终端,<task>,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/plugin,"/plugins, /marketplace",原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/rewind,"/checkpoint, /undo",原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/version,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/sandbox,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/chrome,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/stickers,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/radio,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/exit,/quit,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/restart,/update,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/export,,原生 CLI 终端,[filename],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/remote-env,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/use-case,,原生 CLI 终端,[use case],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/upgrade,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/usage-credits,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/extra-usage,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/pro-trial-expired,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/rate-limit-options,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/statusline,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/wellbeing,"/breaks, /break-reminder, /downtime",原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/background,/bg,原生 CLI 终端,[prompt],原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/stop,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/workflows,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/brief,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/remote-control,/rc,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/daemon,,原生 CLI 终端,,原生条件判定,Claude 2.1.322 原生 CLI
+claude-code,/install,,原生 CLI 终端,[options],原生条件判定,Claude 2.1.322 原生 CLI
+dsh,/compact,,原生 API,,已发现,DSH commands/list
+dsh,/export,,原生 API,,已发现,DSH commands/list
+dsh,/feedback,,原生 API,<text>,已发现,DSH commands/list
+dsh,/goal,,原生 API,[<objective>|clear|edit <objective>|pause|resume],已发现,DSH commands/list
+dsh,/permission,,原生 API,<preset>,已发现,DSH commands/list
+dsh,/plan,,原生 API,[off|message],已发现,DSH commands/list

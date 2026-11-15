@@ -23,4 +23,8 @@ describe('事件数据校验（F2）', () => {
   it('DSH 的 todo_write 工具调用按 tool.call 处理，不再冒充 plan', () => {
     expect(dshToolKind('todo_write')).toBe('tool.call');
   });
+  it('preserves optional native blocking booleans without accepting coerced values', () => {
+    for (const isBlocking of [undefined, true, false]) expect(isValidEventData('question', { questionId: 'q', prompt: 'p', ...(isBlocking === undefined ? {} : { isBlocking }) })).toBe(true);
+    for (const isBlocking of [null, 0, 'false']) expect(isValidEventData('question', { questionId: 'q', prompt: 'p', isBlocking })).toBe(false);
+  });
 });

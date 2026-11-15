@@ -1,0 +1,120 @@
+{
+  "formatVersion": 1,
+  "scope": "native question adaptation, not full NP-06 or NP-01–48 completion",
+  "implementationCommit": "d5501a13a5a36ed785441d082b58df5f5e45a972",
+  "verifiedCommit": "76fb0366da55f72e203005f57b71fe145c8a238a",
+  "sourceFingerprint": "7305b5a1c969670f3dd3306261e73e47e18cb930f3e4d942268306cfe07ce492",
+  "schemaFingerprint": "f947f9ba040372031eda21819062850c747aefeba43eef57cc3cfd7b315ce81b",
+  "sourceGate": {
+    "runId": "d67b50b3-6806-4782-ac16-4ed6f85d9cc5",
+    "passed": true,
+    "checks": [
+      {
+        "id": "typecheck",
+        "status": "passed",
+        "logSha256": "3b25257763e92f98d4af2df629ac3fd9c9b00084d09b5f54e302745906a3e075"
+      },
+      {
+        "id": "lint",
+        "status": "passed",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "id": "native-inventory",
+        "status": "passed",
+        "logSha256": "07e4b260918c0905e320363a32f15e14eccffb2a2b5e7b905240174c311dfc3b"
+      },
+      {
+        "id": "unit",
+        "status": "passed",
+        "logSha256": "09bf4a632da3045eb9437470e21ceecf5c28138d9b53731d6f9375cd82fcc611"
+      },
+      {
+        "id": "browser-security",
+        "status": "passed",
+        "logSha256": "1ab90968a3fb6fa5618409eef8958476a02367331c77b20fdc3d72c96b8eed2f"
+      },
+      {
+        "id": "build",
+        "status": "passed",
+        "logSha256": "067c815b435719a8c0a78be45f155d1e8c49cde73e1f2ea2dd4186adf4153db3"
+      }
+    ],
+    "unitTests": 565,
+    "chromiumTests": 26
+  },
+  "nativeQuestions": {
+    "paidModel": false,
+    "provider": "isolated loopback scripted models",
+    "passed": true,
+    "cases": [
+      {
+        "id": "codex-plan",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload",
+        "configurationFingerprint": "c664e7baff6931c5f9a5618a6adea9eadcc0b976cd31c6b58c4df4eee1521dfe",
+        "binarySha256": "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda"
+      },
+      {
+        "id": "codex-default",
+        "passed": true,
+        "outcome": "native-default-question-unavailable-with-feature-defaults",
+        "configurationFingerprint": "784928e924d5b3e1ce78eddd1a691c50a7c08b3fa1aea2161a0136c949711949",
+        "binarySha256": "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda"
+      },
+      {
+        "id": "claude",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload",
+        "configurationFingerprint": "10c4ba4b3bdf1fc388a11bd232e5ab902d12e24f08773bf2834d1aa99dec08d7",
+        "binarySha256": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478"
+      },
+      {
+        "id": "dsh",
+        "passed": true,
+        "outcome": "two-native-questions-browser-answer-native-continue-and-reload",
+        "configurationFingerprint": "cc9ea64f779ab357c1213b8fb72d43a204a0d74ba75a8ecb608284085eefeaf6",
+        "binarySha256": null
+      },
+      {
+        "id": "codex-plan-cancel",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended",
+        "configurationFingerprint": "ace99cba1477c34be77455e65e5399b796928cc61531a46b5302b981e41362ed",
+        "binarySha256": "cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda"
+      },
+      {
+        "id": "claude-cancel",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended",
+        "configurationFingerprint": "88b8958a7627e1c0fc49858035642bad2154657dbd110cedb09cf57a385b60c6",
+        "binarySha256": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478"
+      },
+      {
+        "id": "dsh-cancel",
+        "passed": true,
+        "outcome": "native-interrupt-cancels-pending-questions-and-reload-remains-ended",
+        "configurationFingerprint": "06097d2da81c36b22648a88ef0cce1c20c565e308b509163090a16255a506eb4",
+        "binarySha256": null
+      }
+    ],
+    "versions": {
+      "codex": "0.167.0",
+      "claudeSdk": "0.3.322",
+      "claudeCli": "2.1.322",
+      "dsh": "0.2.2-rc.1"
+    },
+    "reportSha256": "9927b05d342dce7a952a5394ec3525ce22edc70d171a2ba26401f7611678800d"
+  },
+  "l1": {
+    "testedCommit": "d5501a13a5a36ed785441d082b58df5f5e45a972",
+    "scenariosPassed": 1,
+    "scenariosTotal": 33,
+    "goldenDifferences": 32,
+    "notTriggered": 16,
+    "remainingFailures": true,
+    "goldenFilesChangedByThisWork": false
+  },
+  "deployment": "not-performed",
+  "remaining": "Full secret/MCP, dual native surfaces, network/server-restart and real Provider acceptance; requirements and related Issues remain open."
+}

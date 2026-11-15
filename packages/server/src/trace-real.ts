@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AdapterEvent, TraceFrame, TraceSink } from '@webdcc/protocol';
+import { nativePredicates, scenarioNativePredicates } from '@webdcc/protocol';
 import { CodexAdapter } from '@webdcc/adapter-codex';
 import { ClaudeAdapter } from '@webdcc/adapter-claude';
 import { DshAdapter, attachToDsh } from '@webdcc/adapter-dsh';
@@ -210,6 +211,10 @@ async function main(): Promise<void> {
     }
     const final = events.filter((event): event is Extract<AdapterEvent, { type: 'item.complete' }> => event.type === 'item.complete' && event.kind === 'assistant.message').map((event) => String((event.data as { text?: string }).text ?? '')).filter(Boolean).at(-1) ?? '';
     await writeFile(join(args.out, 'reference', 'final.txt'), final);
+    await native.flush();
+    const nativeFrames = (await readFile(join(args.out, 'native.jsonl'), 'utf8')).split('\n').filter(Boolean).map(line => JSON.parse(line) as TraceFrame);
+    const requiredNativePredicates = scenarioNativePredicates(args.scenario);
+    const observed = nativePredicates(args.agent, nativeFrames);
     await writeFile(join(args.out, 'meta.json'), JSON.stringify({
       version: 1,
       agent: args.agent,
@@ -219,7 +224,10 @@ async function main(): Promise<void> {
       recordedAt: new Date().toISOString(),
       traceMode: args.agent === 'dsh' ? 'attach' : 'spawn',
       modelLayer: args.agent === 'dsh' ? { recorded: false, reason: 'attach 模式无法透明代理 DSH 内部模型端点' } : { recorded: true },
-      notTriggered: [],
+      requiredNativePredicates,
+      nativePredicates: observed,
+      referenceOrigin: 'adapter-output-not-independent',
+      notTriggered: requiredNativePredicates.filter(predicate => observed[predicate] !== true),
     }, null, 2) + '\n');
   } finally {
     await native.flush();

@@ -17,6 +17,8 @@
     "@tanstack/react-router": "^1.170.46",
     "@tanstack/react-virtual": "^3.14.26",
     "@webdcc/protocol": "workspace:*",
+    "@xterm/xterm": "6.0.0",
+    "@xterm/addon-fit": "0.11.0",
     "diff2html": "^3.4.56",
     "idb": "^8.0.4",
     "react": "19.1.10",

@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { parsePublicOrigins } from './auth.js';
+import type { DiagnosticWriteLimits } from '@webdcc/model-proxy';
 
 export interface Config {
   host: string;
@@ -11,6 +13,12 @@ export interface Config {
   idleDisposeMin: number;
   version: string;
   recordInteractions?: boolean;
+  diagnosticLimits?: DiagnosticWriteLimits & { retentionMs: number; maxCaptureBytes: number; maxCaptureChunks: number };
+  publicOrigins?: string[];
+  trustProxy?: boolean | string[];
+  nativeDshPublicOrigin?: string;
+  nativeDshListenHost?: string;
+  nativeDshListenPort?: number;
 }
 
 function envInt(value: string | undefined, fallback: number): number {
@@ -22,6 +30,13 @@ function envInt(value: string | undefined, fallback: number): number {
 /** SPEC 12.2 的配置项 */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const dataDir = env['WDCC_DATA_DIR'] ?? join(homedir(), '.webdcc');
+  const recordInteractions = env['WDCC_TRACE'] === '1' && env['WDCC_TEST_HOOKS'] !== '1';
+  const limit = (name: string, fallback: number, minimum = 0): number => {
+    if (env[name] === undefined || env[name]?.trim() === '') return fallback;
+    const value = Number(env[name]);
+    if (!Number.isSafeInteger(value) || value < minimum) throw new Error(`${name} 必须是至少 ${minimum} 的整数`);
+    return value;
+  };
   return {
     host: env['WDCC_HOST'] ?? '0.0.0.0',
     port: envInt(env['WDCC_PORT'], 8787),
@@ -30,7 +45,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dshPort: envInt(env['WDCC_DSH_PORT'], 3091),
     idleDisposeMin: envInt(env['WDCC_IDLE_DISPOSE_MIN'], 30),
     version: env['WDCC_VERSION'] ?? '0.1.0',
-    recordInteractions: env['WDCC_TRACE'] !== '0' && env['WDCC_TEST_HOOKS'] !== '1',
+    publicOrigins: parsePublicOrigins(env['WDCC_PUBLIC_ORIGINS']),
+    trustProxy: (env['WDCC_TRUST_PROXY'] ?? '').split(',').map(value => value.trim()).filter(Boolean),
+    ...(env['WDCC_NATIVE_DSH_PUBLIC_ORIGIN'] ? {
+      nativeDshPublicOrigin: env['WDCC_NATIVE_DSH_PUBLIC_ORIGIN'],
+      nativeDshListenHost: env['WDCC_NATIVE_DSH_LISTEN_HOST'] ?? '127.0.0.1',
+      nativeDshListenPort: limit('WDCC_NATIVE_DSH_LISTEN_PORT', 8788, 1),
+    } : {}),
+    recordInteractions,
+    ...(recordInteractions ? { diagnosticLimits: {
+      maxCaptureBytes: limit('WDCC_TRACE_MAX_CAPTURE_BYTES', 8 * 1024 * 1024),
+      maxCaptureChunks: limit('WDCC_TRACE_MAX_CAPTURE_CHUNKS', 4096, 1),
+      maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024),
+      maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024),
+      retentionMs: limit('WDCC_TRACE_RETENTION_MS', 7 * 24 * 60 * 60 * 1000, 1),
+    } } : {}),
   };
 }
 

@@ -187,6 +187,7 @@ export function agentStatusLine(agent: string, meta: MetaResponse | null, provid
   const info = meta?.agents[agent];
   if (info === undefined) return '这个 Agent 没有启用';
   if (!info.installed) return info.notes?.[0] ?? '服务器上没有安装';
+  if (info.compatible === false) return `版本不兼容：${info.version ?? '未知'}（需要 ${info.pinnedVersion}）`;
   if (agent === 'dsh' && dsh !== undefined && dsh !== null) {
     if (dsh.mode === 'attach') return dsh.connected ? `已连接本机 DSH · ${hostOf(dsh.url)}` : '还没有连接 DSH';
     return dsh.connected ? 'WebDCC 自己拉起的 DSH' : 'DSH 未运行';
@@ -208,5 +209,5 @@ function hostOf(url: string | null): string {
 
 export function agentAvailable(agent: string, meta: MetaResponse | null): boolean {
   const info = meta?.agents[agent];
-  return info !== undefined && info.installed !== false;
+  return info !== undefined && info.installed !== false && info.compatible !== false;
 }

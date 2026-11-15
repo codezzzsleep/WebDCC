@@ -1,15 +1,9 @@
 import { useState } from 'react';
+import { currentGoal, goalLabel } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { agentText } from '../lib/agents.js';
 import { Icon, Spinner } from './Icon.js';
-
-const GOAL_STATUS: Record<string, string> = {
-  active: '进行中',
-  completed: '已完成',
-  paused: '已暂停',
-  cleared: '已清除',
-};
 
 /**
  * 输入框上方的任务条（DSH 的"任务"位置）。三家用同一个位置，内容是各自原生的：
@@ -21,7 +15,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
   const session = store.getSession(sessionId);
   const turns = store.getTurns(sessionId);
   const plan = [...turns].reverse().find((turn) => turn.plan !== undefined)?.plan;
-  const goalData = [...turns].reverse().find((turn) => turn.goal !== undefined)?.goal;
+  const goalData = currentGoal(store.getEvents(sessionId));
   const showGoal = goalData !== undefined && goalData.status !== 'cleared' && goalData.objective !== '';
   if (plan === undefined && !showGoal) return null;
 
@@ -38,8 +32,9 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
             <Icon name="target" size={15} />
             <strong>目标</strong>
             <span className="summary">
-              {goalData.objective} · {GOAL_STATUS[goalData.status] ?? goalData.status}
+              {goalData.objective} · {goalLabel(goalData)}
             </span>
+            {goalData.tokensUsed === undefined ? null : <span className="origin">用量 {goalData.tokensUsed.toLocaleString()}{goalData.tokenBudget == null ? '' : ` / ${goalData.tokenBudget.toLocaleString()}`} tok</span>}
             <span className="origin">{agentName} 的目标</span>
           </div>
         </div>

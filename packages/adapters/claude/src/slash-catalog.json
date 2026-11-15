@@ -1,0 +1,615 @@
+{
+  "nativeVersion": "2.1.322",
+  "source": "Installed official Claude CLI embedded command definitions (local/local-jsx/builtin prompt)",
+  "binarySha256": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+  "availability": "Native account/platform/configuration predicates are evaluated by the CLI",
+  "commands": [
+    {
+      "name": "/web-setup",
+      "aliases": [],
+      "description": "Set up cloud sessions with your GitHub account"
+    },
+    {
+      "name": "/compact",
+      "aliases": [],
+      "description": "Free up context by summarizing the conversation so far",
+      "argumentHint": "<optional custom summarization instructions>"
+    },
+    {
+      "name": "/add-dir",
+      "aliases": [],
+      "description": "Add a new working directory",
+      "argumentHint": "<path>"
+    },
+    {
+      "name": "/cloud-plugins",
+      "aliases": [],
+      "description": "Choose whether cloud sessions use the plugins enabled on this machine"
+    },
+    {
+      "name": "/auto-mode-setup",
+      "aliases": [],
+      "description": "Teach auto mode about your environment, plus optional rule tweaks",
+      "argumentHint": "[--request-id <uuid>] (--wizard posture=… scope=… depth=… --propose | --expect-sha256 <64-hex> --apply-file <path>)"
+    },
+    {
+      "name": "/artifacts",
+      "aliases": [],
+      "description": "Browse your published and shared artifacts"
+    },
+    {
+      "name": "/autofix-pr",
+      "aliases": [],
+      "description": "Monitor and autofix any issues with the current PR"
+    },
+    {
+      "name": "/btw",
+      "aliases": [],
+      "description": "Ask a quick side question without interrupting the main conversation",
+      "argumentHint": "[question]"
+    },
+    {
+      "name": "/project",
+      "aliases": [],
+      "description": "Set the claude.ai Project for this session's usage reports",
+      "argumentHint": "[Project ID or claude.ai address] [--save] | clear [--save]"
+    },
+    {
+      "name": "/feedback",
+      "aliases": [],
+      "description": "Send feedback to Anthropic or report a bug",
+      "argumentHint": "[report]"
+    },
+    {
+      "name": "/bug",
+      "aliases": [
+        "/share"
+      ],
+      "description": "Report a bug or share your conversation",
+      "argumentHint": "[report]"
+    },
+    {
+      "name": "/cd",
+      "aliases": [],
+      "description": "Move this session to a new working directory",
+      "argumentHint": "<path>"
+    },
+    {
+      "name": "/clear",
+      "aliases": [
+        "/reset",
+        "/new"
+      ],
+      "description": "Start a new session with empty context; previous session stays on disk (resumable with /resume)",
+      "argumentHint": "[name]"
+    },
+    {
+      "name": "/color",
+      "aliases": [],
+      "description": "Set the prompt bar color for this session"
+    },
+    {
+      "name": "/copy",
+      "aliases": [],
+      "description": "Copy Claude's last response to clipboard (or /copy N for the Nth-latest)"
+    },
+    {
+      "name": "/desktop",
+      "aliases": [
+        "/app"
+      ],
+      "description": "Continue the current session in Claude Desktop"
+    },
+    {
+      "name": "/autocompact",
+      "aliases": [],
+      "description": "Set how full the context gets before auto-summarizing",
+      "argumentHint": "[auto|<tokens>]"
+    },
+    {
+      "name": "/config",
+      "aliases": [
+        "/settings"
+      ],
+      "description": "Open settings",
+      "argumentHint": "[key=value]"
+    },
+    {
+      "name": "/output-style",
+      "aliases": [],
+      "description": "List output styles or switch to one",
+      "argumentHint": "[style]"
+    },
+    {
+      "name": "/context",
+      "aliases": [],
+      "description": "Visualize current context usage as a colored grid",
+      "argumentHint": "[all]"
+    },
+    {
+      "name": "/diff",
+      "aliases": [],
+      "description": "Claude CLI 原生 diff 指令"
+    },
+    {
+      "name": "/memory",
+      "aliases": [],
+      "description": "Edit CLAUDE.md files and memory settings"
+    },
+    {
+      "name": "/pause-memory",
+      "aliases": [
+        "/memory-pause",
+        "/toggle-memory"
+      ],
+      "description": "Claude CLI 原生 pause-memory 指令"
+    },
+    {
+      "name": "/help",
+      "aliases": [],
+      "description": "Show help and available commands"
+    },
+    {
+      "name": "/ide",
+      "aliases": [],
+      "description": "Manage IDE integrations and show status",
+      "argumentHint": "[open]"
+    },
+    {
+      "name": "/import",
+      "aliases": [],
+      "description": "Import config from another AI coding agent",
+      "argumentHint": "[codex|gemini|cursor] [--dry-run]"
+    },
+    {
+      "name": "/keybindings",
+      "aliases": [],
+      "description": "Open your keyboard shortcuts file"
+    },
+    {
+      "name": "/design-consent",
+      "aliases": [],
+      "description": "Grant Claude agent access to your Design projects"
+    },
+    {
+      "name": "/design-revoke",
+      "aliases": [],
+      "description": "Revoke Claude agent access to your Design projects"
+    },
+    {
+      "name": "/design-login",
+      "aliases": [],
+      "description": "Authorize design-system access for /design-sync with your claude.ai account"
+    },
+    {
+      "name": "/login",
+      "aliases": [],
+      "description": "Claude CLI 原生 login 指令"
+    },
+    {
+      "name": "/logout",
+      "aliases": [],
+      "description": "Sign out from your Anthropic account"
+    },
+    {
+      "name": "/install-github-app",
+      "aliases": [],
+      "description": "Set up Claude GitHub Actions for a repository"
+    },
+    {
+      "name": "/install-slack-app",
+      "aliases": [],
+      "description": "Install the Claude Slack app"
+    },
+    {
+      "name": "/mcp",
+      "aliases": [],
+      "description": "Manage MCP servers",
+      "argumentHint": "[reconnect|enable|disable [<server>|all]]"
+    },
+    {
+      "name": "/mobile",
+      "aliases": [
+        "/ios",
+        "/android"
+      ],
+      "description": "Show QR code to download the Claude mobile app"
+    },
+    {
+      "name": "/voice",
+      "aliases": [],
+      "description": "Toggle voice mode",
+      "argumentHint": "[hold|tap|off]"
+    },
+    {
+      "name": "/powerup",
+      "aliases": [],
+      "description": "Discover Claude Code features through quick interactive lessons"
+    },
+    {
+      "name": "/release-notes",
+      "aliases": [],
+      "description": "View release notes"
+    },
+    {
+      "name": "/rename",
+      "aliases": [
+        "/name"
+      ],
+      "description": "Rename the current conversation",
+      "argumentHint": "[name]"
+    },
+    {
+      "name": "/resume",
+      "aliases": [
+        "/continue"
+      ],
+      "description": "Claude CLI 原生 resume 指令"
+    },
+    {
+      "name": "/setup-bedrock",
+      "aliases": [],
+      "description": "Reconfigure Amazon Bedrock authentication, region, or model pins"
+    },
+    {
+      "name": "/setup-vertex",
+      "aliases": [],
+      "description": "Reconfigure Google Vertex AI authentication, project, region, or model pins"
+    },
+    {
+      "name": "/ultrareview",
+      "aliases": [],
+      "description": "Claude CLI 原生 ultrareview 指令"
+    },
+    {
+      "name": "/session",
+      "aliases": [
+        "/remote"
+      ],
+      "description": "Show cloud session URL and QR code"
+    },
+    {
+      "name": "/scroll-speed",
+      "aliases": [],
+      "description": "Adjust mouse wheel scroll speed"
+    },
+    {
+      "name": "/skills",
+      "aliases": [],
+      "description": "List available skills"
+    },
+    {
+      "name": "/status",
+      "aliases": [],
+      "description": "Show Claude Code status including version, model, account, API connectivity, and tool statuses"
+    },
+    {
+      "name": "/tasks",
+      "aliases": [
+        "/bashes"
+      ],
+      "description": "View and manage everything running in the background"
+    },
+    {
+      "name": "/teleport",
+      "aliases": [
+        "/tp"
+      ],
+      "description": "Send this session to the cloud, or resume one from claude.ai"
+    },
+    {
+      "name": "/terminal-setup",
+      "aliases": [],
+      "description": "Claude CLI 原生 terminal-setup 指令"
+    },
+    {
+      "name": "/ultraplan",
+      "aliases": [],
+      "description": "Claude CLI 原生 ultraplan 指令",
+      "argumentHint": "<prompt>"
+    },
+    {
+      "name": "/usage",
+      "aliases": [
+        "/cost",
+        "/stats"
+      ],
+      "description": "Show session cost, plan usage, and activity stats"
+    },
+    {
+      "name": "/skill-doctor",
+      "aliases": [],
+      "description": "Show which loaded skills are unused and costing context"
+    },
+    {
+      "name": "/theme",
+      "aliases": [],
+      "description": "Change the theme"
+    },
+    {
+      "name": "/tui",
+      "aliases": [],
+      "description": "Set the terminal UI renderer (default | fullscreen)",
+      "argumentHint": "[default|fullscreen]"
+    },
+    {
+      "name": "/permissions",
+      "aliases": [
+        "/allowed-tools"
+      ],
+      "description": "Manage allow and deny tool permission rules"
+    },
+    {
+      "name": "/plan",
+      "aliases": [],
+      "description": "Enable plan mode or view the current session plan",
+      "argumentHint": "[open|<description>]"
+    },
+    {
+      "name": "/fast",
+      "aliases": [],
+      "description": "Claude CLI 原生 fast 指令",
+      "argumentHint": "[on|off]"
+    },
+    {
+      "name": "/passes",
+      "aliases": [],
+      "description": "Claude CLI 原生 passes 指令"
+    },
+    {
+      "name": "/privacy-settings",
+      "aliases": [],
+      "description": "View and update your privacy settings"
+    },
+    {
+      "name": "/hooks",
+      "aliases": [],
+      "description": "View hook configurations for tool events"
+    },
+    {
+      "name": "/loops",
+      "aliases": [],
+      "description": "List, create, and delete loops"
+    },
+    {
+      "name": "/branch",
+      "aliases": [],
+      "description": "Create a branch of the current conversation at this point",
+      "argumentHint": "[name]"
+    },
+    {
+      "name": "/fork",
+      "aliases": [],
+      "description": "Spawn a background agent that inherits the full conversation",
+      "argumentHint": "<directive>"
+    },
+    {
+      "name": "/subtask",
+      "aliases": [],
+      "description": "Send a subagent off with your full context; its result comes back here",
+      "argumentHint": "<task>"
+    },
+    {
+      "name": "/agents",
+      "aliases": [],
+      "description": "(removed) Ask Claude to create/manage subagents, or edit .claude/agents/"
+    },
+    {
+      "name": "/plugin",
+      "aliases": [
+        "/plugins",
+        "/marketplace"
+      ],
+      "description": "Manage Claude Code plugins"
+    },
+    {
+      "name": "/reload-plugins",
+      "aliases": [],
+      "description": "Activate pending plugin changes in the current session",
+      "argumentHint": "[--force]"
+    },
+    {
+      "name": "/reload-skills",
+      "aliases": [],
+      "description": "Pick up skills added or changed on disk during this session"
+    },
+    {
+      "name": "/rewind",
+      "aliases": [
+        "/checkpoint",
+        "/undo"
+      ],
+      "description": "Restore the code and/or conversation to a previous point"
+    },
+    {
+      "name": "/heapdump",
+      "aliases": [],
+      "description": "Dump the JS heap to the Desktop; on Linux with no Desktop folder, the home directory"
+    },
+    {
+      "name": "/version",
+      "aliases": [],
+      "description": "Show this session's version (autoupdate may have a newer one)"
+    },
+    {
+      "name": "/sandbox",
+      "aliases": [],
+      "description": "Claude CLI 原生 sandbox 指令"
+    },
+    {
+      "name": "/chrome",
+      "aliases": [],
+      "description": "Open Claude in Chrome settings"
+    },
+    {
+      "name": "/stickers",
+      "aliases": [],
+      "description": "Order Claude Code stickers"
+    },
+    {
+      "name": "/radio",
+      "aliases": [],
+      "description": "Listen to Claude FM lo-fi radio"
+    },
+    {
+      "name": "/advisor",
+      "aliases": [],
+      "description": "Let Claude consult a stronger model at key moments"
+    },
+    {
+      "name": "/exit",
+      "aliases": [
+        "/quit"
+      ],
+      "description": "Claude CLI 原生 exit 指令"
+    },
+    {
+      "name": "/restart",
+      "aliases": [
+        "/update"
+      ],
+      "description": "Claude CLI 原生 restart 指令"
+    },
+    {
+      "name": "/export",
+      "aliases": [],
+      "description": "Export the current conversation to a file or clipboard",
+      "argumentHint": "[filename]"
+    },
+    {
+      "name": "/model",
+      "aliases": [],
+      "description": "Set the AI model for Claude Code",
+      "argumentHint": "<model>"
+    },
+    {
+      "name": "/remote-env",
+      "aliases": [],
+      "description": "Choose the default environment for cloud agents"
+    },
+    {
+      "name": "/use-case",
+      "aliases": [],
+      "description": "Choose the Life Sciences use case that applies to your requests",
+      "argumentHint": "[use case]"
+    },
+    {
+      "name": "/workflow-launch-exec",
+      "aliases": [],
+      "description": "Execute a server-launched workflow handoff (workflow_launch event sessions only)"
+    },
+    {
+      "name": "/upgrade",
+      "aliases": [],
+      "description": "Upgrade your plan for higher rate limits and more Opus"
+    },
+    {
+      "name": "/usage-credits",
+      "aliases": [],
+      "description": "Configure usage credits or request them from your admin when you hit a limit"
+    },
+    {
+      "name": "/extra-usage",
+      "aliases": [],
+      "description": "Renamed to /usage-credits"
+    },
+    {
+      "name": "/pro-trial-expired",
+      "aliases": [],
+      "description": "Options shown when the Pro plan Claude Code trial has ended"
+    },
+    {
+      "name": "/rate-limit-options",
+      "aliases": [],
+      "description": "Manage usage limits and upgrade options"
+    },
+    {
+      "name": "/statusline",
+      "aliases": [],
+      "description": "Set up Claude Code's status line UI"
+    },
+    {
+      "name": "/effort",
+      "aliases": [],
+      "description": "Set effort level for model usage"
+    },
+    {
+      "name": "/wellbeing",
+      "aliases": [
+        "/breaks",
+        "/break-reminder",
+        "/downtime"
+      ],
+      "description": "Configure optional break reminders and quiet-hours nudges"
+    },
+    {
+      "name": "/focus",
+      "aliases": [],
+      "description": "Toggle focus view: just your prompt, summary, and response"
+    },
+    {
+      "name": "/insights",
+      "aliases": [],
+      "description": "Generate a report analyzing your Claude Code sessions"
+    },
+    {
+      "name": "/list-agents",
+      "aliases": [
+        "/peers"
+      ],
+      "description": "List subagents, teammates, and other Claude sessions you can message"
+    },
+    {
+      "name": "/background",
+      "aliases": [
+        "/bg"
+      ],
+      "description": "Send this session to the background and free the terminal",
+      "argumentHint": "[prompt]"
+    },
+    {
+      "name": "/stop",
+      "aliases": [],
+      "description": "Stop this background session; transcript and worktree are kept"
+    },
+    {
+      "name": "/recap",
+      "aliases": [],
+      "description": "Generate a one-line session recap now"
+    },
+    {
+      "name": "/goal",
+      "aliases": [],
+      "description": "Set a goal Claude checks before stopping",
+      "argumentHint": "[<condition> | clear]"
+    },
+    {
+      "name": "/workflows",
+      "aliases": [],
+      "description": "Browse running and completed workflows"
+    },
+    {
+      "name": "/brief",
+      "aliases": [],
+      "description": "Toggle brief-only mode"
+    },
+    {
+      "name": "/remote-control",
+      "aliases": [
+        "/rc"
+      ],
+      "description": "Claude CLI 原生 remote-control 指令"
+    },
+    {
+      "name": "/daemon",
+      "aliases": [],
+      "description": "Manage background services and routines"
+    },
+    {
+      "name": "/install",
+      "aliases": [],
+      "description": "Install Claude Code native build",
+      "argumentHint": "[options]"
+    }
+  ]
+}

@@ -1,0 +1,533 @@
+{
+  "nativeVersion": "0.167.0",
+  "sourceUrl": "https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/tui/src/slash_command.rs",
+  "sourceSha256": "38f7b149fa54d62bbe6f99fad6bd6faed1c697663e75abe65379c27f4ff6bff2",
+  "commands": [
+    {
+      "variant": "Model",
+      "name": "/model",
+      "aliases": [],
+      "description": "choose what model and reasoning effort to use",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Presets",
+      "name": "/presets",
+      "aliases": [],
+      "description": "run or save reusable prompts and slash commands",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Daybreak",
+      "name": "/daybreak",
+      "aliases": [],
+      "description": "turn Daybreak on or off",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Ide",
+      "name": "/ide",
+      "aliases": [],
+      "description": "include current selection, open files, and other context from your IDE",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Permissions",
+      "name": "/permissions",
+      "aliases": [],
+      "description": "choose what Codex is allowed to do",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Keymap",
+      "name": "/keymap",
+      "aliases": [],
+      "description": "remap TUI shortcuts",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Vim",
+      "name": "/vim",
+      "aliases": [],
+      "description": "toggle Vim mode for the composer",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "ElevateSandbox",
+      "name": "/setup-default-sandbox",
+      "aliases": [],
+      "description": "set up elevated agent sandbox",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Experimental",
+      "name": "/experimental",
+      "aliases": [],
+      "description": "toggle experimental features",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "AutoReview",
+      "name": "/approve",
+      "aliases": [],
+      "description": "approve one retry of a recent auto-review denial",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Memories",
+      "name": "/memories",
+      "aliases": [],
+      "description": "configure memory use and generation",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Skills",
+      "name": "/skills",
+      "aliases": [],
+      "description": "use skills to improve how Codex performs specific tasks",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Import",
+      "name": "/import",
+      "aliases": [],
+      "description": "import setup, this project, and recent chats from Claude Code",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Hooks",
+      "name": "/hooks",
+      "aliases": [],
+      "description": "view and manage lifecycle hooks",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Review",
+      "name": "/review",
+      "aliases": [],
+      "description": "review my current changes and find issues",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Rename",
+      "name": "/rename",
+      "aliases": [],
+      "description": "rename the current thread",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "New",
+      "name": "/new",
+      "aliases": [],
+      "description": "start a new chat during a conversation",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Archive",
+      "name": "/archive",
+      "aliases": [],
+      "description": "archive this session",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Delete",
+      "name": "/delete",
+      "aliases": [],
+      "description": "permanently delete this session",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Resume",
+      "name": "/resume",
+      "aliases": [],
+      "description": "resume a saved chat",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Fork",
+      "name": "/fork",
+      "aliases": [],
+      "description": "fork the current chat",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Worktree",
+      "name": "/worktree",
+      "aliases": [],
+      "description": "start or continue a conversation in a new worktree",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "App",
+      "name": "/app",
+      "aliases": [],
+      "description": "continue this session in the Desktop app",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Init",
+      "name": "/init",
+      "aliases": [],
+      "description": "create an AGENTS.md file with instructions for Codex",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Compact",
+      "name": "/compact",
+      "aliases": [],
+      "description": "summarize conversation to prevent hitting the context limit",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Config",
+      "name": "/config",
+      "aliases": [],
+      "description": "configure Codex preferences",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Recap",
+      "name": "/recap",
+      "aliases": [],
+      "description": "summarize the current conversation now",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Plan",
+      "name": "/plan",
+      "aliases": [],
+      "description": "switch to Plan mode",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Voice",
+      "name": "/voice",
+      "aliases": [],
+      "description": "start or stop voice; use /voice settings to choose a voice",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Goal",
+      "name": "/goal",
+      "aliases": [],
+      "description": "set or view the goal for a long-running task",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Agents",
+      "name": "/agents",
+      "aliases": [],
+      "description": "open the agent command center",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Side",
+      "name": "/side",
+      "aliases": [],
+      "description": "start a side conversation in an ephemeral fork",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Btw",
+      "name": "/btw",
+      "aliases": [],
+      "description": "start a side conversation in an ephemeral fork",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Copy",
+      "name": "/copy",
+      "aliases": [],
+      "description": "copy the last response or part of it",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Export",
+      "name": "/export",
+      "aliases": [],
+      "description": "export the conversation as markdown",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Raw",
+      "name": "/raw",
+      "aliases": [],
+      "description": "toggle raw scrollback mode for copy-friendly terminal selection",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Tui",
+      "name": "/tui",
+      "aliases": [],
+      "description": "choose the TUI mode for the next launch",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Diff",
+      "name": "/diff",
+      "aliases": [],
+      "description": "show git diff (including untracked files)",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Mention",
+      "name": "/mention",
+      "aliases": [],
+      "description": "mention a file",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Status",
+      "name": "/status",
+      "aliases": [],
+      "description": "show current session configuration and token usage",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Daemon",
+      "name": "/daemon",
+      "aliases": [],
+      "description": "Manage the local background server",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Warnings",
+      "name": "/warnings",
+      "aliases": [],
+      "description": "view retained warnings and diagnostic details",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Cd",
+      "name": "/cd",
+      "aliases": [],
+      "description": "change the current working directory",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Pwd",
+      "name": "/pwd",
+      "aliases": [
+        "/cwd"
+      ],
+      "description": "show the current working directory",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Usage",
+      "name": "/usage",
+      "aliases": [],
+      "description": "view account usage or use a usage limit reset",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "DebugConfig",
+      "name": "/debug-config",
+      "aliases": [],
+      "description": "show config layers and requirement sources for debugging",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Title",
+      "name": "/title",
+      "aliases": [],
+      "description": "configure which items appear in the terminal title",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Statusline",
+      "name": "/statusline",
+      "aliases": [],
+      "description": "configure which items appear in the status line",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Theme",
+      "name": "/theme",
+      "aliases": [],
+      "description": "choose a syntax highlighting theme",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Pets",
+      "name": "/pets",
+      "aliases": [
+        "/pet"
+      ],
+      "description": "choose or hide the terminal pet",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Mcp",
+      "name": "/mcp",
+      "aliases": [],
+      "description": "list MCP tools; use /mcp verbose or /mcp login <name>",
+      "availableDuringTurn": true,
+      "inlineArguments": true
+    },
+    {
+      "variant": "Apps",
+      "name": "/apps",
+      "aliases": [],
+      "description": "manage apps",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Plugins",
+      "name": "/plugins",
+      "aliases": [],
+      "description": "browse plugins",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Logout",
+      "name": "/logout",
+      "aliases": [],
+      "description": "log out of Codex",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Quit",
+      "name": "/quit",
+      "aliases": [],
+      "description": "exit Codex",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Exit",
+      "name": "/exit",
+      "aliases": [],
+      "description": "exit Codex",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Feedback",
+      "name": "/feedback",
+      "aliases": [],
+      "description": "send logs to maintainers",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Rollout",
+      "name": "/rollout",
+      "aliases": [],
+      "description": "print the rollout file path",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Ps",
+      "name": "/ps",
+      "aliases": [],
+      "description": "list background terminals",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Stop",
+      "name": "/stop",
+      "aliases": [
+        "/clean"
+      ],
+      "description": "stop all background terminals",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "Clear",
+      "name": "/clear",
+      "aliases": [],
+      "description": "clear the terminal and start a new chat",
+      "availableDuringTurn": false,
+      "inlineArguments": true
+    },
+    {
+      "variant": "TestApproval",
+      "name": "/test-approval",
+      "aliases": [],
+      "description": "test approval request",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "MultiAgents",
+      "name": "/subagents",
+      "aliases": [],
+      "description": "switch between this session's subagents",
+      "availableDuringTurn": true,
+      "inlineArguments": false
+    },
+    {
+      "variant": "MemoryDrop",
+      "name": "/debug-m-drop",
+      "aliases": [],
+      "description": "DO NOT USE",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    },
+    {
+      "variant": "MemoryUpdate",
+      "name": "/debug-m-update",
+      "aliases": [],
+      "description": "DO NOT USE",
+      "availableDuringTurn": false,
+      "inlineArguments": false
+    }
+  ]
+}

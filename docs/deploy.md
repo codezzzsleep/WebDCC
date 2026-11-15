@@ -103,4 +103,4 @@ WDCC_IDLE_DISPOSE_MIN=30
 - **不要同时运行 DSH 自带的 `dsh web`**：两边共享全局注册表会互相覆盖（SPEC 5.4.9）。WebDCC 自己会在 127.0.0.1:${WDCC_DSH_PORT} 拉起侧车。
 - `codex`、`claude`、`dsh` 必须已按锁定版本安装在运行用户的 PATH 上，并完成各自的登录（或改用 Provider + API Key）。
 - Provider 的 Key 存在 `WDCC_DATA_DIR/secrets.json`（0600），不会出现在日志、事件或 API 响应里。
-- 备份 `WDCC_DATA_DIR`（SQLite + 文件 + secrets）即可完整恢复。
+- `WDCC_DATA_DIR` 备份只覆盖 WebDCC 持久状态；workspace、原生 home/历史/OAuth 和外部 DSH Host 需要另外保存。加密备份与隔离恢复步骤见 [备份与恢复](backup-and-restore.md)。

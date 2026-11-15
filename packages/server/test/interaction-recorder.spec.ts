@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile, utimes, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -30,4 +30,32 @@ it('correlates raw/model/Web/disk evidence, redacts secrets and reports incomple
   expect(rows.every(row => row.context.turnId === 'turn')).toBe(true);
   expect(rows.find(row => row.channel === 'after').value.sha256).toBe(createHash('sha256').update(await readFile(join(root, 'a.txt'))).digest('hex'));
   expect((await stat(join(recorder.directory, 's.jsonl'))).mode & 0o777).toBe(0o600);
+});
+
+it('NP-14 trusted masked model byte records retain valid Base64 and truncated payloads remain incomplete', async () => {
+  root = await mkdtemp(join(tmpdir(), 'wdcc-recorder-model-'));
+  const recorder = new InteractionRecorder(root); await recorder.init();
+  recorder.addSecret('TQ');
+  const data = Buffer.from('M').toString('base64');
+  recorder.recordModel('s', { requestId: 'req', t: 0, phase: 'complete', value: { response: { chunks: [{ data }] }, coverage: { truncated: true } } });
+  const text = await recorder.read('s');
+  const row = JSON.parse(text) as { value: { value: { response: { chunks: { data: string }[] } } } };
+  expect(Buffer.from(row.value.value.response.chunks[0]!.data, 'base64').toString()).toBe('M');
+  expect(await recorder.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('capture limits')] });
+});
+
+it('NP-14 file quotas leave durable incomplete evidence and retention prunes only expired diagnostic files', async () => {
+  root = await mkdtemp(join(tmpdir(), 'wdcc-recorder-retention-'));
+  const traces = join(root, 'traces'); await mkdir(traces);
+  const old = join(traces, 'old.jsonl'); const keep = join(traces, 'operator-notes.txt');
+  await writeFile(old, 'old'); await writeFile(keep, 'keep');
+  const date = new Date(Date.now() - 10_000); await utimes(old, date, date); await utimes(keep, date, date);
+  const recorder = new InteractionRecorder(root, { maxFileBytes: 64, retentionMs: 1000 }); await recorder.init();
+  await expect(readFile(old)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await readFile(keep, 'utf8')).toBe('keep');
+  expect(() => recorder.record('s', 'native', 'huge', { text: 'x'.repeat(200) })).not.toThrow();
+  await recorder.flush();
+  expect(await recorder.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('file size')] });
+  const restarted = new InteractionRecorder(root); await restarted.init();
+  expect(await restarted.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('file size')] });
 });

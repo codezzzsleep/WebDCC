@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import type { InputContent, SlashControlResult } from '@webdcc/protocol';
+import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
+import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
-import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, rememberAccessMode, rememberModel, rememberReasoning, rememberedAccessMode, type ModelChoice } from '../lib/agents.js';
+import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, rememberAccessMode, rememberModel, rememberReasoning, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { AgentMark } from '../components/AgentMark.js';
 import { Composer } from '../components/Composer.js';
@@ -48,8 +51,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const choice = choiceOverride[agent] ?? defaultChoice(agent, meta?.agents[agent], providers);
   const availableAccessModes = meta?.agents[agent]?.accessModes ?? [];
-  const rememberedMode = rememberedAccessMode(agent);
-  const selectedMode = accessModes[agent] ?? (rememberedMode !== undefined && availableAccessModes.some((mode) => mode.id === rememberedMode) ? rememberedMode : availableAccessModes[0]?.id);
+  const selectedMode = accessModes[agent] ?? availableAccessModes[0]?.id;
 
   const cards = useMemo(
     () =>
@@ -70,7 +72,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
     }
   };
 
-  const submit = async (text: string, images: string[]): Promise<void> => {
+  const submit = async (text: string, contentParts: InputContent): Promise<{ commandId: string }> => {
     if (workspaceId === '') throw new Error('先添加一个工作区');
     const accessMode = selectedMode;
     const sessionId = await store.createSession({
@@ -83,8 +85,28 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
     });
     if (sessionId === '') throw new Error('服务端没有返回会话 id');
     store.setDrawer(false);
-    store.sendMessage(sessionId, text, images);
+    for (const part of contentParts.parts) if (part.type === 'image' || part.type === 'file' || part.type === 'audio') await api.grantAttachment(sessionId, part.fileId);
+    if (parseSlashInput(text)) {
+      const savedDraft = await api.saveInputDraft(sessionId, text, contentParts, 0);
+      const catalog = await api.slashCommands(sessionId); const command = slashCommandFor(catalog.commands, text);
+      if (command?.route === 'native-control') {
+        const request = { commandId: crypto.randomUUID(), line: text, revision: catalog.revision, contentParts };
+        const response = await api.slashControl(sessionId, request); const result = response.result as SlashControlResult | undefined;
+        store.requestSlashControl(sessionId, request, response);
+        try { sessionStorage.setItem(`slash-action:${sessionId}`, request.commandId); } catch { /* Optional browser pointer. */ }
+        if (!result?.form && !result?.failed && ['completed', 'submitted'].includes(response.receipt.state)) await api.saveInputDraft(sessionId, '', { ...contentParts, parts: [] }, savedDraft.revision ?? 0);
+        await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+        return { commandId: response.receipt.commandId };
+      }
+      if (!command || command.route === 'native-terminal' || command.route === 'web') {
+        if (command?.route === 'native-terminal' || command?.route === 'web') store.requestNativeCommand(sessionId, text);
+        await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+        return { commandId: store.getSessionCreationCommand(sessionId)! };
+      }
+    }
+    const receipt = await store.sendStructuredMessage(sessionId, text, contentParts);
     await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+    return receipt;
   };
 
   return (
