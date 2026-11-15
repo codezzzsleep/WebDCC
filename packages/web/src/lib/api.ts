@@ -1,6 +1,8 @@
 /** REST 客户端（同源，Cookie 认证） */
 import type {
   BrowseResponse,
+  SlashCommandCatalog,
+  SlashControlRequest,
   ProviderDto,
   Command,
   DraftDto,
@@ -119,7 +121,9 @@ export const api = {
   retryQueuedInput: (id: string, commandId: string) => request<void>(`/api/sessions/${id}/queue/${encodeURIComponent(commandId)}/retry`, { method: 'POST' }),
   providers: () => request<ProviderDto[]>('/api/providers'),
   slashCommands: (sessionId: string) =>
-    request<{ commands: { name: string; description?: string }[] }>(`/api/sessions/${sessionId}/slash-commands`),
+    request<SlashCommandCatalog>(`/api/sessions/${sessionId}/slash-commands`),
+  slashControl: (sessionId: string, input: SlashControlRequest) => request<NativeActionResponse>(`/api/sessions/${sessionId}/slash-commands`, { method: 'POST', body: JSON.stringify(input) }),
+  slashControlResult: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${sessionId}/slash-commands/${encodeURIComponent(commandId)}`),
   sendSubagent: (sessionId: string, childSessionId: string, text: string) =>
     request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/prompt`, { method: 'POST', body: JSON.stringify({ text }) }),
   interruptSubagent: (sessionId: string, childSessionId: string) =>

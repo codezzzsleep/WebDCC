@@ -20,9 +20,12 @@ import type {
   InputContent,
   ResolvedInputPart,
   CodexInputModeCatalog,
+  SlashCommand,
+  SlashCommandCatalog,
+  SlashControlRequest,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
-import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid } from '@webdcc/protocol';
+import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
@@ -891,11 +894,69 @@ export class SessionManager {
     this.updateSessionAndFeed(sessionId, { model }, { model });
   }
 
-  async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
+  async slashCommands(sessionId: string): Promise<SlashCommand[]> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     return runtime.adapter.slashCommands?.(sessionId) ?? [];
+  }
+
+  async slashCommandCatalog(sessionId: string): Promise<SlashCommandCatalog> {
+    const session = this.requireSession(sessionId);
+    try {
+      const commands = await this.slashCommands(sessionId);
+      return { agent: session.agent as AgentId, commands, status: commands.length === 0 ? 'empty' : 'ready',
+        revision: payloadHash({ agent: session.agent, nativeId: this.requireSession(sessionId).nativeId, commands }),
+        ...(commands.length === 0 ? { reason: '原生目录已读取，本会话没有返回可用指令' } : {}) };
+    } catch (failure) {
+      const safe = this.store.nativeEvents.redact({ message: failure instanceof Error ? failure.message : String(failure) }) as { message: string };
+      return { agent: session.agent as AgentId, commands: [], status: 'error', revision: '', reason: `原生指令目录读取失败：${safe.message}` };
+    }
+  }
+
+  async executeSlashControl(sessionId: string, request: SlashControlRequest): Promise<NativeActionResponse> {
+    this.requireSession(sessionId);
+    if (!request || typeof request.line !== 'string' || request.line.length > 16_384 || !parseSlashInput(request.line)
+      || typeof request.revision !== 'string' || !request.revision || Object.keys(request).some(key => !['commandId', 'line', 'revision', 'replaceGoal', 'editGoal', 'contentParts'].includes(key))
+      || request.replaceGoal !== undefined && typeof request.replaceGoal !== 'boolean' || request.editGoal !== undefined && typeof request.editGoal !== 'boolean'
+      || request.replaceGoal === true && request.editGoal === true || request.contentParts !== undefined && !isInputContent(request.contentParts, request.line)) throw this.nativeControlRejected('斜杠控制参数无效', 400);
+    const parsed = parseSlashInput(request.line)!;
+    const type = parsed.name === '/compact' ? 'compact' : parsed.name === '/goal' ? 'slash-goal' : 'slash-control';
+    const response = await this.store.nativeActions.execute(sessionId, { commandId: request.commandId, revision: request.revision,
+      action: { type, line: request.line, ...(request.replaceGoal === undefined ? {} : { replaceGoal: request.replaceGoal }), ...(request.editGoal === undefined ? {} : { editGoal: request.editGoal }),
+        ...(request.contentParts === undefined ? {} : { contentParts: request.contentParts }) } }, () => this.control(sessionId, async () => {
+      const catalog = await this.slashCommandCatalog(sessionId);
+      if (catalog.status !== 'ready' || catalog.revision !== request.revision) throw this.nativeControlRejected('指令目录已变化或未读取，请重新核对');
+      const command = slashCommandFor(catalog.commands, request.line);
+      const runtime = this.runtimes.get(sessionId)!;
+      if (command?.route !== 'native-control' || command.available === false || runtime.adapter.executeSlashControl === undefined) throw this.nativeControlRejected('此指令需要使用声明的原生入口', 400);
+      if (request.contentParts?.parts.some(part => part.type !== 'text') && command.supportsAttachments !== true) throw this.nativeControlRejected('此原生指令没有声明附件能力', 400);
+      let contentParts: UserInput['contentParts'];
+      if (request.contentParts !== undefined) {
+        try { contentParts = (await this.prepareInput(sessionId, { text: request.line, contentParts: request.contentParts })).contentParts; }
+        catch (failure) { throw this.nativeControlRejected(failure instanceof Error ? failure.message : '原生指令附件未通过核对', 400); }
+      }
+      this.assertOwner(runtime); this.store.nativeActions.bind(request.commandId, runtime.identity, runtime.nativeId);
+      if (parsed.name === '/goal' && ['pause', 'clear'].includes(parsed.rawArguments.trim().toLowerCase())) this.watchdog.cancel(sessionId, '用户暂停或清除了原生目标');
+      const result = await runtime.adapter.executeSlashControl(sessionId, request.line, { replaceGoal: request.replaceGoal, editGoal: request.editGoal, contentParts });
+      this.assertOwner(runtime);
+      if (result.text && !result.form) {
+        const event = this.store.appendEvent({ sessionId, turnId: null, itemKey: `slash-result-${request.commandId}`, kind: 'notice',
+          data: { level: result.failed ? 'warning' : 'info', text: `${request.line}\n\n${result.text}`, nativeType: 'slash.command' } });
+        this.hooks.onEvent(event);
+      }
+      const projected = this.store.nativeEvents.redact(result);
+      this.store.nativeActions.saveSlashResult(request.commandId, sessionId, projected);
+      return projected;
+    }));
+    return { ...response, ...this.store.nativeActions.slashResult(request.commandId, sessionId) };
+  }
+
+  slashControlResult(sessionId: string, commandId: string): NativeActionResponse {
+    this.requireSession(sessionId);
+    const response = this.store.nativeActions.slashResult(commandId, sessionId);
+    if (!response) throw Object.assign(new Error('原生指令结果不存在'), { statusCode: 404 });
+    return response;
   }
 
   async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {

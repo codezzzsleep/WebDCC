@@ -1,5 +1,5 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent } from '@webdcc/protocol';
+import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
 import { isInputContent, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
@@ -78,6 +78,17 @@ function nowIso(): string {
 }
 
 export class AppStore {
+  private sessionCreationCommands = new Map<string, string>();
+  private slashControlRequests = new Map<string, { request: SlashControlRequest; response: NativeActionResponse }>();
+  requestSlashControl(sessionId: string, request: SlashControlRequest, response: NativeActionResponse): void { this.slashControlRequests.set(sessionId, { request, response }); this.notify(); }
+  getSlashControlRequest(sessionId: string) { return this.slashControlRequests.get(sessionId); }
+  clearSlashControlRequest(sessionId: string): void { this.slashControlRequests.delete(sessionId); this.notify(); }
+  getSessionCreationCommand(sessionId: string): string | undefined { return this.sessionCreationCommands.get(sessionId); }
+  private nativeCommandRequests = new Map<string, { line: string; id: string }>();
+  requestNativeCommand(sessionId: string, line: string): void {
+    this.nativeCommandRequests.set(sessionId, { line, id: ulid() }); this.notify();
+  }
+  getNativeCommandRequest(sessionId: string): { line: string; id: string } | undefined { return this.nativeCommandRequests.get(sessionId); }
   private sessions = new Map<string, SessionMeta>();
   private events = new Map<string, Map<number, StoredEvent>>();
   private hot = new Map<string, Map<string, HotItem>>();
@@ -197,7 +208,11 @@ export class AppStore {
   private notify(): void {
     if (this.notifyScheduled) return;
     this.notifyScheduled = true;
-    queueMicrotask(() => {
+    // Native goals can complete/start turns faster than the browser paints.
+    // Project all frames immediately, but notify React once per paint so
+    // command input and pause controls remain responsive during that stream.
+    const schedule = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : queueMicrotask;
+    schedule(() => {
       this.notifyScheduled = false;
       this.version += 1;
       for (const listener of this.listeners) listener();
@@ -974,6 +989,7 @@ export class AppStore {
     const result = await api.command(command);
     if (!result.ok) throw new Error(result.error ?? '创建会话失败');
     const value = result.value as { sessionId?: string } | undefined;
+    if (value?.sessionId) this.sessionCreationCommands.set(value.sessionId, command.clientCommandId);
     return value?.sessionId ?? '';
   }
 

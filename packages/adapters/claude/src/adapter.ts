@@ -18,6 +18,7 @@ import type {
   TraceSink,
   TraceFrame,
   AnswerSubmission,
+  SlashCommand,
 } from '@webdcc/protocol';
 import {
   query,
@@ -211,6 +212,7 @@ interface SessionRuntime {
   toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
   /** init 消息里的斜杠命令（F8） */
   slashCommands: string[];
+  terminalSlashCommands: string[];
   content: ClaudeContentReducer;
   ready: Promise<void>;
   frameSeq: number;
@@ -278,7 +280,7 @@ export class ClaudeAdapter implements AgentAdapter {
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
       pump: Promise.resolve(), turnActive: false, backgroundTasks: new Map(), hasBackgroundSnapshot: false, turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
       pending: new Map(), toolItems: new Map(),
-      slashCommands: [], content: new ClaudeContentReducer(1), ready: Promise.resolve(), frameSeq: 0,
+      slashCommands: [], terminalSlashCommands: [], content: new ClaudeContentReducer(1), ready: Promise.resolve(), frameSeq: 0,
     };
     adapter.sessions.set(sessionId, runtime);
     let events: AdapterEvent[] = [];
@@ -357,14 +359,21 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   /** 斜杠命令目录：Claude 的 init 消息里就有（F8 / SL-01） */
-  async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
+  async slashCommands(sessionId: string): Promise<SlashCommand[]> {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return [];
     // The query is created before system/init arrives. Wait briefly so the
     // first slash-menu open observes the native command catalog instead of a
     // transient empty array.
     const commands = await runtime.q.supportedCommands();
-    return commands.map(command => ({ ...command, name: command.name.startsWith('/') ? command.name : `/${command.name}` }));
+    // Before its first user input the pinned CLI answers initialize but has
+    // not emitted system/init, which owns terminal_slash_commands. Use the
+    // terminal subset observed on 2.1.322 until the actual init replaces it.
+    const terminalNames = runtime.slashCommands.length === 0 ? ['doctor', 'color', 'focus', 'reload-plugins'] : runtime.terminalSlashCommands;
+    const terminals = new Set(terminalNames.map(name => name.startsWith('/') ? name : `/${name}`));
+    return commands.map(command => ({ ...command, name: command.name.startsWith('/') ? command.name : `/${command.name}`, source: command.builtin === true ? 'Claude 原生指令' : 'Claude 项目/插件指令',
+      route: terminals.has(command.name.startsWith('/') ? command.name : `/${command.name}`) ? 'native-terminal' : 'native-input',
+      aliases: command.aliases?.map(name => name.startsWith('/') ? name : `/${name}`), argumentHint: command.argumentHint }));
   }
 
   async listModels(providerId: string | null = null): Promise<ModelOption[]> {
@@ -475,6 +484,7 @@ export class ClaudeAdapter implements AgentAdapter {
       pending: new Map(),
       toolItems: new Map(),
       slashCommands: [],
+      terminalSlashCommands: [],
       content: new ClaudeContentReducer(generation),
       ready,
       frameSeq: 0,
@@ -1025,6 +1035,7 @@ export class ClaudeAdapter implements AgentAdapter {
           runtime.nativeId = message.session_id;
           this.emit(sessionId, { type: 'native-id', nativeId: message.session_id });
           runtime.slashCommands = message.slash_commands ?? [];
+          runtime.terminalSlashCommands = message.terminal_slash_commands ?? [];
           runtime.model = message.model;
           runtime.capabilities = message.capabilities ?? [];
         }

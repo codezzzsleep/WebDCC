@@ -10,7 +10,7 @@ interface Action { type: string; label: string; supported: boolean; requiresIdle
 const labels: Record<NativeActionReceipt['state'], string> = { dispatching: '正在执行，等待原生结果', submitted: '已提交，原生终态尚未确认', completed: '原生调用已返回，请核对操作结果', failed: '执行前已拒绝，请核对后重试', uncertain: '结果未确认，请查询原生状态，勿重复执行' };
 
 /** Reads never activate a writer; each action has an explicit submit button. */
-export function NativeControls({ sessionId }: { sessionId: string }): React.ReactElement {
+export function NativeControls({ sessionId, initialCommand }: { sessionId: string; initialCommand?: string }): React.ReactElement {
   const generation = useRef({ sessionId, value: 0 });
   if (generation.current.sessionId !== sessionId) generation.current = { sessionId, value: generation.current.value + 1 };
   const [snapshot, setSnapshot] = useState<NativeControlSnapshot>();
@@ -133,7 +133,7 @@ export function NativeControls({ sessionId }: { sessionId: string }): React.Reac
       {history === undefined ? null : <details open><summary>原生历史（当前页）</summary><pre style={{ whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto' }}>{JSON.stringify(history, null, 2)}</pre></details>}
       {result === undefined ? null : <details open><summary>本次原生返回</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 400, overflow: 'auto' }}>{JSON.stringify(result, null, 2)}</pre></details>}
     </> : null}
-    {snapshot?.agent === 'codex' || snapshot?.agent === 'claude-code' ? <details><summary>原生 CLI</summary><NativeSurface sessionId={sessionId} agent={snapshot.agent} /></details> : null}
+    {snapshot?.agent === 'codex' || snapshot?.agent === 'claude-code' ? <details open={initialCommand !== undefined}><summary>原生 CLI</summary><NativeSurface sessionId={sessionId} agent={snapshot.agent} initialCommand={initialCommand} /></details> : null}
     {snapshot?.agent === 'codex' ? <details><summary>原生进程终端</summary><NativeProcessSurface sessionId={sessionId} /></details> : null}
     {snapshot?.agent === 'dsh' ? <details><summary>DSH 原生页面</summary><NativeDshSurface sessionId={sessionId} /></details> : null}
   </section>;

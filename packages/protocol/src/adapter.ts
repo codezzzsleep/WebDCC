@@ -7,6 +7,7 @@ import type { NativeFrameSink } from './native-events.js';
 import type { NativeObservation } from './native-observation.js';
 import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } from './native-controls.js';
 import type { InputSkillPart, ResolvedInputContent } from './input.js';
+import type { SlashCommand, SlashControlResult } from './slash.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -159,7 +160,8 @@ export interface AgentAdapter {
   /** 切换访问模式（F6）；Codex 在下一次 turn/start 生效，返回值是实际生效的模式 */
   setAccessMode?(sessionId: string, mode: string): Promise<{ accessMode: string } | void>;
   /** 斜杠命令目录（F8）：Claude 来自 init 消息，DSH 来自 commands/list */
-  slashCommands?(sessionId: string): Promise<{ name: string; description?: string }[]>;
+  slashCommands?(sessionId: string): Promise<SlashCommand[]>;
+  executeSlashControl?(sessionId: string, line: string, options?: { replaceGoal?: boolean; editGoal?: boolean; contentParts?: ResolvedInputContent }): Promise<SlashControlResult>;
   /** Read-only mode discovery; it must not activate or resume a native writer. */
   inputModes?(sessionId?: string): Promise<CodexInputModeCatalog>;
   sendSubagent?(sessionId: string, childSessionId: string, text: string): Promise<void>;

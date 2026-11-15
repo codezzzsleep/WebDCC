@@ -5,7 +5,7 @@ import { dirname } from 'node:path';
 export type Db = Database.Database;
 // v12 scopes input/drafts; v13 keeps file name/MIME identity separate from
 // shared content bytes, without changing any existing file ID.
-export const CURRENT_SCHEMA_VERSION = 13;
+export const CURRENT_SCHEMA_VERSION = 14;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -150,6 +150,10 @@ export function openDb(file: string): Db {
       type TEXT NOT NULL, payload_hash TEXT NOT NULL, state TEXT NOT NULL,
       target_key TEXT NOT NULL, runtime_key TEXT, native_id TEXT, server_process TEXT NOT NULL, reference TEXT, error TEXT, updated_at TEXT NOT NULL
     ); CREATE INDEX IF NOT EXISTS native_actions_session ON native_actions(session_id, updated_at);`);
+    db.exec(`CREATE TABLE IF NOT EXISTS slash_results (
+      command_id TEXT PRIMARY KEY REFERENCES native_actions(command_id),
+      session_id TEXT NOT NULL REFERENCES sessions(id), result TEXT NOT NULL
+    )`);
     db.exec(`CREATE TABLE IF NOT EXISTS native_input_ids (
       command_id TEXT PRIMARY KEY REFERENCES input_queue(command_id),
       session_id TEXT NOT NULL REFERENCES sessions(id), turn_id TEXT NOT NULL UNIQUE,

@@ -20,6 +20,8 @@ import type {
   AccessModeOption,
   NativeInteractionSubmission,
   NativeDshRpcCaptureMetadata,
+  SlashCommand,
+  ResolvedInputContent,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
@@ -807,21 +809,29 @@ export class DshAdapter implements AgentAdapter {
   }
 
   /** 斜杠命令目录（F8 / SL-02）：来自 DSH 的 commands/list */
-  async slashCommands(sessionId: string): Promise<{ name: string; description?: string }[]> {
+  async slashCommands(sessionId: string): Promise<SlashCommand[]> {
     const runtime = this.sessions.get(sessionId);
-    const client = await this.ensureSidecar().catch(() => null);
-    if (client === null) return [];
-    try {
-      const result = await this.call<{ commands?: { name?: string; description?: string }[] } | { name?: string; description?: string }[]>(client, 'commands/list', {
+    const client = await this.ensureSidecar();
+    const result = await this.call<{ commands?: { name?: string; description?: string; input?: { hint?: string; attachments?: boolean } }[] } | { name?: string; description?: string; input?: { hint?: string; attachments?: boolean } }[]>(client, 'commands/list', {
         agentId: runtime?.nativeId ?? '',
       });
       const commands = Array.isArray(result) ? result : result.commands ?? [];
       return commands
         .filter((command) => typeof command.name === 'string')
-        .map((command) => ({ name: `/${String(command.name)}`, ...(command.description === undefined ? {} : { description: command.description }) }));
-    } catch {
-      return [];
-    }
+        .map((command) => ({ name: String(command.name).startsWith('/') ? String(command.name) : `/${String(command.name)}`, source: 'DSH commands/list', route: 'native-control' as const,
+          argumentHint: command.input?.hint, supportsAttachments: command.input?.attachments === true,
+          ...(command.description === undefined ? {} : { description: command.description }) }));
+  }
+
+  async executeSlashControl(sessionId: string, line: string, options: { contentParts?: ResolvedInputContent } = {}) {
+    const runtime = this.require(sessionId); const client = await this.ensureSidecar();
+    const generation = this.muxGeneration;
+    const input = { text: line, ...(options.contentParts === undefined ? {} : { contentParts: options.contentParts }) } as UserInput & DshResolvableInput;
+    const encoded = await encodeDshInput(input, { inputModalities: ['text', 'image'], uploadFile: (part, bytes) => this.uploadNativeFile(sessionId, runtime, client, part, bytes) });
+    if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令运行实例已变化'), { code: 'native-control-rejected', statusCode: 409 });
+    const result = await this.call<{ commandId: string; result: { kind: 'success' | 'error'; text?: string } }>(client, 'commands/execute', { agentId: runtime.nativeId, line, submittedAttachments: encoded.submittedAttachments }, sessionId);
+    if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令结果需要核对'), { code: 'uncertain' });
+    return { text: result.result.text ?? '', result, failed: result.result.kind === 'error' };
   }
 
   async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
@@ -1076,6 +1086,8 @@ export class DshAdapter implements AgentAdapter {
     if (command) {
       const execution = await this.call<{ result?: { kind?: string; text?: string } }>(client, 'commands/execute', { agentId: runtime.nativeId, line: input.text, submittedAttachments }, sessionId, inputReference);
       if (execution.result?.kind !== 'success') throw dshNativeError(execution.result?.text ?? 'DSH command did not succeed', 409);
+      if (typeof execution.result.text === 'string' && execution.result.text !== '') this.emit(sessionId, { type: 'item.complete', itemKey: `command-result-${++runtime.frameSeq}`,
+        kind: 'assistant.message', data: { text: execution.result.text }, native: execution });
       this.emit(sessionId, {
         type: 'item.complete',
         itemKey: `command-${++runtime.frameSeq}`,

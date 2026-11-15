@@ -34,6 +34,7 @@ import { nativeAccessMode, schemaHasSecrets } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 import { nativeRequest, nativeSettingsNotification, validateNativeServerParams, type NativeParams } from './controls.js';
+import { codexSlashCommands, executeCodexSlash } from './slash.js';
 import { codexInputParts, encodeCodexInput, unsupportedCodexInput } from './input.js';
 import { elicitationResponse } from './elicitation.js';
 import type { McpServerElicitationRequestParams } from './schema/v2/McpServerElicitationRequestParams.js';
@@ -622,11 +623,19 @@ export class CodexAdapter implements AgentAdapter {
     } finally { await rpc.kill(); }
   }
 
-  /** Codex app-server does not expose a command catalog; /model is the
-   * WebDCC mapping backed by the native model picker. Keep it explicit so the
-   * slash menu does not claim that Codex has no commands. */
-  async slashCommands(): Promise<{ name: string; description?: string }[]> {
-    return [{ name: '/model', description: '打开 Provider 和模型选择' }];
+  /** The pinned CLI owns command names; explicit routes separate native
+   * controls, Web pickers and commands requiring its interactive terminal. */
+  async slashCommands() {
+    await this.requirePinnedVersion();
+    return codexSlashCommands;
+  }
+
+  async executeSlashControl(sessionId: string, line: string, options: { replaceGoal?: boolean; editGoal?: boolean } = {}) {
+    const runtime = this.require(sessionId); await runtime.ready;
+    if (/^\/compact(?:\s|$)/.test(line) && (runtime.turnId !== null || runtime.approvals.size > 0)) throw Object.assign(new Error('请等待原生轮次和交互结束后压缩'), { statusCode: 409, code: 'native-control-rejected' });
+    const result = await executeCodexSlash(runtime.rpc, runtime.nativeId, runtime.cwd, line, options);
+    if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已变化，指令结果需核对'), { code: 'uncertain' });
+    return result;
   }
 
   /** 换模型（AG-*-12）：下一次 turn/start 带上新模型 */

@@ -19,6 +19,14 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
   private readonly preparing = new Map<string, number>();
   constructor(readonly drafts: DraftController<Part>, readonly uploads: UploadController, private readonly capabilities: () => ComposerInputCapabilities) {}
   busy(): boolean { return this.sending; }
+  commandReason(): string | undefined {
+    const draft = this.drafts.snapshot();
+    if (!draft || this.drafts.loading()) return '草稿正在恢复';
+    if (this.sending || (this.preparing.get(draft.sessionId) ?? 0) > 0) return '正文或附件正在准备';
+    if (this.drafts.error()) return this.drafts.error()!.message;
+    try { this.prepareContent(); } catch (error) { return error instanceof Error ? error.message : String(error); }
+    return draft.text.trim() === '' ? '请输入原生指令' : undefined;
+  }
   reason(intent: ComposerIntent): string | undefined {
     const draft = this.drafts.snapshot(); const capabilities = this.capabilities();
     if (draft === undefined || this.drafts.loading()) return '草稿正在恢复';
@@ -51,16 +59,7 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
   async submit(intent: ComposerIntent, enqueue: (input: PreparedComposerInput<Part>) => Promise<{ commandId: string }>): Promise<{ submitted: boolean; reason?: string }> {
     const reason = this.reason(intent); if (reason !== undefined) return { submitted: false, reason };
     const draft = this.drafts.snapshot()!; const token = this.drafts.token()!;
-    const parts = draft.contentParts.parts.map(part => {
-      const { uploadTaskId, ...selected } = part;
-      return uploadTaskId === undefined ? part : { ...selected, fileId: this.uploads.get(uploadTaskId)!.fileId } as Part;
-    });
-    const textParts = parts.filter(part => part.type === 'text');
-    // The visible textarea is declared input, so encode that exact string as
-    // its text block. No instruction or textual stand-in for an asset is added.
-    if (textParts.length === 0 && draft.text !== '') parts.unshift({ type: 'text', text: draft.text } as Part);
-    if (textParts.length === 1) parts[parts.indexOf(textParts[0]!)] = { ...textParts[0]!, text: draft.text };
-    const contentParts: DraftContent<Part> = { ...draft.contentParts, version: 1, parts };
+    const contentParts = this.prepareContent();
     this.sending = true;
     try {
       await this.drafts.flush(token.sessionId);
@@ -72,6 +71,23 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
       if (this.drafts.clearIfUnchanged(token)) await this.drafts.flush(token.sessionId);
       return { submitted: true };
     } finally { this.sending = false; }
+  }
+  /** Resolve the same durable attachment references for a native command,
+   * whose admission rules are independent of the selected model's modalities. */
+  prepareContent(): DraftContent<Part> {
+    const draft = this.drafts.snapshot(); if (!draft || this.drafts.loading()) throw new Error('草稿正在恢复');
+    const parts = draft.contentParts.parts.map(part => {
+      const { uploadTaskId, ...selected } = part;
+      if (uploadTaskId === undefined) return part;
+      const task = this.uploads.get(uploadTaskId);
+      if (task?.state !== 'completed' || !task.fileId || task.sessionId !== draft.sessionId) throw new Error('附件尚未上传完成，原生指令未发送');
+      return { ...selected, fileId: task.fileId } as Part;
+    });
+    const textParts = parts.filter(part => part.type === 'text');
+    if (textParts.some(part => part.elements?.length && part.text !== draft.text)) throw new Error('正文与原生文字元素不一致，请重新准备');
+    if (textParts.length === 0 && draft.text !== '') parts.unshift({ type: 'text', text: draft.text } as Part);
+    if (textParts.length === 1) parts[parts.indexOf(textParts[0]!)] = { ...textParts[0]!, text: draft.text };
+    return { ...draft.contentParts, version: 1, parts };
   }
   /** Attach to current text, never the text captured when upload began. A
    * task already belongs to its durable original Session even when hidden. */

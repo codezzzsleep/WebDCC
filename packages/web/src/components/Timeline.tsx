@@ -32,6 +32,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   const hotCount = store.getHot(sessionId).length;
   const standalone = new Map<string, StoredEvent>();
   for (const event of store.getEvents(sessionId)) {
+    if (event.kind === 'notice' && (event.data as EventData['notice']).nativeType === 'slash.command') standalone.set(event.itemKey, event);
     if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
     if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
     if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
@@ -71,7 +72,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
       {[...standalone.values()].filter(event => event.turnId === null).map(event => <div key={event.itemKey} className="timeline-inner">
-        {event.kind === 'question' ? <QuestionCard event={event} data={event.data as EventData['question']} /> : <ApprovalCard event={event} data={event.data as EventData['approval.request']} />}
+        {event.kind === 'notice' ? <pre className="notice-card" style={{ whiteSpace: 'pre-wrap' }}>{(event.data as EventData['notice']).text}</pre> : event.kind === 'question' ? <QuestionCard event={event} data={event.data as EventData['question']} /> : <ApprovalCard event={event} data={event.data as EventData['approval.request']} />}
       </div>)}
       <div className="timeline-inner" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
         {virtualizer.getVirtualItems().map((item) => {

@@ -18,6 +18,7 @@ import type {
   WorkspaceDto,
   InputContent,
   InteractionEventResponse,
+  SlashControlRequest,
 } from '@webdcc/protocol';
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
@@ -392,7 +393,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const { id } = request.params as { id: string };
     const session = store.getSession(id);
     if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
-    return { commands: await manager.slashCommands(id).catch(() => []) };
+    return manager.slashCommandCatalog(id);
+  });
+
+  app.post('/api/sessions/:id/slash-commands', async request => {
+    const { id } = request.params as { id: string };
+    return manager.executeSlashControl(id, request.body as SlashControlRequest);
+  });
+  app.get('/api/sessions/:id/slash-commands/:commandId', async request => {
+    const { id, commandId } = request.params as { id: string; commandId: string };
+    return manager.slashControlResult(id, commandId);
   });
 
   app.post('/api/sessions/:id/subagents/:childId/prompt', async (request) => {

@@ -1,0 +1,123 @@
+﻿Harness,指令,别名,执行路由,来源,参数提示,附件能力,当前平台可用,说明
+codex,/model,,网页入口,Codex 0.167.0 原生 CLI,原生参数,False,True,
+codex,/presets,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/daybreak,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/ide,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/permissions,,网页入口,Codex 0.167.0 原生 CLI,原生参数,False,True,
+codex,/keymap,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/vim,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/setup-default-sandbox,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/experimental,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/approve,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/memories,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/skills,,网页入口,Codex 0.167.0 原生 CLI,,False,True,
+codex,/import,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/hooks,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/review,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/rename,,原生 API,Codex 0.167.0 原生 CLI,原生参数,False,True,
+codex,/new,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/archive,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/delete,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/resume,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/fork,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/worktree,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/app,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,False,此指令由原生交互终端执行
+codex,/init,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/compact,,原生 API,Codex 0.167.0 原生 CLI,,False,True,
+codex,/config,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/recap,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/plan,,网页入口,Codex 0.167.0 原生 CLI,原生参数,False,True,
+codex,/voice,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/goal,,原生 API,Codex 0.167.0 原生 CLI,原生参数,False,True,
+codex,/agents,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/side,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/btw,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/copy,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/export,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/raw,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/tui,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/diff,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/mention,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/status,,原生 API,Codex 0.167.0 原生 CLI,,False,True,
+codex,/daemon,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/warnings,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/cd,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/pwd,/cwd,原生 API,Codex 0.167.0 原生 CLI,原生参数,False,True,
+codex,/usage,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/debug-config,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/title,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/statusline,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/theme,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/pets,/pet,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/mcp,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/apps,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/plugins,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/logout,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/quit,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/exit,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/feedback,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/rollout,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/ps,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/stop,/clean,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/clear,,原生 CLI 终端,Codex 0.167.0 原生 CLI,原生参数,False,True,此指令由原生交互终端执行
+codex,/test-approval,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/subagents,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/debug-m-drop,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+codex,/debug-m-update,,原生 CLI 终端,Codex 0.167.0 原生 CLI,,False,True,此指令由原生交互终端执行
+claude-code,/deep-research,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/design,,原生 SDK 输入,Claude 原生指令,consent | revoke,由原生 SDK 校验,True,
+claude-code,/design-sync,,原生 SDK 输入,Claude 原生指令,"[<project hint, e.g. ""Acme DS"">]",由原生 SDK 校验,True,
+claude-code,/dataviz,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/update-config,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/verify,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/debug,,原生 SDK 输入,Claude 原生指令,[issue description],由原生 SDK 校验,True,
+claude-code,/code-review,/review,原生 SDK 输入,Claude 原生指令,[low|medium|high|xhigh|max] [--fix] [--comment] [<pr#>|<branch>|<path>] [--max-findings <n>|all],由原生 SDK 校验,True,
+claude-code,/simplify,,原生 SDK 输入,Claude 原生指令,[<target>],由原生 SDK 校验,True,
+claude-code,/batch,,原生 SDK 输入,Claude 原生指令,<instruction>,由原生 SDK 校验,True,
+claude-code,/fewer-permission-prompts,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/doctor,/checkup,原生 CLI 终端,Claude 原生指令,[prompt-audit [<path>]],由原生 SDK 校验,True,
+claude-code,/loop,/proactive,原生 SDK 输入,Claude 原生指令,[interval] [prompt],由原生 SDK 校验,True,
+claude-code,/claude-api,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/workflow-authoring,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/run,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/run-skill-generator,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/plugin-authoring,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/advisor,,原生 SDK 输入,Claude 原生指令,[fable|opus|sonnet|off],由原生 SDK 校验,True,
+claude-code,/agents,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/auto-mode-setup,,原生 SDK 输入,Claude 原生指令,[--request-id <uuid>] (--wizard posture=… scope=… depth=… --propose | --expect-sha256 <64-hex> --apply-file <path>),由原生 SDK 校验,True,
+claude-code,/autocompact,,原生 SDK 输入,Claude 原生指令,[auto|<tokens>],由原生 SDK 校验,True,
+claude-code,/clear,"/reset, /new",原生 SDK 输入,Claude 原生指令,[name],由原生 SDK 校验,True,
+claude-code,/color,,原生 CLI 终端,Claude 原生指令,[red|blue|green|yellow|purple|orange|pink|cyan|default],由原生 SDK 校验,True,
+claude-code,/compact,,原生 SDK 输入,Claude 原生指令,<optional custom summarization instructions>,由原生 SDK 校验,True,
+claude-code,/config,/settings,原生 SDK 输入,Claude 原生指令,key=value,由原生 SDK 校验,True,
+claude-code,/output-style,,原生 SDK 输入,Claude 原生指令,[style],由原生 SDK 校验,True,
+claude-code,/context,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/effort,,原生 SDK 输入,Claude 原生指令,<low|medium|high|xhigh|max|auto|ultracode [on|off]>,由原生 SDK 校验,True,
+claude-code,/fast,,原生 SDK 输入,Claude 原生指令,[on|off],由原生 SDK 校验,True,
+claude-code,/focus,,原生 CLI 终端,Claude 原生指令,[on|off],由原生 SDK 校验,True,
+claude-code,/heapdump,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/init,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/mcp,,原生 SDK 输入,Claude 原生指令,[reconnect|enable|disable [<server>|all]],由原生 SDK 校验,True,
+claude-code,/import,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/model,,原生 SDK 输入,Claude 原生指令,<model>,由原生 SDK 校验,True,
+claude-code,/__remote-workflow,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/workflow-launch-exec,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/reload-plugins,,原生 CLI 终端,Claude 原生指令,[--force],由原生 SDK 校验,True,
+claude-code,/reload-skills,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/rename,/name,原生 SDK 输入,Claude 原生指令,[name],由原生 SDK 校验,True,
+claude-code,/security-review,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/usage,"/cost, /stats",原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/insights,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/recap,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/skill-doctor,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/goal,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/design-consent,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/design-revoke,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/list-agents,/peers,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+claude-code,/team-onboarding,,原生 SDK 输入,Claude 原生指令,,由原生 SDK 校验,True,
+dsh,/compact,,原生 API,DSH commands/list,,False,True,
+dsh,/export,,原生 API,DSH commands/list,,False,True,
+dsh,/feedback,,原生 API,DSH commands/list,<text>,False,True,
+dsh,/goal,,原生 API,DSH commands/list,[<objective>|clear|edit <objective>|pause|resume],True,True,
+dsh,/permission,,原生 API,DSH commands/list,<preset>,False,True,
+dsh,/plan,,原生 API,DSH commands/list,[off|message],True,True,

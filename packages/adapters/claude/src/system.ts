@@ -7,6 +7,7 @@ export function claudeSystemEvent(message: Extract<SDKMessage, { type: 'system' 
     case 'init': return { type: 'item.complete', itemKey: key, kind: 'internal', data: { nativeType: 'system/init' }, native: message };
     case 'background_tasks_changed': return { type: 'item.complete', itemKey: key, kind: 'internal', data: { nativeType: 'system/background_tasks_changed' }, native: message };
     case 'compact_boundary': return { type: 'item.complete', itemKey: key, kind: 'notice', data: { level: 'info', text: 'Claude 已压缩会话上下文', nativeType: 'system/compact_boundary' }, native: message };
+    case 'local_command_output': return { type: 'item.complete', itemKey: key, kind: 'assistant.message', data: { text: message.content }, native: message };
     case 'status': return { type: 'item.complete', itemKey: key, kind: message.status === null ? 'internal' : 'notice', data: message.status === null ? { nativeType: 'system/status' } : { level: 'info', text: message.status === 'compacting' ? 'Claude 正在压缩会话上下文' : String(message.status), nativeType: 'system/status' }, native: message };
     case 'task_started':
     case 'task_progress':

@@ -5,6 +5,7 @@ import {
   CodexAdapter,
 } from '../codex/src/adapter.js';
 import { ClaudeAdapter } from '../claude/src/adapter.js';
+import { codexSlashCommands } from '../codex/src/slash.js';
 import { ALLOWED_ENDPOINTS, DshAdapter, isAllowedCommandLine, isAllowedEndpoint, providerForModel } from '../dsh/src/adapter.js';
 import frozenDshCatalog from '../../../fixtures/dsh/host-api-catalog.json' with { type: 'json' };
 
@@ -81,8 +82,8 @@ describe('原装原则：Codex（SPEC 3.3）', () => {
     });
   });
 
-  it('Codex 指令目录至少提供 WebDCC 映射的 /model', async () => {
-    expect(await new CodexAdapter().slashCommands()).toContainEqual({ name: '/model', description: '打开 Provider 和模型选择' });
+  it('固定的 Codex 原生目录保留 /model 的显式网页路由', () => {
+    expect(codexSlashCommands.find(command => command.name === '/model')).toMatchObject({ route: 'web', action: 'model' });
   });
 });
 

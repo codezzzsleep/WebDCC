@@ -30,6 +30,18 @@ export class NativeActionStore {
     const row = this.db.prepare('SELECT * FROM native_actions WHERE command_id = ? AND session_id = ?').get(commandId, sessionId) as Row | undefined;
     return row === undefined ? undefined : receipt(row);
   }
+  /** Slash command output is a redacted user-visible projection. Other native
+   * actions (including secret replies) still retain only their receipt. */
+  saveSlashResult(commandId: string, sessionId: string, result: unknown): void {
+    this.db.prepare('INSERT OR REPLACE INTO slash_results (command_id, session_id, result) VALUES (?, ?, ?)')
+      .run(commandId, sessionId, JSON.stringify(result));
+  }
+  slashResult(commandId: string, sessionId: string): NativeActionResponse | undefined {
+    const status = this.get(commandId, sessionId);
+    if (status === undefined || !['slash-goal', 'slash-control', 'compact'].includes(status.type)) return undefined;
+    const row = this.db.prepare('SELECT result FROM slash_results WHERE command_id = ? AND session_id = ?').get(commandId, sessionId) as { result: string } | undefined;
+    return { receipt: status, ...(row === undefined ? {} : { result: JSON.parse(row.result) as unknown }) };
+  }
   private finish(commandId: string, state: NativeActionState, reason?: string): void {
     this.db.prepare("UPDATE native_actions SET state = ?, error = ?, updated_at = ? WHERE command_id = ? AND state IN ('dispatching','submitted')")
       .run(state, reason ?? null, new Date().toISOString(), commandId);
@@ -76,7 +88,8 @@ export class NativeActionStore {
         this.db.prepare('UPDATE native_actions SET reference = ? WHERE command_id = ?').run(JSON.stringify(reference), value.commandId);
       }
       const submitted = result !== null && typeof result === 'object' && (result as { confirmed?: boolean }).confirmed === false;
-      this.finish(value.commandId, submitted ? 'submitted' : 'completed');
+      const failed = result !== null && typeof result === 'object' && (result as { failed?: boolean }).failed === true;
+      this.finish(value.commandId, failed ? 'failed' : submitted ? 'submitted' : 'completed', failed ? 'native-command-failed' : undefined);
       return { receipt: this.get(value.commandId, sessionId)!, result };
     } catch (failure) {
       // Only our explicit pre-dispatch validation can prove there was no side effect.

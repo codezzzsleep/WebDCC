@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto } from '@webdcc/protocol';
+import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto, SlashCommand, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
+import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
@@ -15,6 +16,7 @@ import { ComposerInputController, type ComposerInputCapabilities, type ComposerI
 import { SyncedInputDraftStore } from '../lib/synced-input-draft-store.js';
 import { AttachmentPreview } from './InputAttachments.js';
 import { attachmentDigest } from '../lib/input-digest.js';
+import { SlashControl } from './SlashControl.js';
 
 type ComposerMode =
   | {
@@ -79,7 +81,12 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [inputModes, setInputModes] = useState<CodexInputModeCatalog>({ modes: [], observedMode: null });
   const [modeCatalogRevision, setModeCatalogRevision] = useState(0);
   const [slashOpen, setSlashOpen] = useState(false);
-  const [slashCommands, setSlashCommands] = useState<{ name: string; description?: string }[]>([]);
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  const [slashReason, setSlashReason] = useState('');
+  const [slashCatalogRevision, setSlashCatalogRevision] = useState(0);
+  const [slashRequest, setSlashRequest] = useState<SlashControlRequest>();
+  const [slashResponse, setSlashResponse] = useState<NativeActionResponse>();
+  const slashDraftTokens = useRef(new Map<string, NonNullable<ReturnType<typeof controls.drafts.token>>>());
   const [slashStatus, setSlashStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable' | 'error'>('idle');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +107,19 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     return () => { offDrafts(); offUploads(); offSync(); };
   }, [controls]);
   const draftSessionId = sessionId ?? `new:${workspaceId}`;
+  const pendingSlashControl = sessionId === null ? undefined : store.getSlashControlRequest(sessionId);
+  useEffect(() => { setSlashRequest(pendingSlashControl?.request); setSlashResponse(pendingSlashControl?.response); }, [sessionId, pendingSlashControl?.request.commandId]);
+  useEffect(() => {
+    if (sessionId === null || pendingSlashControl) return;
+    let active = true;
+    let commandId: string | null = null;
+    try { commandId = sessionStorage.getItem(`slash-action:${sessionId}`); } catch { /* Server result still persists. */ }
+    if (commandId) void api.slashControlResult(sessionId, commandId).then(response => {
+      if (!active) return;
+      setSlashResponse(response); setSlashRequest({ commandId: response.receipt.commandId, line: '', revision: '' });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [sessionId]);
   useEffect(() => {
     let active = true;
     setInputModes({ modes: [], observedMode: null });
@@ -159,6 +179,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   useEffect(() => {
     if (!slashOpen) return;
+    let active = true;
     if (sessionId === null) {
       setSlashCommands([]);
       setSlashStatus('unavailable');
@@ -168,14 +189,17 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     void api
       .slashCommands(sessionId)
       .then((result) => {
+        if (!active) return;
         setSlashCommands(result.commands);
-        setSlashStatus('ready');
+        setSlashStatus(result.status === 'error' ? 'error' : 'ready'); setSlashReason(result.reason ?? '');
       })
       .catch(() => {
+        if (!active) return;
         setSlashCommands([]);
-        setSlashStatus('error');
+        setSlashStatus('error'); setSlashReason('原生指令目录请求失败，请重新读取');
       });
-  }, [slashOpen, sessionId]);
+    return () => { active = false; };
+  }, [slashOpen, sessionId, slashCatalogRevision]);
   useEffect(() => {
     if (menu !== 'skill' || sessionId === null || agent !== 'codex') return;
     let active = true; setSkills([]); setSkillStatus('正在读取原生技能目录');
@@ -293,12 +317,45 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   const submit = async (intent: ComposerIntent = running ? 'queue' : 'send'): Promise<void> => {
     if (busy) return;
-    if (text.trim() === '/model' && attachmentParts.length === 0) {
+    if (sessionId === null && agent === 'codex' && text.trim() === '/model' && attachmentParts.length === 0) {
       setSlashOpen(false); setMenu('model'); return;
     }
     setError(null); setBusy(true);
     const expectedTurnId = intent === 'steer' ? store.getTurns(sessionId ?? '').findLast(turn => ['starting', 'running', 'waiting'].includes(turn.state) && turn.pending === undefined)?.turnId : undefined;
     try {
+      const parsed = parseSlashInput(text);
+      if (parsed && sessionId !== null) {
+        const token = controls.drafts.token();
+        const commandLine = text;
+        const prepared = controls.input.prepareContent() as InputContent;
+        if (!token) throw new Error('草稿正在恢复');
+        const catalog = await api.slashCommands(sessionId);
+        if (!controls.drafts.accepts(token) || controls.drafts.token()?.revision !== token.revision) return;
+        if (catalog.status === 'error') throw new Error(catalog.reason ?? '原生指令目录读取失败');
+        const command = slashCommandFor(catalog.commands, text);
+        if (!command) throw new Error('当前原生目录没有此指令，请核对名称或重新读取目录');
+        if (command.available === false) throw new Error(command.reason ?? '此原生指令在当前平台不可用');
+        if (attachmentParts.length > 0 && command.supportsAttachments === false) throw new Error('此指令未声明附件能力，附件和正文仍保留在草稿中');
+        if (command.route === 'native-control') {
+          await controls.drafts.flush();
+          if (!controls.drafts.accepts(token)) return;
+          const commandId = crypto.randomUUID(); slashDraftTokens.current.set(commandId, token);
+          setSlashResponse(undefined); setSlashRequest({ commandId, line: commandLine, revision: catalog.revision, contentParts: prepared }); setSlashOpen(false); return;
+        }
+        if (command.route === 'native-terminal' || command.route === 'web' && parsed.rawArguments.trim() !== '') {
+          store.requestNativeCommand(sessionId, text); setSlashOpen(false); return;
+        }
+        if (command.route === 'web') {
+          setSlashOpen(false);
+          if (command.action === 'model') setMenu('model');
+          else if (command.action === 'permissions') setMenu('mode');
+          else if (command.action === 'skills') setMenu('skill');
+          else if (command.action === 'plan') {
+            const draft = controls.drafts.snapshot(); if (draft) controls.drafts.update('', { ...draft.contentParts, collaborationMode: 'plan', parts: draft.contentParts.parts.filter(part => part.type !== 'text') });
+          }
+          return;
+        }
+      }
       const result = await controls.input.submit(intent, async input => {
         const contentParts = input.contentParts as InputContent;
         if (mode.kind === 'new') return mode.onSubmit(input.text, contentParts);
@@ -363,7 +420,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     !(currentModel === '' ? currentProvider.models : [currentModel]).some((model) => model.startsWith('gpt-'));
   const stats = sessionId === null ? null : statsFor(sessionId);
   const sendIntent: ComposerIntent = running ? 'queue' : 'send';
-  const blockedReason = controls.input.reason(sendIntent);
+  const blockedReason = parseSlashInput(text) ? controls.input.commandReason() : controls.input.reason(sendIntent);
   const sendDisabled = busy || blockedReason !== undefined;
 
   return (
@@ -764,26 +821,28 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           )}
 
           {slashOpen ? (
-            <div className="menu up left mention-menu" role="menu" data-testid="slash-menu">
+            <div className="menu up left mention-menu" role="menu" data-testid="slash-menu" style={{ maxHeight: 'min(60vh, 480px)', overflowY: 'auto' }}>
               <div className="menu-group-title">{agentText(agent).name} 的指令</div>
-              {agent === 'codex' && (text === '/' || text === '/model') ? (
+              {sessionId === null && agent === 'codex' && (text === '/' || text === '/model') ? (
                 <button type="button" className="menu-item" onClick={() => { setSlashOpen(false); setMenu('model'); }}>
                   <span className="mono" style={{ fontSize: 13 }}>/model</span>
                   <span className="menu-item-sub">打开 Provider 和模型选择</span>
                 </button>
               ) : null}
-              {slashCommands.length === 0 && !(agent === 'codex' && (text === '/' || text === '/model')) ? <div className="menu-note">{sessionId === null ? '新会话尚未建立，发送第一条消息后才能读取原生命令目录' : slashStatus === 'loading' ? '正在读取原生命令目录…' : slashStatus === 'error' ? '原生命令目录读取失败，请稍后重试' : '该 Harness 没有返回可用的斜杠命令'}</div> : null}
+              {slashCommands.length === 0 && !(sessionId === null && agent === 'codex' && (text === '/' || text === '/model')) ? <div className="menu-note">{sessionId === null ? '建立原生会话后读取此项目的指令目录' : slashStatus === 'loading' ? '正在读取原生命令目录…' : slashReason || '本会话没有返回可用的原生指令'}</div> : null}
+              {slashStatus === 'error' ? <button type="button" onClick={() => setSlashCatalogRevision(value => value + 1)}>重新读取指令</button> : null}
               {slashCommands
-                .filter((command) => command.name.startsWith(text) && !(agent === 'codex' && command.name === '/model' && text === '/model'))
-                .slice(0, 12)
-                .map((command) => (
+                .filter((command) => command.name.startsWith(text) || command.aliases?.some(alias => alias.startsWith(text)))
+                .map((command, index) => (
                   <button
-                    key={command.name}
+                    key={`${command.name}:${index}`}
                     type="button"
                     className="menu-item"
+                    disabled={command.available === false}
                     onClick={() => {
-                      setText(command.name);
-                      persist(command.name);
+                      const selected = command.name.startsWith(text) ? command.name : command.aliases?.find(alias => alias.startsWith(text)) ?? command.name;
+                      setText(selected);
+                      persist(selected);
                       setSlashOpen(false);
                       textareaRef.current?.focus();
                     }}
@@ -792,6 +851,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                       {command.name}
                     </span>
                     {command.description === undefined ? null : <span className="menu-item-sub">{command.description}</span>}
+                    <span className="menu-item-sub">{command.route === 'native-terminal' ? '原生终端' : command.route === 'native-control' ? '原生 API' : command.route === 'web' ? '网页入口' : '原生指令'}{command.argumentHint ? ` · ${command.argumentHint}` : ''}{command.source ? ` · ${command.source}` : ''}{command.aliases?.length ? ` · ${command.aliases.join(', ')}` : ''}</span>
                   </button>
                 ))}
             </div>
@@ -842,6 +902,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {error}
         </div>
       ) : null}
+      {slashRequest && sessionId !== null ? <SlashControl key={slashRequest.commandId} sessionId={sessionId} request={slashRequest}
+        initialResponse={slashResponse}
+        onAccepted={() => { const token = slashDraftTokens.current.get(slashRequest.commandId); slashDraftTokens.current.delete(slashRequest.commandId); if (token && controls.drafts.clearIfUnchanged(token)) void controls.drafts.flush(); }}
+        onClose={() => { slashDraftTokens.current.delete(slashRequest.commandId); setSlashRequest(undefined); store.clearSlashControlRequest(sessionId); }} /> : null}
       {controls.drafts.error() !== undefined ? <div className="composer-error" role="alert">
         {controls.drafts.error()?.message}<button type="button" onClick={() => void controls.drafts.retrySave().catch(cause => setError(String(cause)))}>重试保存</button>
         {controls.drafts.error() instanceof DraftConflictError ? <>

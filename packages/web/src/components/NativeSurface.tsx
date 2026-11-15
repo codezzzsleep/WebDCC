@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { NativeTerminal, nativeSurfaceRequest, type NativeTerminalInfo } from './NativeTerminal.js';
 
-export function NativeSurface({ sessionId, agent, takeover }: {
+export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
   sessionId: string;
   agent: 'codex' | 'claude-code';
   takeover?: { allowed: boolean; reason: string };
+  initialCommand?: string;
 }) {
   const [terminals, setTerminals] = useState<NativeTerminalInfo[]>([]);
   const [recordOutput, setRecordOutput] = useState(false);
@@ -27,6 +28,7 @@ export function NativeSurface({ sessionId, agent, takeover }: {
   };
   return <section aria-label="原生 CLI" style={{ padding: 16, display: 'grid', gap: 12 }}>
     <strong>{agent === 'codex' ? 'Codex' : 'Claude Code'} 原生 CLI</strong>
+    {initialCommand ? <p>待执行原生指令：<code>{initialCommand}</code>。请选择原生会话，再将指令填入终端并按 Enter 执行。</p> : null}
     <p style={{ margin: 0 }}>在浏览器中操作服务器上的原生终端。新建会话拥有独立历史；同会话接管需要确认原生身份、旧进程释放及历史与设置。</p>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
       <button type="button" disabled={pending} onClick={() => { void open('new-native'); }}>创建新原生会话</button>
@@ -35,7 +37,7 @@ export function NativeSurface({ sessionId, agent, takeover }: {
     {!takeover?.allowed && <p role="status" style={{ margin: 0 }}>当前会话接管受阻：{takeover?.reason ?? '尚未验证旧 writer 与外部 writer 的释放。'}</p>}
     <label><input type="checkbox" checked={recordOutput} onChange={event => setRecordOutput(event.currentTarget.checked)} /> 临时保留日志供下载（可能含敏感内容，关闭终端时删除）</label>
     {error && <p role="alert">{error}</p>}
-    {terminals.map(terminal => <NativeTerminal key={terminal.id} terminal={terminal} onChanged={next => setTerminals(values => values.map(value => value.id === next.id ? next : value))} onClosed={() => setTerminals(values => values.filter(value => value.id !== terminal.id))} />)}
+    {terminals.map(terminal => <NativeTerminal key={terminal.id} terminal={terminal} initialCommand={initialCommand} onChanged={next => setTerminals(values => values.map(value => value.id === next.id ? next : value))} onClosed={() => setTerminals(values => values.filter(value => value.id !== terminal.id))} />)}
   </section>;
 }
 
