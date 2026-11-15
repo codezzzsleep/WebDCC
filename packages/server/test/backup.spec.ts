@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { appendFileSync, closeSync, openSync, readlinkSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, open, readFile, readdir, rm, stat, symlink, writeFile, type FileHandle } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, open, readFile, readdir, rm, stat, symlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
@@ -91,6 +91,7 @@ describe('encrypted WebDCC stored-state backup', () => {
         const output = await runCli([...args, '--offline'], path); expect(output.code).toBe(1); expect(output.stdout).toBe(''); expect(output.stderr).toContain('恰好是 32 字节'); await expect(stat(ctx.destination)).rejects.toThrow();
       }
       const publicPath = join(ctx.root, 'public-key'); await writeFile(publicPath, ctx.key, { mode: 0o644 });
+      await chmod(publicPath, 0o644); // Set the intended fixture permissions even under a restrictive umask.
       const publicOutput = await runCli([...args, '--offline'], publicPath); expect(publicOutput.code).toBe(1); expect(publicOutput.stderr).toContain('其他用户读取'); expect(publicOutput.stdout).toBe('');
       const keyPath = join(ctx.root, 'private-key'); await writeFile(keyPath, ctx.key, { mode: 0o600 });
       const onlineOutput = await runCli(args, keyPath); expect(onlineOutput.code).toBe(1); expect(onlineOutput.stderr).toContain('--offline'); await expect(stat(ctx.destination)).rejects.toThrow();
