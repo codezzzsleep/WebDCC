@@ -126,7 +126,26 @@ export async function verifyCodexAsyncQuestionCase(binary: string, name: AsyncQu
       assert.equal(question.isBlocking, false); assert.equal(question.allowsFreeText, true);
       assert.equal(question.multiSelect, false); assert.equal(question.prompt, prompts[index]);
     }
-    assert.equal((await adapter.inputModes(session.id)).observedMode, 'default');
+    // Inherited mode can remain unreported by app-server. Prove the actual
+    // native turn mode from its own rollout instead of inferring it from null.
+    const nativeThreadReply = rpcFrames(frames, 'in').find(frame => (frame.result as { thread?: { id?: string } } | undefined)?.thread?.id === nativeAsync.params!['threadId']);
+    const nativePath = (nativeThreadReply?.result as { thread?: { path?: string } } | undefined)?.thread?.path;
+    assert.ok(nativePath, 'NOT_TRIGGERED: native thread did not supply its rollout path');
+    type ModeContext = { type?: string; payload?: { turn_id?: string; model?: string; collaboration_mode?: { mode?: string } } };
+    let modeContexts: ModeContext['payload'][] = [];
+    await expect.poll(async () => {
+      const rollout = await readFile(nativePath, 'utf8');
+      modeContexts = rollout.split('\n').filter(Boolean).flatMap(line => {
+        // The native writer may still be appending its final JSONL record.
+        let row: ModeContext;
+        try { row = JSON.parse(line) as ModeContext; } catch { return []; }
+        if (row.type !== 'turn_context' || row.payload === undefined || row.payload.turn_id !== nativeAsync.params!['turnId']) return [];
+        return [{ turn_id: row.payload.turn_id, model: row.payload.model, collaboration_mode: row.payload.collaboration_mode }];
+      });
+      return modeContexts.length > 0 && modeContexts.every(context => context?.collaboration_mode?.mode === 'default');
+    }, { timeout: 10_000, message: 'NOT_TRIGGERED: native rollout must confirm Default for the actual async question turn' }).toBe(true);
+    result['nativeModeEvidence'] = { nativeThreadId: nativeAsync.params!['threadId'], nativeTurnId: nativeAsync.params!['turnId'],
+      nativeRolloutPath: nativePath, contexts: modeContexts, appServerObservedMode: (await adapter.inputModes(session.id)).observedMode };
     assert.notEqual(ctx.manager.getRuntime(session.id)?.status, 'waiting', 'Async arrival cannot force the native thread to wait');
     const initialTurn = rpcFrames(frames, 'out').find(frame => frame.method === 'turn/start')?.params;
     assert.ok(initialTurn); assert.equal(initialTurn['collaborationMode'], undefined);
@@ -270,7 +289,7 @@ export async function verifyCodexAsyncQuestionCase(binary: string, name: AsyncQu
     releaseContinuation();
     const lastEvents = ctx.store.listSessions(true).flatMap(session => ctx.store.allEvents(session.id));
     await mkdir(resolve(reportPath, '..'), { recursive: true });
-    await writeFile(evidencePath, JSON.stringify({ frames, webSocketFrames, commands, commandRecords: [...new Set(commands.map(command => command['clientCommandId']))].map(id => typeof id === 'string' ? ctx.store.journal.get(id) : undefined), events: lastEvents, modelRequests: control.requests, nativeRecords: ctx.store.nativeEvents.list(undefined, 0, 200).map(record => ctx.store.nativeEvents.get(record.id)) }, null, 2) + '\n');
+    await writeFile(evidencePath, JSON.stringify({ frames, webSocketFrames, commands, commandRecords: [...new Set(commands.map(command => command['clientCommandId']))].map(id => typeof id === 'string' ? ctx.store.journal.get(id) : undefined), events: lastEvents, modelRequests: control.requests, nativeModeEvidence: result['nativeModeEvidence'], nativeRecords: ctx.store.nativeEvents.list(undefined, 0, 200).map(record => ctx.store.nativeEvents.get(record.id)) }, null, 2) + '\n');
     result['evidence'] = [evidencePath]; result['endedAt'] = new Date().toISOString(); result['finalSourceFingerprint'] = sourceFingerprint();
     await browser?.close(); await ctx.close(); await model.close();
     await rm(isolated.dirs.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
