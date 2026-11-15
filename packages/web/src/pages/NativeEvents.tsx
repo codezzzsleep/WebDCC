@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import type { NativeEnvelopeDetail, NativeEnvelopeSummary, NativeOwnerDto, StoredEvent } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { NativeRecovery } from '../components/NativeRecovery.js';
@@ -50,8 +51,9 @@ export function NativeEventsPage({ initialSessionId = '' }: { initialSessionId?:
     catch (failure) { if (request === detailRequest.current) setError(failure instanceof Error ? failure.message : String(failure)); }
   };
   return <main className="main" style={{ padding: 24, overflow: 'auto' }}>
+    <Link to="/settings/diagnostics" className="btn small ghost">返回诊断与排查</Link>
     <h1>原生记录</h1>
-    <p>查看原始接口记录和适配后的事件。敏感内容会被省略；缺少原始记录时会保留缺失状态。</p>
+    <p>排查报错、执行状态或历史同步问题时，在这里查看 Harness 的后台请求和返回事件。敏感内容会被省略；缺少原始记录时会保留缺失状态。</p>
     <form onSubmit={event => { event.preventDefault(); if (busy) return; setFilter(sessionId.trim()); setRevision(value => value + 1); }} style={{ display: 'flex', gap: 8 }}>
       <input className="text-input" aria-label="会话 ID" placeholder="会话 ID，留空查看全部" value={sessionId} onChange={event => setSessionId(event.target.value)} />
       <button className="btn" disabled={busy} type="submit">刷新</button>

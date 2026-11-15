@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import type { ProviderDto, DshSettingsView, DshSettingsPreview, DshProviderUpdate, DshDefaultModelUpdate } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { AGENT_IDS, agentText, isCompatible, sourceLabel, type AgentKey } from '../lib/agents.js';
@@ -62,7 +63,7 @@ export function ProvidersPage(): React.ReactElement {
     <main className="main" data-testid="providers-page">
       <div className="mobile-only session-header" style={{ borderBottom: 0 }}><div className="session-header-row"><button type="button" className="icon-btn drawer-toggle" aria-label="会话列表" onClick={() => store.setDrawer(true)}><Icon name="menu" size={18} /></button></div></div>
       <div className="settings"><div className="settings-inner providers-settings">
-        <div><h1>Harness · Provider · Model</h1><p className="lead">先选择 Harness，再管理它的 Provider；同一个 Base URL 可以拥有多个独立模型。</p>{meta !== null ? <p className="muted" style={{ fontSize: 12 }}>版本 {meta.version} · commit {meta.commit} · 构建于 {meta.builtAt}</p> : null}</div>
+        <div className="row-actions"><div><h1>Harness · Provider · Model</h1><p className="lead">先选择 Harness，再管理它的 Provider；同一个 Base URL 可以拥有多个独立模型。</p>{meta !== null ? <p className="muted" style={{ fontSize: 12 }}>版本 {meta.version} · commit {meta.commit} · 构建于 {meta.builtAt}</p> : null}</div><Link to="/settings/diagnostics" className="btn small ghost"><Icon name="tool" size={14} />诊断与排查</Link></div>
         <div className="harness-tabs" role="tablist" aria-label="选择 Harness">
           {AGENT_IDS.map((id) => {
             const status = agentStatus(id, meta, dsh, providers);
