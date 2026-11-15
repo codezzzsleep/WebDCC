@@ -1,7 +1,8 @@
-import { lstat, mkdir, readFile, readdir, rename, symlink, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createTestApp } from './helpers.js';
+import { openUploadStaging } from '../src/upload-staging.js';
 
 it('an upload directory replaced with an external symlink cannot overwrite an external chunk path', async () => {
   const ctx = await createTestApp();
@@ -86,12 +87,27 @@ it('unsupported platform verification blocks upload writes while initialization 
   const ctx = await createTestApp();
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
   try {
+    const existing = await ctx.files.putBuffer(Buffer.from('existing'), 'existing.txt', 'text/plain');
     const { uploadId } = await ctx.files.initUpload({ name: 'file.txt', size: 6, mime: 'text/plain' });
     Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' });
     await expect(ctx.files.init()).resolves.toBeUndefined();
+    expect((await ctx.files.readAll(existing.id))?.buffer.toString()).toBe('existing');
     await expect(ctx.files.writeChunk(uploadId, 0, Buffer.from('INSIDE'))).rejects.toMatchObject({ statusCode: 501 });
     await expect(ctx.files.initUpload({ name: 'other.txt', size: 0, mime: 'text/plain' })).rejects.toMatchObject({ statusCode: 501 });
     expect(ctx.files.uploadStatus(uploadId).received).toEqual([]);
     expect(await readdir(join(ctx.dataDir, 'uploads', uploadId))).toEqual([]);
   } finally { Object.defineProperty(process, 'platform', platform); await ctx.close(); }
+});
+
+it('an opened staging directory deleted externally is a path conflict and closes the retained descriptors', async () => {
+  const ctx = await createTestApp();
+  try {
+    const { uploadId } = await ctx.files.initUpload({ name: 'file.txt', size: 6, mime: 'text/plain' });
+    const slot = await openUploadStaging(join(ctx.dataDir, 'uploads'), uploadId);
+    try {
+      await rm(join(ctx.dataDir, 'uploads', uploadId), { recursive: true });
+      await expect(slot.check()).rejects.toMatchObject({ statusCode: 409 });
+      expect(ctx.files.uploadStatus(uploadId).received).toEqual([]);
+    } finally { await slot.close(); }
+  } finally { await ctx.close(); }
 });

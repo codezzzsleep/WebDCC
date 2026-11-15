@@ -18,7 +18,11 @@ export async function openUploadStaging(uploadsPath: string, uploadId?: string, 
     const dataPath = await realpath(dirname(uploadsPath)), rootPath = join(dataPath, 'uploads');
     const data = await open(dataPath, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); handles.push(data);
     const dataFd = `/proc/self/fd/${data.fd}`;
-    const descriptorPath = async (path: string) => realpath(path).catch(() => { throw failure('无法核验上传目录描述符，需要可用的 /proc/self/fd', 501); });
+    const descriptorPath = async (path: string) => realpath(path).catch(async error => {
+      const procExists = await stat('/proc/self/fd').then(() => true, () => false);
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' && procExists) throw failure('上传暂存路径已删除或改变，上传尚未完成');
+      throw failure('无法核验上传目录描述符，需要可用的 /proc/self/fd', 501);
+    });
     if (await descriptorPath(dataFd) !== dataPath) throw failure('上传暂存路径已改变，上传尚未完成');
     const root = await open(join(dataFd, 'uploads'), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); handles.push(root);
     const rootFd = `/proc/self/fd/${root.fd}`;
