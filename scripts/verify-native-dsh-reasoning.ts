@@ -94,6 +94,9 @@ try {
   assert.deepEqual(await page.getByRole('menuitemradio').allTextContents(), ['沿用原生', 'off', 'high', 'max']);
   await page.getByRole('menuitemradio', { name: 'high', exact: true }).click();
   await expect(page.getByTestId('reasoning-menu')).toHaveText('思考 high');
+  await page.reload();
+  await expect(page.getByTestId('reasoning-menu')).toHaveText('思考 high', { timeout: 15_000 });
+  evidence['newSessionChoicePreservedBeforeCreation'] = true;
   // Read the actual create command by temporarily intercepting the subsequent
   // user-message command; creation still runs the production native adapter.
   await page.route('**/api/commands', async route => {
