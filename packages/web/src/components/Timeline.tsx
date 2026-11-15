@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -151,7 +151,7 @@ function TurnView({
       {turn.pending !== undefined || user.text !== '' || (user.images?.length ?? 0) > 0 || user.contentParts?.parts.some(part => part.type !== 'text') ? (
         <div className="user-message" data-testid="user-message">
           <div className="user-bubble">
-            <Markdown text={user.text} />
+            <Markdown text={displayCodexAsyncReply(user.text)} />
             <InputAttachments contentParts={user.contentParts} images={user.images} />
           </div>
           <div className="user-meta">
@@ -170,7 +170,7 @@ function TurnView({
       ) : null}
 
       {[...(turn.inputs?.slice(1) ?? []), ...(turn.pendingInputs ?? [])].map((input, index) => <div className="user-message" data-testid="additional-user-input" key={`additional-${index}`}>
-        <div className="user-bubble"><Markdown text={input.text} /><InputAttachments contentParts={input.contentParts} images={input.images} /></div>
+        <div className="user-bubble"><Markdown text={displayCodexAsyncReply(input.text)} /><InputAttachments contentParts={input.contentParts} images={input.images} /></div>
         <div className="user-meta"><span>本轮补充消息</span>{'status' in input ? <span className="outbox-status">{outboxLabel(input.status)}</span> : null}<span>{new Date(input.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span></div>
         {'error' in input && input.error !== undefined ? <p role="alert">{input.error}</p> : null}
       </div>)}
@@ -677,6 +677,7 @@ function InteractionStatus({ submission }: { submission: ReturnType<typeof store
   const text = submission.status === 'failed' ? submission.error ?? '提交失败，请重试'
     : submission.status === 'uncertain' ? '提交结果待核对，请等待会话同步'
     : submission.status === 'collected' ? '此答案已保存，等待其他问题'
+    : submission.status === 'queued' ? '回答已排队，等待发送；可在输入队列中取消'
     : submission.status === 'sent' ? '已提交，等待原生结果'
     : store.connectionState === 'online' ? '正在提交…' : '等待连接后提交…';
   return <p role={submission.status === 'failed' ? 'alert' : 'status'}>{text}</p>;
@@ -695,18 +696,17 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState('');
   useStoreVersion();
-  const submission = data.submission === 'sent' || data.submission === 'uncertain'
-    ? { commandId: '', status: data.submission } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
-      ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission });
+  const submission = store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
+    ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission, error: data.submissionError });
   const synchronized = store.isInteractionSynced(event.sessionId, 'answer', data.questionId);
-  const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
+  const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
   const blocking = data.isBlocking !== false;
   const nonblockingLabel = blocking ? null : <span className="what">非阻塞提问</span>;
   if (data.status === 'answered' || data.status === 'skipped') {
     return (
       <div className="approval-card resolved" data-testid="question-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-blocking={blocking}>
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? '已由原生结束' : data.outcome === 'decline' ? '已拒绝' : data.status === 'skipped' ? '已取消' : '已回答'}</span>
+        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? data.asyncReply ? '已在原生客户端回答' : '已由原生结束' : data.outcome === 'decline' ? '已拒绝' : data.status === 'skipped' ? '已取消' : data.asyncReply ? '原生已收到回答' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
         {nonblockingLabel}
         {synchronized ? null : <span>历史记录，当前状态尚未核对</span>}
@@ -726,7 +726,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         <Icon name="help" size={16} />
         {data.header ?? (blocking ? '需要你回答' : '非阻塞提问')}
       </div>
-      {blocking ? null : <p>原生标记为非阻塞，你仍可以回答。</p>}
+      {blocking ? null : <p>{data.asyncReply ? 'Codex 会继续执行。提交回答会送入当前对话；也可以排队等本轮结束。' : '原生标记为非阻塞，你仍可以回答。'}</p>}
       <div style={{ fontSize: 14 }}>{data.prompt}</div>
       <div className="question-options" role={data.multiSelect === true ? 'group' : 'radiogroup'} aria-label={data.prompt}>
         {(data.options ?? []).map((option) => (
@@ -748,7 +748,8 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         ))}
       </div>
       {data.allowsFreeText !== false ? (
-        <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
+        data.asyncReply ? <textarea className="text-input" rows={3} disabled={busy} placeholder={data.options?.length ? '或输入回答' : '输入回答'} aria-label="其他回答" value={text} onChange={event_ => setText(event_.target.value)} />
+          : <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
       ) : null}
       {data.isSecret ? <p>敏感回答只在本页面保留，刷新后需要重新输入。</p> : null}
       {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
@@ -764,6 +765,8 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         >
           提交
         </button>
+        {data.asyncReply && ['running', 'waiting'].includes(store.getSession(event.sessionId)?.status ?? '') ? <button type="button" className="btn" data-testid="question-queue-answer" disabled={busy || selected.length === 0 && text.trim() === ''}
+          onClick={() => store.answer(event.sessionId, data.questionId, { selected, custom: text }, { intent: 'queue' })}>排队回答</button> : null}
       </div>
     </div>
   );

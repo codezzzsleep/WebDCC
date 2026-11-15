@@ -69,7 +69,7 @@ export interface TurnModel extends TurnView {
 
 export interface InteractionSubmission {
   commandId: string;
-  status: 'pending' | 'collected' | 'sent' | 'failed' | 'uncertain';
+  status: 'pending' | 'collected' | 'queued' | 'sent' | 'failed' | 'uncertain';
   error?: string;
 }
 
@@ -267,7 +267,7 @@ export class AppStore {
           ...(patch['archived'] === undefined ? {} : { archived: Boolean(patch['archived']) }),
           ...(patch['pinned'] === undefined ? {} : { pinned: Boolean(patch['pinned']) }),
           ...(patch['model'] === undefined ? {} : { model: String(patch['model']) }),
-          ...(patch['reasoningEffort'] === undefined ? {} : { reasoningEffort: String(patch['reasoningEffort']) }),
+          ...(patch['reasoningEffort'] === undefined ? {} : { reasoningEffort: patch['reasoningEffort'] === null ? undefined : String(patch['reasoningEffort']) }),
           ...(patch['accessMode'] === undefined ? {} : { accessMode: String(patch['accessMode']) }),
           ...(patch['permissions'] === undefined ? {} : { permissions: patch['permissions'] as PermissionState }),
           ...(patch['providerId'] === undefined ? {} : { providerId: patch['providerId'] === null ? null : String(patch['providerId']) }),
@@ -352,7 +352,8 @@ export class AppStore {
           const key = JSON.stringify([command.sessionId, command.op, id]);
           if (this.interactionSubmissions.get(key)?.commandId === message.clientCommandId) {
             const collected = message.result.ok && (message.result.value as { submitted?: unknown } | undefined)?.submitted === false;
-            this.interactionSubmissions.set(key, { commandId: message.clientCommandId, status: message.result.ok ? collected ? 'collected' : 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed', ...(message.result.ok ? {} : { error: message.result.error }) });
+            const queued = message.result.ok && (message.result.value as { queued?: unknown } | undefined)?.queued === true;
+            this.interactionSubmissions.set(key, { commandId: message.clientCommandId, status: message.result.ok ? collected ? 'collected' : queued ? 'queued' : 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed', ...(message.result.ok ? {} : { error: message.result.error }) });
           }
         }
         if (entry !== undefined) {
@@ -437,6 +438,15 @@ export class AppStore {
     const seen = map.has(event.seq);
     map.set(event.seq, event);
     this.events.set(event.sessionId, map);
+    if (event.kind === 'question') {
+      const data = event.data as EventData['question'];
+      const latest = this.latestInteractionEvent(event.sessionId, 'answer', data.questionId);
+      if (latest?.seq === event.seq && data.submission !== undefined) {
+        const key = JSON.stringify([event.sessionId, 'answer', data.questionId]);
+        const previous = this.interactionSubmissions.get(key);
+        if (previous !== undefined) this.interactionSubmissions.set(key, { commandId: previous.commandId, status: data.submission, ...(data.submissionError === undefined ? {} : { error: data.submissionError }) });
+      }
+    }
     this.cursors.set(event.sessionId, this.contiguousSeq(event.sessionId, this.cursors.get(event.sessionId) ?? 0));
     const hot = this.hot.get(event.sessionId);
     if (hot !== undefined) {
@@ -767,7 +777,7 @@ export class AppStore {
     if (event === undefined) return 'unknown';
     const data = event.data as EventData['question'] | EventData['approval.request'];
     if (event.kind === 'approval.resolved' || 'status' in data && (data.status === 'answered' || data.status === 'skipped')) return 'resolved';
-    return data.submission === 'sent' || data.submission === 'uncertain' ? 'awaiting' : 'pending';
+    return data.submission === 'sent' || data.submission === 'uncertain' || data.submission === 'queued' ? 'awaiting' : 'pending';
   }
 
   private dispatchInteraction(command: Extract<Command, { op: 'answer' | 'approve' }>): void {
@@ -935,11 +945,11 @@ export class AppStore {
     return this.interactionSubmissions.get(JSON.stringify([sessionId, op, id]));
   }
 
-  answer(sessionId: string, questionId: string, answer: unknown): void {
+  answer(sessionId: string, questionId: string, answer: unknown, delivery?: { intent?: 'send' | 'queue' | 'steer'; expectedTurnId?: string }): void {
     if (!this.isInteractionSynced(sessionId, 'answer', questionId) || this.interactionState({ op: 'answer', clientCommandId: '', sessionId, questionId, answer }) !== 'pending') return;
-    if (['pending', 'sent', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'answer', questionId)?.status ?? '')) return;
+    if (['pending', 'sent', 'queued', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'answer', questionId)?.status ?? '')) return;
     const question = this.getEvents(sessionId).findLast(event => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId);
-    this.enqueue({ op: 'answer', clientCommandId: ulid(), sessionId, questionId, answer }, (question?.data as EventData['question'] | undefined)?.isSecret === true);
+    this.enqueue({ op: 'answer', clientCommandId: ulid(), sessionId, questionId, answer, ...delivery }, (question?.data as EventData['question'] | undefined)?.isSecret === true);
   }
 
   interrupt(sessionId: string): void {

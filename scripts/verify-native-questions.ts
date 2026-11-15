@@ -19,12 +19,13 @@ import { MockControl } from '../packages/testing/mock-models/src/mock-control.js
 import type { Plan } from '../packages/testing/mock-models/src/plan.js';
 import { sourceFingerprint } from './lib/gate-report.js';
 import { isSupportedCodexVersion } from '../packages/adapters/codex/src/versions.js';
+import { asyncQuestionCases, verifyCodexAsyncQuestionCase, type AsyncQuestionCase } from './verify-native-codex-async.js';
 
 const option = (name: string): string | undefined => { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1]; };
 const binary = resolve(option('--binary') ?? '.artifacts/native-baseline/package/vendor/x86_64-unknown-linux-musl/bin/codex');
 const reportPath = resolve(option('--report') ?? 'web_review/evidence/native-questions.json');
 const requested = option('--case');
-const cases = ['codex-plan', 'codex-default', 'claude', 'dsh', 'codex-plan-cancel', 'claude-cancel', 'dsh-cancel'] as const;
+const cases = ['codex-plan', 'codex-default', 'codex-default-sync-enabled', 'claude', 'dsh', 'codex-plan-cancel', 'claude-cancel', 'dsh-cancel', ...asyncQuestionCases] as const;
 if (requested !== undefined && !cases.includes(requested as typeof cases[number])) throw new Error('Unknown --case');
 const selectedCases = cases.filter(name => requested === undefined || name === requested);
 const report: Record<string, unknown> = { startedAt: new Date().toISOString(), commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -32,6 +33,17 @@ const report: Record<string, unknown> = { startedAt: new Date().toISOString(), c
 await mkdir(resolve(reportPath, '..'), { recursive: true });
 
 for (const name of selectedCases) {
+  if (asyncQuestionCases.includes(name as AsyncQuestionCase)) {
+    const result = await verifyCodexAsyncQuestionCase(binary, name as AsyncQuestionCase, reportPath);
+    (report['results'] as unknown[]).push(result);
+    report['finalSourceFingerprint'] = sourceFingerprint();
+    report['passed'] = (report['results'] as { passed: boolean }[]).length === selectedCases.length
+      && (report['results'] as { passed: boolean }[]).every(result => result.passed) && report['finalSourceFingerprint'] === report['sourceFingerprint'];
+    report['endedAt'] = new Date().toISOString(); await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+    if (result['passed'] !== true) process.exitCode = 1;
+    process.stdout.write(JSON.stringify({ case: name, passed: result['passed'], outcome: result['outcome'], error: result['error'], report: reportPath }) + '\n');
+    continue;
+  }
   const agent: AgentId = name.startsWith('codex') ? 'codex' : name.startsWith('claude') ? 'claude-code' : 'dsh';
   const isolated = isolatedEnv({ PATH: process.env['PATH'] }, 'wdcc-native-question');
   const workspacePath = join(isolated.dirs.root, 'workspace'); await mkdir(workspacePath);
@@ -59,6 +71,7 @@ for (const name of selectedCases) {
       const overrides = ['model_provider=wdcc_mock', 'model="mock-responses-1"', 'model_providers.wdcc_mock.name="WDCC isolated mock"',
         'model_providers.wdcc_mock.base_url="' + model.url + '/v1"', 'model_providers.wdcc_mock.wire_api="responses"', 'model_providers.wdcc_mock.env_key="WDCC_MOCK_KEY"',
         'model_providers.wdcc_mock.request_max_retries=0', 'model_providers.wdcc_mock.stream_max_retries=0'];
+      if (name === 'codex-default-sync-enabled') overrides.push('features.default_mode_request_user_input=true');
       adapter = new CodexAdapter({ command: binary, configOverrides: overrides, env: { ...env, WDCC_MOCK_KEY: 'fixture-only' }, traceSink });
     } else if (agent === 'claude-code') {
       const cli = resolveNativeCli(); assert.ok(cli, 'Pinned Claude CLI missing');
@@ -83,7 +96,7 @@ for (const name of selectedCases) {
     if (agent === 'codex') {
       const selector = page.getByTestId('codex-input-mode');
       await expect(selector.locator('option[value="plan"]')).toBeEnabled({ timeout: 15_000 });
-      await selector.selectOption(name === 'codex-default' ? 'default' : 'plan');
+      await selector.selectOption(name.startsWith('codex-default') ? 'default' : 'plan');
     }
     const inputText = '  Ask the configured questions. 中文  ';
     await page.getByTestId('composer-input').fill(inputText);
@@ -93,7 +106,7 @@ for (const name of selectedCases) {
       await expect.poll(() => events().filter(event => event.kind === 'turn.completed').length, { timeout: 30_000 }).toBe(1);
       assert.equal(events().filter(event => event.kind === 'question').length, 0);
       assert.ok(JSON.stringify(control.requests.map(request => request.body)).includes('unavailable in Default mode'), 'Native must report its Default-mode question limitation');
-      result['outcome'] = 'native-default-question-unavailable-with-feature-defaults';
+      result['outcome'] = 'native-default-legacy-synchronous-tool-unavailable-with-feature-off';
     } else if (name.endsWith('-cancel')) {
       await expect.poll(() => events().filter(event => event.kind === 'question').length, { timeout: 35_000 }).toBe(2);
       assert.equal(ctx.manager.getRuntime(session.id)?.status, 'waiting');
@@ -136,7 +149,7 @@ for (const name of selectedCases) {
         const replies = nativeReplies.map(frame => frame.frame as { result?: { answers?: unknown } }).filter(frame => frame.result?.answers !== undefined);
         assert.equal(replies.length, 1, 'Native question group must receive exactly one answer');
         assert.deepEqual(replies[0]!.result, { answers: { q0: { answers: [freeText] }, q1: { answers: ['Alpha'] } } });
-        assert.equal((await (adapter as CodexAdapter).inputModes(session.id)).observedMode, 'plan');
+        assert.equal((await (adapter as CodexAdapter).inputModes(session.id)).observedMode, name === 'codex-default-sync-enabled' ? 'default' : 'plan');
       } else if (agent === 'claude-code') {
         const reply = nativeReplies.find(frame => frame.ch === 'canUseTool-result' && (frame.frame as { toolName?: string }).toolName === 'AskUserQuestion');
         assert.ok(reply);
@@ -149,7 +162,7 @@ for (const name of selectedCases) {
       await expect(first).toHaveAttribute('data-state', 'resolved'); await expect(second).toHaveAttribute('data-state', 'resolved');
       assert.equal(await first.getByRole('button').count() + await second.getByRole('button').count(), 0);
       assert.deepEqual(events().filter(event => event.kind === 'question'), questionEventsBeforeReload);
-      if (agent === 'codex') await expect(page.getByTestId('codex-input-mode')).toHaveValue('plan');
+      if (agent === 'codex') await expect(page.getByTestId('codex-input-mode')).toHaveValue(name === 'codex-default-sync-enabled' ? 'default' : 'plan');
       result['outcome'] = 'two-native-questions-browser-answer-native-continue-and-reload';
     }
     const nativeUser = events().find(event => event.kind === 'user.message'); assert.ok(nativeUser);
@@ -175,6 +188,11 @@ for (const name of selectedCases) {
     result['modelBodies'] = control.requests.map(request => request.body);
     process.exitCode = 1;
   } finally {
+    // Successful and failed cases retain the same complete native/model/Web
+    // evidence; final answers alone do not establish a triggered question.
+    const tracePath = reportPath + '.' + name + '.trace.json';
+    await writeFile(tracePath, JSON.stringify({ frames, sessions: ctx.store.listSessions(true).map(session => ({ session, events: ctx.store.allEvents(session.id) })), modelRequests: control.requests }, null, 2) + '\n');
+    result['evidence'] = [tracePath];
     await browser?.close(); await ctx.close();
     if (adapter instanceof DshAdapter) await adapter.shutdown();
     await model.close(); await rm(isolated.dirs.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

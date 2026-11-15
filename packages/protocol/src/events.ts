@@ -70,12 +70,15 @@ export interface QuestionItem {
   isSecret?: boolean;
   /** Native blocking declaration; absence in old events means blocking. */
   isBlocking?: boolean;
+  /** Native async message identity; its reply is ordinary input, not RPC. */
+  asyncReply?: { nativeId: string; itemId: string; index: number };
   elicitation?: ElicitationForm;
   outcome?: ElicitationAction;
   toolCallId?: string;
   status?: 'pending' | 'answered' | 'skipped';
   resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';
-  submission?: 'sent' | 'uncertain' | 'collected';
+  submission?: 'sent' | 'uncertain' | 'collected' | 'queued' | 'failed';
+  submissionError?: string;
 }
 
 export function isBlockingQuestion(question: Pick<QuestionItem, 'isBlocking' | 'status'>): boolean {

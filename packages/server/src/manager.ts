@@ -25,7 +25,7 @@ import type {
   SlashControlRequest,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
-import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor } from '@webdcc/protocol';
+import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
@@ -807,8 +807,11 @@ export class SessionManager {
     }
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown, commandId = ulid()): Promise<AnswerSubmission> {
+  async answer(sessionId: string, questionId: string, answer: unknown, commandId = ulid(), delivery?: { intent?: UserInput['delivery']; expectedTurnId?: string }): Promise<AnswerSubmission> {
     this.protectAnswer(sessionId, questionId, answer);
+    const question = this.store.allEvents(sessionId).findLast(event => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId)?.data as EventData['question'] | undefined;
+    if (question?.asyncReply !== undefined) return this.control(sessionId, () => this.answerAsync(sessionId, question, answer, commandId, delivery));
+    if (delivery?.intent !== undefined) throw Object.assign(new Error('此原生问题不支持排队或介入回答'), { statusCode: 400 });
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
@@ -837,14 +840,95 @@ export class SessionManager {
     return result ?? { submitted: true, questionIds: [questionId] };
   }
 
-  private persistInteractionSubmission(row: InteractionRow, submission: 'sent' | 'uncertain' | 'collected'): void {
+  private async answerAsync(sessionId: string, question: EventData['question'], answer: unknown, commandId: string, delivery?: { intent?: UserInput['delivery']; expectedTurnId?: string }): Promise<AnswerSubmission> {
+    const session = this.requireSession(sessionId);
+    if (session.agent !== 'codex' || question.asyncReply?.nativeId !== session.nativeId) throw Object.assign(new Error('异步问题不属于当前原生会话'), { statusCode: 409 });
+    const text = formatCodexAsyncReply(question, answer);
+    const runtime = await this.ensureReady(session, this.requireWorkspace(session.workspaceId).path);
+    this.assertOwner(runtime);
+    // Resume may have learned that another native client already answered.
+    const claim = this.store.interactions.claim(sessionId, 'answer', question.questionId, commandId);
+    const intent = delivery?.intent ?? (runtime.turnId !== null && runtime.finishAction === null && runtime.nativeObservedStatus !== 'idle'
+      && this.turns.nativeTurn(runtime.turnId) !== undefined && runtime.adapter.steer !== undefined ? 'steer' : 'queue');
+    try {
+      const result = await this.sendAccepted(sessionId, { text, delivery: intent,
+        ...(intent === 'steer' ? { expectedTurnId: delivery?.expectedTurnId ?? runtime.turnId ?? undefined } : {}) }, commandId);
+      this.syncAsyncSubmissions(sessionId);
+      return { submitted: true, confirmed: this.confirmedAsyncAnswer(sessionId, question.questionId, commandId), questionIds: [question.questionId], queued: result.queued, turnId: result.turnId };
+    } catch (error) {
+      const accepted = this.store.journal.get(commandId);
+      if (this.confirmedAsyncAnswer(sessionId, question.questionId, commandId)) return { submitted: true, confirmed: true, questionIds: [question.questionId], queued: false, ...(accepted?.turnId == null ? {} : { turnId: accepted.turnId }) };
+      this.store.interactions.fail(claim, error);
+      this.syncAsyncSubmissions(sessionId);
+      const row = this.store.interactions.get(sessionId, 'answer', question.questionId);
+      if (row?.state === 'uncertain' || row?.state === 'failed') this.persistInteractionSubmission(row, row.state);
+      throw error;
+    }
+  }
+
+  private confirmedAsyncAnswer(sessionId: string, questionId: string, commandId: string): boolean {
+    const row = this.store.interactions.get(sessionId, 'answer', questionId);
+    return row?.command_id === commandId && row.state === 'resolved' && (JSON.parse(row.request) as { resolution?: string }).resolution === 'native-acknowledged';
+  }
+
+  /** Queue state is durable, while only the native user-message echo resolves an answer. */
+  private syncAsyncSubmissions(sessionId: string): void {
+    const questions = new Map<string, EventData['question']>();
+    for (const event of this.store.allEvents(sessionId)) if (event.kind === 'question') questions.set((event.data as EventData['question']).questionId, event.data as EventData['question']);
+    for (const question of questions.values()) {
+      if (question.asyncReply === undefined || question.status === 'answered' || question.status === 'skipped') continue;
+      const row = this.store.interactions.get(sessionId, 'answer', question.questionId);
+      if (row?.command_id == null) continue;
+      const command = this.store.journal.get(row.command_id);
+      if (command === undefined || command.turnId === null) continue;
+      const state = command.state === 'queued' ? 'queued' : command.state === 'failed' || command.state === 'cancelled' ? 'failed'
+        : command.state === 'uncertain' || command.state === 'completed' ? 'uncertain' : 'sent';
+      if (this.store.interactions.submission(row, state)) this.persistInteractionSubmission(row, state);
+    }
+  }
+
+  private resolveAsyncInput(sessionId: string, event: Extract<AdapterEvent, { type: 'item.complete' }>): void {
+    if (event.kind !== 'user.message' || this.requireSession(sessionId).agent !== 'codex') return;
+    const data = event.data as EventData['user.message'];
+    const identity = data.clientCommandId === undefined ? undefined : this.store.journal.nativeInputRecord(sessionId, data.clientCommandId);
+    if (identity !== undefined && identity.input.text !== data.text) return;
+    const command = identity === undefined ? undefined : this.store.journal.get(identity.commandId)?.payload;
+    const replies = parseCodexAsyncReplies(data.text);
+    const questions = new Map<string, StoredEvent>();
+    for (const candidate of this.store.allEvents(sessionId)) if (candidate.kind === 'question') questions.set((candidate.data as EventData['question']).questionId, candidate);
+    for (const candidate of questions.values()) {
+      const question = candidate.data as EventData['question'];
+      if (question.asyncReply?.nativeId !== this.requireSession(sessionId).nativeId || question.status === 'skipped') continue;
+      const row = this.store.interactions.get(sessionId, 'answer', question.questionId);
+      const local = command?.op === 'answer' && command.questionId === question.questionId && row?.command_id === identity?.commandId;
+      if (question.status === 'answered' && (!local || question.resolution === 'native-acknowledged')) continue;
+      if (!local && !replies.some(reply => reply.questionItemId === question.questionId || reply.questionItemId === question.asyncReply?.itemId)) continue;
+      if (!local && row?.command_id != null && this.store.journal.queue(sessionId).some(input => input.commandId === row.command_id && input.state === 'queued')) {
+        this.store.journal.cancel(sessionId, row.command_id);
+      }
+      const resolved = this.store.appendEvent({ sessionId, turnId: candidate.turnId, itemKey: `question-resolved-${question.questionId}`, kind: 'question',
+        data: { ...question, status: 'answered', resolution: local ? 'native-acknowledged' : 'external' }, native: event.native });
+      this.hooks.onEvent(resolved);
+      if (local && identity !== undefined && (identity.steered || this.store.allEvents(sessionId).some(item => item.turnId === identity.turnId && item.kind === 'turn.completed'))) {
+        this.store.journal.inputState(identity.admissionTurnId, 'completed');
+      }
+      this.queueChanged(sessionId);
+    }
+  }
+
+  private persistInteractionSubmission(row: InteractionRow, submission: 'sent' | 'uncertain' | 'collected' | 'queued' | 'failed'): void {
     if (this.store.interactions.get(row.session_id, row.kind, row.id)?.state !== submission) return;
     const request = this.store.allEvents(row.session_id).findLast(event => row.kind === 'answer'
       ? event.kind === 'question' && (event.data as EventData['question']).questionId === row.id
       : event.kind === 'approval.request' && (event.data as EventData['approval.request']).approvalId === row.id);
     if (request === undefined) return;
-    const event = this.store.appendEvent({ sessionId: row.session_id, turnId: request.turnId, itemKey: request.itemKey, kind: request.kind,
-      data: { ...(request.data as EventData['question'] | EventData['approval.request']), submission } });
+    const base = { sessionId: row.session_id, turnId: request.turnId, itemKey: request.itemKey };
+    const event = request.kind === 'question'
+      ? this.store.appendEvent({ ...base, kind: 'question', data: { ...(request.data as EventData['question']), submission,
+        ...(submission === 'failed' ? { submissionError: '回答未送达，可重新提交；排队的回答可在输入队列中核对。' } : {}) } })
+      : submission === 'queued' || submission === 'failed' ? undefined
+        : this.store.appendEvent({ ...base, kind: 'approval.request', data: { ...(request.data as EventData['approval.request']), submission } });
+    if (event === undefined) return;
     this.hooks.onEvent(event);
   }
 
@@ -1207,9 +1291,18 @@ export class SessionManager {
       this.updateSessionAndFeed(sessionId, { permissions }, { permissions });
       return;
     }
+    if (runtime.adapter.id === 'dsh' && event.type === 'item.complete' && event.native !== null && typeof event.native === 'object') {
+      const selected = event.native as { source?: string; reasoningEffort?: unknown };
+      if (selected.source === 'session/selectModel:selected' || selected.source === 'session/projections:modelSelection.next') {
+        const reasoningEffort = typeof selected.reasoningEffort === 'string' ? selected.reasoningEffort : null;
+        this.updateSessionAndFeed(sessionId, { reasoningEffort }, { reasoningEffort });
+      }
+    }
     if (event.type === 'history') {
       const imported = this.store.nativeHistory.import(sessionId, event.nativeId, event.records);
       for (const stored of imported) this.hooks.onEvent(stored);
+      for (const record of event.records) for (const item of record.events) if (item.type === 'item.complete' && item.kind === 'user.message') this.resolveAsyncInput(sessionId, item);
+      this.syncAsyncSubmissions(sessionId);
       const terminal = imported.find(stored => stored.kind === 'turn.completed' && stored.turnId === runtime.turnId);
       if (terminal !== undefined) this.finishTurn(runtime, (terminal.data as EventData['turn.completed']).status, undefined, terminal);
       return;
@@ -1218,11 +1311,17 @@ export class SessionManager {
       const data = event.data as EventData['user.message'];
       const identity = data.clientCommandId === undefined ? undefined : this.store.journal.nativeInputRecord(sessionId, data.clientCommandId);
       if (identity?.steered && !this.confirmInputEcho(sessionId, data.clientCommandId!, data.text, event.nativeTurnId)) return;
+      this.resolveAsyncInput(sessionId, event);
       const commandId = identity?.commandId ?? data.clientCommandId;
       const local = findUserEcho(this.store.allEvents(sessionId), { ...data, clientCommandId: commandId });
       if (local !== undefined) {
         return;
       }
+    }
+    if (event.type === 'item.complete' && event.kind === 'question' && (event.data as EventData['question']).asyncReply !== undefined) {
+      const question = event.data as EventData['question'];
+      const previous = this.store.interactions.get(sessionId, 'answer', question.questionId);
+      if ((question.status === undefined || question.status === 'pending') && (previous?.state === 'resolved' || previous?.state === 'cancelled')) return;
     }
     if (event.type === 'turn.start' && event.nativeTurnId !== undefined) {
       const knownTurn = this.turns.publicTurn(sessionId, event.nativeTurnId) ?? this.store.nativeHistory.turn(sessionId, event.nativeTurnId);
@@ -1544,6 +1643,7 @@ export class SessionManager {
   }
 
   queueChanged(sessionId: string): void {
+    this.syncAsyncSubmissions(sessionId);
     const patch = { queueRevision: Date.now() };
     const feedSeq = this.store.appendFeed(sessionId, patch);
     this.hooks.onFeed(sessionId, patch, feedSeq);

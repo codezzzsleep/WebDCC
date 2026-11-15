@@ -88,6 +88,8 @@ export interface AnswerSubmission {
   questionIds?: string[];
   /** false means transport submission still awaits native request resolution. */
   confirmed?: boolean;
+  queued?: boolean;
+  turnId?: string;
 }
 
 export interface NativeInteractionSubmission { confirmed: boolean }

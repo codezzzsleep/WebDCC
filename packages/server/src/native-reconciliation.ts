@@ -88,6 +88,7 @@ export class NativeReconciliationStore {
     for (const row of this.db.prepare("SELECT kind, id FROM interactions WHERE session_id = ? AND state NOT IN ('resolved','cancelled')").all(sessionId) as { kind: string; id: string }[]) {
       const event = events.findLast(event => row.kind === 'answer' ? event.kind === 'question' && (event.data as EventData['question']).questionId === row.id
         : event.kind === 'approval.request' && (event.data as EventData['approval.request']).approvalId === row.id);
+      if (event?.kind === 'question' && (event.data as EventData['question']).asyncReply !== undefined) continue;
       if (event?.turnId == null || !outcomes.some(outcome => outcome.turnId === event.turnId)) reasons.push(`交互 ${row.id} 缺少已结束原生轮次的关联证据。`);
     }
     return { revision: randomUUID(), sessionId, generation: owner?.generation ?? null, observedAt: new Date().toISOString(), observation,
@@ -127,7 +128,7 @@ export class NativeReconciliationStore {
         const questions = new Map(existing.filter(event => event.kind === 'question').map(event => [(event.data as EventData['question']).questionId, event]));
         for (const event of questions.values()) {
           const data = event.data as EventData['question'];
-          if (data.status === 'answered' || data.status === 'skipped') continue;
+          if (data.status === 'answered' || data.status === 'skipped' || data.asyncReply !== undefined) continue;
           const { submission: _submission, ...question } = data; void _submission;
           append({ ...base, itemKey: event.itemKey, kind: 'question', data: { ...question, status: 'skipped', resolution: 'outcome-unknown' } });
         }

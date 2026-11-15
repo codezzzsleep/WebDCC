@@ -8,13 +8,15 @@ import { arch, platform } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from '@playwright/test';
 import { CodexAdapter, PINNED_VERSION } from '../packages/adapters/codex/src/adapter.js';
+import { isSupportedCodexVersion } from '../packages/adapters/codex/src/versions.js';
+import type { TraceFrame } from '../packages/protocol/src/index.js';
 import { createSourceTestApp } from '../browser-tests/helpers.js';
 import { isolatedEnv } from '../packages/server/src/test-isolation.js';
 import { startResponsesMock } from '../packages/testing/mock-models/src/responses-server.js';
 import { sourceFingerprint } from './lib/gate-report.js';
 
 const binaryIndex = process.argv.indexOf('--binary');
-if (binaryIndex < 0 || !process.argv[binaryIndex + 1]) throw new Error('需要 --binary 指定隔离安装的 Codex 0.167.0');
+if (binaryIndex < 0 || !process.argv[binaryIndex + 1]) throw new Error('需要 --binary 指定已审查兼容范围中的 Codex 可执行文件');
 const binary = resolve(process.argv[binaryIndex + 1]!);
 const reportIndex = process.argv.indexOf('--report');
 const reportPath = resolve(reportIndex < 0 ? 'web_review/evidence/native-elicitation.json' : process.argv[reportIndex + 1]!);
@@ -48,6 +50,7 @@ const modelRecord = join(isolated.dirs.root, 'model.jsonl');
 const model = await startResponsesMock({ plan: [{ tool: { kind: 'other', name: 'ask_details', namespace: 'mcp__webdcc_fixture', input: {} } }, { text: expectedText }], recordPath: modelRecord, log: () => undefined });
 const overrides = ['model_provider=wdcc_mock', 'model="mock-responses-1"', 'model_providers.wdcc_mock.name="WDCC mock"', `model_providers.wdcc_mock.base_url="${model.url}/v1"`, 'model_providers.wdcc_mock.wire_api="responses"', 'model_providers.wdcc_mock.env_key="WDCC_MOCK_KEY"'];
 const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+const frames: TraceFrame[] = [];
 const binaryHash = createHash('sha256'); for await (const chunk of createReadStream(binary)) binaryHash.update(chunk);
 const evidence: Record<string, unknown> = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), sourceFingerprint: sourceFingerprint(),
   kind: 'pinned-native-mcp-with-scripted-model-and-real-browser', baseline: PINNED_VERSION, nativeBinarySha256: binaryHash.digest('hex'),
@@ -55,8 +58,10 @@ const evidence: Record<string, unknown> = { commit: execFileSync('git', ['rev-pa
   configurationFingerprint: createHash('sha256').update(await readFile(join(isolated.dirs.CODEX_HOME, 'config.toml'))).update(await readFile(fixture)).digest('hex'),
   paidModel: false, startedAt: new Date().toISOString(), passed: false };
 try {
-  const adapter = new CodexAdapter({ command: binary, configOverrides: overrides, env: { ...isolated.env, WDCC_MOCK_KEY: 'mock-fixture-key' } });
-  assert.equal((await adapter.probe()).version, PINNED_VERSION);
+  const adapter = new CodexAdapter({ command: binary, configOverrides: overrides, env: { ...isolated.env, WDCC_MOCK_KEY: 'mock-fixture-key' }, traceSink: { record: frame => { frames.push(structuredClone(frame)); } } });
+  const nativeVersion = (await adapter.probe()).version;
+  assert.ok(isSupportedCodexVersion(nativeVersion), 'Codex binary is outside the reviewed compatibility range');
+  evidence['nativeVersion'] = nativeVersion;
   ctx.manager.registerAdapter(adapter); const workspace = ctx.store.createWorkspace('Native MCP', workspacePath);
   const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent: 'codex' });
   await ctx.app.listen({ host: '127.0.0.1', port: 0 }); const address = ctx.app.server.address(); if (!address || typeof address === 'string') throw new Error('missing listener');
@@ -101,6 +106,10 @@ try {
   process.exitCode = 1;
 }
 finally {
+  const tracePath = reportPath + '.trace.json';
+  await mkdir(resolve(reportPath, '..'), { recursive: true });
+  await writeFile(tracePath, JSON.stringify({ frames, events: ctx.store.listSessions(true).map(session => ({ session, events: ctx.store.allEvents(session.id) })), modelRecords: await readFile(modelRecord, 'utf8').catch(() => '') }, null, 2) + '\n');
+  evidence['evidence'] = [tracePath];
   await browser?.close(); await ctx.close(); await model.close();
   evidence['endedAt'] = new Date().toISOString(); await mkdir(resolve(reportPath, '..'), { recursive: true }); await writeFile(reportPath, `${JSON.stringify(evidence, null, 2)}\n`);
   await rm(isolated.dirs.root, { recursive: true, force: true }); process.stdout.write(`${JSON.stringify({ passed: evidence['passed'], error: evidence['error'], report: reportPath })}\n`);
