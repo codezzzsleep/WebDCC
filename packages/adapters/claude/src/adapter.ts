@@ -566,8 +566,8 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   async validateInput(_sessionId: string, input: UserInput): Promise<void> {
-    // The pinned SDK ModelInfo has no input modality declaration. Preserve
-    // that unknown instead of guessing from model names or descriptions.
+    // ModelInfo does not describe modalities; admit the reviewed SDK content
+    // types. Provider/model vision support remains an observed native outcome.
     await encodeClaudeInput(input);
   }
 

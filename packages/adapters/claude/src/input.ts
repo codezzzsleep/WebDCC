@@ -4,6 +4,8 @@ import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ResolvedInputPart, UserInput } from '@webdcc/protocol';
 import { isInputContent, publicInputContent } from '@webdcc/protocol';
 export type ClaudeUserContent = Extract<SDKUserMessage['message'], { role: 'user' }>['content'];
+/** Pinned SDK content contract; this does not attest a Provider/model's vision support. */
+export const CLAUDE_SDK_INPUT_MODALITIES = ['text', 'image'] as const;
 
 export const unsupportedClaudeInput = (message: string): Error => Object.assign(new Error(message), { code: 'input-unsupported', statusCode: 400, nativeAdmission: 'not-submitted' });
 function partsOf(input: UserInput): ResolvedInputPart[] {
@@ -11,7 +13,7 @@ function partsOf(input: UserInput): ResolvedInputPart[] {
   if (input.images?.length || !isInputContent(publicInputContent(input.contentParts), input.text)) throw unsupportedClaudeInput('结构化输入与编辑框正文不一致');
   return input.contentParts.parts;
 }
-export function validateClaudeInput(input: UserInput, modalities?: readonly string[]): void {
+export function validateClaudeInput(input: UserInput, modalities: readonly string[] = CLAUDE_SDK_INPUT_MODALITIES): void {
   const parts = partsOf(input);
   if (!input.text.trim() && !parts.some(part => part.type !== 'text')) throw unsupportedClaudeInput('请输入正文或选择附件');
   for (const part of parts) {
@@ -19,12 +21,12 @@ export function validateClaudeInput(input: UserInput, modalities?: readonly stri
     if (part.type === 'audio' || part.type === 'skill' || part.type === 'resource') throw unsupportedClaudeInput(`当前 Claude SDK 不支持独立 ${part.type} 输入`);
     if (part.type === 'image') {
       if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(part.mime)) throw unsupportedClaudeInput(`Claude 不支持图片格式 ${part.mime}`);
-      if (!modalities?.includes('image')) throw unsupportedClaudeInput('当前 Claude 原生模型目录未声明图片输入能力');
+      if (!modalities.includes('image')) throw unsupportedClaudeInput('当前 Claude 原生输入约束不支持图片');
     }
     if (part.type === 'file' && part.mime !== 'application/pdf' && !part.mime.startsWith('text/')) throw unsupportedClaudeInput(`Claude SDK 文档输入不支持 ${part.mime}`);
   }
 }
-export async function encodeClaudeInput(input: UserInput, modalities?: readonly string[]): Promise<ClaudeUserContent> {
+export async function encodeClaudeInput(input: UserInput, modalities: readonly string[] = CLAUDE_SDK_INPUT_MODALITIES): Promise<ClaudeUserContent> {
   validateClaudeInput(input, modalities);
   const content: Exclude<ClaudeUserContent, string> = [];
   for (const part of partsOf(input)) {
