@@ -1297,10 +1297,9 @@ export class CodexAdapter implements AgentAdapter {
     }
     if (actor === undefined || actor === runtime.nativeId) return;
     const turn = (params['turn'] ?? {}) as { id?: string; rootTurnId?: string; status?: string; error?: unknown };
-    let child = children.get(actor);
-    if (child === undefined && typeof turn.rootTurnId === 'string' && runtime.observedTurns?.has(turn.rootTurnId)) {
-      child = { agent: 'codex', childId: actor, parentThreadId: runtime.nativeId, rootTurnId: turn.rootTurnId, nativeStatus: 'unknown' };
-    }
+    // rootTurnId identifies delegated root work, not the immediate parent.
+    // Unknown lineage stays in the raw ledger until native supplies an edge.
+    const child = children.get(actor);
     if (child === undefined) return;
     const nativeTurnId = this.nativeTurnId(params);
     const observed = runtime.subagentTurns ??= new Map();

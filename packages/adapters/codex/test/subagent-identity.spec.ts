@@ -34,3 +34,10 @@ it('restored child identities accept late results without spawning again or admi
   expect(events.find(event => event.type === 'item.complete' && event.kind === 'tool.call')).toMatchObject({ scope: 'session', data: { input: { childId: 'child', parentThreadId: 'parent' }, output: { result: { nativeTurnId: 'child-turn', itemId: 'result', text: 'existing task result' } } } });
   expect(events.some(event => event.type === 'turn.start' || event.type === 'turn.end' || event.type === 'item.complete' && event.kind === 'assistant.message')).toBe(false);
 });
+
+it('rootTurnId alone does not fabricate the immediate parent of an unknown descendant', () => {
+  const replay = CodexAdapter.replay('session', 'parent');
+  replay.feed({ i: 1, t: 1, dir: 'in', ch: 'rpc', frame: { method: 'turn/started', params: { threadId: 'parent', turn: { id: 'root-turn' } } } });
+  const frame = { method: 'turn/started', params: { threadId: 'unknown-descendant', turn: { id: 'child-turn', rootTurnId: 'root-turn', status: 'inProgress' } } };
+  expect(replay.feed({ i: 2, t: 2, dir: 'in', ch: 'rpc', frame })).toEqual([expect.objectContaining({ type: 'item.complete', kind: 'internal', scope: 'session', native: frame })]);
+});
