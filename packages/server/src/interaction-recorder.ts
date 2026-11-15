@@ -139,7 +139,26 @@ export class InteractionRecorder {
     if (nativeId !== undefined && nativeId !== '') paths.push(join(this.directory, `model-${key(nativeId)}.jsonl`));
     if (workspaceId !== undefined) paths.push(join(this.directory, `${key(`workspace-${workspaceId}`)}.jsonl`));
     const lines = (await Promise.all(paths.map(path => readFile(path, 'utf8').catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return ''; throw error; })))).join('').split('\n').filter(Boolean);
-    return lines.map(line => ({ line, at: (JSON.parse(line) as InteractionRecord).at })).sort((a, b) => a.at.localeCompare(b.at)).map(row => row.line + '\n').join('');
+    const rows = lines.map(line => ({ line, record: JSON.parse(line) as InteractionRecord }));
+    const native = rows.filter(row => row.record.source === 'native' && row.record.context?.agent === 'dsh');
+    if (native.length > 0) {
+      // Model public identities depend on the adapter's Host-wide catalog.
+      // Include its original RPC evidence, not another Session's events or a
+      // catalog reconstructed from the report's selected model. The recorder
+      // run and sequence bound both inherited state and later refreshes.
+      const through = new Map<string, number>();
+      for (const { record } of native) through.set(record.runId, Math.max(through.get(record.runId) ?? 0, record.seq));
+      const host = await readFile(join(this.directory, 'dsh-host.jsonl'), 'utf8').catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return ''; throw error; });
+      const seen = new Set(rows.map(({ record }) => `${record.runId}:${record.seq}`));
+      for (const line of host.split('\n').filter(Boolean)) {
+        const record = JSON.parse(line) as InteractionRecord;
+        const limit = through.get(record.runId);
+        if (limit === undefined || record.seq > limit || record.source !== 'native' || record.channel !== 'rpc:session/modelCatalog'
+          || seen.has(`${record.runId}:${record.seq}`)) continue;
+        rows.push({ line, record }); seen.add(`${record.runId}:${record.seq}`);
+      }
+    }
+    return rows.sort((a, b) => a.record.at.localeCompare(b.record.at) || (a.record.runId === b.record.runId ? a.record.seq - b.record.seq : 0)).map(row => row.line + '\n').join('');
   }
   async summary(sessionId: string, nativeId?: string, workspaceId?: string): Promise<RecordingSummary> {
     const summary = { ...this.summaryFor(sessionId), errors: [...this.summaryFor(sessionId).errors] };
