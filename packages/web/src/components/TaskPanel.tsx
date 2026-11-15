@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { currentGoal, goalLabel } from '@webdcc/protocol';
+import { currentGoal, goalLabel, currentCodexSubagents, codexSubagentRecoveryText } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { agentText } from '../lib/agents.js';
@@ -17,7 +17,9 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
   const plan = [...turns].reverse().find((turn) => turn.plan !== undefined)?.plan;
   const goalData = currentGoal(store.getEvents(sessionId));
   const showGoal = goalData !== undefined && goalData.status !== 'cleared' && goalData.objective !== '';
-  if (plan === undefined && !showGoal) return null;
+  const subagents = currentCodexSubagents(store.getEvents(sessionId));
+  const recoveryText = codexSubagentRecoveryText(turns.at(-1)?.state, subagents);
+  if (plan === undefined && !showGoal && subagents.length === 0) return null;
 
   const agentName = agentText(session?.agent ?? '').name;
   const items = plan ?? [];
@@ -26,6 +28,17 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
 
   return (
     <>
+      {subagents.length > 0 ? <div className="task-bar" data-testid="codex-subagents-panel">
+        <div className="task-bar-head"><Icon name="tool" size={15} /><strong>子任务</strong>
+          <span className="summary">{subagents.filter(child => child.nativeStatus === 'completed').length} 已完成 · {subagents.length} 总计</span>
+        </div>
+        {recoveryText === undefined ? null : <p role="status">{recoveryText}</p>}
+        {subagents.map(child => <details key={child.childId}>
+          <summary>{child.agentPath ?? child.childId} · {child.nativeStatus === 'completed' ? '已完成' : child.nativeStatus === 'failed' ? '失败' : child.nativeStatus === 'interrupted' ? '已中断' : child.nativeStatus === 'waiting' ? '等待原生交互' : child.nativeStatus === 'running' ? '运行中' : '状态待确认'}</summary>
+          <p>原生线程：{child.childId}<br />父线程：{child.parentThreadId}</p>
+          {child.results.map(result => <pre className="output" key={`${result.nativeTurnId}:${result.itemId}`}>{result.text}</pre>)}
+        </details>)}
+      </div> : null}
       {showGoal && goalData !== undefined ? (
         <div className="task-bar" data-testid="goal-panel">
           <div className="task-bar-head" style={{ cursor: 'default' }}>

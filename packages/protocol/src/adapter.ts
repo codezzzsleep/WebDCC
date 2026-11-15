@@ -8,6 +8,7 @@ import type { NativeObservation } from './native-observation.js';
 import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } from './native-controls.js';
 import type { InputSkillPart, ResolvedInputContent } from './input.js';
 import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './slash.js';
+import type { CodexSubagentView } from './subagents.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -62,6 +63,8 @@ export interface CreateOpts {
   accessMode?: string;
   /** Server-owned roundtrip from a verified CLI writer; preserve native settings. */
   restoreNativeHistory?: boolean;
+  /** Passive persisted task identities for reconnect; never sent to native prompts/tools. */
+  restoreCodexSubagents?: CodexSubagentView[];
   /** Optional side-channel recorder; it never changes Agent input/output. */
   traceSink?: TraceSink;
   /** Observer-only endpoint override; keeps the native provider/auth identity. */

@@ -27,6 +27,8 @@ import type {
   CodexInputModeCatalog,
   CodexInputMode,
   NativeHistoryRecord,
+  CodexSubagentIdentity,
+  CodexSubagentView,
 } from '@webdcc/protocol';
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
@@ -138,6 +140,8 @@ interface SessionRuntime {
   observedMode?: CodexInputMode | null;
   turnId: string | null;
   observedTurns?: Set<string>;
+  subagents?: Map<string, CodexSubagentIdentity>;
+  subagentTurns?: Map<string, Set<string>>;
   reasoningSummaries?: Map<string, ReasoningSummary>;
   completedReasoning?: Set<string>;
   goalId?: string;
@@ -151,6 +155,14 @@ interface SessionRuntime {
   lastAssistantText: string;
   /** 已经发过 item.start 的条目（Codex 的 agentMessage 不一定有 item/started） */
   started: Set<string>;
+}
+
+function restoreSubagentState(runtime: SessionRuntime, children: readonly CodexSubagentView[]): void {
+  runtime.subagents = new Map(children.map(({ turns: _turns, results: _results, ...identity }) => {
+    void _turns; void _results;
+    return [identity.childId, identity];
+  }));
+  runtime.subagentTurns = new Map(children.map(child => [child.childId, new Set(Object.keys(child.turns))]));
 }
 
 const ACCESS_MODES = [
@@ -524,7 +536,7 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   /** Transport-free replay through the production notification/request handlers. */
-  static replay(sessionId = 'replay', nativeId = ''): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: CodexAdapter; replies: unknown[] } {
+  static replay(sessionId = 'replay', nativeId = '', children: readonly CodexSubagentView[] = []): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: CodexAdapter; replies: unknown[] } {
     const adapter = new CodexAdapter();
     const replies: unknown[] = [];
     const runtime: SessionRuntime = {
@@ -533,6 +545,7 @@ export class CodexAdapter implements AgentAdapter {
       cwd: '.', accessMode: null, model: null, reasoningEffort: null, turnId: null,
       frameSeq: 0, turnStartedAt: 0, generationStartedAt: null, approvals: new Map(), lastAssistantText: '', started: new Set(),
     };
+    restoreSubagentState(runtime, children);
     adapter.sessions.set(sessionId, runtime);
     let events: AdapterEvent[] = [];
     adapter.onEvent((_id, event) => events.push(event));
@@ -754,7 +767,7 @@ export class CodexAdapter implements AgentAdapter {
       markReady = resolve;
     });
     const runtime: SessionRuntime = {
-      nativeId: '',
+      nativeId: 'nativeId' in opts && typeof opts.nativeId === 'string' ? opts.nativeId : '',
       identity: opts.runtime,
       pid: rpc.child.pid ?? 0,
       processToken: randomUUID(),
@@ -774,6 +787,7 @@ export class CodexAdapter implements AgentAdapter {
       lastAssistantText: '',
       started: new Set(),
     };
+    restoreSubagentState(runtime, opts.restoreCodexSubagents ?? []);
     runtimeRef.current = runtime;
     rpc.onNotification((frame) => {
       if (this.sessions.get(sessionId) !== runtime) return;
@@ -1238,6 +1252,79 @@ export class CodexAdapter implements AgentAdapter {
 
   // ---------- 通知 ----------
 
+  private observeSubagent(sessionId: string, runtime: SessionRuntime, frame: Frame): void {
+    const params = (frame['params'] ?? {}) as Record<string, unknown>;
+    const thread = (params['thread'] ?? {}) as Record<string, unknown>;
+    const item = (params['item'] ?? {}) as Record<string, unknown>;
+    const source = thread['source'] as { subAgent?: { thread_spawn?: { parent_thread_id?: string; agent_path?: string } } } | undefined;
+    const spawn = source?.subAgent?.thread_spawn;
+    const actor = typeof params['threadId'] === 'string' ? params['threadId'] : typeof thread['id'] === 'string' ? thread['id'] : undefined;
+    const children = runtime.subagents ??= new Map();
+    const ownsActor = actor === runtime.nativeId || actor !== undefined && children.has(actor);
+    const publish = (child: CodexSubagentIdentity, output?: unknown): void => {
+      children.set(child.childId, child);
+      this.emit(sessionId, { type: 'item.complete', kind: 'tool.call', itemKey: `codex-subagent-${child.childId}`, scope: 'session',
+        data: { name: 'subagent', label: child.agentPath ?? child.childId, input: { ...child },
+          status: child.nativeStatus === 'failed' || child.nativeStatus === 'interrupted' ? 'failed' : child.nativeStatus === 'completed' ? 'completed' : 'running',
+          ...(output === undefined ? {} : { output }) }, native: frame });
+    };
+    if (frame['method'] === 'thread/started' && actor !== undefined && actor !== runtime.nativeId) {
+      const parent = typeof thread['parentThreadId'] === 'string' ? thread['parentThreadId'] : spawn?.parent_thread_id;
+      if (parent === runtime.nativeId || parent !== undefined && children.has(parent)) publish({
+        ...children.get(actor), agent: 'codex', childId: actor, parentThreadId: parent, nativeStatus: children.get(actor)?.nativeStatus ?? 'unknown',
+        ...(typeof spawn?.agent_path === 'string' ? { agentPath: spawn.agent_path } : {}),
+        ...(typeof thread['model'] === 'string' ? { model: thread['model'] } : {}),
+        ...(typeof thread['cliVersion'] === 'string' ? { nativeVersion: thread['cliVersion'] } : {}),
+        ...(typeof thread['path'] === 'string' ? { rolloutPath: thread['path'] } : {}),
+      });
+    }
+    if (ownsActor && item['type'] === 'subAgentActivity' && typeof item['agentThreadId'] === 'string' && item['agentThreadId'] !== runtime.nativeId) {
+      const id = item['agentThreadId'];
+      const previous = children.get(id);
+      // Interacting with an ancestor or peer does not create a parent relation.
+      if (item['kind'] === 'started' || previous !== undefined) publish({
+        ...previous, agent: 'codex', childId: id, parentThreadId: previous?.parentThreadId ?? actor!,
+        nativeStatus: previous?.nativeStatus ?? (item['kind'] === 'completed' ? 'completed' : 'unknown'),
+        ...(typeof item['agentPath'] === 'string' ? { agentPath: item['agentPath'] } : {}),
+        ...(typeof item['model'] === 'string' ? { model: item['model'] } : {}),
+      });
+    }
+    if (ownsActor && item['type'] === 'collabAgentToolCall' && item['tool'] === 'spawnAgent' && Array.isArray(item['receiverThreadIds'])) {
+      for (const id of item['receiverThreadIds']) if (typeof id === 'string' && id !== runtime.nativeId && !children.has(id)) publish({
+        agent: 'codex', childId: id, parentThreadId: actor!, nativeStatus: 'unknown',
+        ...(typeof item['model'] === 'string' ? { model: item['model'] } : {}),
+      });
+    }
+    if (actor === undefined || actor === runtime.nativeId) return;
+    const turn = (params['turn'] ?? {}) as { id?: string; rootTurnId?: string; status?: string; error?: unknown };
+    let child = children.get(actor);
+    if (child === undefined && typeof turn.rootTurnId === 'string' && runtime.observedTurns?.has(turn.rootTurnId)) {
+      child = { agent: 'codex', childId: actor, parentThreadId: runtime.nativeId, rootTurnId: turn.rootTurnId, nativeStatus: 'unknown' };
+    }
+    if (child === undefined) return;
+    const nativeTurnId = this.nativeTurnId(params);
+    const observed = runtime.subagentTurns ??= new Map();
+    const knownTurns = observed.get(actor) ?? new Set<string>();
+    observed.set(actor, knownTurns);
+    if (frame['method'] === 'turn/started' && nativeTurnId !== undefined) {
+      if (knownTurns.has(nativeTurnId)) return;
+      knownTurns.add(nativeTurnId);
+      publish({ ...child, nativeTurnId, ...(turn.rootTurnId === undefined ? {} : { rootTurnId: turn.rootTurnId }), nativeStatus: 'running' },
+        { turn: { id: nativeTurnId, status: turn.status ?? 'inProgress' } });
+    } else if (frame['method'] === 'turn/completed' && nativeTurnId !== undefined) {
+      knownTurns.add(nativeTurnId);
+      publish({ ...child, ...(child.nativeTurnId === undefined ? { nativeTurnId } : {}),
+        ...(child.nativeTurnId === undefined || child.nativeTurnId === nativeTurnId ? { nativeStatus: turn.status ?? 'unknown' } : {}) },
+        { turn: { id: nativeTurnId, status: turn.status ?? 'unknown', error: turn.error } });
+    } else if (frame['method'] === 'thread/status/changed') {
+      const status = params['status'] as { type?: string; activeFlags?: string[] } | undefined;
+      if (status?.type === 'active') publish({ ...child, nativeStatus: status.activeFlags?.length && status.activeFlags.every(flag => flag === 'waitingOnApproval' || flag === 'waitingOnUserInput') ? 'waiting' : 'running' });
+      // Idle/systemError alone is not evidence of a successful/failed task.
+    } else if (frame['method'] === 'item/completed' && item['type'] === 'agentMessage' && typeof item['text'] === 'string') {
+      publish(child, { result: { nativeTurnId: nativeTurnId ?? child.nativeTurnId, itemId: String(item['id']), text: item['text'], nativePhase: item['phase'] } });
+    }
+  }
+
   private onNotification(sessionId: string, frame: Frame): void {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
@@ -1246,6 +1333,17 @@ export class CodexAdapter implements AgentAdapter {
     const route = routeNotification(method);
     runtime.frameSeq += 1;
     const frameKey = `${method.replace(/[^a-zA-Z0-9]+/g, '-')}-${runtime.frameSeq}`;
+
+    this.observeSubagent(sessionId, runtime, frame);
+    const thread = (params['thread'] ?? {}) as { id?: unknown };
+    const nativeThreadId = params['threadId'] ?? params['conversationId'] ?? thread.id;
+    if (runtime.nativeId !== '' && typeof nativeThreadId === 'string' && nativeThreadId !== runtime.nativeId) {
+      // Keep every notification in the native ledger without admitting child
+      // turns, answers, errors, goals or settings into the parent runtime.
+      this.emit(sessionId, { type: 'item.complete', itemKey: `foreign-${frameKey}`, kind: 'internal',
+        data: { nativeType: method }, scope: 'session', native: frame });
+      return;
+    }
 
     switch (route) {
       case 'thread/status': {
