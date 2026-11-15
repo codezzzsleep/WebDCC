@@ -63,6 +63,7 @@ it('NP-06 a real browser keeps question input and pending state through submissi
     await card.and(page.locator('[data-sync="ready"]')).waitFor();
     expect(snapshotThrough()).toBeGreaterThanOrEqual(ctx.store.getSession(session.id)!.lastSeq);
     expect(await card.getByRole('button', { name: '提交', exact: true }).isDisabled()).toBe(true);
+    expect(await card.getByRole('textbox', { name: '其他回答' }).isDisabled()).toBe(true);
     await expect.poll(() => card.getByRole('status').textContent()).toContain('等待原生结果');
     native.feed({ i: 2, t: 0, dir: 'in', ch: 'rpc', frame: { method: 'serverRequest/resolved', params: { threadId: '', requestId: 'native-request' } } });
     await expect.poll(() => card.getAttribute('data-state')).toBe('resolved');

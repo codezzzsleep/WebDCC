@@ -696,8 +696,9 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   const [selected, setSelected] = useState<string[]>([]);
   const [text, setText] = useState('');
   useStoreVersion();
-  const submission = store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
-    ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission, error: data.submissionError });
+  const submission = data.submission === 'sent' || data.submission === 'queued' || data.submission === 'uncertain'
+    ? { commandId: '', status: data.submission, error: data.submissionError } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
+      ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission, error: data.submissionError });
   const synchronized = store.isInteractionSynced(event.sessionId, 'answer', data.questionId);
   const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
   const blocking = data.isBlocking !== false;

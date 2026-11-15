@@ -510,7 +510,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
         <div className="composer-bar" ref={barRef}>
           {/* 附件 */}
-          <span className="menu-anchor">
+          <span className="menu-anchor composer-attach">
             <button
               type="button"
               className="round-btn"
@@ -795,23 +795,6 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             ) : null}
           </span>
 
-          {agent === 'codex' ? <label className="pill" title="默认执行和先做计划都可向你提问。这里只选择工作方式，随下一条消息发送后生效。">
-            <span className="pill-text">工作方式</span>
-            <select aria-label="Codex 工作方式" data-testid="codex-input-mode" value={controls.drafts.snapshot()?.contentParts.collaborationMode ?? ''}
-              disabled={controls.drafts.loading() || controls.drafts.snapshot()?.sessionId !== draftSessionId}
-              onChange={event => {
-                const draft = controls.drafts.snapshot(); if (draft?.sessionId !== draftSessionId) return;
-                const { collaborationMode: _old, ...contentParts } = draft.contentParts;
-                const selected = event.target.value;
-                controls.drafts.update(draft.text, { ...contentParts, ...(selected === 'default' || selected === 'plan' ? { collaborationMode: selected } : {}) });
-              }}>
-              <option value="">沿用原生{inputModes.observedMode === 'plan' ? '（先做计划 · 已确认）' : inputModes.observedMode === 'default' ? '（默认执行 · 已确认）' : '（待确认）'}</option>
-              <option value="default" disabled={!inputModes.modes.some(mode => mode.id === 'default')}>默认执行</option>
-              <option value="plan" disabled={!inputModes.modes.some(mode => mode.id === 'plan')}>先做计划</option>
-            </select>
-          </label> : null}
-          {agent === 'codex' && inputModes.reason !== undefined ? <span className="muted" role="status">{inputModes.reason} <button type="button" onClick={() => setModeCatalogRevision(value => value + 1)}>重新读取模式</button></span> : null}
-          {agent === 'codex' ? <span className="muted" data-testid="codex-work-mode-state">原生实际：{inputModes.observedMode === 'plan' ? '先做计划' : inputModes.observedMode === 'default' ? '默认执行' : '待确认'}；选择随下条消息生效</span> : null}
           {agent === 'codex' || agent === 'claude-code' || agent === 'dsh' ? (
             <span className="menu-anchor">
               <button type="button" className="pill" aria-haspopup="menu" aria-expanded={menu === 'reasoning'} onClick={() => setMenu(menu === 'reasoning' ? null : 'reasoning')} data-testid="reasoning-menu"
@@ -827,7 +810,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               ) : null}
             </span>
           ) : null}
-          <details className="muted" data-testid="composer-settings-help"><summary>设置说明</summary><p>权限决定可执行的操作；Provider 提供模型连接；模型决定处理能力；思考强度控制推理投入。{agent === 'codex' ? '默认执行和先做计划是工作方式，两种方式都可提问。沿用原生会保留原生设置，待确认表示尚未读到实际值。' : agent === 'dsh' ? 'DSH 思考等级来自当前 Provider 和模型，已有会话确认成功后才更新显示。' : '沿用原生会保留原生设置。'}</p></details>
+
 
           {running ? (
             <>
@@ -936,6 +919,26 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               ))}
             </div>
           ) : null}
+        </div>
+        <div className="composer-settings">
+          {agent === 'codex' ? <label className="pill composer-work-mode" title="默认执行和先做计划都可向你提问。这里只选择工作方式，随下一条消息发送后生效。">
+            <span className="pill-text">工作方式</span>
+            <select aria-label="Codex 工作方式" data-testid="codex-input-mode" value={controls.drafts.snapshot()?.contentParts.collaborationMode ?? ''}
+              disabled={controls.drafts.loading() || controls.drafts.snapshot()?.sessionId !== draftSessionId}
+              onChange={event => {
+                const draft = controls.drafts.snapshot(); if (draft?.sessionId !== draftSessionId) return;
+                const { collaborationMode: _old, ...contentParts } = draft.contentParts;
+                const selected = event.target.value;
+                controls.drafts.update(draft.text, { ...contentParts, ...(selected === 'default' || selected === 'plan' ? { collaborationMode: selected } : {}) });
+              }}>
+              <option value="">沿用原生{inputModes.observedMode === 'plan' ? '（先做计划 · 已确认）' : inputModes.observedMode === 'default' ? '（默认执行 · 已确认）' : '（待确认）'}</option>
+              <option value="default" disabled={!inputModes.modes.some(mode => mode.id === 'default')}>默认执行</option>
+              <option value="plan" disabled={!inputModes.modes.some(mode => mode.id === 'plan')}>先做计划</option>
+            </select>
+          </label> : null}
+          {agent === 'codex' && inputModes.reason !== undefined ? <span className="muted" role="status">{inputModes.reason} <button type="button" onClick={() => setModeCatalogRevision(value => value + 1)}>重新读取模式</button></span> : null}
+          {agent === 'codex' ? <span className="muted" data-testid="codex-work-mode-state">原生实际：{inputModes.observedMode === 'plan' ? '先做计划' : inputModes.observedMode === 'default' ? '默认执行' : '待确认'}；选择随下条消息生效</span> : null}
+          <details className="muted" data-testid="composer-settings-help"><summary>设置说明</summary><p>权限决定可执行的操作；Provider 提供模型连接；模型决定处理能力；思考强度控制推理投入。{agent === 'codex' ? '默认执行和先做计划是工作方式，两种方式都可提问。沿用原生会保留原生设置，待确认表示尚未读到实际值。' : agent === 'dsh' ? 'DSH 思考等级来自当前 Provider 和模型，已有会话确认成功后才更新显示。' : '沿用原生会保留原生设置。'}</p></details>
         </div>
       </div>
       {error !== null ? (

@@ -1262,6 +1262,36 @@ button.step-line:hover {
   min-width: 0;
   flex: 0 1 auto;
 }
+.composer-bar > .composer-attach {
+  flex: 0 0 auto;
+}
+.composer-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+  font-size: 12px;
+}
+.composer-settings .composer-work-mode {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+}
+.composer-work-mode select {
+  min-width: 0;
+  max-width: 100%;
+}
+.composer-settings > [role="status"] {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+.composer-settings details {
+  max-width: 100%;
+}
+.composer-settings details p {
+  margin: 4px 0;
+}
 .composer-bar > .menu-anchor > .pill {
   min-width: 0;
   max-width: 100%;
