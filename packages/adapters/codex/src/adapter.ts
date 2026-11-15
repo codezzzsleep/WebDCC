@@ -636,6 +636,10 @@ export class CodexAdapter implements AgentAdapter {
     return codexSlashCommands;
   }
 
+  async previewSlashCommands() {
+    return this.slashCommands();
+  }
+
   async executeSlashControl(sessionId: string, line: string, options: { replaceGoal?: boolean; editGoal?: boolean; contentParts?: UserInput['contentParts'] } = {}) {
     const runtime = this.require(sessionId); await runtime.ready;
     if (/^\/compact(?:\s|$)/.test(line) && (runtime.turnId !== null || runtime.approvals.size > 0)) throw Object.assign(new Error('请等待原生轮次和交互结束后压缩'), { statusCode: 409, code: 'native-control-rejected' });

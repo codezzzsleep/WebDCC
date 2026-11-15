@@ -7,6 +7,45 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb, CURRENT_SCHEMA_VERSION } from '../src/db.js';
 import { Store } from '../src/store.js';
+import { codexSlashCommands } from '../../adapters/codex/src/slash.js';
+
+it('authenticated pre-creation discovery reads the Codex catalog without creating or resuming a session', async () => {
+  const ctx = await createTestApp();
+  try {
+    const workspace = ctx.store.createWorkspace('new slash', ctx.dataDir);
+    const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' });
+    const calls: (string | undefined)[] = [];
+    adapter.previewSlashCommands = async cwd => { calls.push(cwd); return codexSlashCommands; };
+    adapter.create = async () => { throw new Error('Discovery activated a writer'); };
+    adapter.resume = async () => { throw new Error('Discovery resumed a writer'); };
+    adapter.send = async () => { throw new Error('Discovery sent model input'); };
+    ctx.manager.registerAdapter(adapter);
+    const url = `/api/agents/codex/slash-commands?workspaceId=${workspace.id}`;
+    expect((await ctx.app.inject({ url })).statusCode).toBe(401);
+    const response = await ctx.app.inject({ url, headers: { cookie: ctx.cookie } });
+    expect(response.json()).toMatchObject({ agent: 'codex', status: 'ready', commands: expect.any(Array) });
+    expect(response.json().commands).toEqual(codexSlashCommands);
+    expect(calls).toEqual([workspace.path]);
+    expect(ctx.store.listSessions()).toEqual([]);
+    expect((await ctx.app.inject({ url: '/api/agents/codex/slash-commands?workspaceId=missing', headers: { cookie: ctx.cookie } })).statusCode).toBe(404);
+  } finally { await ctx.close(); }
+});
+
+it('pre-creation discovery preserves failure and empty reasons without using session-bound fallback', async () => {
+  const ctx = await createTestApp();
+  try {
+    const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' });
+    adapter.slashCommands = async () => { throw new Error('Session-bound fallback used'); };
+    ctx.manager.registerAdapter(adapter);
+    const read = () => ctx.app.inject({ url: '/api/agents/codex/slash-commands', headers: { cookie: ctx.cookie } });
+    expect((await read()).json()).toMatchObject({ status: 'empty', reason: expect.stringContaining('建立原生会话后') });
+    adapter.previewSlashCommands = async () => { throw new Error('native version unavailable'); };
+    expect((await read()).json()).toMatchObject({ status: 'error', reason: expect.stringContaining('native version unavailable'), commands: [] });
+    adapter.previewSlashCommands = async () => [];
+    expect((await read()).json()).toMatchObject({ status: 'empty', reason: expect.stringContaining('没有返回'), commands: [] });
+    expect(ctx.store.listSessions()).toEqual([]);
+  } finally { await ctx.close(); }
+});
 
 async function fixture() {
   const ctx = await createTestApp(); const workspace = ctx.store.createWorkspace('slash', ctx.dataDir);

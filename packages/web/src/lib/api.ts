@@ -124,6 +124,7 @@ export const api = {
   providers: () => request<ProviderDto[]>('/api/providers'),
   slashCommands: (sessionId: string) =>
     request<SlashCommandCatalog>(`/api/sessions/${sessionId}/slash-commands`),
+  previewSlashCommands: (agent: string, workspaceId?: string) => request<SlashCommandCatalog>(`/api/agents/${encodeURIComponent(agent)}/slash-commands${workspaceId === undefined ? '' : `?workspaceId=${encodeURIComponent(workspaceId)}`}`),
   slashControl: (sessionId: string, input: SlashControlRequest) => request<NativeActionResponse>(`/api/sessions/${sessionId}/slash-commands`, { method: 'POST', body: JSON.stringify(input) }),
   slashControlResult: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${sessionId}/slash-commands/${encodeURIComponent(commandId)}`),
   sendSubagent: (sessionId: string, childSessionId: string, text: string) =>
