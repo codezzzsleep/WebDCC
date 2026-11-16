@@ -37,7 +37,8 @@ import { normalizeQuestionAnswer } from '@webdcc/protocol';
 import { nativeAccessMode, schemaHasSecrets } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
-import { nativeRequest, nativeSettingsNotification, validateNativeServerParams, type NativeParams } from './controls.js';
+import { nativeRequest, nativeSettingsNotification, validateNativeResult, validateNativeServerParams, type NativeParams } from './controls.js';
+import type { ReviewStartResponse } from './schema/v2/ReviewStartResponse.js';
 import { codexSlashCommands, executeCodexSlash } from './slash.js';
 import { codexInputParts, encodeCodexInput, unsupportedCodexInput } from './input.js';
 import { elicitationResponse } from './elicitation.js';
@@ -149,6 +150,9 @@ interface SessionRuntime {
   observedMode?: CodexInputMode | null;
   turnId: string | null;
   observedTurns?: Set<string>;
+  completedTurns?: Set<string>;
+  reviewRoots?: Map<string, { completed: boolean; executionTurnId?: string; executionTurnIds: Set<string> }>;
+  activeReviewRoot?: string;
   subagents?: Map<string, CodexSubagentIdentity>;
   subagentTurns?: Map<string, Set<string>>;
   reasoningSummaries?: Map<string, ReasoningSummary>;
@@ -566,9 +570,19 @@ export class CodexAdapter implements AgentAdapter {
     adapter.sessions.set(sessionId, runtime);
     let events: AdapterEvent[] = [];
     adapter.onEvent((_id, event) => events.push(event));
+    const reviewRequests = new Set<string | number>();
     return { adapter, replies, feed(frame) {
       events = []; adapter.replayTime = frame.t;
       const raw = frame.frame as Frame;
+      const requestId = raw['id'];
+      if (frame.ch === 'rpc' && (typeof requestId === 'string' || typeof requestId === 'number')) {
+        if (frame.dir === 'out' && raw['method'] === 'review/start' && (raw['params'] as { threadId?: string } | undefined)?.threadId === runtime.nativeId) {
+          reviewRequests.add(requestId);
+          if (reviewRequests.size > 128) reviewRequests.delete(reviewRequests.values().next().value!);
+        } else if (frame.dir === 'in' && raw['method'] === undefined && (raw['result'] !== undefined || raw['error'] !== undefined) && reviewRequests.delete(requestId)) {
+          if (raw['result'] !== undefined) adapter.acceptReview(sessionId, runtime, raw['result']);
+        }
+      }
       if (frame.dir === 'in' && typeof raw['method'] === 'string') {
         if (raw['id'] !== undefined) {
           try { adapter.onServerRequest(sessionId, raw); } catch (error) {
@@ -598,11 +612,15 @@ export class CodexAdapter implements AgentAdapter {
     const identity = current?.identity;
     if (identity !== undefined) event = { ...event, runtime: identity };
     if (current?.envelopeId !== undefined) event = { ...event, nativeEnvelopeId: current.envelopeId };
+    if ('nativeTurnId' in event && event.nativeTurnId !== undefined) {
+      const projected = this.nativeTurnId({ turnId: event.nativeTurnId }, current);
+      if (projected !== event.nativeTurnId) event = { ...event, nativeTurnId: projected };
+    }
     if ((event.type === 'item.start' || event.type === 'item.complete' || event.type === 'item.cancel' || event.type === 'turn.start' || event.type === 'turn.end')
       && event.nativeTurnId === undefined && event.native !== null && typeof event.native === 'object') {
       const native = event.native as Record<string, unknown>;
       const params = native['params'] !== null && typeof native['params'] === 'object' ? native['params'] as Record<string, unknown> : native;
-      const nativeTurnId = this.nativeTurnId(params);
+      const nativeTurnId = this.nativeTurnId(params, current);
       if (nativeTurnId !== undefined) event = { ...event, nativeTurnId };
     }
     if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
@@ -1040,9 +1058,10 @@ export class CodexAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     if (runtime.turnId === null || input.expectedTurnId !== undefined && input.expectedTurnId !== runtime.turnId) throw unsupportedCodexInput('当前运行轮次已变化，无法介入');
     const expectedTurnId = runtime.turnId;
+    const nativeExecutionId = this.activeNativeTurnId(runtime)!;
     const content = await encodeCodexInput(input, await this.inputModalities(sessionId, input));
-    if (this.sessions.get(sessionId) !== runtime || runtime.turnId !== expectedTurnId) throw unsupportedCodexInput('当前运行轮次已变化，无法介入');
-    await nativeRequest(runtime.rpc, 'turn/steer', { threadId: runtime.nativeId, expectedTurnId, input: content,
+    if (this.sessions.get(sessionId) !== runtime || runtime.turnId !== expectedTurnId || this.activeNativeTurnId(runtime) !== nativeExecutionId) throw unsupportedCodexInput('当前运行轮次已变化，无法介入');
+    await nativeRequest(runtime.rpc, 'turn/steer', { threadId: runtime.nativeId, expectedTurnId: nativeExecutionId, input: content,
       ...(input.nativeRequestId === undefined ? {} : { clientUserMessageId: input.nativeRequestId }) });
   }
 
@@ -1057,7 +1076,7 @@ export class CodexAdapter implements AgentAdapter {
   async interrupt(sessionId: string): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime?.turnId === null || runtime?.turnId === undefined) return;
-    await nativeRequest(runtime.rpc, 'turn/interrupt', { threadId: runtime.nativeId, turnId: runtime.turnId });
+    await nativeRequest(runtime.rpc, 'turn/interrupt', { threadId: runtime.nativeId, turnId: this.activeNativeTurnId(runtime)! });
   }
 
   async respond(sessionId: string, decision: ApprovalDecision): Promise<NativeInteractionSubmission> {
@@ -1160,7 +1179,10 @@ export class CodexAdapter implements AgentAdapter {
     const current = (): void => { if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已更换或断开'), { statusCode: 409 }); };
     const state = await codexNativeState(runtime.rpc, runtime.nativeId, current);
     return { ...state, model: runtime.model ?? runtime.nativeModel ?? null, effort: runtime.reasoningEffort ?? runtime.nativeEffort ?? null, permissions: runtime.permissions,
-      transport: 'live', turnActive: runtime.turnId !== null, activeTurnId: runtime.turnId,
+      transport: 'live', turnActive: runtime.turnId !== null, activeTurnId: this.activeNativeTurnId(runtime),
+      review: runtime.activeReviewRoot === undefined ? null : { rootTurnId: runtime.activeReviewRoot,
+        executionTurnId: runtime.reviewRoots?.get(runtime.activeReviewRoot)?.executionTurnId ?? null,
+        executionTurnIds: [...runtime.reviewRoots?.get(runtime.activeReviewRoot)?.executionTurnIds ?? []] },
       interactions: [...runtime.approvals].map(([id, pending]) => ({ id, kind: pending.kind, submitted: pending.submitted === true })) };
   }
   nativeTerminalEnvironment(): Record<string, string | undefined> { return { ...(this.options.env ?? process.env) }; }
@@ -1178,8 +1200,11 @@ export class CodexAdapter implements AgentAdapter {
     await runtime.ready;
     if (['compact', 'archive', 'unarchive', 'fork', 'review'].includes(action.type) && (runtime.turnId !== null || runtime.approvals.size > 0)) throw Object.assign(new Error('请等待原生轮次和交互结束后操作'), { statusCode: 409, code: 'native-control-rejected' });
     if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生实例已断开'), { statusCode: 409, code: 'native-control-rejected' });
-    const result = await executeCodexNativeControl(runtime.rpc, runtime.nativeId, runtime.cwd, action);
+    const result = await executeCodexNativeControl(runtime.rpc, runtime.nativeId, runtime.cwd, action, () => {
+      if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed || runtime.turnId !== null || runtime.approvals.size > 0) throw Object.assign(new Error('原生 Review 实例或运行状态已变化，Review 未提交'), { statusCode: 409, code: 'native-control-rejected' });
+    });
     if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生运行实例已变化，结果需核对'), { statusCode: 409 });
+    if (action.type === 'review') this.acceptReview(sessionId, runtime, result);
     return result;
   }
 
@@ -1271,19 +1296,56 @@ export class CodexAdapter implements AgentAdapter {
     return runtime;
   }
 
-  private nativeTurnId(params: Record<string, unknown>): string | undefined {
+  private nativeTurnId(params: Record<string, unknown>, runtime?: SessionRuntime): string | undefined {
     const fromParams = typeof params['turnId'] === 'string' ? params['turnId'] : undefined;
     const turn = params['turn'];
     const fromTurn = typeof turn === 'object' && turn !== null && typeof (turn as { id?: unknown }).id === 'string' ? String((turn as { id: string }).id) : undefined;
     const item = params['item'];
     const fromItem = typeof item === 'object' && item !== null && typeof (item as { turnId?: unknown }).turnId === 'string' ? String((item as { turnId: string }).turnId) : undefined;
-    return fromParams ?? fromTurn ?? fromItem;
+    const raw = fromParams ?? fromTurn ?? fromItem;
+    if (raw === undefined || runtime?.reviewRoots === undefined || runtime.reviewRoots.has(raw)) return raw;
+    // Only an observed Review operation can make its execution turn an alias.
+    // A general rootTurnId is provenance, not a turn identity substitution.
+    for (const [root, review] of runtime?.reviewRoots ?? []) {
+      if (raw !== undefined && review.executionTurnIds.has(raw)) return root;
+    }
+    return raw;
   }
 
   private rememberTurn(runtime: SessionRuntime, nativeTurnId: string): void {
     const turns = runtime.observedTurns ??= new Set<string>();
     turns.add(nativeTurnId);
     if (turns.size > 128) turns.delete(turns.values().next().value!);
+  }
+
+  private activeNativeTurnId(runtime: SessionRuntime): string | null {
+    if (runtime.turnId === null) return null;
+    const review = runtime.activeReviewRoot === runtime.turnId ? runtime.reviewRoots?.get(runtime.turnId) : undefined;
+    return review?.executionTurnId ?? runtime.turnId;
+  }
+
+  private acceptReview(sessionId: string, runtime: SessionRuntime, value: unknown): void {
+    validateNativeResult('review/start', value);
+    const accepted = value as ReviewStartResponse;
+    if (accepted.reviewThreadId !== runtime.nativeId) throw Object.assign(new Error('原生 Review 接受结果属于其他会话，需核对'), { statusCode: 409, code: 'uncertain' });
+    this.beginReview(sessionId, runtime, accepted, 'accepted');
+  }
+
+  private beginReview(sessionId: string, runtime: SessionRuntime, params: Record<string, unknown>, source: 'marker' | 'accepted' = 'marker'): void {
+    const root = this.nativeTurnId(params);
+    if (root === undefined) return;
+    const reviews = runtime.reviewRoots ??= new Map();
+    if (reviews.has(root)) return;
+    const completed = runtime.completedTurns?.has(root) === true;
+    reviews.set(root, { completed, executionTurnIds: new Set() });
+    if (reviews.size > 1024) reviews.delete(reviews.keys().next().value!);
+    // A same-thread native mode marker proves that the root operation began,
+    // even before its separate execution turn emits turn/started.
+    if (completed || source === 'accepted' && runtime.turnId !== null && runtime.turnId !== root) return;
+    if (runtime.turnId === root) { runtime.activeReviewRoot = root; return; }
+    runtime.turnId = root; runtime.activeReviewRoot = root;
+    runtime.turnStartedAt = this.now(); this.rememberTurn(runtime, root);
+    this.emit(sessionId, { type: 'turn.start', nativeTurnId: root, native: params });
   }
 
   // ---------- 通知 ----------
@@ -1414,7 +1476,23 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'turn/started': {
-        const nativeTurnId = this.nativeTurnId(params);
+        let nativeTurnId = this.nativeTurnId(params);
+        const turn = params['turn'] as { rootTurnId?: unknown } | undefined;
+        const provenance = typeof turn?.rootTurnId === 'string' ? turn.rootTurnId : undefined;
+        const candidate = provenance === undefined ? undefined : runtime.reviewRoots?.get(provenance);
+        const root = nativeTurnId !== undefined && runtime.reviewRoots?.has(nativeTurnId) ? nativeTurnId
+          : candidate !== undefined && (!candidate.completed || nativeTurnId !== undefined && candidate.executionTurnIds.has(nativeTurnId)) ? provenance : undefined;
+        const review = root === undefined ? undefined : runtime.reviewRoots?.get(root);
+        if (review !== undefined) {
+          if (review.completed || runtime.turnId !== root) {
+            this.emit(sessionId, { type: 'item.complete', itemKey: 'late-review-start-' + frameKey, kind: 'internal',
+              data: { nativeType: method }, native: params, scope: 'session' });
+            return;
+          }
+          review.executionTurnId = nativeTurnId;
+          if (nativeTurnId !== undefined) review.executionTurnIds.add(nativeTurnId);
+          nativeTurnId = root; runtime.activeReviewRoot = root;
+        } else runtime.activeReviewRoot = undefined;
         if (nativeTurnId !== undefined) {
           if (nativeTurnId !== runtime.turnId) runtime.generationStartedAt = null;
           runtime.turnId = nativeTurnId;
@@ -1427,6 +1505,23 @@ export class CodexAdapter implements AgentAdapter {
       case 'turn/completed': {
         const turn = (params['turn'] ?? {}) as { id?: string; status?: string };
         const nativeTurnId = turn.id ?? this.nativeTurnId(params) ?? runtime.turnId;
+        const root = this.nativeTurnId(params, runtime);
+        if (root !== undefined && nativeTurnId !== root && runtime.reviewRoots?.has(root)) {
+          // Native Review suppresses execution completion and closes its root
+          // operation separately. Keep any execution terminal as evidence.
+          this.emit(sessionId, { type: 'item.complete', itemKey: 'review-execution-end-' + frameKey, kind: 'internal',
+            data: { nativeType: method }, native: params, scope: 'session' });
+          return;
+        }
+        if (nativeTurnId != null) {
+          const completed = runtime.completedTurns ??= new Set();
+          completed.add(nativeTurnId);
+          if (completed.size > 1024) completed.delete(completed.values().next().value!);
+        }
+        if (nativeTurnId != null && runtime.reviewRoots?.has(nativeTurnId)) {
+          runtime.reviewRoots.get(nativeTurnId)!.completed = true;
+          if (runtime.activeReviewRoot === nativeTurnId) runtime.activeReviewRoot = undefined;
+        }
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
         const generationMs = endGeneration(runtime, nativeTurnId ?? undefined, this.now());
         for (const [key, summary] of runtime.reasoningSummaries ?? []) {
@@ -1459,19 +1554,20 @@ export class CodexAdapter implements AgentAdapter {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
+        if (type === 'enteredReviewMode') this.beginReview(sessionId, runtime, params);
         if (type === 'plan' && typeof item['text'] === 'string') {
-          for (const event of (runtime.plans ??= new CodexPlanStreams()).start(itemId, this.nativeTurnId(params) ?? runtime.turnId ?? undefined, item['text'])) {
+          for (const event of (runtime.plans ??= new CodexPlanStreams()).start(itemId, this.nativeTurnId(params, runtime) ?? runtime.turnId ?? undefined, item['text'])) {
             this.emit(sessionId, { ...event, native: item });
           }
           return;
         }
-        if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') beginGeneration(runtime, this.nativeTurnId(params), this.now());
-        if (type === 'agentMessage') runtime.started.add(JSON.stringify([this.nativeTurnId(params) ?? runtime.turnId, itemId]));
+        if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') beginGeneration(runtime, this.nativeTurnId(params, runtime), this.now());
+        if (type === 'agentMessage') runtime.started.add(JSON.stringify([this.nativeTurnId(params, runtime) ?? runtime.turnId, itemId]));
         const kind = mapItemKind(type);
         if (kind === 'internal') return;
         let data = mapItemData(item);
         if (type === 'reasoning') {
-          const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId;
+          const nativeTurnId = this.nativeTurnId(params, runtime) ?? runtime.turnId;
           const key = JSON.stringify([nativeTurnId, itemId]);
           if (runtime.completedReasoning?.has(key)) return;
           const summaries = runtime.reasoningSummaries ??= new Map();
@@ -1495,7 +1591,7 @@ export class CodexAdapter implements AgentAdapter {
           itemKey: itemId,
           kind,
           data,
-          nativeTurnId: this.nativeTurnId(params),
+          nativeTurnId: this.nativeTurnId(params, runtime),
           native: item,
         });
         return;
@@ -1504,8 +1600,9 @@ export class CodexAdapter implements AgentAdapter {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
+        if (type === 'enteredReviewMode') this.beginReview(sessionId, runtime, params);
         if (type === 'plan' && typeof item['text'] === 'string') {
-          for (const event of (runtime.plans ??= new CodexPlanStreams()).complete(itemId, this.nativeTurnId(params) ?? runtime.turnId ?? undefined, item['text'])) {
+          for (const event of (runtime.plans ??= new CodexPlanStreams()).complete(itemId, this.nativeTurnId(params, runtime) ?? runtime.turnId ?? undefined, item['text'])) {
             this.emit(sessionId, { ...event, native: item });
           }
           return;
@@ -1513,14 +1610,14 @@ export class CodexAdapter implements AgentAdapter {
         if (type === 'userMessage') {
           const { text, replies } = nativeAsyncReplies(item);
           for (const reply of replies) (runtime.asyncAnswered ??= new Set()).add(reply.questionItemId);
-          this.emit(sessionId, { type: 'item.complete', itemKey: itemId, kind: 'user.message', nativeTurnId: this.nativeTurnId(params), native: item,
+          this.emit(sessionId, { type: 'item.complete', itemKey: itemId, kind: 'user.message', nativeTurnId: this.nativeTurnId(params, runtime), native: item,
             data: { text, ...(typeof item['clientId'] === 'string' ? { clientCommandId: item['clientId'] } : {}) } });
           return;
         }
         for (const question of codexAsyncQuestions(item, runtime.nativeId)) {
           if (runtime.asyncAnswered?.has(question.questionId) || runtime.asyncQuestions?.has(question.questionId)) continue;
           (runtime.asyncQuestions ??= new Map()).set(question.questionId, question);
-          this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: question, native: item, scope: 'session', nativeTurnId: this.nativeTurnId(params) });
+          this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: question, native: item, scope: 'session', nativeTurnId: this.nativeTurnId(params, runtime) });
         }
         if (type === 'agentMessage') runtime.lastAssistantText = String(item['text'] ?? '');
         const kind = mapItemKind(type);
@@ -1531,13 +1628,13 @@ export class CodexAdapter implements AgentAdapter {
             kind: 'internal',
             data: { nativeType: type === '' ? 'item' : type },
             native: item,
-            nativeTurnId: this.nativeTurnId(params),
+            nativeTurnId: this.nativeTurnId(params, runtime),
           });
           return;
         }
         let data = mapItemData(item);
         if (type === 'reasoning') {
-          const key = JSON.stringify([this.nativeTurnId(params) ?? runtime.turnId, itemId]);
+          const key = JSON.stringify([this.nativeTurnId(params, runtime) ?? runtime.turnId, itemId]);
           const pending = runtime.reasoningSummaries?.get(key);
           if (pending?.content?.size && (!Array.isArray(item['content']) || item['content'].length === 0)) {
             data = { ...(data as EventData['reasoning']), nativeContent: reasoningData(pending).nativeContent, incomplete: true };
@@ -1558,14 +1655,14 @@ export class CodexAdapter implements AgentAdapter {
           kind,
           data,
           native: item,
-          nativeTurnId: this.nativeTurnId(params),
+          nativeTurnId: this.nativeTurnId(params, runtime),
         });
         return;
       }
       case 'agentMessage/delta': {
-        beginGeneration(runtime, this.nativeTurnId(params), this.now());
+        beginGeneration(runtime, this.nativeTurnId(params, runtime), this.now());
         const itemId = String(params['itemId'] ?? '');
-        const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId ?? undefined;
+        const nativeTurnId = this.nativeTurnId(params, runtime) ?? runtime.turnId ?? undefined;
         const key = JSON.stringify([nativeTurnId ?? null, itemId]);
         if (!runtime.started.has(key)) {
           runtime.started.add(key);
@@ -1577,7 +1674,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'reasoning/summaryTextDelta':
       case 'reasoning/textDelta': {
         const itemId = String(params['itemId'] ?? '');
-        const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId;
+        const nativeTurnId = this.nativeTurnId(params, runtime) ?? runtime.turnId;
         const key = JSON.stringify([nativeTurnId, itemId]);
         if (runtime.completedReasoning?.has(key)) return;
         const body = route === 'reasoning/textDelta';
@@ -1602,7 +1699,7 @@ export class CodexAdapter implements AgentAdapter {
       }
       case 'reasoning/summaryPartAdded': {
         const itemId = String(params['itemId'] ?? '');
-        const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId;
+        const nativeTurnId = this.nativeTurnId(params, runtime) ?? runtime.turnId;
         const key = JSON.stringify([nativeTurnId, itemId]);
         const index = params['summaryIndex'] ?? 0;
         if (!Number.isSafeInteger(index) || Number(index) < 0) {
@@ -1630,7 +1727,7 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'commandExecution/outputDelta': {
-        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'output', append: String(params['delta'] ?? ''), nativeTurnId: this.nativeTurnId(params) });
+        this.emit(sessionId, { type: 'item.delta', itemKey: String(params['itemId'] ?? ''), field: 'output', append: String(params['delta'] ?? ''), nativeTurnId: this.nativeTurnId(params, runtime) });
         return;
       }
       case 'tokenUsage': {
@@ -1639,7 +1736,7 @@ export class CodexAdapter implements AgentAdapter {
         const inputTokens = Number(currentTurn['inputTokens'] ?? 0);
         const outputTokens = Number(currentTurn['outputTokens'] ?? 0);
         if (inputTokens === 0 && outputTokens === 0) return;
-        const generationMs = endGeneration(runtime, this.nativeTurnId(params), this.now());
+        const generationMs = endGeneration(runtime, this.nativeTurnId(params, runtime), this.now());
         this.emit(sessionId, {
           type: 'item.complete',
           itemKey: `usage-${frameKey}`,
@@ -1731,7 +1828,7 @@ export class CodexAdapter implements AgentAdapter {
             data: { nativeType: method }, native: params, nativeTurnId: this.nativeTurnId(params) });
           return;
         }
-        for (const event of (runtime.plans ??= new CodexPlanStreams()).delta(params['itemId'], params['turnId'], params['delta'])) this.emit(sessionId, event);
+        for (const event of (runtime.plans ??= new CodexPlanStreams()).delta(params['itemId'], this.nativeTurnId(params, runtime) ?? params['turnId'], params['delta'])) this.emit(sessionId, event);
         return;
       }
       case 'plan/item': {
@@ -1759,7 +1856,7 @@ export class CodexAdapter implements AgentAdapter {
           kind: 'turn.diff',
           data: { changes, status: 'completed' },
           native: params,
-          nativeTurnId: this.nativeTurnId(params),
+          nativeTurnId: this.nativeTurnId(params, runtime),
         });
         return;
       }
@@ -1880,13 +1977,13 @@ export class CodexAdapter implements AgentAdapter {
 
     const approvalId = `${runtime?.processToken ?? 'p'}:${typeof id}:${id}`;
     if (runtime?.approvals.has(approvalId)) return undefined;
-    runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params) });
+    runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params, runtime) });
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
       const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[] | null; isOther?: boolean; isSecret?: boolean }[];
       const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, isSecret: question.isSecret === true,
         ...(typeof params['isBlocking'] === 'boolean' ? { isBlocking: params['isBlocking'] } : {}),
         allowsFreeText: question.isSecret === true || question.options == null || question.isOther !== false, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }));
-      runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params), questionIds: questions.map(question => question.id), questions: items });
+      runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params, runtime), questionIds: questions.map(question => question.id), questions: items });
       for (const question of items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.questionId.slice(approvalId.length + 1)}`, kind: 'question', data: question, native: frame });
       return undefined;
     }
@@ -1896,7 +1993,7 @@ export class CodexAdapter implements AgentAdapter {
       type: 'item.complete',
       itemKey: `approval-${approvalId}`,
       kind: 'approval.request',
-      nativeTurnId: this.nativeTurnId(params),
+      nativeTurnId: this.nativeTurnId(params, runtime),
       native: frame,
       data: {
         approvalId,

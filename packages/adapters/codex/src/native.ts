@@ -1,5 +1,6 @@
 import { Ajv } from 'ajv';
 import { nativeRequest } from './controls.js';
+import { resolve } from 'node:path';
 import type { JsonRpcStdio } from './rpc.js';
 
 export type CodexNativeAction =
@@ -64,7 +65,7 @@ export async function codexNativeCatalog(rpc: JsonRpcStdio, nativeId: string, cw
       login: '账号只读状态；交互登录使用原生 CLI', queue: '原生队列管理尚未验证，Web 队列保持独立' } };
 }
 
-export async function executeCodexNativeControl(rpc: JsonRpcStdio, nativeId: string, cwd: string, action: CodexNativeAction): Promise<unknown> {
+export async function executeCodexNativeControl(rpc: JsonRpcStdio, nativeId: string, cwd: string, action: CodexNativeAction, current: () => void = () => undefined): Promise<unknown> {
   switch (action.type) {
     case 'goal-set': return nativeRequest(rpc, 'thread/goal/set', { threadId: nativeId, origin: 'user', objective: action.objective, ...(action.tokenBudget === undefined ? {} : { tokenBudget: action.tokenBudget }) });
     case 'goal-pause': case 'goal-resume': return nativeRequest(rpc, 'thread/goal/set', { threadId: nativeId, origin: 'user', status: action.type === 'goal-pause' ? 'paused' : 'active' });
@@ -74,7 +75,15 @@ export async function executeCodexNativeControl(rpc: JsonRpcStdio, nativeId: str
     case 'unarchive': return nativeRequest(rpc, 'thread/unarchive', { threadId: nativeId });
     case 'fork': return nativeRequest(rpc, 'thread/fork', { threadId: nativeId, ...(action.lastTurnId === undefined ? {} : { lastTurnId: action.lastTurnId }), excludeTurns: true });
     case 'compact': await nativeRequest(rpc, 'thread/compact/start', { threadId: nativeId }); return { submitted: true, confirmed: false, note: '等待原生压缩终态通知' };
-    case 'review': return nativeRequest(rpc, 'review/start', { threadId: nativeId, delivery: 'inline', target: action.target });
+    case 'review': {
+      let thread;
+      try { thread = (await nativeRequest(rpc, 'thread/read', { threadId: nativeId, includeTurns: false })).thread; }
+      catch (cause) { throw Object.assign(new Error('原生 Review 工作目录读取失败，Review 未提交', { cause }), { statusCode: 409, code: 'native-control-rejected' }); }
+      current();
+      if (thread.id !== nativeId || resolve(thread.cwd) !== resolve(cwd)) throw Object.assign(
+        new Error('原生 Review 会话或工作目录与当前工作区不一致，Review 未提交'), { statusCode: 409, code: 'native-control-rejected' });
+      return nativeRequest(rpc, 'review/start', { threadId: nativeId, delivery: 'inline', target: action.target });
+    }
     case 'refresh-skills': return nativeRequest(rpc, 'skills/list', { cwds: [cwd], forceReload: true });
   }
 }

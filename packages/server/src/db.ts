@@ -5,7 +5,7 @@ import { dirname } from 'node:path';
 export type Db = Database.Database;
 // v12 scopes input/drafts; v13 keeps file name/MIME identity separate from
 // shared content bytes, without changing any existing file ID.
-export const CURRENT_SCHEMA_VERSION = 14;
+export const CURRENT_SCHEMA_VERSION = 15;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -73,6 +73,12 @@ export function openDb(file: string): Db {
     }
   }
   if (schemaVersion >= 13 && uniqueFileHash(db)) { db.close(); throw new Error('数据库 schema v13 的文件别名能力不完整，拒绝启动'); }
+  if (schemaVersion >= 15) {
+    const columns = new Set((db.prepare('PRAGMA table_info(native_history_partial_items)').all() as { name: string }[]).map(column => column.name));
+    if (['session_id', 'native_id', 'turn_key', 'item_key', 'kind', 'projection_version', 'source_seq', 'event_seq'].some(column => !columns.has(column))) {
+      db.close(); throw new Error('数据库 schema v15 的历史部分阶段证据不完整，拒绝启动');
+    }
+  }
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
@@ -132,6 +138,15 @@ export function openDb(file: string): Db {
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       native_id TEXT NOT NULL, native_seq INTEGER NOT NULL, at TEXT NOT NULL, native TEXT NOT NULL,
       PRIMARY KEY (session_id, native_id, native_seq)
+    );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS native_history_partial_items (
+      session_id TEXT NOT NULL, native_id TEXT NOT NULL, turn_key TEXT NOT NULL,
+      item_key TEXT NOT NULL, kind TEXT NOT NULL,
+      projection_version INTEGER NOT NULL CHECK (projection_version = 1),
+      source_seq INTEGER NOT NULL, event_seq INTEGER NOT NULL,
+      PRIMARY KEY (session_id, native_id, turn_key, item_key, kind, projection_version),
+      FOREIGN KEY (session_id, native_id, source_seq) REFERENCES native_history_records(session_id, native_id, native_seq) ON DELETE CASCADE,
+      FOREIGN KEY (session_id, event_seq) REFERENCES events(session_id, seq) ON DELETE CASCADE
     );`);
     db.exec(`CREATE TABLE IF NOT EXISTS command_journal (
       command_id TEXT PRIMARY KEY, payload_hash TEXT, payload TEXT, op TEXT NOT NULL,

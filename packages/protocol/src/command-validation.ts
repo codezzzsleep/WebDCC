@@ -45,6 +45,10 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     case 'subscribe': return subscriptions(value['subscribe']);
     case 'unsubscribe': return strings(value['sessionIds']);
     case 'pong': return true;
+    case 'dsh-question-wait': return id(value['requestId']) && id(value['sessionId']) && opaqueId(value['questionId'])
+      && (value['action'] === 'claim' && Object.keys(value).every(key => ['op', 'requestId', 'sessionId', 'questionId', 'action'].includes(key))
+        || ['timeout', 'release'].includes(String(value['action'])) && id(value['claimId'])
+          && Object.keys(value).every(key => ['op', 'requestId', 'sessionId', 'questionId', 'action', 'claimId'].includes(key)));
     default: return false;
   }
 }

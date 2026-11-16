@@ -748,7 +748,27 @@ export class SessionManager {
       this.queueChanged(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing && runtime.turnId === turnId && this.store.nativeOwners.current(sessionId, runtime.identity)) this.finishTurn(runtime, 'failed', `${knownUnsubmittedInput(error) ? 'native-input-not-submitted' : 'native-outcome-uncertain'}: ${message}`);
+      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing && runtime.turnId === turnId && this.store.nativeOwners.current(sessionId, runtime.identity)) {
+        if (knownUnsubmittedInput(error)) this.finishTurn(runtime, 'failed', `native-input-not-submitted: ${message}`);
+        else {
+          this.store.journal.settleInputFailure(turnId, 'uncertain');
+          this.queueChanged(sessionId);
+          const notice = this.store.appendEvent({ sessionId, turnId, itemKey: `input-outcome-uncertain-${turnId}`, kind: 'notice',
+            data: { level: 'warning', text: `原生调用结果待核对，输入已保留，不会自动重发：${message}`, nativeType: 'native-outcome-uncertain' } });
+          this.hooks.onEvent(notice);
+          // Keep observing a known native turn, including a confirmed end in
+          // its settle window. Without an identity, use the existing unobserved
+          // recovery contract rather than assign a later unrelated native end.
+          if (this.turns.nativeTurn(turnId) === undefined && runtime.finishAction === null) {
+            try { await this.dispose(sessionId); }
+            catch (closeError) {
+              const failed = this.store.appendEvent({ sessionId, turnId, itemKey: `uncertain-input-close-failed-${turnId}`, kind: 'notice',
+                data: { level: 'warning', text: `原生通道关闭未确认，输入结果仍待核对：${closeError instanceof Error ? closeError.message : String(closeError)}`, nativeType: 'uncertain-input-close-failed' } });
+              this.hooks.onEvent(failed);
+            }
+          }
+        }
+      }
       else this.store.journal.settleInputFailure(turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain');
       throw error;
     }
@@ -890,6 +910,24 @@ export class SessionManager {
     this.refreshInteractionStatus(runtime);
     this.touchIdle(runtime);
     return result ?? { submitted: true, questionIds: [questionId] };
+  }
+
+  async claimDshQuestionWait(sessionId: string, questionId: string, signal: AbortSignal) {
+    if (this.requireSession(sessionId).agent !== 'dsh' || this.runtimes.get(sessionId) === undefined) throw this.nativeControlRejected('请先连接原生 DSH 以核对前台问题');
+    const context = this.subagentReadContext(sessionId);
+    if (context.adapter.claimDshQuestionWait === undefined) throw this.nativeControlRejected('此原生连接没有前台等待接口');
+    const lifetime = new AbortController();
+    try {
+      const opening = await context.adapter.claimDshQuestionWait(sessionId, questionId, AbortSignal.any([signal, lifetime.signal]));
+      context.guard(); return opening;
+    } catch (error) { lifetime.abort(); throw error; }
+  }
+
+  async timeoutDshQuestion(sessionId: string, questionId: string, signal: AbortSignal): Promise<void> {
+    if (signal.aborted || this.requireSession(sessionId).agent !== 'dsh' || this.runtimes.get(sessionId) === undefined) throw this.nativeControlRejected('原生 DSH 前台问题需要重新同步');
+    const context = this.subagentReadContext(sessionId);
+    if (context.adapter.timeoutDshQuestion === undefined) throw this.nativeControlRejected('此原生连接没有前台计时接口');
+    await context.adapter.timeoutDshQuestion(sessionId, questionId, signal, context.guard); context.guard();
   }
 
   private async answerAsync(sessionId: string, question: EventData['question'], answer: unknown, commandId: string, delivery?: { intent?: UserInput['delivery']; expectedTurnId?: string }): Promise<AnswerSubmission> {
@@ -1629,6 +1667,14 @@ export class SessionManager {
           const previous = this.store.allEvents(sessionId).filter((candidate) => candidate.turnId === turnId);
           const data = completeData as EventData['turn.completed'];
           completeData = { ...data, answerItemKeys: data.answerItemKeys ?? resolveAnswer(previous).map((item) => item.itemKey) };
+        }
+        if (event.kind === 'question' && runtime.adapter.id === 'dsh') {
+          const question = completeData as EventData['question'];
+          const previous = this.store.interactions.get(sessionId, 'answer', question.questionId);
+          const old = previous === undefined ? undefined : (JSON.parse(previous.request) as { dshQuestion?: EventData['question']['dshQuestion'] }).dshQuestion;
+          if (question.dshQuestion?.phase === 'continued' && old?.phase === 'open' && old.nativeId === question.dshQuestion.nativeId && old.callId === question.dshQuestion.callId
+            && previous !== undefined && ['sending', 'sent', 'uncertain'].includes(previous.state))
+            completeData = { ...question, submission: 'failed', submissionError: '前台等待已结束，原回答未被前台接收；可明确提交稍后回答。' };
         }
         const duplicateStart = event.kind === 'turn.started' && turnId !== null && this.store.allEvents(sessionId).some((candidate) => candidate.turnId === turnId && candidate.kind === 'turn.started');
         const kind = duplicateStart ? 'internal' : event.kind;

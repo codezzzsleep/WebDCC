@@ -81,10 +81,10 @@ try {
     });
     assert.ok(event, 'Native reasoning item/turn identity missing');
     const mapping = ctx!.store.nativeEvents.get(event.nativeEnvelopeId!);
-    assert.equal(mapping?.source, 'mapping');
+    assert.ok(mapping && mapping.source === 'mapping');
     assert.ok(mapping.rawEnvelopeId !== null, 'Original RPC link missing');
     const raw = ctx!.store.nativeEvents.get(mapping.rawEnvelopeId);
-    assert.equal(raw?.source, 'transport');
+    assert.ok(raw && raw.source === 'transport');
     assert.equal(raw.nativeTurnId, value.nativeTurnId);
     assert.deepEqual((raw.payload as { params: { item: Reasoning } }).params.item, value.item);
     assert.deepEqual(event.native, value.item);

@@ -3192,18 +3192,31 @@
           "packages/adapters/claude/src/native-state.ts",
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
-          "packages/web/src/components/NativeControls.tsx"
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/codex/src/adapter.ts",
+          "packages/protocol/src/codex-review.ts",
+          "packages/web/src/components/CodexReviewTarget.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/adapters/codex/test/review-stream.spec.ts",
+          "packages/adapters/codex/test/review.spec.ts",
+          "packages/adapters/codex/test/permissions.spec.ts",
+          "packages/protocol/test/codex-review.spec.ts",
+          "browser-tests/codex-review.spec.ts",
+          "scripts/verify-codex-review-replay.ts",
+          "scripts/verify-native-codex-review.ts",
+          "docs/codex-native-review.md"
         ],
         "evidence": [
           "web_review/evidence/native-live-claude.json",
-          "web_review/evidence/native-models-current.json"
+          "web_review/evidence/native-models-current.json",
+          "docs/codex-native-review.md"
         ],
         "remainingAcceptance": [
           "未提交改动、基线分支、commit三种review目标各有真实原生对照。",
           "review期间刷新/停止/完成后结果关系正确。",
           "工作区/环境切换显示实际cwd，误连项目或不存在方法被阻止。"
         ],
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-16 Codex Review sub-scope: dedicated three-target controls, pre-submit native thread/cwd check, original formatted result and refresh, proven root/execution identity and actual execution-ID interrupt; production/capture replay share handlers. Local source and official0.169 controlled-model evidence only; independent source acceptance, current Provider/target and project/environment/worktree workflows remain separate."
       },
       "dependencyIds": [
         "NP-20",

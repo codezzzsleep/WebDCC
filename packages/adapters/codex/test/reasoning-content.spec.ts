@@ -55,6 +55,19 @@ it('preserves an int64 native body index above u32 without allocating intermedia
   expect(delta(' body').at(-1)).toMatchObject({ data: { nativeContent: [{ index: contentIndex, text: 'Sparse body' }] } });
 });
 
+it('keeps Review execution body parts on the verified root and does not complete them twice', () => {
+  const feed = fixture();
+  feed('item/started', { turnId: 'root', item: { type: 'enteredReviewMode', id: 'enter', review: 'Native Review' } });
+  feed('turn/started', { turn: { id: 'execution', rootTurnId: 'root', status: 'inProgress' } });
+  expect(feed('item/reasoning/textDelta', { turnId: 'execution', itemId: 'body', contentIndex: 0, delta: 'Review body' }).at(-1))
+    .toMatchObject({ nativeTurnId: 'root', data: { nativeContent: [{ index: 0, text: 'Review body' }] } });
+  expect(feed('item/completed', { turnId: 'execution', item: { type: 'reasoning', id: 'body', summary: ['Summary'], content: ['Final Review body'] } })[0])
+    .toMatchObject({ nativeTurnId: 'root', data: { text: 'Summary', nativeContent: [{ index: 0, text: 'Final Review body' }] } });
+  expect(feed('turn/completed', { turn: { id: 'root', status: 'completed' } })).toMatchObject([
+    { type: 'turn.end', nativeTurnId: 'root', status: 'completed' },
+  ]);
+});
+
 it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1, '1'])('keeps malformed body indices as unknown without changing valid content (%s)', contentIndex => {
   const feed = fixture();
   feed('item/reasoning/textDelta', { turnId: 'turn', itemId: 'r', contentIndex: 0, delta: 'Valid' });

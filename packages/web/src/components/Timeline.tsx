@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, nativeReasoningContent } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, nativeReasoningContent, codexReviewItem } from '@webdcc/protocol';
 import { NativeReasoningContent } from './NativeReasoningContent.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
@@ -15,6 +15,7 @@ import { ElicitationForm } from './ElicitationForm.js';
 import { InputAttachments } from './InputAttachments.js';
 import { DshSubagentPanel } from './DshSubagentPanel.js';
 import { openDshSubagent } from '../lib/dsh-subagent-navigation.js';
+import { DshQuestionWait, useDshQuestionWait } from './DshQuestionWait.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -148,6 +149,14 @@ function TurnView({
   const user = turn.user;
   const running = turn.state === 'starting' || turn.state === 'running' || turn.state === 'waiting';
   const steps = turn.steps;
+  const reviewTexts = new Set(steps.flatMap(event => {
+    const review = codexReviewItem(event); return review?.phase === 'finished' ? [review.text] : [];
+  }));
+  // Codex emits both the formatted mode result and the same agent message.
+  // Retain both source events and display that exact native text once.
+  const reviewCopy = (data: EventData['assistant.message']) =>
+    (data.nativePhase === undefined || data.nativePhase === 'final_answer') && reviewTexts.has(data.text);
+  const visibleSteps = steps.filter(event => event.kind !== 'assistant.message' || !reviewCopy(event.data as EventData['assistant.message']));
   const answerKeys = new Set(turn.answer.map((answer) => answer.itemKey));
   const changes = turn.changes.map((change) => ({ ...change, ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }) }));
   // 运行中、或用户展开时显示全部步骤；完成后默认只显示摘要和最终回答（DSH 的做法）
@@ -227,21 +236,21 @@ function TurnView({
         ) : null}
 
         {showAll
-          ? steps.map((event) => (
+          ? visibleSteps.map((event) => (
               <ErrorBoundary key={`${event.itemKey}-${event.seq}`} label="timeline-item">
                 <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
               </ErrorBoundary>
             ))
-          : steps
+          : visibleSteps
               .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey)
-                || failedFileOperation(event))
+                || failedFileOperation(event) || codexReviewItem(event)?.phase === 'finished')
               .map((event) => (
                 <ErrorBoundary key={`always-${event.itemKey}-${event.seq}`} label="timeline-item">
                   <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
                 </ErrorBoundary>
               ))}
 
-        {turn.live.map((item) => <HotRow key={item.itemKey} item={item} />)}
+        {turn.live.filter(item => item.kind !== 'assistant.message' || !reviewCopy(item.data as EventData['assistant.message'])).map((item) => <HotRow key={item.itemKey} item={item} />)}
 
         {!running && changes.length > 0 ? <ChangesCard changes={changes} onOpenDiff={onOpenDiff} /> : null}
 
@@ -275,6 +284,7 @@ function TurnView({
 function summaryLabel(turn: ProtocolTurnView): string {
   const { commands, reads, edits, tools } = turn.summary;
   const parts: string[] = [];
+  if (turn.steps.some(step => codexReviewItem(step) !== undefined)) parts.push('原生 Review');
   if (turn.plan !== undefined || turn.steps.some(step => nativePlanText(step) !== undefined)) parts.push('更新了计划');
   if (turn.goal !== undefined) parts.push(goalLabel(turn.goal));
   if (commands > 0) parts.push(`执行了 ${commands} 条命令`);
@@ -496,6 +506,11 @@ function StepRow({
       );
     }
     case 'tool.call': {
+      const review = codexReviewItem(event);
+      if (review !== undefined) return <div className={className}>
+        <StepLine icon="listChecks" label={review.phase === 'started' ? '开始原生 Review' : '原生 Review 结果'} detail={review.phase === 'started' ? review.text : undefined} />
+        {review.phase === 'finished' ? <div data-testid="codex-review-result" data-native-item-key={event.itemKey} data-raw-text={review.text}><Markdown text={review.text} /></div> : null}
+      </div>;
       const data = event.data as EventData['tool.call'];
       const toolInput = data.input as Record<string, unknown>;
       const childId = data.name === 'subagent' && typeof toolInput?.['childId'] === 'string' ? toolInput['childId'] : undefined;
@@ -750,14 +765,24 @@ function InteractionSyncStatus({ sessionId, kind, id }: { sessionId: string; kin
 }
 
 function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['question'] }): React.ReactElement {
-  const [selected, setSelected] = useState<string[]>([]);
-  const [text, setText] = useState('');
+  const identity = store.getSession(event.sessionId)?.agent === 'dsh' ? data.dshQuestion : undefined;
+  const draft = () => identity === undefined || data.isSecret ? { selected: [], custom: '' } : store.dshQuestionWaits.drafts.read(event.sessionId, identity);
+  const [selected, setSelected] = useState<string[]>(() => draft().selected);
+  const [text, setText] = useState(() => draft().custom);
+  const [hidden, setHidden] = useState(false);
   useStoreVersion();
   const submission = data.submission === 'sent' || data.submission === 'queued' || data.submission === 'uncertain'
     ? { commandId: '', status: data.submission, error: data.submissionError } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
       ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission, error: data.submissionError });
   const synchronized = store.isInteractionSynced(event.sessionId, 'answer', data.questionId);
-  const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
+  const submitting = submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
+  const wait = useDshQuestionWait(event.sessionId, data.questionId, identity, data.status !== 'answered' && data.status !== 'skipped', synchronized && !submitting && store.connectionState === 'online');
+  const collapsed = wait?.hidden ?? hidden;
+  const busy = !synchronized || submitting || identity?.timed === true && identity.phase === 'open' && wait?.card.snapshot().channel !== 'waterfall';
+  const edit = (nextSelected: string[], nextText: string): void => {
+    setSelected(nextSelected); setText(nextText); wait?.card.engage();
+    if (identity !== undefined && !data.isSecret) store.dshQuestionWaits.drafts.save(event.sessionId, identity, 'editing', { selected: nextSelected, custom: nextText });
+  };
   const blocking = data.isBlocking !== false;
   const nonblockingLabel = blocking ? null : <span className="what">非阻塞提问</span>;
   const nativeDshCancelled = store.getSession(event.sessionId)?.agent === 'dsh' && data.status === 'skipped' && data.outcome === 'cancel';
@@ -785,8 +810,13 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         <Icon name="help" size={16} />
         {data.header ?? (blocking ? '需要你回答' : '非阻塞提问')}
       </div>
-      {blocking ? null : <p>{data.asyncReply ? 'Codex 会继续执行。提交回答会送入当前对话；也可以排队等本轮结束。' : '原生标记为非阻塞，你仍可以回答。'}</p>}
+      {blocking || identity?.phase === 'continued' ? null : <p>{data.asyncReply ? 'Codex 会继续执行。提交回答会送入当前对话；也可以排队等本轮结束。' : '原生标记为非阻塞，你仍可以回答。'}</p>}
       <div style={{ fontSize: 14 }}>{data.prompt}</div>
+      {wait !== undefined && identity?.timed ? <DshQuestionWait entry={wait} /> : null}
+      {identity === undefined ? null : <button type="button" className="btn ghost" onClick={() => { if (wait === undefined) setHidden(!hidden); else store.dshQuestionWaits.toggleSurface(wait); }}>{collapsed ? '展开回答' : '收起回答'}</button>}
+      {collapsed ? null : <div onFocusCapture={() => wait?.card.holdFocus()} onBlurCapture={event_ => {
+        if (!event_.currentTarget.contains(event_.relatedTarget as Node | null)) wait?.card.releaseFocus();
+      }}>
       <div className="question-options" role={data.multiSelect === true ? 'group' : 'radiogroup'} aria-label={data.prompt}>
         {(data.options ?? []).map((option) => (
           <label key={option.id} className="question-option">
@@ -795,9 +825,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
               name={data.questionId}
               disabled={busy}
               checked={selected.includes(option.id)}
-              onChange={() =>
-                setSelected((prev) => (data.multiSelect === true ? (prev.includes(option.id) ? prev.filter((id) => id !== option.id) : [...prev, option.id]) : [option.id]))
-              }
+              onChange={() => edit(data.multiSelect === true ? selected.includes(option.id) ? selected.filter(id => id !== option.id) : [...selected, option.id] : [option.id], text)}
             />
             <span>
               {option.label}
@@ -807,8 +835,8 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         ))}
       </div>
       {data.allowsFreeText !== false ? (
-        data.asyncReply ? <textarea className="text-input" rows={3} disabled={busy} placeholder={data.options?.length ? '或输入回答' : '输入回答'} aria-label="其他回答" value={text} onChange={event_ => setText(event_.target.value)} />
-          : <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
+        data.asyncReply || identity !== undefined && !data.isSecret ? <textarea className="text-input" rows={3} disabled={busy} placeholder={data.options?.length ? '或输入回答' : '输入回答'} aria-label="其他回答" value={text} onChange={event_ => edit(selected, event_.target.value)} />
+          : <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => edit(selected, event_.target.value)} />
       ) : null}
       {data.isSecret ? <p>敏感回答只在本页面保留，刷新后需要重新输入。</p> : null}
       {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
@@ -827,6 +855,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         {data.asyncReply && ['running', 'waiting'].includes(store.getSession(event.sessionId)?.status ?? '') ? <button type="button" className="btn" data-testid="question-queue-answer" disabled={busy || selected.length === 0 && text.trim() === ''}
           onClick={() => store.answer(event.sessionId, data.questionId, { selected, custom: text }, { intent: 'queue' })}>排队回答</button> : null}
       </div>
+      </div>}
     </div>
   );
 }

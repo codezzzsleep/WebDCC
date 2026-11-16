@@ -268,15 +268,47 @@ describe('Codex Watchdog', () => {
     await vi.advanceTimersByTimeAsync(60_000); expect(codex.created).toHaveLength(2);
   });
 
-  it('交接已创建而首轮发送抛出限流时，保留新会话关联并由新会话退避', async () => {
+  it('交接首轮回执未知时保持原生观察，原生终态确认限流后才由新会话退避', async () => {
     enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
     await ctx.manager.send(sessionId, { text: '开发任务' });
     codex.afterSend = () => { throw new Error('429 token rate limit exceeded'); };
     codex.finish(sessionId, 'failed', RESOURCE_ERROR); await vi.advanceTimersByTimeAsync(5000);
     await vi.waitFor(() => expect(ctx.store.watchdogJob(sessionId)?.status).toBe('handed-off'));
     const child = ctx.store.watchdogJob(sessionId)?.targetSessionId as string;
-    expect(ctx.store.watchdogJob(child)).toMatchObject({ status: 'scheduled', action: 'continue', attempts: 1, handoffs: 1 });
+    expect(ctx.store.watchdogJob(child)).toMatchObject({ status: 'recovering', attempts: 1, handoffs: 1 });
     expect(ctx.store.getSession(child)?.parentId).toBe(sessionId);
+    expect(ctx.store.journal.queue(child).some(input => input.state === 'uncertain')).toBe(true);
+    await vi.advanceTimersByTimeAsync(60_000); expect(codex.sent).toHaveLength(2);
+    codex.afterSend = undefined; codex.finish(child, 'failed', '429 token rate limit exceeded');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(ctx.store.watchdogJob(child)).toMatchObject({ status: 'scheduled', action: 'continue', attempts: 1, handoffs: 1 });
+  });
+
+  it('原会话续跑回执未知时不安排第二个输入，自身原生终态仍能确认恢复', async () => {
+    enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '开发任务' });
+    codex.afterSend = () => { throw new Error('429 reply lost after observed native start'); };
+    codex.finish(sessionId, 'failed', '429 token rate limit exceeded');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(ctx.store.watchdogJob(sessionId)?.status).toBe('recovering');
+    expect(ctx.store.journal.queue(sessionId).some(input => input.state === 'uncertain')).toBe(true);
+    await vi.advanceTimersByTimeAsync(60_000); expect(codex.sent).toHaveLength(2);
+    codex.afterSend = undefined; codex.finish(sessionId, 'completed');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(ctx.store.watchdogJob(sessionId)?.status).toBe('recovered');
+  });
+
+  it('未观察原生身份的未知续跑保留原输入，取消自动重发且不制造终态', async () => {
+    enable(); const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    await ctx.manager.send(sessionId, { text: '开发任务' });
+    codex.send = async (id, input) => { codex.sent.push({ sessionId: id, input }); throw new Error('429 reply unavailable with no native identity'); };
+    codex.finish(sessionId, 'failed', '429 token rate limit exceeded');
+    await vi.advanceTimersByTimeAsync(5000);
+    const pending = ctx.store.journal.queue(sessionId).find(input => input.state === 'uncertain');
+    expect(pending).toBeDefined();
+    expect(ctx.store.watchdogJob(sessionId)).toMatchObject({ status: 'exhausted', nextAttemptAt: null });
+    expect(ctx.store.allEvents(sessionId).some(event => event.turnId === pending?.turnId && event.kind === 'turn.completed')).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000); expect(codex.sent).toHaveLength(2);
   });
 
   it('用户排队的消息优先于失败轮次的自动恢复', async () => {
