@@ -37,6 +37,7 @@ import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
+import { createWorkspaceEntry } from './workspace-create.js';
 import { registerNativeControlRoutes } from './native-control-routes.js';
 
 export interface RouteDeps {
@@ -79,21 +80,6 @@ export async function resolveInsideWorkspace(workspacePath: string, requested: s
   const rel = relative(root, target);
   if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) throw badRequest('路径必须在工作区内');
   return target;
-}
-
-/** 解析尚不存在的目标，先解析父目录，避免新建文件时 realpath 失败。 */
-async function resolveNewInsideWorkspace(workspacePath: string, requested: string): Promise<string> {
-  const root = await realpath(workspacePath);
-  const normalized = requested.replace(/^\/+/, '');
-  if (normalized === '' || isAbsolute(requested)) throw badRequest('需要工作区内的相对路径');
-  const target = resolve(root, normalized);
-  const rel = relative(root, target);
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) throw badRequest('路径必须在工作区内');
-  const parent = await realpath(dirname(target)).catch(() => undefined);
-  if (parent === undefined) throw badRequest('父目录不存在');
-  const parentRel = relative(root, parent);
-  if (parentRel !== '' && (parentRel.startsWith('..') || isAbsolute(parentRel))) throw badRequest('路径必须在工作区内');
-  return join(parent, basename(target));
 }
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -313,19 +299,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const body = request.body as { path?: string; kind?: string; content?: string };
     if (typeof body?.path !== 'string' || body.path.trim() === '') throw badRequest('需要文件路径');
     if (body.kind !== 'file' && body.kind !== 'dir') throw badRequest('kind 必须是 file 或 dir');
-    const target = await resolveNewInsideWorkspace(workspace.path, body.path.trim());
-    if (body.kind === 'dir') {
-      await mkdir(target).catch((error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw badRequest('目录已存在');
-        throw error;
-      });
-    } else {
-      await writeFile(target, body.content ?? '', { encoding: 'utf8', flag: 'wx' }).catch((error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw badRequest('文件已存在');
-        throw error;
-      });
-    }
-    return { path: relative(workspace.path, target), kind: body.kind };
+    if (body.content !== undefined && typeof body.content !== 'string') throw badRequest('content 必须是文本');
+    return createWorkspaceEntry(workspace.path, body.path.trim(), body.kind, body.content ?? '');
   });
 
   app.get('/api/workspaces/:id/raw', async (request, reply) => {
