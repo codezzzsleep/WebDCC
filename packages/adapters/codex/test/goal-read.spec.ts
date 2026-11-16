@@ -56,8 +56,8 @@ it('reads an unchanged native goal once without a model input', async () => {
 });
 
 it('bounds retries when native goal observations keep changing instead of publishing an obsolete snapshot', async () => {
-  let f!: ReturnType<typeof fixture>; let reads = 0;
-  f = fixture(async method => {
+  let reads = 0;
+  const f = fixture(async method => {
     if (method === 'thread/read') { reads++; f.observe({ ...newGoal, updatedAt: 201 + reads }); return { thread }; }
     if (method === 'thread/goal/get') return { goal: oldGoal };
     throw new Error('Unexpected method ' + method);
