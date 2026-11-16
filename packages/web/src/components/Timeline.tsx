@@ -19,6 +19,7 @@ import { openDshSubagent } from '../lib/dsh-subagent-navigation.js';
 import { DshQuestionWait, useDshQuestionWait } from './DshQuestionWait.js';
 import { ClaudeStructuredOutput } from './ClaudeStructuredOutput.js';
 import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
+import { CodexNativeToolStatus } from './CodexNativeToolStatus.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -568,6 +569,7 @@ function StepRow({
               {data.output === undefined ? '' : `\n\n→ ${typeof data.output === 'string' ? data.output : JSON.stringify(data.output, null, 2)}`}
             </pre>
           ) : null}
+          <CodexNativeToolStatus sessionId={event.sessionId} data={data} />
           {canControlChild ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
           {canOpenDshChild ? <div className="subagent-controls"><button type="button" className="btn small" data-testid="dsh-timeline-child-open" onClick={() => openDshSubagent({ sessionId: event.sessionId, parentSessionId, childSessionId: childId })}>打开子会话</button></div> : null}
           {dsh && childId !== undefined && !canOpenDshChild ? <p className="muted">请从当前子 Agent 面板核对子会话身份和可用操作。</p> : null}
