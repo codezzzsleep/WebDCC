@@ -135,9 +135,15 @@ export class SessionManager {
       }
       const events = this.store.allEvents(session.id);
       if (session.agent === 'claude-code' && currentClaudeTasks(events).some(task => !['completed', 'failed', 'stopped'].includes(task.status))) {
+        const latestQuery = events.findLast(event => event.kind === 'internal'
+          && (event.data as EventData['internal']).claudeTaskRuntime?.state === 'started'
+          && typeof (event.data as EventData['internal']).claudeTaskRuntime?.id === 'string'
+          && (event.data as EventData['internal']).claudeTaskRuntime!.id !== '');
+        const latestQueryId = (latestQuery?.data as EventData['internal'] | undefined)?.claudeTaskRuntime?.id;
         const observed = events.findLast(event => event.kind === 'internal'
           && typeof (event.data as EventData['internal']).claudeTaskRuntime?.id === 'string'
           && (event.data as EventData['internal']).claudeTaskRuntime!.id !== ''
+          && (latestQueryId === undefined || (event.data as EventData['internal']).claudeTaskRuntime!.id === latestQueryId)
           && ['started', 'unavailable'].includes((event.data as EventData['internal']).claudeTaskRuntime!.state));
         const signal = (observed?.data as EventData['internal'] | undefined)?.claudeTaskRuntime;
         if (signal?.state !== 'unavailable') {

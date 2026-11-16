@@ -63,6 +63,14 @@ it('keeps legacy task observations unknown and lets a new query confirm a new ru
       native: { type: 'system', subtype: 'task_started', session_id: 'controlled-native', task_id: 'background', run_id: '002', description: 'new task run' } });
     store.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'late-old-unavailable', kind: 'internal', data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: { id: 'old-query', state: 'unavailable' } } });
     expect(currentClaudeTasks(store.allEvents(session.id)).find(task => task.taskId === 'background')).toMatchObject({ status: 'running', runId: '002' });
+    const recovered = new SessionManager(store, { idleDisposeMin: 0 });
+    expect(currentClaudeTasks(store.allEvents(session.id)).find(task => task.taskId === 'background')).toMatchObject({ status: 'unknown', nativeStatus: 'running', runId: '002', backgroundPresence: 'unknown' });
+    const view = currentClaudeTaskViews(store.allEvents(session.id)).tasks.find(task => task.taskId === 'background');
+    expect(view?.previousRuns.find(run => run.runId === '001')?.outputs).toEqual([expect.objectContaining({ text: 'Retained child output' })]);
+    const count = store.allEvents(session.id).length;
+    const repeated = new SessionManager(store, { idleDisposeMin: 0 });
+    expect(store.allEvents(session.id)).toHaveLength(count);
+    await repeated.disposeAll(); await recovered.disposeAll();
     await manager.disposeAll();
   } finally { db.close(); }
 });
