@@ -2,6 +2,7 @@
 import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse, QueueSnapshot } from '@webdcc/protocol';
 import { isInputContent, isQueueInputReorderable, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
+import { completeRecentEventPage } from './recent-event-history.js';
 import { cache, type CachedSession } from './db.js';
 import { SyncConnection, type ConnectionState } from './connection.js';
 import { InputPreparationStore } from './input-preparation-store.js';
@@ -596,9 +597,9 @@ export class AppStore {
     if (serverLastSeq !== undefined && serverLastSeq > 0 && (serverLastSeq > this.maxSeq(sessionId) ||
       this.coverage.cursor(sessionId) < serverLastSeq)) {
       const page = await api.events(sessionId, { before: serverLastSeq + 1, limit: 200 }).catch(() => undefined);
-      const completeRecentPage = page !== undefined && page.events.length > 0 && page.events.every((event, index) => event.seq === page.events[0]!.seq + index) && page.events.at(-1)?.seq === serverLastSeq;
+      const completeRecentPage = completeRecentEventPage(page, sessionId, serverLastSeq);
       let persisted = false;
-      if (page !== undefined) {
+      if (completeRecentPage) {
         const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
         for (const event of page.events) map.set(event.seq, event);
         this.events.set(sessionId, map);
