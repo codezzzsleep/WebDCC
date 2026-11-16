@@ -90,6 +90,26 @@ export const cache = {
     return database.getAll('events', range);
   },
 
+  async getEventsBefore(sessionId: string, beforeSeq: number, limit = 200): Promise<StoredEvent[]> {
+    if (!Number.isSafeInteger(beforeSeq) || beforeSeq <= 1 || !Number.isSafeInteger(limit) || limit < 1) return [];
+    const database = await db();
+    const events: StoredEvent[] = [];
+    const range = IDBKeyRange.bound([sessionId, 1], [sessionId, beforeSeq - 1]);
+    const tx = database.transaction('events');
+    // Cursor requests and tx.done both reject on an abort. Observe the
+    // transaction immediately, even while awaiting the first cursor.
+    const completed = tx.done.catch(() => undefined);
+    try {
+      let cursor = await tx.store.openCursor(range, 'prev');
+      while (cursor !== null && events.length < limit) {
+        events.push(cursor.value);
+        cursor = await cursor.continue();
+      }
+      await tx.done;
+      return events.reverse();
+    } finally { await completed; }
+  },
+
   async countEvents(sessionId: string): Promise<number> {
     const database = await db();
     return database.count('events', IDBKeyRange.bound([sessionId, 0], [sessionId, Number.MAX_SAFE_INTEGER]));
