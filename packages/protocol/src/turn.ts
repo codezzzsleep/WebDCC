@@ -2,6 +2,7 @@ import type { EventData, EventKind, StoredEvent, UsageData } from './events.js';
 import { isBlockingQuestion } from './events.js';
 import { failedFileOperation } from './file-operation.js';
 import type { InputContent } from './input.js';
+import { claudeOutputOrigin } from './claude-tasks.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -96,7 +97,7 @@ function isFinalNativeAssistant(event: StoredEvent): boolean {
 /** Decide the answer once at turn completion.  This function is pure and can
  * be used both for old rows (which have no answerItemKeys) and live turns. */
 export function resolveAnswer(events: readonly StoredEvent[]): { itemKey: string; text: string }[] {
-  const assistants = currentItems(events).filter((event) => event.kind === 'assistant.message' && assistantText(event) !== '');
+  const assistants = currentItems(events).filter((event) => event.kind === 'assistant.message' && assistantText(event) !== '' && claudeOutputOrigin(event) === undefined);
   if (assistants.length === 0) return [];
 
   const completed = [...events].reverse().find((event) => event.kind === 'turn.completed');
@@ -203,7 +204,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
   const completed = [...events].reverse().find((event) => event.kind === 'turn.completed');
   const completedData = completed?.data as EventData['turn.completed'] | undefined;
   const relevant = (item: { turnId?: string | null }) => item.turnId == null || item.turnId === turnId;
-  const live = open.filter(relevant).map((item) => ({ ...item, ...(liveText(item) === undefined ? {} : { text: liveText(item) }) }));
+  const live = open.filter(item => relevant(item) && claudeOutputOrigin(item) === undefined).map((item) => ({ ...item, ...(liveText(item) === undefined ? {} : { text: liveText(item) }) }));
   const stateEvents = [...events.filter(relevant), ...sessionInteractions.filter(event => event.turnId === null)];
   const questions = new Map<string, EventData['question']>(); const approvals = new Set<string>(); const resolvedApprovals = new Set<string>();
   for (const event of stateEvents) {
@@ -217,11 +218,11 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     const question = item.data as EventData['question']; return isBlockingQuestion(questions.get(question.questionId) ?? question);
   });
   const state = completedData?.status ?? (started === undefined ? 'starting' : waiting ? 'waiting' : 'running');
-  const steps = currentItems(events).filter((event) => !['user.message', 'turn.started', 'turn.completed', 'internal'].includes(event.kind));
+  const steps = currentItems(events).filter((event) => !['user.message', 'turn.started', 'turn.completed', 'internal'].includes(event.kind) && claudeOutputOrigin(event) === undefined);
   const answer = completedData?.answerItemKeys
     ? completedData.answerItemKeys.flatMap((key) => {
         const event = events.find((candidate) => candidate.itemKey === key && candidate.kind === 'assistant.message');
-        return event === undefined ? [] : [{ itemKey: key, text: assistantText(event) }];
+        return event === undefined || claudeOutputOrigin(event) !== undefined ? [] : [{ itemKey: key, text: assistantText(event) }];
       })
     : TERMINAL.has(state)
       ? resolveAnswer(events)

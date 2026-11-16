@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { currentGoal, goalLabel, currentCodexSubagents, codexSubagentRecoveryText } from '@webdcc/protocol';
+import { currentGoal, goalLabel, currentCodexSubagents, codexSubagentRecoveryText, currentClaudeTaskViews } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { agentText } from '../lib/agents.js';
 import { Icon, Spinner } from './Icon.js';
+import { ClaudeTaskPanel } from './ClaudeTaskPanel.js';
 
 /**
  * 输入框上方的任务条（DSH 的"任务"位置）。三家用同一个位置，内容是各自原生的：
@@ -19,7 +20,8 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
   const showGoal = goalData !== undefined && goalData.status !== 'cleared' && goalData.objective !== '';
   const subagents = currentCodexSubagents(store.getConversationEvents(sessionId));
   const recoveryText = codexSubagentRecoveryText(turns.at(-1)?.state, subagents);
-  if (store.isViewingConversationHistory(sessionId) || plan === undefined && !showGoal && subagents.length === 0) return null;
+  const claudeView = currentClaudeTaskViews(session?.agent === 'claude-code' ? store.getEvents(sessionId) : [], session?.agent === 'claude-code' ? store.getHot(sessionId) : []);
+  if (store.isViewingConversationHistory(sessionId) || plan === undefined && !showGoal && subagents.length === 0 && claudeView.tasks.length === 0 && claudeView.unassignedOutputs.length === 0) return null;
 
   const agentName = agentText(session?.agent ?? '').name;
   const items = plan ?? [];
@@ -28,6 +30,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
 
   return (
     <>
+      <ClaudeTaskPanel view={claudeView} />
       {subagents.length > 0 ? <div className="task-bar" data-testid="codex-subagents-panel">
         <div className="task-bar-head"><Icon name="tool" size={15} /><strong>子任务</strong>
           <span className="summary">{subagents.filter(child => child.nativeStatus === 'completed').length} 已完成 · {subagents.length} 总计</span>

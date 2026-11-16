@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRootRoute, createRoute, createRouter, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import type { EventData } from '@webdcc/protocol';
+import { claudeOutputOrigin, type EventData } from '@webdcc/protocol';
 import { api } from './lib/api.js';
 import { useStoreVersion } from './lib/hooks.js';
 import { store } from './lib/store.js';
@@ -202,7 +202,7 @@ function NewSessionPage(): React.ReactElement {
 function lastFinalText(sessionId: string): string {
   const final = [...store.getConversationEvents(sessionId)]
     .reverse()
-    .find((event) => event.kind === 'assistant.message' && (event.data as EventData['assistant.message']).phase !== 'interim');
+    .find((event) => event.kind === 'assistant.message' && (event.data as EventData['assistant.message']).phase !== 'interim' && claudeOutputOrigin(event) === undefined);
   return final === undefined ? '' : (final.data as EventData['assistant.message']).text;
 }
 
