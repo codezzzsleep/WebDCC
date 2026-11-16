@@ -2023,7 +2023,13 @@
           "packages/web/src/components/Composer.tsx",
           "packages/web/src/components/Timeline.tsx",
           "packages/web/src/lib/store-recovery.spec.ts",
-          "packages/server/test/attachment-admission.spec.ts"
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/adapters/dsh/src/commands.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/slash-catalog.json",
+          "packages/protocol/src/slash.ts",
+          "packages/adapters/dsh/test/command-aliases.spec.ts",
+          "browser-tests/dsh-command-aliases.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/input.ts",
@@ -2039,7 +2045,13 @@
           "packages/web/src/components/Composer.tsx",
           "packages/web/src/components/Timeline.tsx",
           "packages/web/src/lib/store-recovery.spec.ts",
-          "packages/server/test/attachment-admission.spec.ts"
+          "packages/server/test/attachment-admission.spec.ts",
+          "packages/adapters/dsh/src/commands.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/src/slash-catalog.json",
+          "packages/protocol/src/slash.ts",
+          "packages/adapters/dsh/test/command-aliases.spec.ts",
+          "browser-tests/dsh-command-aliases.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -2051,7 +2063,36 @@
           "离线刷新仍可读待发送正文/附件/错误和真实时间，队列重启不丢。",
           "失败ACK恢复可操作状态；过期interrupt不作用于新的turn。"
         ],
-        "remainingWork": "Explicit busy send rejects; queue survives failures; steer uses independent native UUID with server-verified turn and real echo confirmation. Failed input restoration implemented. Queue editing and complete interrupt scope/expiry/native stop failure matrix remain unverified."
+        "remainingWork": "Explicit busy send rejects; queue survives failures; steer uses independent native UUID with server-verified turn and real echo confirmation. Failed input restoration implemented. Queue editing and complete interrupt scope/expiry/native stop failure matrix remain unverified.",
+        "behaviorDeliveries": [
+          {
+            "issue": 127,
+            "behavior": "Preserve native DSH definitionId and derive English/Chinese tokens only for actual first-party identities; exact scoped names and first effective definition take precedence; liveandbaselinepreview use sameprojection; originalinputlineunchanged",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "nativeSource": "Host0.2.2-rc.1 fcc0ad462 unchanged interaction/commands builtin+types; captured realHost descriptor identities reused, no native/provider/model0",
+            "fileChanges": {
+              "added": [
+                "packages/adapters/dsh/src/commands.ts",
+                "packages/adapters/dsh/test/command-aliases.spec.ts",
+                "browser-tests/dsh-command-aliases.spec.ts"
+              ],
+              "modified": [
+                "packages/adapters/dsh/src/adapter.ts",
+                "packages/adapters/dsh/src/slash-catalog.json",
+                "packages/protocol/src/slash.ts"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "verification": "16 mapping/contracts/handler local tests;1 actuallocalChromium/HTTP/SQLite test with12 English/Chinese routes+refresh; fulltypes/changedlintpassed. Actual native identities reused, RPC and executing Adapter controlledfixture. Original7fail/1pass, confirmedfalsefixture409 andENOSPCuntriggered preserved. Composer alreadyconsumesaliases, no additionalproductchanges.",
+            "remainingAcceptance": [
+              "Independent actual target/native sixcommands English/Chinese andscoped definitionbehavior",
+              "Live provider/currentnative behavior, allactualcommand effects including export122/123 andgoalprojection128",
+              "Complete NP19acceptance and merge/deploy remain separate/unperformed bydeveloper"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-03",
