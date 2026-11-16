@@ -32,6 +32,7 @@ import { DshRetryDisplay } from './retry.js';
 import { readDshHostIdentity, requireDshBaseline, type DshHostIdentity } from './identity.js';
 import slashCatalog from './slash-catalog.json' with { type: 'json' };
 import { dshCommandAliases, mapDshCommands, type DshCommandDescriptor } from './commands.js';
+import { dshGoalChange, dshGoalProjection } from './goals.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
@@ -265,6 +266,7 @@ interface SessionRuntime {
   assistantKeys?: Set<string>;
   assistantSettlements?: Map<number, { type: string; data: Record<string, unknown>; native: unknown; envelopeId?: number }>;
   projections?: { asOfSeq: number; values: Record<string, unknown> };
+  goalObservation?: { data: EventData['goal']; throughSeq: number; projection: boolean };
   modelObservation?: { provider?: string; model?: string; publicModelId?: string; reasoningEffort?: string; source: string; nativeSeq?: number };
   controlState?: unknown;
 }
@@ -844,10 +846,16 @@ export class DshAdapter implements AgentAdapter {
       }
     });
   }
-  private applyProjections(sessionId: string, runtime: SessionRuntime, baseline: { asOfSeq: number; values: Record<string, unknown> }, replace = false, source = 'session/control'): void {
+  private applyProjections(sessionId: string, runtime: SessionRuntime, baseline: { asOfSeq: number; values: Record<string, unknown> }, replace = false, source = 'session/control', origin: unknown = baseline, observesGoal = true): void {
     if (!replace && baseline.asOfSeq < (runtime.projections?.asOfSeq ?? -1)) return;
     const previous = runtime.projections;
     runtime.projections = structuredClone(baseline);
+    if (observesGoal && Object.hasOwn(baseline.values, 'goal')) {
+      const goal = dshGoalProjection(baseline.values['goal']);
+      if (goal !== undefined) this.projectGoal(sessionId, runtime, goal, baseline.asOfSeq, origin, true, replace);
+      else this.emit(sessionId, { type: 'item.complete', itemKey: `unknown-goal-projection-${++runtime.frameSeq}`, kind: 'unknown',
+        data: { nativeType: 'session/projections:goal' }, scope: 'session', native: origin });
+    }
     const selected = projectedModelSelection(baseline.values['modelSelection']);
     if (selected !== undefined && JSON.stringify(previous?.values['modelSelection']) !== JSON.stringify(baseline.values['modelSelection'])) {
       this.observeModelSelection(sessionId, runtime, selected, 'session/projections:modelSelection.next');
@@ -867,7 +875,18 @@ export class DshAdapter implements AgentAdapter {
     if (typeof value['seq'] !== 'number' || !Array.isArray(value['changes']) || value['seq'] < (runtime.projections?.asOfSeq ?? -1)) return;
     const values = { ...(runtime.projections?.values ?? {}) };
     for (const change of value['changes'] as { key: string; val?: unknown }[]) values[change.key] = change.val;
-    this.applyProjections(sessionId, runtime, { asOfSeq: value['seq'], values }, false, source);
+    this.applyProjections(sessionId, runtime, { asOfSeq: value['seq'], values }, false, source, value,
+      (value['changes'] as { key: string }[]).some(change => change.key === 'goal'));
+  }
+
+  private projectGoal(sessionId: string, runtime: SessionRuntime, data: EventData['goal'], throughSeq: number, native: unknown, projection = false, replace = false): void {
+    const previous = runtime.goalObservation;
+    if (!replace && previous !== undefined && (throughSeq < previous.throughSeq || !projection && previous.projection && throughSeq <= previous.throughSeq
+      || data.goalId !== undefined && data.goalId === previous.data.goalId && (data.nativeRevision ?? 0) < (previous.data.nativeRevision ?? 0))) return;
+    runtime.goalObservation = { data, throughSeq, projection };
+    if (previous !== undefined && JSON.stringify(previous.data) === JSON.stringify(data)) return;
+    this.emit(sessionId, { type: 'item.complete', itemKey: `goal-${projection ? 'projection' : 'change'}-${throughSeq}-${++runtime.frameSeq}`,
+      kind: 'goal', data, nativeSeq: throughSeq, native, scope: 'session' });
   }
   private projectContinuedQuestions(sessionId: string, runtime: SessionRuntime, value: unknown): void {
     const projection = value as { active?: { callId: string; state: string; questions: { id: string; question: string; header?: string; options?: { label: string; description?: string }[]; multiSelect?: boolean }[] }[]; settled?: { callId: string; answers: { id: string; selected: string[]; custom?: string }[] }[] } | undefined;
@@ -899,7 +918,7 @@ export class DshAdapter implements AgentAdapter {
       if (state === 'reconnecting' || state === 'auth-required') {
         this.modelPublicIds.clear();
         this.clientId = ''; this.muxGeneration++; this.observedHost = undefined; this.workspaceState.invalidate();
-        for (const [id, runtime] of this.sessions) { runtime.history?.invalidate(); runtime.projections = undefined; runtime.children.clear(); runtime.modelObservation = undefined; this.emit(id, { type: 'permissions', observation: { effective: null, source: 'dsh.connection', scope: 'session' } }); }
+        for (const [id, runtime] of this.sessions) { runtime.history?.invalidate(); runtime.projections = undefined; runtime.goalObservation = undefined; runtime.children.clear(); runtime.modelObservation = undefined; this.emit(id, { type: 'permissions', observation: { effective: null, source: 'dsh.connection', scope: 'session' } }); }
       }
       for (const [id, runtime] of this.sessions) this.emit(id, {
         type: 'item.complete', itemKey: `dsh-connection-${++runtime.frameSeq}`, kind: 'notice',
@@ -1571,7 +1590,7 @@ export class DshAdapter implements AgentAdapter {
       }
       case 'agent-preset/selected': {
         const values = { ...(runtime.projections?.values ?? {}), agentPreset: data['agentPreset'] };
-        this.applyProjections(sessionId, runtime, { asOfSeq: nativeSeq, values });
+        this.applyProjections(sessionId, runtime, { asOfSeq: nativeSeq, values }, false, 'session/control', native, false);
         complete(`internal-preset-${nativeSeq}`, 'internal', { nativeType: type }); return;
       }
       case 'subagent/catalog':
@@ -1728,6 +1747,12 @@ export class DshAdapter implements AgentAdapter {
             status: todo.status === 'completed' ? 'completed' : todo.status === 'in_progress' ? 'in_progress' : 'pending',
           })),
         });
+        return;
+      }
+      case 'goal/change': {
+        const goal = dshGoalChange(data);
+        if (goal === undefined) complete(`unknown-goal-change-${nativeSeq}`, 'unknown', { nativeType: type });
+        else this.projectGoal(sessionId, runtime, goal, nativeSeq, native);
         return;
       }
       case 'approval/asked': {

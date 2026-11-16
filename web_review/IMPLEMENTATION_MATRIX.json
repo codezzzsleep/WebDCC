@@ -2367,7 +2367,14 @@
           "packages/adapters/claude/src/native-state.ts",
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
-          "packages/web/src/components/NativeControls.tsx"
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/goals.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/protocol/src/events.ts",
+          "packages/adapters/dsh/test/goals.spec.ts",
+          "browser-tests/dsh-goals.spec.ts",
+          "packages/adapters/dsh/test/goal-fixture.ts",
+          "web_review/dsh-goals-source-20261116.summary.json"
         ],
         "actualFiles": [
           "packages/protocol/src/goals.ts",
@@ -2383,18 +2390,27 @@
           "packages/adapters/claude/src/native-state.ts",
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
-          "packages/web/src/components/NativeControls.tsx"
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/dsh/src/goals.ts",
+          "packages/adapters/dsh/src/adapter.ts",
+          "packages/adapters/dsh/test/goals.spec.ts",
+          "packages/adapters/dsh/test/goal-fixture.ts",
+          "packages/protocol/src/events.ts",
+          "browser-tests/dsh-goals.spec.ts",
+          "web_review/dsh-goals-source-20261116.summary.json"
         ],
         "evidence": [
           "web_review/evidence/native-live-claude.json",
-          "web_review/evidence/native-models-current.json"
+          "web_review/evidence/native-models-current.json",
+          "web_review/dsh-goals-source-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "原生同一任务更新/删除不会重复，失败创建不产生幽灵任务。",
           "刷新后owner、依赖、计划正文、目标状态与原生一致。",
-          "主Agent与子Agent任务隔离；UI空状态不把缺数据当已完成。"
+          "主Agent与子Agent任务隔离；UI空状态不把缺数据当已完成。",
+          "DSH 真实 Host 生命周期、外部改变、重连恢复与 process-local activation/自动续跑尚未完整验收。"
         ],
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-16 #128: DSH durable goal/change and goal projection mapping, native identity/revision/rounds/block reason, goal-specific replay watermark and source UI refresh/clear. Controlled fixtures checked against actual upstream strict fold; no live Host/provider or target deployment acceptance."
       },
       "dependencyIds": [
         "NP-05",

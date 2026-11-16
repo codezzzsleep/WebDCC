@@ -1,0 +1,61 @@
+import { chromium, type Browser } from '@playwright/test';
+import type { AdapterEvent, EventData } from '@webdcc/protocol';
+import { expect, it } from 'vitest';
+import { createSourceTestApp } from './helpers.js';
+import { seedWorkspaceAndSession } from '../packages/server/test/helpers.js';
+import { DshAdapter } from '../packages/adapters/dsh/src/adapter.js';
+import { dshGoalFixture } from '../packages/adapters/dsh/test/goal-fixture.js';
+
+it('controlled DSH goal lifecycle and admitted-round projection update cards across refresh and clear', async () => {
+  const ctx = await createSourceTestApp();
+  let browser: Browser | undefined;
+  try {
+    const { sessionId } = await seedWorkspaceAndSession(ctx);
+    const emitter = ctx.manager.adapter('dsh') as unknown as { emit(id: string, event: AdapterEvent): void };
+    const replay = DshAdapter.replay(sessionId, 'controlled-native');
+    const fixture = dshGoalFixture();
+    const emit = (value: unknown, seq: number, ch = 'mux:session/follow') => {
+      for (const event of replay.feed({ i: seq + 1, t: seq, dir: 'in', ch, frame: { type: 'item', value } })) emitter.emit(sessionId, event);
+    };
+    const native = (seq: number) => emit({ type: 'event', event: fixture.events[seq] }, seq);
+    native(0);
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    const address = ctx.app.server.address();
+    if (!address || typeof address === 'string') throw new Error('missing goal listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.goto(`${base}/s/${sessionId}`);
+    const panel = page.getByTestId('goal-panel');
+    await expect.poll(() => panel.textContent()).toContain('Original native objective');
+    await expect.poll(() => page.getByTestId('goal-rounds').textContent()).toBe('轮次 0 / 10');
+    for (let seq = 1; seq <= 6; seq++) native(seq);
+    emit({ type: 'projection', seq: 6, changes: [{ key: 'goal', val: fixture.activeProjection }] }, 6, 'mux:session/observeProjections');
+    await expect.poll(() => page.getByTestId('goal-rounds').textContent()).toBe('轮次 2 / 10');
+    await page.reload();
+    await expect.poll(() => page.getByTestId('goal-rounds').textContent()).toBe('轮次 2 / 10');
+    native(7);
+    await expect.poll(() => panel.textContent()).toContain('Edited native objective');
+    native(8);
+    await expect.poll(() => panel.textContent()).toContain('目标已暂停');
+    native(9);
+    await expect.poll(() => panel.textContent()).toContain('目标进行中');
+    native(10);
+    await expect.poll(() => page.getByTestId('goal-block-reason').textContent()).toBe('Native block explanation');
+    await expect.poll(() => panel.textContent()).toContain('目标受阻');
+    native(11);
+    await expect.poll(() => panel.textContent()).toContain('目标已完成');
+    await page.reload();
+    await expect.poll(() => panel.textContent()).toContain('目标已完成');
+    expect(await panel.textContent()).toContain('轮次 2 / 10');
+    const original = ctx.store.allEvents(sessionId);
+    native(12);
+    await expect.poll(() => panel.count()).toBe(0);
+    await page.reload();
+    await expect.poll(() => panel.count()).toBe(0);
+    expect(ctx.store.allEvents(sessionId)).toEqual(expect.arrayContaining(original));
+    expect(ctx.store.allEvents(sessionId).findLast(event => event.kind === 'goal')?.data).toMatchObject({ status: 'cleared', goalId: 'native-goal', nativeRevision: 7 });
+    expect(original.some(event => event.kind === 'goal' && (event.data as EventData['goal']).blockedReason?.message === 'Native block explanation')).toBe(true);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 60000);
