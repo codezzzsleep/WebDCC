@@ -642,7 +642,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
     return (
       <div className="approval-card resolved" data-testid="approval-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName} data-resolved="true" id={`e-${event.seq}`}>
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>{resolvedText}</span>
+        <span className="approval-result">{resolvedText}</span>
         {what === '' ? null : <span className="what">· {what}</span>}
         {synchronized ? null : <span>历史记录，当前状态尚未核对</span>}
       </div>
