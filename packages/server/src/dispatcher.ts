@@ -165,7 +165,8 @@ export class CommandDispatcher {
 
   private failure(error: unknown, native: boolean): DispatchResult {
     const statusCode = (error as { statusCode?: number }).statusCode; const code = (error as { code?: string }).code;
+    const unsubmitted = (error as { nativeAdmission?: unknown }).nativeAdmission === 'not-submitted';
     return { ok: false, error: error instanceof Error ? error.message : String(error), code: code === 'native-version-incompatible' || code === 'uncertain' ? code
-      : statusCode === 404 ? 'not-found' : statusCode === 409 ? 'conflict' : statusCode === 403 ? 'forbidden' : statusCode === 413 ? 'too-large' : statusCode === 400 ? 'bad-request' : native ? 'uncertain' : 'failed' };
+      : statusCode === 404 ? 'not-found' : statusCode === 409 ? 'conflict' : statusCode === 403 ? 'forbidden' : statusCode === 413 ? 'too-large' : statusCode === 400 ? 'bad-request' : native && !unsubmitted ? 'uncertain' : 'failed' };
   }
 }

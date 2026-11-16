@@ -44,6 +44,7 @@ import { processState } from './process-identity.js';
 import type { InteractionRow } from './interactions.js';
 import { payloadHash } from './command-journal.js';
 import type { FileStore } from './files.js';
+import { inputNotSubmitted, type QueueChange } from './input-admission.js';
 
 const TURN_SETTLE_MS = 1_500;
 const hotKey = (turnId: string | null, itemKey: string): string => JSON.stringify([turnId, itemKey]);
@@ -685,8 +686,9 @@ export class SessionManager {
     if (input.delivery === 'steer') return this.steerAccepted(runtime, input, clientCommandId);
 
     const turnId = ulid();
-    const accepted = this.store.journal.enqueue(clientCommandId ?? `internal-${turnId}`, sessionId, turnId, input);
-    this.queueChanged(sessionId);
+    const queuedChange = this.store.inputAdmissions.enqueue(clientCommandId ?? `internal-${turnId}`, sessionId, turnId, input);
+    const { accepted } = queuedChange;
+    this.queueChanged(sessionId, queuedChange);
     if (accepted.state !== 'queued') return { turnId: accepted.turnId, queued: accepted.state !== 'completed' };
     const next = runtime.turnId === null ? this.store.journal.next(sessionId) : undefined;
     if (next !== undefined) await this.startTurn(runtime, next.turnId, next.input, next.commandId);
@@ -713,47 +715,24 @@ export class SessionManager {
     }
     this.assertOwner(runtime);
     if (runtime.turnId !== null) throw Object.assign(new Error('原生轮次已开始，已接受的输入继续排队'), { statusCode: 409 });
-    if (!this.store.journal.beginInput(turnId)) throw Object.assign(new Error('队列输入已被取消或占有'), { statusCode: 409 });
-    this.queueChanged(sessionId);
+    let admission: ReturnType<Store['inputAdmissions']['begin']>;
+    try {
+      if (this.options.recorder !== undefined) await this.options.recorder.turnContext(sessionId, turnId);
+      this.assertOwner(runtime);
+      if (runtime.turnId !== null) throw Object.assign(new Error('原生轮次已开始，已接受的输入继续排队'), { statusCode: 409 });
+      this.options.recorder?.record(sessionId, 'web', 'input', { input, clientCommandId }, 'out');
+      admission = this.store.inputAdmissions.begin(sessionId, turnId, input, runtime.identity, clientCommandId, firstLine(input.text));
+    } catch (error) {
+      try { this.store.journal.preparationError(turnId, error instanceof Error ? error.message : String(error)); this.queueChanged(sessionId); }
+      catch (savingError) { throw inputNotSubmitted(new AggregateError([error, savingError], '输入尚未提交原生；持久化开始与错误记录失败')); }
+      throw inputNotSubmitted(error);
+    }
     runtime.turnId = turnId;
     runtime.turnStartedAt = Date.now();
-    if (this.options.recorder !== undefined) await this.options.recorder.turnContext(sessionId, turnId);
-    this.options.recorder?.record(sessionId, 'web', 'input', { input, clientCommandId }, 'out');
-
-    const userEvent = this.store.appendEvent({
-      sessionId,
-      turnId,
-      itemKey: `user-${turnId}`,
-      kind: 'user.message',
-      data: {
-        text: input.text,
-        intent: input.delivery ?? 'send',
-        ...(clientCommandId === undefined ? {} : { clientCommandId }),
-        ...(input.images === undefined ? {} : { images: input.images.map((image) => image.fileId) }),
-        ...(input.contentParts === undefined ? {} : { contentParts: publicInputContent(input.contentParts) }),
-      },
-    });
-    this.hooks.onEvent(userEvent);
-    // 服务端分配轮次（F4）：一轮以 turn.started 开始、以 turn.completed 结束
-    const startEvent = this.store.appendEvent({
-      sessionId,
-      turnId,
-      itemKey: `turn-start-${turnId}`,
-      kind: 'turn.started',
-      data: {},
-    });
-    this.hooks.onEvent(startEvent);
     this.turns.start(sessionId, turnId, runtime.turnStartedAt);
-
-    if (session.title === undefined || session.title === null || session.title === '') {
-      const title = firstLine(input.text);
-      // The first user prompt is the stable session label. Native title
-      // notifications may arrive later (and in some harnesses are generated
-      // from an auxiliary request), so they must not replace this label.
-      this.store.setTitleSource(sessionId, 'user');
-      const updated = this.updateSessionAndFeed(sessionId, { title }, { title });
-      void updated;
-    }
+    this.queueChanged(sessionId, admission);
+    for (const event of admission.events) this.hooks.onEvent(event);
+    if (admission.titleChange !== undefined) this.hooks.onFeed(sessionId, admission.titleChange.patch, admission.titleChange.feedSeq);
 
     try {
       await runtime.adapter.send(sessionId, { ...input, nativeRequestId: this.store.journal.nativeRequestId(turnId) });
@@ -1862,10 +1841,10 @@ export class SessionManager {
     void runtime.adapter.dispose(runtime.sessionId).catch(() => undefined);
   }
 
-  queueChanged(sessionId: string): void {
+  queueChanged(sessionId: string, committed?: QueueChange): void {
     this.syncAsyncSubmissions(sessionId);
-    const patch = { queueRevision: Date.now() };
-    const feedSeq = this.store.appendFeed(sessionId, patch);
+    const patch = committed?.patch ?? { queueRevision: Date.now() };
+    const feedSeq = committed?.feedSeq ?? this.store.appendFeed(sessionId, patch);
     this.hooks.onFeed(sessionId, patch, feedSeq);
   }
 
