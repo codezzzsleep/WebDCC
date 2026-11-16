@@ -163,7 +163,7 @@ export interface EventData {
     planMarkdown?: string;
     submission?: 'sent' | 'uncertain' | 'collected';
   };
-  'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' | 'other' };
+  'approval.resolved': { approvalId: string; optionId: string; by: 'user' | 'agent' | 'system' | 'other' | 'unknown' };
   question: QuestionItem;
   'turn.started': Record<string, never>;
   'turn.completed': {

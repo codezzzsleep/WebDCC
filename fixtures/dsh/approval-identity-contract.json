@@ -1,0 +1,53 @@
+{
+  "formatVersion": 1,
+  "evidenceKind": "controlled-unmodified-native-library",
+  "nativeVersion": "0.2.2-rc.1",
+  "nativeSourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+  "nativeSourceDirty": "pre-existing user changes; no native file altered by this probe",
+  "hashes": {
+    "gateway": "91abae7edfaa2bf3154680829e77b1f341aa01ba9094795aa70b96ff3e15f52b",
+    "protocol": "ab4d8d638062a3f0e2330229550342eafe517ae0bbc47d433df4f7618b5bf5ac",
+    "gatewaySource": "ff9c0de37a8810c6ea2fe9d5a285425017c5cfbc3902d5f90315796c76285686",
+    "approvalSource": "afa2f16553b8dcf5ea74f4bf09555cc8aa633d8203146d3e369210a5ef043cff",
+    "cli": "54d9e9fee0d005835a1967dba39246459a65133e13555239c5b6a2a229ab48e0"
+  },
+  "reportSha256": "1f38e41a5c0cdc2a005c8b8340d00a766636e44e81b931365f29e1f1fdf13ddd",
+  "verifiedAt": "2026-11-16T18:45:39.633Z",
+  "cases": [
+    {
+      "name": "current delivery settles the native source once, with a void transport result",
+      "status": "passed"
+    },
+    {
+      "name": "same-event result repeated after settlement is an idempotent no-op",
+      "status": "passed"
+    },
+    {
+      "name": "a superseded native Client result cannot consume the current delivery",
+      "status": "passed"
+    },
+    {
+      "name": "the current re-delivery can settle the original event after an old Client no-op",
+      "status": "passed"
+    },
+    {
+      "name": "an unrelated event ID cannot settle the pending approval",
+      "status": "passed"
+    },
+    {
+      "name": "same-option resolution carries no answering Client provenance",
+      "status": "passed"
+    },
+    {
+      "name": "settlement cancels other forwarding deliveries without cancelling its native business result",
+      "status": "passed"
+    }
+  ],
+  "nativeHosts": 0,
+  "nativeAgents": 0,
+  "providerRequests": 0,
+  "ids": "Controlled instance and event UUIDs; not captured Agent identities.",
+  "scope": "Native Gateway result/no-op/delivery cancellation library contract. Controlled private instance state, not a running Host, Agent, human approval, Provider, GUI or deployment acceptance.",
+  "nativeAcceptance": "not-established",
+  "deployment": "not-performed"
+}
