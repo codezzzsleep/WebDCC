@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { currentCodexSubagents, type AdapterEvent, type CodexSubagentView, type StoredEvent } from '@webdcc/protocol';
+import { currentCodexSubagents, isValidEventData, type AdapterEvent, type CodexSubagentView, type EventData, type StoredEvent } from '@webdcc/protocol';
 import { CodexAdapter } from '../src/adapter.js';
 import type { ThreadItem } from '../src/schema/v2/ThreadItem.js';
 import type { CollabAgentState } from '../src/schema/v2/CollabAgentState.js';
@@ -15,10 +15,11 @@ function fixture(seed: readonly CodexSubagentView[] = [], prior: readonly Stored
   const feed = (method: string, params: Record<string, unknown>) => {
     const emitted = replay.feed({ i: ++index, t: index, dir: 'in', ch: 'rpc', frame: { method, params } });
     events.push(...emitted);
-    for (const event of emitted) if (event.type === 'item.complete') stored.push({
-      sessionId: 'session', seq: stored.length + 1, turnId: null, itemKey: event.itemKey,
-      at: 'controlled', kind: event.kind, data: event.data, native: event.native,
-    });
+    for (const event of emitted) if (event.type === 'item.complete') {
+      expect(isValidEventData(event.kind, event.data)).toBe(true);
+      stored.push({ sessionId: 'session', seq: stored.length + 1, turnId: null, itemKey: event.itemKey,
+        at: 'controlled', kind: event.kind, data: event.data as StoredEvent['data'], native: event.native });
+    }
     return emitted;
   };
   const call = (id: string, states: States, status: CollabAgentToolCallStatus, turnId = 'root', senderThreadId = parent,
@@ -124,7 +125,7 @@ it('keeps an unreviewed state as native evidence without claiming a successful o
   expect(f.children()).toMatchObject([{ nativeStatus: 'unknown', snapshots: [
     { status: 'future-state', message: 'Original unsupported state', applied: false },
   ] }]);
-  const emitted = f.events.filter(event => event.type === 'item.complete' && event.kind === 'tool.call' && event.data.name === 'subagent');
+  const emitted = f.events.filter(event => event.type === 'item.complete' && event.kind === 'tool.call' && (event.data as EventData['tool.call']).name === 'subagent');
   expect(emitted.at(-1)).toMatchObject({ data: { status: 'unknown' } });
 });
 

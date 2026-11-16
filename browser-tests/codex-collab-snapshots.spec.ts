@@ -19,15 +19,17 @@ it('the source child panel persists both native collab observations and refreshe
     ctx.manager.registerAdapter(adapter);
     const workspace = ctx.store.createWorkspace('Native collab observations', ctx.dataDir);
     const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent: 'codex' });
-    const replay = CodexAdapter.replay(session.id, session.nativeId); let index = 0;
+    if (session.nativeId === undefined) throw new Error('Missing controlled native session identity');
+    const nativeId = session.nativeId;
+    const replay = CodexAdapter.replay(session.id, nativeId); let index = 0;
     const feed = (method: string, params: Record<string, unknown>) => {
-      const frame = { i: ++index, t: index, dir: 'in' as const, ch: 'rpc', frame: { method, params: { threadId: session.nativeId, ...params } } };
+      const frame = { i: ++index, t: index, dir: 'in' as const, ch: 'rpc', frame: { method, params: { threadId: nativeId, ...params } } };
       const receipt = opts.nativeEvents!.record(frame);
       for (const event of replay.feed(frame)) emit(session.id, { ...event, runtime: opts.runtime, nativeEnvelopeId: receipt.envelopeId });
     };
     const call = (id: string, tool: 'spawnAgent' | 'wait', states: Record<string, CollabAgentState>, status: 'completed' | 'inProgress', receivers = Object.keys(states)) =>
       feed(status === 'inProgress' ? 'item/started' : 'item/completed', { turnId: 'parent-turn', item: {
-        type: 'collabAgentToolCall', id, tool, status, senderThreadId: session.nativeId, receiverThreadIds: receivers,
+        type: 'collabAgentToolCall', id, tool, status, senderThreadId: nativeId, receiverThreadIds: receivers,
         prompt: null, model: null, reasoningEffort: null, agentsStates: states,
       } satisfies ThreadItem });
     feed('turn/started', { turn: { id: 'parent-turn', status: 'inProgress' } });
@@ -59,7 +61,7 @@ it('the source child panel persists both native collab observations and refreshe
           .and(page.locator('[data-native-call-id="wait:string:id"][data-child-id="' + childId + '"]'));
         await observation.locator(':scope > summary').click();
         expect(await observation.getByTestId('codex-collab-message').textContent()).toBe(message);
-        expect(await observation.textContent()).toContain(session.nativeId);
+        expect(await observation.textContent()).toContain(nativeId);
         expect(await observation.textContent()).toContain('parent-turn');
       }
       expect(await panel.locator('b').count()).toBe(0);
