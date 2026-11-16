@@ -8,6 +8,7 @@ export function registerNativeControlRoutes(app: FastifyInstance, manager: Sessi
   const base = '/api/sessions/:id/native';
   const id = (request: { params: unknown }): string => (request.params as { id: string }).id;
   app.get(base, request => manager.nativeControls(id(request), (request.query as { catalog?: string }).catalog === '1'));
+  app.get(`${base}/claude-configuration`, request => manager.claudeConfiguration(id(request)));
   app.post(`${base}/connect`, { bodyLimit: 2_048 }, request => manager.connectNativeControls(id(request), request.body as NativeActionRequest));
   app.post(`${base}/actions`, { bodyLimit: 256 * 1024 }, request => manager.executeNativeControl(id(request), request.body as NativeActionRequest));
   app.get(`${base}/actions/:commandId`, (request, reply) => {

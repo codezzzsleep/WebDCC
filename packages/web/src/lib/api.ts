@@ -41,6 +41,7 @@ import type {
   DshSubagentCatalog,
   DshSubagentHistory,
   DshSubagentHistoryOptions,
+  ClaudeConfigurationRecovery,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -80,6 +81,7 @@ export const api = {
     return { blob: await response.blob(), filename };
   },
   nativeControls: (sessionId: string, catalog = false) => request<NativeControlSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/native${catalog ? '?catalog=1' : ''}`),
+  claudeConfiguration: (sessionId: string) => request<ClaudeConfigurationRecovery>(`/api/sessions/${encodeURIComponent(sessionId)}/native/claude-configuration`),
   connectNativeControls: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/connect`, { method: 'POST', body: JSON.stringify({ commandId, action: { type: 'connect' } }) }),
   nativeAction: (sessionId: string, value: NativeActionRequest) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions`, { method: 'POST', body: JSON.stringify(value) }),
   nativeActionReceipt: (sessionId: string, commandId: string) => request<NativeActionReceipt>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions/${encodeURIComponent(commandId)}`),

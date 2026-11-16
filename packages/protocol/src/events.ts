@@ -4,6 +4,7 @@ import type { InputContent, InputIntent } from './input.js';
 import type { ClaudeOutputOrigin, ClaudeTaskRuntime } from './claude-tasks.js';
 import type { NativeReasoningPart } from './codex-reasoning.js';
 import type { ClaudeStructuredOutput } from './claude-output.js';
+import type { ClaudeQueryConfiguration } from './claude-configuration.js';
 
 export type EventKind =
   | 'user.message'
@@ -181,7 +182,7 @@ export interface EventData {
   usage: UsageData;
   error: { message: string };
   unknown: { nativeType: string };
-  internal: { nativeType: string; claudeTaskRuntime?: ClaudeTaskRuntime };
+  internal: { nativeType: string; claudeTaskRuntime?: ClaudeTaskRuntime; claudeConfiguration?: ClaudeQueryConfiguration };
 }
 
 export interface StoredEvent<K extends EventKind = EventKind> {
