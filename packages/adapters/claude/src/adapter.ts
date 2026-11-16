@@ -189,13 +189,20 @@ interface PendingInteraction {
   resolve: (decision: { approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }) => void;
 }
 
+// requestId identifies the native control envelope; toolUseID only identifies
+// the tool whose permission can be requested more than once. Old recordings
+// predate requestId and retain their original tool-based projection identity.
+type PermissionIdentityOptions = Pick<Parameters<CanUseTool>[2], 'signal'> & Partial<Pick<Parameters<CanUseTool>[2], 'toolUseID' | 'requestId'>>;
+
 interface SessionRuntime {
+  generation: number;
+  permissionRequestIds: Set<string>;
   stdio: ClaudeStdioCaptureState;
   nativeOptions: ClaudeNativeOptions;
   state: ClaudeNativeState;
   capabilities: string[];
   nativePending: Map<string, NativePending>;
-  questionGroups: Map<string, { items: EventData['question'][]; submitted: boolean; cancelled?: boolean }>;
+  questionGroups: Map<string, { items: EventData['question'][]; toolUseID?: string; submitted: boolean; cancelled?: boolean }>;
   envelopeId?: number;
   turnActive: boolean;
   backgroundTasks: Map<string, string | undefined>;
@@ -282,6 +289,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const adapter = new ClaudeAdapter();
     const decisions: PermissionResult[] = [];
     const runtime: SessionRuntime = {
+      generation: 1, permissionRequestIds: new Set(),
       stdio: { enabled: false, failed: false },
       nativeOptions: {}, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
@@ -297,8 +305,9 @@ export class ClaudeAdapter implements AgentAdapter {
       const raw = frame.frame as Record<string, unknown>;
       if (frame.dir === 'in' && frame.ch === 'sdk') adapter.onSdkMessage(sessionId, raw as unknown as SDKMessage);
       else if (frame.dir === 'in' && frame.ch === 'canUseTool') {
+        if (Number.isSafeInteger(raw['queryGeneration']) && Number(raw['queryGeneration']) > 0) runtime.generation = Number(raw['queryGeneration']);
         void adapter.handleCanUseTool(sessionId, String(raw['toolName'] ?? raw['tool'] ?? ''), (raw['input'] ?? {}) as Record<string, unknown>, {
-          signal: new AbortController().signal, toolUseID: typeof raw['toolUseID'] === 'string' ? raw['toolUseID'] : undefined,
+          signal: new AbortController().signal, toolUseID: typeof raw['toolUseID'] === 'string' ? raw['toolUseID'] : undefined, requestId: typeof raw['requestId'] === 'string' ? raw['requestId'] : undefined,
           suggestions: permissionSuggestions(raw['suggestions']),
           suppressAlwaysAllowRule: typeof raw['suppressAlwaysAllowRule'] === 'boolean' ? raw['suppressAlwaysAllowRule'] : undefined,
           defaultToNo: typeof raw['defaultToNo'] === 'boolean' ? raw['defaultToNo'] : undefined,
@@ -477,7 +486,7 @@ export class ClaudeAdapter implements AgentAdapter {
       if (owner === undefined || owner.retiring || owner.closePromise !== undefined || this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换或正在关闭' };
       const result = await this.handleCanUseTool(sessionId, toolName, toolInput, options);
       if (owner.retiring || owner.closePromise !== undefined || this.sessions.get(sessionId) !== owner) return { behavior: 'deny', message: '原生运行实例已替换或正在关闭' };
-      if (!this.observeNative(owner, opts, { i: ++owner.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, result } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
+      if (!this.observeNative(owner, opts, { i: ++owner.frameSeq, t: 0, dir: 'out', ch: 'canUseTool-result', frame: { toolName, toolUseID: options.toolUseID, requestId: options.requestId, queryGeneration: owner.generation, result } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
       return result;
     };
 
@@ -489,6 +498,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const generation = (this.generations.get(sessionId) ?? 0) + 1;
     this.generations.set(sessionId, generation);
     const runtime: SessionRuntime = {
+      generation, permissionRequestIds: new Set(),
       stdio,
       nativeOptions, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
       nativeId: resume ?? '',
@@ -980,12 +990,14 @@ export class ClaudeAdapter implements AgentAdapter {
 
   private waitForDecision(runtime: SessionRuntime, id: string, kind: 'approval' | 'question', toolName: string, input: Record<string, unknown>, signal: AbortSignal, approvalOptionIds?: string[]): Promise<Parameters<PendingInteraction['resolve']>[0]> {
     let abort = (): void => undefined;
+    let pending: PendingInteraction;
     return new Promise<Parameters<PendingInteraction['resolve']>[0]>(resolve => {
-      runtime.pending.set(id, { kind, toolName, input, resolve, approvalOptionIds });
+      pending = { kind, toolName, input, resolve, approvalOptionIds };
+      runtime.pending.set(id, pending);
       abort = () => resolve({ approved: false, optionId: 'cancel' });
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) abort();
-    }).finally(() => { signal.removeEventListener('abort', abort); runtime.pending.delete(id); });
+    }).finally(() => { signal.removeEventListener('abort', abort); if (runtime.pending.get(id) === pending) runtime.pending.delete(id); });
   }
 
   // ---------- canUseTool：审批与提问都从这里来 ----------
@@ -1005,18 +1017,29 @@ export class ClaudeAdapter implements AgentAdapter {
     sessionId: string,
     toolName: string,
     input: Record<string, unknown>,
-    options: ClaudePermissionOptions,
+    options: ClaudePermissionOptions & PermissionIdentityOptions,
   ): Promise<PermissionResult> {
     const runtime = this.require(sessionId);
     const proposal = permissionProposal(options);
-    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID,
+    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID, ...(options.requestId === undefined ? {} : { requestId: options.requestId, queryGeneration: runtime.generation }),
       ...(options.suggestions === undefined ? {} : { suggestions: structuredClone(options.suggestions) }),
       ...(options.suppressAlwaysAllowRule === undefined ? {} : { suppressAlwaysAllowRule: options.suppressAlwaysAllowRule }),
       ...(options.defaultToNo === undefined ? {} : { defaultToNo: options.defaultToNo }),
     } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
+    if (options.requestId !== undefined && (typeof options.requestId !== 'string' || options.requestId.length === 0)) return { behavior: 'deny', message: 'Claude 原生 requestId 无效' };
+    const controlId = options.requestId === undefined ? undefined : `claude-control:${runtime.generation}:${encodeURIComponent(options.requestId)}`;
+    const id = toolName === 'AskUserQuestion'
+      ? controlId ?? options.toolUseID ?? `q-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`
+      : `${sessionId}:${controlId ?? options.toolUseID ?? `tool-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
+    if (controlId !== undefined && runtime.permissionRequestIds.has(controlId) || runtime.pending.has(id) || runtime.questionGroups.has(id)) {
+      this.emit(sessionId, { type: 'item.complete', itemKey: `claude-control-conflict-${runtime.frameSeq}`, kind: 'notice', data: { level: 'warning', text: 'Claude 原生交互身份重复，已拒绝重复请求并保留原请求', nativeType: 'canUseTool/duplicate' }, scope: 'session' });
+      return { behavior: 'deny', message: 'Claude 原生交互身份重复' };
+    }
+    if (controlId !== undefined) runtime.permissionRequestIds.add(controlId);
+    if (options.signal.aborted) return { behavior: 'deny', message: 'Claude 原生交互已取消' };
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
-      const questionId = `${options.toolUseID ?? `q-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
+      const questionId = id;
       const questionPromise = this.waitForDecision(runtime, questionId, 'question', toolName, input, options.signal);
       const items: EventData['question'][] = questions.map((question, index) => ({
           questionId: `${questionId}:${index}`,
@@ -1033,7 +1056,7 @@ export class ClaudeAdapter implements AgentAdapter {
           allowsFreeText: true,
           ...(options.toolUseID === undefined ? {} : { toolCallId: options.toolUseID }),
       }));
-      runtime.questionGroups.set(questionId, { items, submitted: false });
+      runtime.questionGroups.set(questionId, { items, toolUseID: options.toolUseID, submitted: false });
       for (const [index, data] of items.entries()) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${questionId}-${index}`, kind: 'question', data });
       const decision = await questionPromise;
       if (!decision.approved) {
@@ -1045,7 +1068,7 @@ export class ClaudeAdapter implements AgentAdapter {
     }
 
     const isPlanMode = toolName === 'ExitPlanMode';
-    const approvalId = `${sessionId}:${options.toolUseID ?? `tool-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
+    const approvalId = id;
     const decisionPromise = this.waitForDecision(runtime, approvalId, 'approval', toolName, input, options.signal, proposal.options.map(option => option.id));
     this.emit(sessionId, {
       type: 'item.complete',
@@ -1141,11 +1164,12 @@ export class ClaudeAdapter implements AgentAdapter {
         for (const block of content) {
           if (block['type'] !== 'tool_result') continue;
           const toolId = String(block['tool_use_id'] ?? '');
-          const group = runtime.questionGroups.get(toolId);
-          if (group !== undefined) {
+          const matches = [...runtime.questionGroups].filter(([id, group]) => (group.toolUseID ?? id) === toolId);
+          for (const [groupId, group] of matches) {
             const rejected = group.cancelled === true && block['is_error'] === true;
-            this.settleQuestionGroup(sessionId, runtime, toolId, group.submitted && block['is_error'] !== true ? 'answered' : 'skipped', message,
-              block['is_error'] === true && !rejected ? 'outcome-unknown' : group.submitted || rejected ? 'native-acknowledged' : 'external');
+            const ambiguous = matches.length > 1;
+            this.settleQuestionGroup(sessionId, runtime, groupId, !ambiguous && group.submitted && block['is_error'] !== true ? 'answered' : 'skipped', message,
+              ambiguous || block['is_error'] === true && !rejected ? 'outcome-unknown' : group.submitted || rejected ? 'native-acknowledged' : 'external');
           }
           const item = runtime.toolItems.get(toolId);
           runtime.toolItems.delete(toolId);
