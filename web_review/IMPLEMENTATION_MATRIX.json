@@ -310,7 +310,8 @@
           "web_review/evidence/native-live-codex-revalidated.json",
           "web_review/evidence/native-claude-stdio.json",
           "web_review/queue-order-source-20261116.summary.json",
-          "web_review/queue-retry-cancellation-20261116.summary.json"
+          "web_review/queue-retry-cancellation-20261116.summary.json",
+          "web_review/send-cancellation-result-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "同一命令100个并发HTTP/WS请求只进入一次执行；同ID异内容被拒。",
@@ -320,7 +321,8 @@
           "220 atomically retries only still-queued preparation under matching input/command identity, preserving concurrentcancel/native admission. Controlled100HTTP retry success1/conflicts99 is separate from full100HTTP/WSsend/crash/realNative acceptance."
         ],
         "remainingWork": "Native reconciliation/ownership, all crash windows, queue auto-recovery under verified ownership, secret-aware commands and complete attachments/outbox coverage remain incomplete.",
-        "latestScope": "2026-11-16 #220 adds atomic state/identity verification and paired retry/preparation/receipt/feed updates; cancel/sent/uncertain/stale input cannot be reset queued. Ordinary/internal input IDs and text retained; local57 plusfinal17/types/lint, realNative/target scope separate."
+        "latestScope": "2026-11-16 #220 adds atomic state/identity verification and paired retry/preparation/receipt/feed updates; cancel/sent/uncertain/stale input cannot be reset queued. Ordinary/internal input IDs and text retained; local57 plusfinal17/types/lint, realNative/target scope separate.",
+        "latestSendCancellationScope": "2026-11-16 Issue224: ordinary send result settlement atomically rechecks current SQLite state; cancellation and terminal receipts survive late execution results. Source51 checks/full types/changed lint passed; official Native/provider/target validation separate. Complete NP implementation/acceptance remains in progress."
       },
       "dependencyIds": [
         "NP-02"
@@ -451,7 +453,8 @@
           "packages/server/test/hub-stream-identity.spec.ts",
           "packages/web/src/lib/store-stream-identity.spec.ts",
           "browser-tests/stream-identity.spec.ts",
-          "scripts/verify-native-reasoning.ts"
+          "scripts/verify-native-reasoning.ts",
+          "web_review/send-cancellation-result-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "并发resume只创建一个owner，旧query晚到不能污染新会话。",
@@ -459,7 +462,8 @@
           "服务端重启时区分原生仍运行/已退出/未知，不把所有情况都标用户打断。"
         ],
         "remainingWork": "Managed owner/generation 占有、PID/boot 恢复、单 flight、跨 manager 恢复隔离和 callback/call fencing 已实施；租约失效不证明 native writer 已退出。仍需完整 NativeSessionRef/Host/profile 校验、原生仍运行/已退出/未知的权威对账、native 自主 continuation/activeTurn 全闭环、原生释放证据及真实故障验收。",
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "latestSendCancellationScope": "2026-11-16 Issue224: ordinary send result settlement atomically rechecks current SQLite state; cancellation and terminal receipts survive late execution results. Source51 checks/full types/changed lint passed; official Native/provider/target validation separate. Complete NP implementation/acceptance remains in progress."
       },
       "dependencyIds": [
         "NP-02",

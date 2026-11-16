@@ -63,9 +63,12 @@ export class CommandDispatcher {
       const acceptedState = externalAsync ? state === 'cancelled' ? 'cancelled' : 'uncertain'
         : interaction === undefined ? 'completed' : interaction.state === 'collected' || interaction.state === 'queued' ? 'queued'
         : interaction.state === 'resolved' || interaction.state === 'cancelled' ? 'completed' : interaction.state === 'uncertain' ? 'uncertain' : 'dispatching';
-      this.store.journal.state(command.clientCommandId, blockedInput !== undefined ? 'queued' : result.ok ? command.op === 'send' && state !== undefined ? state : acceptedState : result.code === 'uncertain' ? 'uncertain' : 'failed', result);
-      this.recorder?.record(owner, 'web', 'ack', result, 'in');
-      return result;
+      const nextState = blockedInput !== undefined ? 'queued' : result.ok ? command.op === 'send' && state !== undefined ? state : acceptedState : result.code === 'uncertain' ? 'uncertain' : 'failed';
+      let receipt = result;
+      if (command.op === 'send') receipt = this.store.journal.settleSendResult(command.clientCommandId, state, nextState, result);
+      else this.store.journal.state(command.clientCommandId, nextState, result);
+      this.recorder?.record(owner, 'web', 'ack', receipt, 'in');
+      return receipt;
     });
     this.inFlight.set(command.clientCommandId, pending);
     try { return await pending; } finally { this.inFlight.delete(command.clientCommandId); }
