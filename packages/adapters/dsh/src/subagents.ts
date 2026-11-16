@@ -51,9 +51,21 @@ export function dshSubagentText(record: DshSubagentRecord): string | undefined {
   return text === '' ? undefined : text;
 }
 
-export function dshSubagentSummary(child: DshSubagentIdentity, state: DshSubagentState, page: DshPage): DshSubagentSummary {
-  const end = page.records.findLast(record => record.event.type === 'turn/end');
-  const start = page.records.findLast(record => record.event.type === 'turn/start');
+/** Native address validation proves a recognized descriptor belongs to the
+ * child's own suffix; cached/missing identity cannot establish that boundary. */
+export function dshSubagentDescriptorSeq(value: unknown, child: DshSubagentIdentity): number | undefined {
+  const projection = object(value); const identity = object(object(projection['values'])['subagent']);
+  const seq = identity['seq'];
+  if (projection['kind'] !== 'sequenced' || !Number.isSafeInteger(projection['asOfSeq']) || !Number.isSafeInteger(seq) || (seq as number) < 0
+    || (projection['asOfSeq'] as number) < (seq as number) || !['one-shot', 'continuable'].includes(String(identity['mode']))
+    || child.mode !== 'unknown' && identity['mode'] !== child.mode) return undefined;
+  return seq as number;
+}
+
+export function dshSubagentSummary(child: DshSubagentIdentity, state: DshSubagentState, page: DshPage, ownDescriptorSeq?: number): DshSubagentSummary {
+  const own = ownDescriptorSeq === undefined ? [] : page.records.filter(record => record.event.seq >= ownDescriptorSeq);
+  const end = own.findLast(record => record.event.type === 'turn/end');
+  const start = own.findLast(record => record.event.type === 'turn/start');
   const data = object(end?.event.data);
   const reason = object(data['reason'])['kind'];
   let status: DshSubagentSummary['status'] = 'unknown';
@@ -64,9 +76,10 @@ export function dshSubagentSummary(child: DshSubagentIdentity, state: DshSubagen
     if (reason === 'completed') status = 'completed';
     else if (['interrupted', 'cancelled', 'aborted'].includes(String(reason))) status = 'stopped';
     else if (['error', 'failed', 'max-tokens', 'refusal'].includes(String(reason))) status = 'failed';
-  } else if (start === undefined && state.active) status = 'idle';
-  const lastText = page.records.findLast(record => dshSubagentText(record) !== undefined);
+  } else if (start === undefined && state.active && ownDescriptorSeq !== undefined) status = 'idle';
+  const lastText = own.findLast(record => dshSubagentText(record) !== undefined);
   return { ...child, status, state,
+    ...(ownDescriptorSeq === undefined ? { error: '原生子会话自身记录的起点待确认，保留历史但不归属结果' } : { ownDescriptorSeq }),
     ...(end === undefined ? {} : { lastTurn: { seq: end.event.seq, ...(typeof data['turn'] === 'number' ? { turn: data['turn'] } : {}), reason: data['reason'] } }),
     ...(lastText === undefined ? {} : { result: { seq: lastText.event.seq, text: dshSubagentText(lastText)! } }) };
 }

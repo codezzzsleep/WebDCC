@@ -17,10 +17,11 @@ export async function createDshSubagentFixture(localId = 'parent') {
     { id: 'external', createdAt: 1003, name: 'external', label: 'External work', mode: 'external' },
   ];
   const states = new Map<string, DshSubagentState>();
+  const descriptorSeqs = new Map<string, number | null>();
   const records = new Map<string, DshSubagentRecord[]>();
   for (const id of ['reviewer', 'failing', 'once']) {
     const rows = [
-      childRecord(0, 'subagent/descriptor', { version: 1, mode: id === 'once' ? 'one-shot' : 'continuable', label: id }),
+      childRecord(0, 'subagent/descriptor', { version: id === 'once' ? 0 : 3, mode: id === 'once' ? 'one-shot' : 'continuable', label: id, provider: 'fork' }),
       childRecord(1, 'turn/start', { turn: 1 }),
       childRecord(2, 'user/message', { id: `${id}-input`, source: { kind: 'user', rpcId: `${id}-request` }, content: [{ type: 'text', text: `${id} original input` }] }),
       childRecord(3, 'tool/call', { callId: `${id}-tool`, name: 'read', arguments: '{"file_path":"child.ts"}' }),
@@ -30,6 +31,7 @@ export async function createDshSubagentFixture(localId = 'parent') {
     ];
     states.set(id, { cursor: 6, active: false, running: false, pendingInput: [], queue: null });
     records.set(id, rows);
+    descriptorSeqs.set(id, 0);
   }
   let pageSize = 3;
   const calls: { rpcId: string; method: string; args: Record<string, unknown> }[] = [];
@@ -46,6 +48,9 @@ export async function createDshSubagentFixture(localId = 'parent') {
       let value: unknown;
       if (body.method === 'commands/list') value = { commands: [] };
       else if (body.method === 'session/projections' && target?.sessionId === parentId) value = { kind: 'sequenced', asOfSeq: 10, values: { subagentCatalog: structuredClone(catalog) } };
+      else if (body.method === 'session/projections') value = { kind: 'sequenced', asOfSeq: states.get(target?.sessionId ?? '')?.cursor ?? -1, values: {
+        subagent: descriptorSeqs.get(target?.sessionId ?? '') === null ? null : { seq: descriptorSeqs.get(target?.sessionId ?? '') ?? 0, mode: catalog.find(child => child.id === target?.sessionId)?.mode, label: target?.sessionId },
+      } };
       else if (body.method === 'session/state') value = structuredClone(states.get(target?.sessionId ?? ''));
       else if (body.method === 'session/page') {
         const input = args['request'] as DshPageRequest;
@@ -76,7 +81,7 @@ export async function createDshSubagentFixture(localId = 'parent') {
   adapter.accessModes = async () => [{ id: 'inherit', label: '原生默认' }];
   adapter.listModels = async () => [];
   adapter.resume = async () => undefined;
-  return { adapter, native, client, parentId, states, records, calls,
+  return { adapter, native, client, parentId, states, descriptorSeqs, records, calls,
     setPageSize(value: number) { pageSize = value; },
     setCatalog(value: typeof catalog) { catalog = value; },
     disconnect() { for (const socket of sockets.clients) socket.terminate(); },

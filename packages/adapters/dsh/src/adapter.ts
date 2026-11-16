@@ -41,7 +41,7 @@ import { dshCommandAliases, mapDshCommands, type DshCommandDescriptor } from './
 import { dshGoalChange, dshGoalProjection } from './goals.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
-import { dshSubagentCatalog, dshSubagentAddress, checkDshSubagentPage, dshSubagentSummary } from './subagents.js';
+import { dshSubagentCatalog, dshSubagentAddress, checkDshSubagentPage, dshSubagentSummary, dshSubagentDescriptorSeq } from './subagents.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
 import { dshInputParts, dshInputUnsupported, encodeDshInput, validateDshInputParts, type DshResolvableInput, type DshResolvedAttachment } from './input.js';
 
@@ -631,12 +631,14 @@ export class DshAdapter implements AgentAdapter {
         if (child.mode === 'external') { items[position] = { ...child, status: 'unknown', error: '外部执行没有本地子会话，原生接口未提供其当前状态或历史' }; continue; }
         try {
           context.guard();
+          const projection = await this.call(context.client, 'session/projections', { request: { sessionId: child.childId } }, sessionId);
+          context.guard();
           const state = await this.call<DshSubagentState>(context.client, 'session/state', { request: { sessionId: child.childId } }, sessionId);
           context.guard();
           const page = await this.call<DshPage>(context.client, 'session/page', { request: { address: dshSubagentAddress(child), throughSeq: state.cursor, maxMessages: 5 } }, sessionId);
           context.guard();
           checkDshSubagentPage(page, state.cursor);
-          items[position] = dshSubagentSummary(child, state, page);
+          items[position] = dshSubagentSummary(child, state, page, dshSubagentDescriptorSeq(projection, child));
         } catch (error) { items[position] = { ...child, status: 'unknown', error: error instanceof Error ? error.message : '原生子会话状态无法读取' }; }
       }
     }));
@@ -652,6 +654,9 @@ export class DshAdapter implements AgentAdapter {
     const child = context.children.find(entry => entry.childId === childSessionId);
     if (child === undefined) throw dshNativeError('子 Agent 不属于当前父会话', 409);
     const address = dshSubagentAddress(child);
+    const projection = await this.call(context.client, 'session/projections', { request: { sessionId: child.childId } }, sessionId);
+    context.guard();
+    const ownDescriptorSeq = dshSubagentDescriptorSeq(projection, child);
     const throughSeq = options.throughSeq ?? (await this.call<DshSubagentState>(context.client, 'session/state', { request: { sessionId: child.childId } }, sessionId)).cursor;
     context.guard();
     const page = await this.call<DshPage>(context.client, 'session/page', { request: { address, maxMessages: options.limit, throughSeq,
@@ -659,6 +664,7 @@ export class DshAdapter implements AgentAdapter {
     context.guard();
     checkDshSubagentPage(page, throughSeq, options.beforeSeq);
     return { address, cursor: page.cursor, records: page.records, hasMore: page.hasMore,
+      ...(ownDescriptorSeq === undefined ? {} : { ownDescriptorSeq }),
       ...(page.records[0] === undefined ? {} : { nextCursor: page.records[0].event.seq }) };
   }
 

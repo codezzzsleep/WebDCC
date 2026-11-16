@@ -23,6 +23,8 @@ export interface DshSubagentRecord {
 }
 
 export interface DshSubagentSummary extends DshSubagentIdentity {
+  /** Native subagent projection's own descriptor, after any inherited prefix. */
+  ownDescriptorSeq?: number;
   status: 'running' | 'waiting' | 'pending' | 'idle' | 'completed' | 'failed' | 'stopped' | 'unknown';
   state?: DshSubagentState;
   lastTurn?: { turn?: number; seq: number; reason: unknown };
@@ -44,6 +46,7 @@ export interface DshSubagentHistoryOptions {
 }
 
 export interface DshSubagentHistory {
+  ownDescriptorSeq?: number;
   address: { kind: 'subagent'; parentSessionId: string; childSessionId: string; mode: Exclude<DshSubagentMode, 'external'> };
   cursor: number;
   records: DshSubagentRecord[];

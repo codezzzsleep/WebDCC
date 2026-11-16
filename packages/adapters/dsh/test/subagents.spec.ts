@@ -109,3 +109,32 @@ it('a physical native WS generation change rejects late passive reads and re-rea
     expect((await fixture.adapter.listSubagents('parent')).items[0]?.status).toBe('completed');
   } finally { held.release(); await fixture.close(); }
 });
+
+it('an inherited parent completion and answer cannot settle a new child before its own descriptor', async () => {
+  const fixture = await createDshSubagentFixture();
+  try {
+    fixture.records.set('reviewer', [childRecord(0, 'turn/start', { turn: 7 }),
+      childRecord(1, 'assistant/message', { turn: 7, message: { id: 'parent-message', content: [{ type: 'text', text: 'PARENT INHERITED ANSWER' }] } }),
+      childRecord(2, 'turn/end', { turn: 7, reason: { kind: 'completed' } }),
+      childRecord(3, 'subagent/descriptor', { version: 3, mode: 'continuable', provider: 'fork', label: 'New child' })]);
+    fixture.descriptorSeqs.set('reviewer', 3);
+    fixture.states.set('reviewer', { cursor: 3, active: false, running: false, queue: null, pendingInput: [] });
+    const child = (await fixture.adapter.listSubagents('parent')).items[0];
+    expect(child).toMatchObject({ status: 'unknown', ownDescriptorSeq: 3 });
+    expect(child?.result).toBeUndefined(); expect(child?.lastTurn).toBeUndefined();
+    const history = await fixture.adapter.readSubagentHistory('parent', 'reviewer', { limit: 100 });
+    expect(history).toMatchObject({ ownDescriptorSeq: 3 });
+    expect(history.records).toEqual(fixture.records.get('reviewer')!.slice(1));
+  } finally { await fixture.close(); }
+});
+
+it('missing native descriptor identity preserves raw history while withholding unowned results', async () => {
+  const fixture = await createDshSubagentFixture();
+  try {
+    fixture.descriptorSeqs.set('reviewer', null);
+    const child = (await fixture.adapter.listSubagents('parent')).items[0];
+    expect(child?.status).toBe('unknown'); expect(child?.result).toBeUndefined();
+    const history = await fixture.adapter.readSubagentHistory('parent', 'reviewer', { limit: 100 });
+    expect(history.ownDescriptorSeq).toBeUndefined(); expect(history.records.length).toBeGreaterThan(0);
+  } finally { await fixture.close(); }
+});

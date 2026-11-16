@@ -135,19 +135,24 @@ function DshChildHistory({ sessionId, child, onClose }: { sessionId: string; chi
     <div className="row-actions"><button type="button" className="btn small ghost" disabled={loading} onClick={() => { setOlder(false); setRefresh(value => value + 1); }}>查看最新</button>{loading ? <Spinner size={14} /> : null}</div>
     {error === undefined ? null : <p role="alert">{error}。已读取的历史保留，当前未同步。</p>}
     {history?.hasMore ? <button type="button" className="btn small ghost" disabled={loading} onClick={() => void loadOlder()}>加载更早的子会话记录</button> : null}
-    {history?.records.map(record => <DshHistoryRecord key={`${child.childId}:${record.event.seq}`} record={record} />)}
+    {history?.records.map(record => <DshHistoryRecord key={`${child.childId}:${record.event.seq}`} record={record} ownDescriptorSeq={history.ownDescriptorSeq} />)}
     {history?.records.length === 0 ? <p className="muted">原生子会话暂无记录。</p> : null}
   </section>;
 }
 
-function DshHistoryRecord({ record }: { record: DshSubagentRecord }): React.ReactElement | null {
+function DshHistoryRecord({ record, ownDescriptorSeq }: { record: DshSubagentRecord; ownDescriptorSeq?: number }): React.ReactElement | null {
   const { type, data: raw, seq } = record.event; const data = object(raw); const message = object(data['message']);
+  const role = ownDescriptorSeq === undefined ? 'unverified' : seq < ownDescriptorSeq ? 'context' : 'child';
   if (type === 'user/message' || type === 'assistant/message') {
     const content = type === 'user/message' ? data['content'] : message['content'];
     const text = textBlocks(content); const reasoning = textBlocks(content, 'reasoning');
     if (text === '' && reasoning === '') return null;
-    return <article className="dsh-child-message" data-native-seq={seq}>
-      <strong>{type === 'user/message' ? '用户' : '子 Agent'}</strong>
+    const source = object(data['source']); const kind = source['kind'];
+    if (type === 'user/message' && kind !== 'user' && kind !== 'retry') return <details className="dsh-child-message" data-native-seq={seq} data-native-role={role}>
+      <summary>{kind === 'runtime-context' ? '运行上下文' : kind === 'time-context' ? '时间上下文' : kind === 'agent' ? 'Agent 消息' : '原生上下文'}</summary><pre className="output">{text}</pre>
+    </details>;
+    return <article className="dsh-child-message" data-native-seq={seq} data-native-role={role}>
+      <strong>{role === 'context' ? '已有上下文 · ' : ''}{type === 'user/message' ? '用户' : role === 'child' ? '子 Agent' : '会话中的助手'}</strong>
       {reasoning === '' ? null : <details><summary>思考</summary><pre className="output">{reasoning}</pre></details>}
       {text === '' ? null : <pre className="output">{text}</pre>}
     </article>;

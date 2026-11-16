@@ -111,3 +111,44 @@ it('DSH mobile child selection ignores late results for the previous child and t
     expect(await page.getByTestId('main-column').textContent()).not.toContain('PARTIAL CHILD OUTPUT');
   } finally { await browser?.close(); await ctx.close(); await native.close(); }
 }, 60000);
+
+it('DSH child history preserves earlier context and labels native runtime input separately from child answers', async () => {
+  const ctx = await createSourceTestApp();
+  const workspace = ctx.store.createWorkspace('DSH context attribution', ctx.dataDir);
+  const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'dsh' });
+  const native = await createDshSubagentFixture(session.id);
+  native.records.set('reviewer', [childRecord(0, 'turn/start', { turn: 7 }),
+    childRecord(1, 'assistant/message', { turn: 7, message: { id: 'parent-message', content: [{ type: 'text', text: 'PARENT INHERITED ANSWER' }] } }),
+    childRecord(2, 'turn/end', { turn: 7, reason: { kind: 'completed' } }),
+    childRecord(3, 'subagent/descriptor', { version: 3, mode: 'continuable', provider: 'fork', label: 'New child' }),
+    childRecord(4, 'user/message', { id: 'native-context', source: { kind: 'runtime-context', form: 'snapshot' }, content: [{ type: 'text', text: 'Native runtime context retained' }] }),
+    childRecord(5, 'user/message', { id: 'new-child-input', source: { kind: 'user', rpcId: 'new-child-request' }, content: [{ type: 'text', text: 'New child input' }] }),
+    childRecord(6, 'assistant/message', { turn: 1, message: { id: 'child-message', content: [{ type: 'text', text: 'NEW CHILD ANSWER' }] } }),
+    childRecord(7, 'turn/end', { turn: 1, reason: { kind: 'completed' } })]);
+  native.descriptorSeqs.set('reviewer', 3); native.states.get('reviewer')!.cursor = 7;
+  ctx.store.updateSession(session.id, { nativeId: native.parentId });
+  bindDshSubagentFixture(ctx.manager, ctx.store.getSession(session.id)!, workspace.path, native.adapter, native.parentId);
+  let browser: Browser | undefined;
+  try {
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    const address = ctx.app.server.address(); if (address === null || typeof address === 'string') throw new Error('context listener missing');
+    const base = `http://127.0.0.1:${address.port}`; browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.goto(`${base}/s/${session.id}`);
+    const panel = page.getByTestId('dsh-subagents-panel'); await panel.getByRole('button', { name: '子 Agent', exact: true }).click();
+    const row = panel.locator('[data-child-id="reviewer"]'); await row.getByRole('button').click();
+    const history = page.getByTestId('dsh-child-history');
+    await expect.poll(() => history.textContent()).toContain('NEW CHILD ANSWER');
+    expect(await row.textContent()).not.toContain('PARENT INHERITED ANSWER');
+    await history.getByRole('button', { name: '加载更早的子会话记录' }).click();
+    await expect.poll(() => history.locator('[data-native-seq="4"]').textContent()).toContain('运行上下文');
+    expect(await history.locator('[data-native-seq="4"]').textContent()).not.toContain('用户');
+    await history.getByRole('button', { name: '加载更早的子会话记录' }).click();
+    await expect.poll(() => history.locator('[data-native-seq="1"]').textContent()).toContain('已有上下文');
+    expect(await history.locator('[data-native-seq="1"]').textContent()).toContain('PARENT INHERITED ANSWER');
+    expect(await history.locator('[data-native-seq="6"]').getAttribute('data-native-role')).toBe('child');
+    await page.reload();
+    await expect.poll(() => page.getByTestId('dsh-child-history').textContent()).toContain('NEW CHILD ANSWER');
+    expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'assistant.message')).toEqual([]);
+  } finally { await browser?.close(); await ctx.close(); await native.close(); }
+}, 60000);
