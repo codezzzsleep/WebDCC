@@ -154,6 +154,8 @@ interface SessionRuntime {
   completedReasoning?: Set<string>;
   goalId?: string;
   goalVersion?: { createdAt: number; updatedAt: number };
+  /** Invalidates pending readbacks after an accepted goal update or clear. */
+  goalObservation?: number;
   frameSeq: number;
   turnStartedAt: number;
   /** 模型输出开始时间；用于把 tok/s 的分母限制在生成阶段。 */
@@ -1167,7 +1169,15 @@ export class CodexAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     await runtime.ready;
     const current = (): void => { if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生运行实例已更换或断开'), { statusCode: 409 }); };
-    const state = await codexNativeState(runtime.rpc, runtime.nativeId, current);
+    let state: Awaited<ReturnType<typeof codexNativeState>> | undefined;
+    // These are read-only snapshots. Never retry a goal mutation or model input.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const observation = runtime.goalObservation ?? 0;
+      const value = await codexNativeState(runtime.rpc, runtime.nativeId, current);
+      if ((runtime.goalObservation ?? 0) === observation) { state = value; break; }
+    }
+    if (state === undefined) throw Object.assign(new Error('原生目标在读取期间持续变化，当前状态尚未确认，请重新读取'),
+      { statusCode: 409, code: 'native-state-changed' });
     return { ...state, model: runtime.model ?? runtime.nativeModel ?? null, effort: runtime.reasoningEffort ?? runtime.nativeEffort ?? null, permissions: runtime.permissions,
       transport: 'live', turnActive: runtime.turnId !== null, activeTurnId: this.activeNativeTurnId(runtime),
       review: runtime.activeReviewRoot === undefined ? null : { rootTurnId: runtime.activeReviewRoot,
@@ -1225,7 +1235,12 @@ export class CodexAdapter implements AgentAdapter {
       }), { type: 'turn.end' as const, nativeTurnId: turn.id, status: turn.status === 'failed' ? 'failed' as const : turn.status === 'interrupted' ? 'interrupted' as const : 'completed' as const }] }));
     if (this.sessions.get(sessionId) !== runtime) throw Object.assign(new Error('原生返回实例已变化'), { code: 'uncertain' });
     this.emit(sessionId, { type: 'history', nativeId: runtime.nativeId, records });
+    const observation = runtime.goalObservation ?? 0;
     const goal = await nativeRequest(runtime.rpc, 'thread/goal/get', { threadId: runtime.nativeId });
+    if (this.sessions.get(sessionId) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('原生返回实例已变化，目标结果需核对'), { code: 'uncertain' });
+    // A live notification already projected the newer goal. The original get
+    // response remains in the native ledger, but must not replace that goal.
+    if ((runtime.goalObservation ?? 0) !== observation) return;
     this.onNotification(sessionId, goal.goal ? { method: 'thread/goal/updated', params: { threadId: runtime.nativeId, turnId: null, goal: goal.goal } }
       : { method: 'thread/goal/cleared', params: { threadId: runtime.nativeId } });
   }
@@ -1747,6 +1762,7 @@ export class CodexAdapter implements AgentAdapter {
           }
           runtime.goalVersion = { createdAt: goal.createdAt, updatedAt: goal.updatedAt };
         }
+        runtime.goalObservation = (runtime.goalObservation ?? 0) + 1;
         const status = goal.status === 'complete' || goal.status === 'completed' ? 'completed'
           : goal.status === 'active' || goal.status === 'paused' || goal.status === 'blocked' || goal.status === 'usageLimited' || goal.status === 'budgetLimited' ? goal.status : 'unknown';
         runtime.goalId = `${goal.threadId ?? runtime.nativeId}:${goal.createdAt ?? 'legacy'}`;
@@ -1770,6 +1786,7 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'goal/cleared': {
+        runtime.goalObservation = (runtime.goalObservation ?? 0) + 1;
         runtime.goalVersion = undefined;
         this.emit(sessionId, {
           type: 'item.complete',
