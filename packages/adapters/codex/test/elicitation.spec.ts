@@ -7,6 +7,22 @@ import type { McpServerElicitationRequestParams } from '../src/schema/v2/McpServ
 const form: McpServerElicitationRequestParams = { threadId: 'thread', turnId: null, serverName: 'server', mode: 'openai/form', _meta: null, message: 'Enter details',
   requestedSchema: { type: 'object', required: ['name', 'age'], properties: { name: { type: 'string', minLength: 1 }, age: { type: 'integer', minimum: 18 } }, additionalProperties: false } };
 
+it.each(['constructor', 'toString', 'hasOwnProperty'])('validates only JSON own fields for native schema key %s', name => {
+  for (const dialect of [undefined, 'https://json-schema.org/draft/2019-09/schema', 'https://json-schema.org/draft/2020-12/schema']) {
+    const schema = { type: 'object', properties: { [name]: { type: 'string' } }, additionalProperties: false, ...(dialect === undefined ? {} : { $schema: dialect }) };
+    const request: McpServerElicitationRequestParams = { ...form, requestedSchema: schema };
+    expect(elicitationResponse(request, { action: 'accept', content: {} })).toEqual({ action: 'accept', content: {}, _meta: null });
+    const content = { [name]: '  original value  ' };
+    expect(elicitationResponse(request, { action: 'accept', content })).toEqual({ action: 'accept', content, _meta: null });
+    expect(() => elicitationResponse(request, { action: 'accept', content: { [name]: 12 } })).toThrow('原生要求');
+    expect(() => elicitationResponse(request, { action: 'accept', content: { extra: 'not allowed' } })).toThrow('原生要求');
+    const inherited = Object.assign(Object.create({ extra: 'not a JSON own field' }) as Record<string, unknown>, content);
+    expect(JSON.parse(JSON.stringify(elicitationResponse(request, { action: 'accept', content: inherited })))).toEqual({ action: 'accept', content, _meta: null });
+    const required = { ...request, requestedSchema: { ...schema, required: [name] } };
+    expect(() => elicitationResponse(required, { action: 'accept', content: {} })).toThrow('required');
+  }
+});
+
 it.each(['accept', 'decline', 'cancel'] as const)('NP-06 MCP %s produces a typed native reply and waits for native resolution', async action => {
   const replay = CodexAdapter.replay('s', 'thread');
   const events = replay.feed({ i: 1, t: 0, dir: 'in', ch: 'rpc', frame: { id: 'mcp:string:id', method: 'mcpServer/elicitation/request', params: form } });
