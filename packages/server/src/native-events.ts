@@ -4,6 +4,7 @@ import { redactDiagnosticValue } from '@webdcc/model-proxy';
 import type { Db } from './db.js';
 import inventory from './native-inventory.json' with { type: 'json' };
 import { payloadHash } from './command-journal.js';
+import { nativeEnvelopeIdentity } from './native-envelope-identity.js';
 
 interface Row {
   id: number; session_id: string; agent: string; native_id: string | null;
@@ -68,7 +69,7 @@ export class NativeEventStore {
   private insert(context: Context, source: Row['source'], direction: 'in' | 'out', channel: string, value: unknown, disposition: string, rawEnvelopeId?: number): number {
     const root = object(value); const native = object(root['native'] ?? root['frame'] ?? value);
     const params = object(native['params']); const event = object(object(native['value'])['event']);
-    const observedNativeId = text(native['session_id'] ?? params['threadId'] ?? object(object(native['result'])['thread'])['id'] ?? object(native['result'])['sessionId']);
+    const scope = nativeEnvelopeIdentity(context.agent, value);
     const request = native['request_id'] ?? object(native['response'])['request_id'] ?? native['rpcId'] ?? native['id'] ?? params['requestId'] ?? native['toolUseID'] ?? (native['type'] === 'user' ? native['uuid'] : undefined) ?? dshMetadata(root['dshTransport'])?.rpcId;
     const requestId = typeof request === 'string' || typeof request === 'number' ? request : null;
     const restricted = privateSchema(value) || /^account\/|oauth|authentication/i.test(String(native['method'] ?? channel));
@@ -92,10 +93,10 @@ export class NativeEventStore {
     const result = this.db.prepare(`INSERT INTO native_event_envelopes (session_id, agent, native_id, owner_id, generation, received_at,
       source, direction, channel, disposition, schema_hash, raw_envelope_id, native_seq, native_turn_id, native_request_id, actor_id, parent_tool_use_id, payload_coverage, payload)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(context.sessionId, context.agent, observedNativeId ?? (context.nativeId || null), context.identity?.ownerId ?? null, context.identity?.generation ?? null,
+      .run(context.sessionId, context.agent, scope.nativeId ?? (context.nativeId || null), context.identity?.ownerId ?? null, context.identity?.generation ?? null,
         new Date().toISOString(), source, direction, channel, disposition, this.schemaHash, rawEnvelopeId ?? null,
         Number.isSafeInteger(seq) ? seq : null, text(turnId), requestId === null ? null : JSON.stringify(requestId),
-        text(native['actorId'] ?? native['agent_id'] ?? params['actorId']), text(native['parent_tool_use_id']), coverage, payload);
+        scope.actorId, scope.parentToolUseId, coverage, payload);
     return Number(result.lastInsertRowid);
   }
   frame(context: Context, frame: TraceFrame, accepted: boolean): number {

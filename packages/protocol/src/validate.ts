@@ -2,6 +2,7 @@
 import type { EventData, EventKind } from './events.js';
 import { isInputContent } from './input.js';
 import { isClaudeStructuredOutput } from './claude-output.js';
+import { validNativeReasoningParts } from './codex-reasoning.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -24,7 +25,7 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'structured.output':
       return isClaudeStructuredOutput(data);
     case 'reasoning':
-      return typeof data['text'] === 'string';
+      return typeof data['text'] === 'string' && (data['nativeContent'] === undefined || validNativeReasoningParts(data['nativeContent']));
     case 'command':
       return typeof data['command'] === 'string' && typeof data['status'] === 'string';
     case 'file.read':

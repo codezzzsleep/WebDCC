@@ -379,7 +379,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
 
     let outputIndex = 0;
 
-    if (step.thinking) {
+    if (step.thinking || step.reasoningContent?.length) {
       const itemId = newId('rs');
       const index = outputIndex++;
       writeSse(res, 'response.output_item.added', {
@@ -394,7 +394,7 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         summary_index: 0,
         part: { type: 'summary_text', text: '' },
       });
-      for (const chunk of chunkText(control.render(step.thinking, vars), chunkSize)) {
+      for (const chunk of chunkText(control.render(step.thinking ?? '', vars), chunkSize)) {
         await delay(stepDelay);
         writeSse(res, 'response.reasoning_summary_text.delta', {
           type: 'response.reasoning_summary_text.delta',
@@ -409,16 +409,29 @@ export function createResponsesMock(options: ResponsesMockOptions): RunningRespo
         item_id: itemId,
         output_index: index,
         summary_index: 0,
-        text: step.thinking,
+        text: control.render(step.thinking ?? '', vars),
       });
       writeSse(res, 'response.reasoning_summary_part.done', {
         type: 'response.reasoning_summary_part.done',
         item_id: itemId,
         output_index: index,
         summary_index: 0,
-        part: { type: 'summary_text', text: step.thinking },
+        part: { type: 'summary_text', text: control.render(step.thinking ?? '', vars) },
       });
-      const item = { id: itemId, type: 'reasoning', summary: [{ type: 'summary_text', text: control.render(step.thinking, vars) }] };
+      const content = [];
+      for (const [contentIndex, original] of (step.reasoningContent ?? []).entries()) {
+        const text = control.render(original, vars);
+        for (const chunk of chunkText(text, chunkSize)) {
+          await delay(stepDelay);
+          writeSse(res, 'response.reasoning_text.delta', { type: 'response.reasoning_text.delta', item_id: itemId,
+            output_index: index, content_index: contentIndex, delta: chunk });
+        }
+        writeSse(res, 'response.reasoning_text.done', { type: 'response.reasoning_text.done', item_id: itemId,
+          output_index: index, content_index: contentIndex, text });
+        content.push({ type: 'reasoning_text', text });
+      }
+      const item = { id: itemId, type: 'reasoning', summary: [{ type: 'summary_text', text: control.render(step.thinking ?? '', vars) }],
+        ...(step.reasoningContent === undefined ? {} : { content }) };
       outputItems.push(item);
       writeSse(res, 'response.output_item.done', { type: 'response.output_item.done', output_index: index, item });
     }
