@@ -1,0 +1,96 @@
+{
+  "issue": 56,
+  "parents": [
+    42,
+    44,
+    47
+  ],
+  "base": "94c1d0e3f19e5e9d27d5f374510677556f3dbb73",
+  "date": "2026-11-16T07:23:01.886991+00:00",
+  "scope": "Retained raw chunks across default DiagnosticCapture instances and independent module copies in one JavaScript process",
+  "defaultBytes": 67108864,
+  "setting": "WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES",
+  "classification": "source tests with controlled HTTP/process fixtures",
+  "checks": {
+    "relatedSourceTests": 45,
+    "workspaceAndScriptsTypes": "passed",
+    "changedLint": "passed",
+    "nativeNodeHTTP": "concurrency, independent module copy, cancel, unread signal abort, null response body, upstream refusal/partial failure, still-streaming request failure, opt-out, combined directory/active limits"
+  },
+  "runtime": {
+    "node": "26.13.0",
+    "pnpm": "12.18.0"
+  },
+  "nativeAgentRuns": 0,
+  "liveProviderCalls": 0,
+  "deployment": "not performed",
+  "remaining": [
+    "cross-process RAM total",
+    "VM/transport/JSON/Base64 copies",
+    "full credentials/cross-frame/sensitive persisted data policy",
+    "retention/export policy",
+    "independent three-Agent target acceptance"
+  ],
+  "preservedFailures": [
+    {
+      "file": "regression-before.log",
+      "result": "zero-budget body still captured before implementation"
+    },
+    {
+      "file": "native-lifecycle-first.log",
+      "result": "fixture sent five requests but expected six terminals; later fixture explicitly sends eight"
+    },
+    {
+      "file": "rebased-regression-first.log",
+      "result": "conflict resolution script truncated files; collection failed; complete source restored"
+    },
+    {
+      "file": "rebased-regression-second.log",
+      "result": "44 pass / 1 directory-process failure: helper exited rather than quota rejection; not counted as quota success"
+    },
+    {
+      "file": "directory-process-diagnostic.log",
+      "result": "isolated directory process check passed; other 14 tests unrun in targeted invocation"
+    },
+    {
+      "file": "rebased-regression-third.log",
+      "result": "full 45/45 passed; earlier failures retained"
+    }
+  ],
+  "sourceSha256": {
+    "docs/diagnostics.md": "350549309d91c1368be43eb05e977b558e010b3fddb3eee545d149bdf0a561c5",
+    "packages/server/src/config.ts": "dda9db75cf14436037485cc354a891cba8be801ccdd9d954aaad9f8086135cd9",
+    "packages/server/src/interaction-recorder.ts": "d70781d9ee95cfa5c9be04a9c45b278602e3110c3041c16f735533911f56629e",
+    "packages/server/src/main.ts": "a8e8c70d19c8d3169de86418f97082546cc11ef564dbab3a8a3446940edbb2bb",
+    "packages/server/src/native-http-recorder.ts": "0e8dbe6d7b4a38f1c8689baa11a8689ba4bc6e48260a2ec06dd88302bd6115a5",
+    "packages/server/test/config.spec.ts": "2e88bee8212af8d703a1f0284592fa1a182859c2d6d94faaaee87cf57489f749",
+    "packages/server/test/fixtures/native-capture-budget.ts": "408b57178b4cb8816b9fc34443074711b278fff13eaa4cf9e5c095b2e6498cc0",
+    "packages/server/test/fixtures/native-recorder-off.ts": "b3c85e4edbe97f2a245066624fe515acebe44322857530f9bd4dc115467e65b4",
+    "packages/server/test/model-recording.spec.ts": "70e52d6ebb3c5bdb848b1fa4450ec11a4039092add8b3e943a63e0aa0b26bcbc",
+    "packages/server/test/native-http-recorder.spec.ts": "a864f188913f29262e345afca4fb0070b79911f88e7b3a4bfdc01c9fa31b1501",
+    "packages/testing/model-proxy/src/index.spec.ts": "3a0ed2d92ca609139eba001f6fda234fe5ce574c3ccb50ccf6c22d252080ec04",
+    "packages/testing/model-proxy/src/index.ts": "deeef4e75112145927380c0a2c5905185059aaffd14ed33c38d58a7eeee9a15d",
+    "packages/testing/model-proxy/src/redaction.spec.ts": "c33e2fe2893e6922e734e316f789a3097d1e54a14e06cda5b2fb5f25110c3fd4",
+    "packages/testing/model-proxy/src/redaction.ts": "a697888920afa83feec21c337f996c617aa4b64c73e10be880587ce215b9025c",
+    "web_review/IMPLEMENTATION_MATRIX.json": "9b98b1cee4f15c60319c2a41af3e56a423f336bda32a9c6cf1ace566e43b4cee"
+  },
+  "evidenceSha256": {
+    "regression-matrix-first.log": "09dccf3ed891cc3fd07eaff8d6a22d5dd59bbdd88554865045f171951d023611",
+    "regression-before.log": "c171bfc34fcfa793617875f55a1b8fd326d9e00512b272854f2240f6bfc800dd",
+    "rebased-typecheck-second.log": "154b895377439964cd10076af47983dafaddffcf61686587c094c6b12f73cb3a",
+    "typecheck-first.log": "fc4ec5b27cd2a8f3face7ef534dbb2ec8e5a2fc17884f039d08166914a744018",
+    "rebased-regression-first.log": "4233d0381434b19d5d3ac7d3ba6fed27e2f774212eef0d0c44bb85ed50c50ee9",
+    "regression-first.log": "7a24b22b87976295f147af3f29883946ff6266070839ddd3b709a68807482dca",
+    "rebased-regression-third.log": "99db8e8643170d57fd6bce8d896d3e18a63c5051ae19b04d6606ac56fc08e941",
+    "install.log": "993d3e282019a28ecde5b143cb7e69377a469a7c959ab101a0fe8b7cb7fe8249",
+    "regression-second.log": "5c62f12ce271dd7095092bb38f37ca2908efcc66100233cc4fe8303d7dcb5d2d",
+    "native-lifecycle-first.log": "e8158b7ab02d04ab4a0322a39868918db2338ffce049613c6356cbe7203c9910",
+    "directory-process-diagnostic.log": "321c29f05b68c04354a40016d7afb284839a60940db08bf1afe857cd904c3b7a",
+    "native-lifecycle-second.log": "2296abdd49c938a624ee686339761d3616ea2edabd2b9801afa0245a9596cc89",
+    "lint-first.log": "976a7f29f192a72bb46562e8d69b9aefcbe9af866492b3d7d133bc007c003ec1",
+    "rebased-typecheck-first.log": "cdd2e12d166b8f1f80fffff11674a56907fa0728359f946fdd53abc80c93e27a",
+    "rebased-regression-second.log": "d87c2f015ab18025e7f03d337d890f1ba38319bd0fd910e56a359a5af0e4f01f",
+    "rebased-lint-second.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sourceFingerprint": "fddd3e19cdd48c522a2bb67cddddbbe0312fd9dd84ff427e0e400f54792626b2"
+}

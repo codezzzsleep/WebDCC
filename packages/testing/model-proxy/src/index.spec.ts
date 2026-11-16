@@ -3,11 +3,11 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
-import { ModelProxy, type ModelProxyRecord } from './index.js';
+import { afterEach, expect, it } from 'vitest';
+import { ModelProxy, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBytes, type ModelProxyRecord } from './index.js';
+afterEach(() => { expect(diagnosticCaptureBudgetBytes()).toBe(0); configureDiagnosticCaptureBudget(64 * 1024 * 1024); });
 async function listen(server: Server): Promise<number> { server.listen(0, '127.0.0.1'); await once(server, 'listening'); return (server.address() as { port: number }).port; }
 async function close(server: Server): Promise<void> { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
-
 it('a standalone proxy directory quota marks recording incomplete after unchanged forwarding', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-proxy-directory-'));
   let sent = '';
@@ -41,6 +41,42 @@ it('forwards the first SSE bytes before upstream ends and redacts a secret split
     const recorded = Buffer.concat(records[0]!.response.chunks.map(chunk => Buffer.from(chunk.data, 'base64'))).toString();
     expect(recorded).not.toContain('secret-fixture'); expect(recorded.length).toBe('data: secret-fixture\n\n'.length);
   } finally { release(); await proxy.close(); await close(upstream); }
+});
+
+it('NP-14 independent proxies share one capture budget and release it before slow or failed record observers finish', async () => {
+  configureDiagnosticCaptureBudget(6);
+  let finish!: () => void; const gate = new Promise<void>(resolve => { finish = resolve; });
+  const upstream = createServer((req, res) => { if (req.url === '/held') { res.write('123456'); void gate.then(() => res.end()); } else res.end('abcdef'); });
+  const port = await listen(upstream);
+  const records: ModelProxyRecord[] = [];
+  let finishObserver!: () => void; const observer = new Promise<void>(resolve => { finishObserver = resolve; });
+  const first = new ModelProxy({ target: `http://127.0.0.1:${port}`, onRecord: () => observer });
+  const second = new ModelProxy({ target: `http://127.0.0.1:${port}`, onRecord: record => { records.push(record); } });
+  try {
+    const firstAddress = await first.listen(); const secondAddress = await second.listen();
+    const held = await fetch(`${firstAddress.url}/held`); const reader = held.body!.getReader();
+    expect(Buffer.from((await reader.read()).value!).toString()).toBe('123456');
+    expect(diagnosticCaptureBudgetBytes()).toBe(6);
+    expect(await (await fetch(secondAddress.url)).text()).toBe('abcdef'); await second.flush();
+    expect(records[0]).toMatchObject({ response: { chunks: [] }, coverage: { truncated: true, responseBytes: 6, responseLimitReason: 'active-buffer-budget' } });
+    expect(diagnosticCaptureBudgetBytes()).toBe(6);
+    finish(); await reader.read();
+    expect(diagnosticCaptureBudgetBytes()).toBe(0);
+    expect(await (await fetch(secondAddress.url)).text()).toBe('abcdef'); await second.flush();
+    expect(records[1]?.coverage?.truncated).toBe(false);
+    finishObserver(); await first.flush();
+  } finally { finish(); finishObserver(); await first.close(); await second.close(); await close(upstream); }
+});
+
+it('NP-14 recording callbacks can fail without keeping raw captures or breaking native response bytes', async () => {
+  const upstream = createServer((_req, res) => res.end('response'));
+  const port = await listen(upstream);
+  const proxy = new ModelProxy({ target: `http://127.0.0.1:${port}`, onEvent: () => { throw new Error('observer'); }, onRecord: () => { throw new Error('record'); } });
+  try {
+    const address = await proxy.listen();
+    expect(await (await fetch(address.url, { method: 'POST', body: 'input' })).text()).toBe('response');
+    expect(diagnosticCaptureBudgetBytes()).toBe(0); await expect(proxy.flush()).rejects.toThrow('incomplete');
+  } finally { await expect(proxy.close()).rejects.toThrow('incomplete'); await close(upstream); }
 });
 it('connection refusal and cancelled partial streams both retain terminal evidence', async () => {
   const unused = createServer(); const port = await listen(unused); await close(unused);

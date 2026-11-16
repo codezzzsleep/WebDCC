@@ -29,13 +29,13 @@ export class InteractionRecorder {
   private readonly secrets = new Set<string>();
   private readonly writer: DiagnosticFileWriter;
   private readonly retentionMs: number;
-  readonly captureLimits: { maxCaptureBytes?: number; maxCaptureChunks?: number };
+  readonly captureLimits: { maxCaptureBytes?: number; maxCaptureChunks?: number; maxActiveCaptureBytes?: number };
   private nextPruneAt = 0;
   private pruning?: Promise<void>;
   private seq = 0;
-  constructor(dataDir: string, limits: DiagnosticWriteLimits & { retentionMs?: number; maxCaptureBytes?: number; maxCaptureChunks?: number } = {}) {
+  constructor(dataDir: string, limits: DiagnosticWriteLimits & { retentionMs?: number; maxCaptureBytes?: number; maxCaptureChunks?: number; maxActiveCaptureBytes?: number } = {}) {
     this.directory = join(dataDir, 'traces'); this.writer = new DiagnosticFileWriter(limits); this.retentionMs = limits.retentionMs ?? 7 * 24 * 60 * 60 * 1000;
-    this.captureLimits = { maxCaptureBytes: limits.maxCaptureBytes, maxCaptureChunks: limits.maxCaptureChunks };
+    this.captureLimits = { maxCaptureBytes: limits.maxCaptureBytes, maxCaptureChunks: limits.maxCaptureChunks, maxActiveCaptureBytes: limits.maxActiveCaptureBytes };
     if (!Number.isSafeInteger(this.retentionMs) || this.retentionMs < 1) throw new Error('Invalid diagnostic retention');
   }
   async init(): Promise<void> {

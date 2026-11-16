@@ -3,8 +3,8 @@ import { request as requestHttps } from 'node:https';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { DiagnosticCapture, diagnosticSecretsFromHeaders, redactDiagnosticBytes, sensitiveDiagnosticField } from './redaction.js';
-export { DiagnosticCapture, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from './redaction.js';
+import { DiagnosticCapture, configureDiagnosticCaptureBudget, diagnosticSecretsFromHeaders, redactDiagnosticBytes, sensitiveDiagnosticField, type CaptureLimitReason } from './redaction.js';
+export { DiagnosticCapture, DiagnosticCaptureBudget, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBytes, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from './redaction.js';
 import { DiagnosticFileWriter } from './diagnostic-writer.js';
 export { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, type DiagnosticWriteLimits } from './diagnostic-writer.js';
 
@@ -18,7 +18,7 @@ export interface ModelProxyRecord {
   error?: { name: string; message: string; code?: string };
   request: { method: string; path: string; headers: IncomingHttpHeaders; body: string; sha256?: string };
   response: { status: number; headers: Record<string, string | string[] | undefined>; chunks: ModelProxyChunk[]; upstreamStatus?: number | null };
-  coverage?: { truncated: boolean; requestBytes: number; responseBytes: number; responseChunks: number; digestScope: 'redacted' };
+  coverage?: { truncated: boolean; requestBytes: number; responseBytes: number; responseChunks: number; digestScope: 'redacted'; requestLimitReason?: CaptureLimitReason; responseLimitReason?: CaptureLimitReason };
 }
 export interface ModelProxyEvent { requestId: string; t: number; phase: 'request' | 'headers' | 'chunk' | 'complete'; value: unknown; }
 export interface ModelProxyOptions {
@@ -33,6 +33,7 @@ export interface ModelProxyOptions {
   onRecord?: (record: ModelProxyRecord) => void | Promise<void>;
   maxCaptureBytes?: number;
   maxCaptureChunks?: number;
+  maxActiveCaptureBytes?: number;
   maxRecordFileBytes?: number;
   maxPendingRecordBytes?: number;
   maxRecordDirectoryBytes?: number;
@@ -64,6 +65,7 @@ export class ModelProxy {
   private pendingBytes = 0;
   constructor(private readonly options: ModelProxyOptions) {
     this.target = new URL(options.target);
+    if (options.maxActiveCaptureBytes !== undefined) configureDiagnosticCaptureBudget(options.maxActiveCaptureBytes);
     new DiagnosticCapture(options.maxCaptureBytes, options.maxCaptureChunks);
     this.writer = new DiagnosticFileWriter({ maxFileBytes: options.maxRecordFileBytes, maxQueuedBytes: options.maxPendingRecordBytes,
       maxDirectoryBytes: options.maxRecordDirectoryBytes });
@@ -135,22 +137,27 @@ export class ModelProxy {
       if (settled) return;
       settled = true;
       this.abortRequests.delete(abort);
-      const raw = capture.buffer();
-      const safe = safeBytes(raw, secrets);
-      let offset = 0;
-      const recordedChunks = capture.chunks.map(chunk => {
-        const data = safe.subarray(offset, offset + chunk.bytes.length); offset += chunk.bytes.length;
-        return { t: chunk.t, data: data.toString('base64'), bytes: chunk.bytes.length, sha256: hash(data) };
-      });
-      const record: ModelProxyRecord = {
-        i: requestIndex, t: begun - this.started, requestId, durationMs: elapsed(), outcome,
-        ...(error === undefined ? {} : { error: { name: error.name, message: safeBytes(Buffer.from(error.message), secrets).toString(), ...('code' in error ? { code: String(error.code) } : {}) } }),
-        request: { method: req.method ?? 'GET', path: safeBytes(Buffer.from(safePath(req.url ?? '/')), secrets).toString(), headers: safeHeaders(req.headers, secrets), body: safeBytes(requestCapture.buffer(), secrets).toString('base64'), sha256: hash(safeBytes(requestCapture.buffer(), secrets)) },
-        response: { status: responseStatus ?? 502, upstreamStatus: responseStatus, headers: safeHeaders(responseHeaders, secrets), chunks: recordedChunks },
-        coverage: { truncated: capture.truncated || requestCapture.truncated || !requestEnded, requestBytes: requestCapture.bytes, responseBytes: capture.bytes, responseChunks: capture.count, digestScope: 'redacted' },
-      };
-      this.observe({ requestId, t: elapsed(), phase: 'complete', value: record });
-      this.persist(record);
+      try {
+        const raw = capture.buffer();
+        const safe = safeBytes(raw, secrets);
+        const requestSafe = safeBytes(requestCapture.buffer(), secrets);
+        let offset = 0;
+        const recordedChunks = capture.chunks.map(chunk => {
+          const data = safe.subarray(offset, offset + chunk.bytes.length); offset += chunk.bytes.length;
+          return { t: chunk.t, data: data.toString('base64'), bytes: chunk.bytes.length, sha256: hash(data) };
+        });
+        const record: ModelProxyRecord = {
+          i: requestIndex, t: begun - this.started, requestId, durationMs: elapsed(), outcome,
+          ...(error === undefined ? {} : { error: { name: error.name, message: safeBytes(Buffer.from(error.message), secrets).toString(), ...('code' in error ? { code: String(error.code) } : {}) } }),
+          request: { method: req.method ?? 'GET', path: safeBytes(Buffer.from(safePath(req.url ?? '/')), secrets).toString(), headers: safeHeaders(req.headers, secrets), body: requestSafe.toString('base64'), sha256: hash(requestSafe) },
+          response: { status: responseStatus ?? 502, upstreamStatus: responseStatus, headers: safeHeaders(responseHeaders, secrets), chunks: recordedChunks },
+          coverage: { truncated: capture.truncated || requestCapture.truncated || !requestEnded, requestBytes: requestCapture.bytes, responseBytes: capture.bytes, responseChunks: capture.count, digestScope: 'redacted',
+            ...(requestCapture.limitReason === undefined ? {} : { requestLimitReason: requestCapture.limitReason }), ...(capture.limitReason === undefined ? {} : { responseLimitReason: capture.limitReason }) },
+        };
+        this.observe({ requestId, t: elapsed(), phase: 'complete', value: record });
+        this.persist(record);
+      } catch (failure) { this.recordingError(failure); }
+      finally { capture.release(); requestCapture.release(); }
     };
     abort = () => { finish('cancelled', new Error('Recording route closed')); upstreamRequest?.destroy(); res.destroy(); };
     this.abortRequests.add(abort);
