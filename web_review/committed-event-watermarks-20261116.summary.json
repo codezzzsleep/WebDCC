@@ -1,0 +1,92 @@
+{
+  "formatVersion": 1,
+  "issue": 47,
+  "relatedIssues": [
+    42,
+    46
+  ],
+  "baseCommit": "34d4b3f3f0bc27f8498f5d2d3c7370a2c01a7a4a",
+  "behavior": "Reconnect/sync cursors advance only through committed cache ranges; failed cache cannot certify history or discard gaps",
+  "sourceFiles": {
+    "packages/web/src/lib/store.ts": "567d24d9fa6c300bf888443a07fd1c69d2a0fe7313cf7f5d198b41337ff6fe1f",
+    "packages/web/src/lib/db.ts": "ef4ce683335b6944d96b3aa9bd0444d306abdd46fd484b962590ee2977c20556",
+    "packages/web/src/lib/event-coverage.ts": "4705cbc60885ddc3112835c1143d04476a0aaf55ea26b67ef3616f0e0e0f4963",
+    "packages/web/src/lib/store-durable-sync.spec.ts": "1436a148b616e451e0e7aff6e3d364ca2ae1b05770a89dcfc698e23144eb5876",
+    "packages/web/src/lib/store-sync.spec.ts": "3c264c3581ca8be5b1030bd9e68ebfd95951244f677889d85e726690bf6739f7",
+    "packages/web/src/lib/store-interaction-sync.spec.ts": "e47b60d667ea886a50958021731bd74afcca8ca68aa3bf8a6062ccebe371e8f4",
+    "packages/web/src/lib/store-recovery.spec.ts": "b404369c7aa8b0a8fb4684a6458347c68097151250adb1498b0f18eabe15bc16",
+    "browser-tests/durable-sync.spec.ts": "77465596ae03ed6198729fb8451f73506c746081ab75ed4b4e25780b118069f9",
+    "docs/committed-event-watermarks.md": "21f89dd1bf97f2412c757f38bc12a804529a01c73d506d8b62910cdd833d7ac9"
+  },
+  "verification": {
+    "AppStoreRegression": {
+      "passed": 44,
+      "files": 6,
+      "log": "sync-store-final.log"
+    },
+    "actualSourceBrowser": {
+      "passed": 3,
+      "files": 3,
+      "log": "sync-browser-final.log",
+      "durableRecovery": "Real IndexedDB abort, WebSocket close/reconnect, exact cache/server events comparison and reload; afterSeq0,0,2; pageErrors0"
+    },
+    "webTypecheck": "passed",
+    "changedFileLint": "passed",
+    "build": "Exact-head packaging evidence to be bound in final PR body and private task ledger after commit",
+    "independentSourceAcceptance": "pending",
+    "deployment": "not performed"
+  },
+  "preservedFailures": [
+    {
+      "log": "sync-before.log",
+      "failed": 3,
+      "reason": "actual main advanced cursor before cache commit and skipped failed page rewrite"
+    },
+    {
+      "log": "sync-first.log",
+      "passed": 29,
+      "failed": 8,
+      "reason": "old immediate cursor/interaction assertions and missing history return in fixture; tests now await real cache boundary"
+    },
+    {
+      "log": "sync-browser-first.log",
+      "failed": 1,
+      "reason": "ambiguous user-message/title selector, later recovery untriggered"
+    },
+    {
+      "log": "sync-browser-before-db.log",
+      "failed": 1,
+      "reason": "observer flattened actual hello/subscribe arrays, later replay/reload assertions untriggered"
+    },
+    {
+      "log": "sync-browser-before-db-valid.log",
+      "failed": 1,
+      "reason": "actual2unhandled aborted IndexedDB request promises; reconnect/replay/reload triggered but overall failed"
+    }
+  ],
+  "evidenceSha256": {
+    "sync-before.log": "864b47fd75eebe39161fc9e17935f5ca6eafbf15816c2e80f477fd2ff246f0ec",
+    "sync-first.log": "d68630f984d1c0adeeb50f77c1325a4f48b99de6d1a56e42f2df21db227fcdb6",
+    "sync-second.log": "d2e71e38ca8c4b4583068fd9e9319fd964656711990bcc3586e559f12d79743f",
+    "sync-store-final.log": "6e29451b085eadaf53bd67134b65f1897df5971d1666fe50e590e9fa8ab67ce1",
+    "sync-browser-first.log": "c2aec8ffe694c2198f75f0d50a5f84c30d5c6af8941d7b47c60ce38a8f392e4b",
+    "sync-browser-before-db.log": "7b3deb263191bfa57cb12f89987ab2a8cecf7f4a202e6ae021033907212e16ee",
+    "sync-browser-before-db-valid.log": "4fdae8ec506ebf02fbbb07fc8b5aee3ec43240c5db9d65d775a92ecd8b199681",
+    "sync-browser-final.log": "40adbec0edc1681fad1511ac049e21df68732d71de0013118531e45beda12d75",
+    "sync-browser-recovery.json": "7df3dbbe4a074c40a0d780a4bb0492e5fde9cc07fe18179018d939ef7894a510",
+    "sync-browser-recovered.png": "90230abf10e702d6e316a2f861864f8f060286fe531e9f4cdc7f036fd10448ac",
+    "sync-typecheck.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "sync-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "nativeEvidence": {
+    "officialAgentCalls": 0,
+    "providerCalls": 0,
+    "nativeAdapterAndProtocolChanges": false,
+    "localControlledAdapter": "fake-1.0.0 plus compatible existing controlled native replay in browser regression"
+  },
+  "remainingScope": [
+    "NP47 older history outside a bounded recent window is still separate; full persistent history-gap ledger and versioned raw projection rebuild not delivered by this PR",
+    "NP45/46 official three-Agent faults and target-platform ownership/outcome acceptance remain with assigned windows",
+    "full repository source gate remains with independent reviewer"
+  ]
+}

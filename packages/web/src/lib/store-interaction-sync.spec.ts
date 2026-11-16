@@ -17,7 +17,7 @@ const event = (seq: number): StoredEvent => ({ sessionId: 's', seq, turnId: 't',
 const approval: StoredEvent = { sessionId: 's', seq: 2, turnId: null, itemKey: 'approval-a', kind: 'approval.request', data: { approvalId: 'a', title: 'Approval', detail: '', options: [] }, at: new Date(0).toISOString() };
 const connection = () => mocks.options.at(-1)!;
 const snapshot = (throughSeq: number) => connection().onMessage({ op: 'snapshot', sessionId: 's', throughSeq, items: [] });
-const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+const flush = async () => { await vi.advanceTimersByTimeAsync(100); for (let i = 0; i < 8; i++) await Promise.resolve(); };
 
 beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks(); mocks.options.length = 0;
@@ -53,7 +53,8 @@ it('concurrent opens share history hydration and a snapshot cannot cover missing
   const first = store.ensureSession('s'); const second = store.ensureSession('s'); expect(first).toBe(second); await first;
   expect(mocks.events).toHaveBeenCalledOnce(); snapshot(3); expect(store.isSessionSynced('s')).toBe(false);
   connection().onMessage({ op: 'event', event: event(3) }); expect(store.isSessionSynced('s')).toBe(false);
-  connection().onMessage({ op: 'event', event: event(2) }); expect(store.isSessionSynced('s')).toBe(true);
+  connection().onMessage({ op: 'event', event: event(2) }); expect(store.isSessionSynced('s')).toBe(false);
+  await flush(); expect(store.isSessionSynced('s')).toBe(true);
 });
 
 it('a legacy snapshot without an end marker cannot enable cached interactions', async () => {
@@ -65,7 +66,7 @@ it('a legacy snapshot without an end marker cannot enable cached interactions', 
 it('a smaller WS end cannot certify a higher cached cursor when HTTP detail is unavailable', async () => {
   const store = new AppStore(); connection().onState('online', 0);
   for (let seq = 1; seq < 10; seq++) store.applyEvent(event(seq)); store.applyEvent(question(10));
-  mocks.detail.mockRejectedValueOnce(new Error('detail unavailable')); await store.ensureSession('s'); snapshot(5);
+  await flush(); mocks.detail.mockRejectedValueOnce(new Error('detail unavailable')); await store.ensureSession('s'); snapshot(5);
   expect(store.getSessionSync('s')).toMatchObject({ phase: 'replaying', throughSeq: 10, cursor: 10 });
   store.answer('s', 'q', { custom: 'higher stale cache' }); expect(mocks.putOutbox).not.toHaveBeenCalled();
 });
@@ -134,7 +135,8 @@ it('a delayed detail response cannot mistake a later live event for a server rol
     connection().onMessage({ op: 'event', event: event(2) });
     return { id: 's', lastSeq: 1 };
   });
-  await store.ensureSession('s'); expect(store.isSessionSynced('s')).toBe(true);
+  await store.ensureSession('s'); expect(store.isSessionSynced('s')).toBe(false);
+  await flush(); expect(store.isSessionSynced('s')).toBe(true);
 });
 
 it('a restored durable answer across a history gap is checked by ID before replay and discarded when native ended it', async () => {
@@ -164,6 +166,8 @@ it('HTTP lookup truth waits for the current WS watermark before enabling a pendi
   mocks.interaction.mockResolvedValue({ event: question(), throughSeq: 11 }); const store = await gapped(); await flush();
   expect(store.isSessionSynced('s')).toBe(false); expect(store.isInteractionSynced('s', 'answer', 'q')).toBe(false);
   connection().onMessage({ op: 'event', event: event(11) });
+  expect(store.isInteractionSynced('s', 'answer', 'q')).toBe(false);
+  await flush();
   expect(store.isInteractionSynced('s', 'answer', 'q')).toBe(true);
   store.answer('s', 'q', { custom: 'verified answer' }); await flush(); expect(mocks.send).toHaveBeenCalledOnce();
 });

@@ -32,6 +32,8 @@ it('NP-05 does not advance past failed history and retries on a second open; lat
   store.applyEvent(event(9));
   expect(mocks.options.at(-1)?.getSubscriptions()).toEqual([{ sessionId: 's', afterSeq: 7 }]);
   store.applyEvent(event(8));
+  expect(mocks.options.at(-1)?.getSubscriptions()).toEqual([{ sessionId: 's', afterSeq: 7 }]);
+  await vi.advanceTimersByTimeAsync(100);
   expect(mocks.options.at(-1)?.getSubscriptions()).toEqual([{ sessionId: 's', afterSeq: 9 }]);
 });
 
