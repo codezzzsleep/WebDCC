@@ -19990,53 +19990,6 @@
         "column": 9
       }
     },
-    "subagents/interruptByParent": {
-      "package": "@deepseek-ai/dsh-subagent",
-      "description": "Remote face of {@link interrupt} under one durable parent address. No catalog, history, persistence, or parent Agent lookup runs: the core primitive alone authorizes the address against the live Activation, which is what keeps a live child interruptible while its parent Agent is offline. Absent, idle, and already-completed targets are accepted no-ops there.",
-      "kind": "direct",
-      "parameters": [
-        {
-          "name": "childSessionId",
-          "description": "durable child session id to interrupt.",
-          "jsonSchema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "parentSessionId",
-          "description": "durable direct parent whose authority is claimed.",
-          "jsonSchema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "mode",
-          "description": "required continuable-address discriminator.",
-          "jsonSchema": {
-            "type": "string",
-            "const": "continuable"
-          }
-        }
-      ],
-      "result": {
-        "type": "object",
-        "properties": {
-          "accepted": {
-            "type": "boolean",
-            "const": true
-          }
-        },
-        "required": [
-          "accepted"
-        ],
-        "additionalProperties": true
-      },
-      "source": {
-        "file": "packages/subagent/subagent/src/index.ts",
-        "line": 519,
-        "column": 3
-      }
-    },
     "subagents/prompt": {
       "package": "@deepseek-ai/dsh-subagent",
       "description": "Deliver one browser-authored message to a continuable child through the exact live direct parent, retaining the caller-minted request identity and validated browser zone on the accepted message. Success identifies the message the child's inbox accepted; later execution is independent of this call. Queue delivery targets a later turn; steer delivery targets the nearest step and retains the Agent loop's best-effort fallback semantics. Image parts are admitted and persisted through the attachment store before delivery, and the child's model must accept image input. Cold resume at capacity rejects with `subagent/delivery-unavailable`.",
@@ -20268,6 +20221,38 @@
         "file": "packages/interaction/user-questions/src/index.ts",
         "line": 221,
         "column": 10
+      }
+    },
+    "subagents/interruptByUser": {
+      "package": "@deepseek-ai/dsh-subagent",
+      "description": "Remote face of {@link interrupt}, authorized on the target Session by the Gateway. No catalog, history, persistence, or parent Agent lookup runs. Absent, idle, and already-completed targets are accepted no-ops there.",
+      "kind": "direct",
+      "parameters": [
+        {
+          "name": "childSessionId",
+          "description": "durable child session id to interrupt.",
+          "jsonSchema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "additionalProperties": true
+      },
+      "source": {
+        "file": "packages/subagent/subagent/src/index.ts",
+        "line": 504,
+        "column": 3
       }
     }
   }

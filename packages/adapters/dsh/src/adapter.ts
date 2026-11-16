@@ -29,6 +29,8 @@ import type {
   DshSubagentHistoryOptions,
   DshSubagentState,
   DshSubagentReadTarget,
+  DshSubagentControlTarget,
+  DshSubagentInterruptReceipt,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode, slashCommandFor, parseSlashInput } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
@@ -149,7 +151,7 @@ export const ALLOWED_ENDPOINTS: ReadonlySet<string> = new Set([
   'commands/execute',
   'commands/list',
   'subagents/prompt',
-  'subagents/interruptByParent',
+  'subagents/interruptByUser',
   '$events',
   '$events/result',
   'userQuestions/answer',
@@ -554,6 +556,7 @@ export class DshAdapter implements AgentAdapter {
       }
       if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw Object.assign(dshNativeError('DSH action outcome belongs to a replaced runtime', 409), { code: 'uncertain' });
       if (action.type === 'model') this.confirmModelSelection(sessionId, runtime, result, action.provider, action.model, action.reasoningEffort);
+      if (action.type === 'child-interrupt') return { result, id: action.childSessionId, confirmed: false, nativeId: runtime.nativeId };
       // Native cards explicitly distinguish accepted from confirmed settlement.
       if (action.type === 'card-dismiss') {
         const outcome = result as { status?: string; reason?: string };
@@ -1091,11 +1094,31 @@ export class DshAdapter implements AgentAdapter {
     await this.call(client, 'subagents/prompt', { ...args }, sessionId);
   }
 
-  async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
-    const runtime = this.requireChild(sessionId, childSessionId);
-    const client = await this.ensureSidecar();
-    const args: DshSubagentInterrupt = { childSessionId, parentSessionId: runtime.nativeId, mode: 'continuable' };
-    await this.call(client, 'subagents/interruptByParent', { ...args }, sessionId);
+  async interruptSubagent(sessionId: string, childSessionId: string, target?: DshSubagentControlTarget): Promise<DshSubagentInterruptReceipt> {
+    let dispatched = false;
+    try {
+      const client = await this.ensureSidecar();
+      const host = await this.hostIdentity(); requireDshBaseline(host);
+      const context = await this.childReadContext(sessionId, target);
+      const child = context.children.find(entry => entry.childId === childSessionId);
+      if (child?.mode !== 'continuable') throw dshNativeError('子 Agent 不属于此父会话，或此原生模式不支持独立停止', 409);
+      const freshHost = await this.hostIdentity(); requireDshBaseline(freshHost);
+      if (context.client !== client || host.fingerprint === undefined || freshHost.fingerprint !== host.fingerprint)
+        throw dshNativeError('DSH Host 在子 Agent 停止核对期间已变化', 409);
+      context.guard(); target?.guard?.();
+      const args: DshSubagentInterrupt = { childSessionId };
+      dispatched = true;
+      await this.call<{ accepted: true }>(context.client, 'subagents/interruptByUser', { ...args }, sessionId);
+      context.guard(); target?.guard?.();
+      return { id: childSessionId, accepted: true, confirmed: false,
+        address: { kind: 'subagent', parentSessionId: context.nativeId, childSessionId, mode: 'continuable' } };
+    } catch (error) {
+      if (dispatched) {
+        if (error instanceof DshRpcError) throw error;
+        throw Object.assign(dshNativeError('子 Agent 停止结果未确认，请刷新原生状态，不要自动重发', 503), { code: 'uncertain' });
+      }
+      throw Object.assign(error instanceof Error ? error : dshNativeError('子 Agent 停止未通过核对'), { code: 'native-control-rejected' });
+    }
   }
 
   private requireChild(sessionId: string, childSessionId: string): SessionRuntime {

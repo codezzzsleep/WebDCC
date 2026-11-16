@@ -47,6 +47,7 @@ export async function createDshSubagentFixture(localId = 'parent') {
       const target = args['request'] as { sessionId?: string } | undefined;
       let value: unknown;
       if (body.method === 'commands/list') value = { commands: [] };
+      else if (body.method === 'subagents/interruptByUser') value = { accepted: true };
       else if (body.method === 'session/projections' && target?.sessionId === parentId) value = { kind: 'sequenced', asOfSeq: 10, values: { subagentCatalog: structuredClone(catalog) } };
       else if (body.method === 'session/projections') value = { kind: 'sequenced', asOfSeq: states.get(target?.sessionId ?? '')?.cursor ?? -1, values: {
         subagent: descriptorSeqs.get(target?.sessionId ?? '') === null ? null : { seq: descriptorSeqs.get(target?.sessionId ?? '') ?? 0, mode: catalog.find(child => child.id === target?.sessionId)?.mode, label: target?.sessionId },
@@ -81,6 +82,8 @@ export async function createDshSubagentFixture(localId = 'parent') {
   adapter.accessModes = async () => [{ id: 'inherit', label: '原生默认' }];
   adapter.listModels = async () => [];
   adapter.resume = async () => undefined;
+  adapter.hostIdentity = async () => ({ url: `http://127.0.0.1:${address.port}/`, source: 'native-bootstrap', status: 'verified', version: '0.2.2-rc.1',
+    fingerprint: 'f'.repeat(64), profile: { scope: 'current-host-profile', identity: 'unavailable-in-api' } });
   return { adapter, native, client, parentId, states, descriptorSeqs, records, calls,
     cold() {
       (adapter as unknown as { sessions: Map<string, unknown> }).sessions.clear();

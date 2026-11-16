@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { DshAdapter } from '../src/adapter.js';
 import type { TraceFrame } from '@webdcc/protocol';
 import { DshHostClient } from '../src/host.js';
+import { createDshSubagentFixture } from './subagent-fixture.js';
 
 const frame = (value: unknown, i = 1): TraceFrame => ({ i, t: i, dir: 'in', ch: 'mux:$events', frame: { type: 'item', value } });
 
@@ -58,11 +59,14 @@ it('NP-11 limits child controls to the exact direct parent and continuable catal
   replay.feed(frame({ type: 'event', event: { type: 'subagent/catalog', seq: 0, time: 1000, data: { childId: 'child', mode: 'continuable' } } }));
   await replay.adapter.sendSubagent('session', 'child', '  original\r\n');
   expect(replay.replies.at(-1)).toMatchObject({ endpoint: 'subagents/prompt', args: { request: { parentSessionId: 'native-parent', childSessionId: 'child', mode: 'continuable', delivery: 'queue', content: [{ type: 'text', text: '  original\r\n' }] } } });
-  await replay.adapter.interruptSubagent('session', 'child');
-  expect(replay.replies.at(-1)).toMatchObject({ endpoint: 'subagents/interruptByParent', args: { parentSessionId: 'native-parent', childSessionId: 'child', mode: 'continuable' } });
   await expect(replay.adapter.sendSubagent('session', 'other-parent-child', 'text')).rejects.toMatchObject({ statusCode: 409 });
-  replay.feed(frame({ type: 'event', event: { type: 'subagent/catalog', seq: 1, time: 1001, data: { childId: 'one-shot', mode: 'one-shot' } } }));
-  await expect(replay.adapter.interruptSubagent('session', 'one-shot')).rejects.toMatchObject({ statusCode: 409 });
+  const native = await createDshSubagentFixture('session');
+  try {
+    expect(await native.adapter.interruptSubagent('session', 'reviewer')).toMatchObject({ accepted: true, confirmed: false });
+    expect(native.calls.at(-1)).toMatchObject({ method: 'subagents/interruptByUser', args: { childSessionId: 'reviewer' } });
+    for (const child of ['foreign', 'once']) await expect(native.adapter.interruptSubagent('session', child)).rejects.toMatchObject({ statusCode: 409 });
+    expect(native.calls.filter(call => call.method === 'subagents/interruptByUser')).toHaveLength(1);
+  } finally { await native.close(); }
 });
 
 it('NP-11 continued timed questions use the native late-answer RPC and wait for projection admission', async () => {

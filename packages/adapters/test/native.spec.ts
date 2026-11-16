@@ -146,12 +146,12 @@ describe('原装原则：DSH（SPEC 5.4.8）', () => {
     expect(spec.env).toEqual({});
   });
 
-  it('端点白名单遵循原生基线；子 Agent 使用 NP-11 的父身份方法', () => {
+  it('端点白名单遵循原生基线；子 Agent Stop 使用已复核的目标会话授权方法', () => {
     const transportExtensions = new Set(['$events', '$events/result']);
     for (const endpoint of ALLOWED_ENDPOINTS) expect(transportExtensions.has(endpoint) || Object.hasOwn(frozenDshCatalog.endpoints, endpoint), endpoint).toBe(true);
     expect(ALLOWED_ENDPOINTS.size).toBeLessThan(Object.keys(frozenDshCatalog.endpoints).length);
-    expect(isAllowedEndpoint('subagents/interruptByParent')).toBe(true);
-    expect(isAllowedEndpoint('subagents/interruptByUser')).toBe(false);
+    expect(isAllowedEndpoint('subagents/interruptByParent')).toBe(false);
+    expect(isAllowedEndpoint('subagents/interruptByUser')).toBe(true);
     expect(isAllowedEndpoint('host/describe')).toBe(false);
     expect(isAllowedEndpoint('settings/mutate')).toBe(true);
     expect(isAllowedEndpoint('pluginManager/install')).toBe(false);

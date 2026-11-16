@@ -422,6 +422,8 @@ function StepRow({
   const [open, setOpen] = useState(false);
   const [subagentText, setSubagentText] = useState('');
   const [subagentBusy, setSubagentBusy] = useState(false);
+  const [subagentNotice, setSubagentNotice] = useState<string>();
+  const [subagentError, setSubagentError] = useState<string>();
   const className = `step-row ${highlight === true ? 'highlight' : ''}`;
   // 渲染前再校验一次：不合格的事件显示占位，而不是让组件崩掉（F2）
   if (!isValidEventData(event.kind, event.data)) {
@@ -502,9 +504,13 @@ function StepRow({
       };
       const stopSubagent = async (): Promise<void> => {
         if (childId === undefined) return;
-        setSubagentBusy(true);
+        setSubagentBusy(true); setSubagentNotice(undefined); setSubagentError(undefined);
         try {
-          await api.interruptSubagent(event.sessionId, childId);
+          const result = await api.interruptSubagent(event.sessionId, childId);
+          setSubagentNotice('receipt' in result && result.receipt.state === 'submitted'
+            ? '停止请求已被原生接受，请查看子 Agent 当前状态。' : '请核对子 Agent 当前状态；刷新不会重发停止请求。');
+        } catch (cause) {
+          setSubagentError(`${cause instanceof Error ? cause.message : String(cause)}。停止结果待核对。`);
         } finally {
           setSubagentBusy(false);
         }
@@ -526,6 +532,8 @@ function StepRow({
             </pre>
           ) : null}
           {canControlChild ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
+          {subagentNotice === undefined ? null : <p role="status">{subagentNotice}</p>}
+          {subagentError === undefined ? null : <p role="alert">{subagentError}</p>}
         </div>
       );
     }

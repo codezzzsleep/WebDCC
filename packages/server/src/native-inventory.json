@@ -30,7 +30,7 @@
     },
     "dsh": {
       "path": "fixtures/dsh/host-api-catalog.json",
-      "sha256": "b7d851bdb4e035de54dc0e849fda859cc7a5add1d93720e6697bf76248d73990"
+      "sha256": "aae8a88ca5dafe740bd5b71e531938b921930f4348f5015ea052b2fd246f4b9f"
     },
     "claude": {
       "path": "@anthropic-ai/claude-agent-sdk/sdk.d.ts",
@@ -2966,7 +2966,7 @@
     },
     {
       "agent": "dsh",
-      "method": "subagents/interruptByParent",
+      "method": "subagents/interruptByUser",
       "role": "action",
       "capabilityId": "dsh.subagents"
     },

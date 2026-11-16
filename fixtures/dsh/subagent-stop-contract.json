@@ -1,0 +1,91 @@
+{
+  "nativeVersion": "0.2.2-rc.1",
+  "nativeCommit": "fcc0ad4",
+  "hostFingerprint": "932fdfe376de37d1d0cf4c17978e066604874d2586ebd1de870cff21d65d73c2",
+  "cliSha256": "54d9e9fee0d005835a1967dba39246459a65133e13555239c5b6a2a229ab48e0",
+  "compiledTypertSha256": "da62ec30c2e46021d8c7cf21c366c355bd7c6e32f71bfe9a079f1bb229ab92c3",
+  "previousCatalogSha256": "b7d851bdb4e035de54dc0e849fda859cc7a5add1d93720e6697bf76248d73990",
+  "descriptor": {
+    "package": "@deepseek-ai/dsh-subagent",
+    "description": "Remote face of {@link interrupt}, authorized on the target Session by the Gateway. No catalog, history, persistence, or parent Agent lookup runs. Absent, idle, and already-completed targets are accepted no-ops there.",
+    "kind": "direct",
+    "parameters": [
+      {
+        "name": "childSessionId",
+        "description": "durable child session id to interrupt.",
+        "jsonSchema": {
+          "type": "string"
+        }
+      }
+    ],
+    "result": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "accepted"
+      ],
+      "additionalProperties": true
+    },
+    "source": {
+      "file": "packages/subagent/subagent/src/index.ts",
+      "line": 504,
+      "column": 3
+    }
+  },
+  "source": "actual isolated native HTTP, completed real child, no new model requests",
+  "captureSha256": "acb1575cbaecf22affdd310e05803ca73f23cc4557cf2fd71c6c08e9d820e62b",
+  "capture": {
+    "subagents/interruptByParent": {
+      "request": {
+        "type": "client-request",
+        "rpcId": "ea397564-5261-409a-8d5c-d07e434829bb",
+        "method": "subagents/interruptByParent",
+        "payload": {
+          "args": {
+            "childSessionId": "0461406f-beb9-4a31-a27c-e4041e28a3d2",
+            "parentSessionId": "session-a4f773b5-c591-438b-a038-31573c709ec6",
+            "mode": "continuable"
+          }
+        }
+      },
+      "httpStatus": 404,
+      "response": {
+        "nonJson": "not found"
+      }
+    },
+    "subagents/interruptByUser": {
+      "request": {
+        "type": "client-request",
+        "rpcId": "15bc38b3-eab8-428e-b817-d94a9a3d5deb",
+        "method": "subagents/interruptByUser",
+        "payload": {
+          "args": {
+            "childSessionId": "0461406f-beb9-4a31-a27c-e4041e28a3d2"
+          }
+        }
+      },
+      "httpStatus": 200,
+      "response": {
+        "type": "server-response",
+        "rpcId": "15bc38b3-eab8-428e-b817-d94a9a3d5deb",
+        "result": {
+          "ok": true,
+          "value": {
+            "accepted": true
+          }
+        }
+      }
+    }
+  },
+  "limitations": [
+    "idle interrupt is an accepted no-op; it does not prove running-child termination",
+    "native source tree had existing changes; only executed compiled carrier and actual Host are bound",
+    "prompt descriptor remains a separately tracked compatibility review",
+    "no target-platform or new provider validation"
+  ]
+}

@@ -1177,8 +1177,20 @@ export class SessionManager {
     return { adapter, nativeId, guard };
   }
 
-  async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {
+  async interruptSubagent(sessionId: string, childSessionId: string, commandId = ulid()): Promise<void | NativeActionResponse> {
     const session = this.requireSession(sessionId);
+    if (session.agent === 'dsh') {
+      // One browser command keeps its receipt across refresh/retry. The request
+      // identity is local; native Stop receives only the target child id.
+      return this.store.nativeActions.execute(sessionId, { commandId, action: { type: 'dsh-child-interrupt', childSessionId, requestId: commandId } }, async () => {
+        const context = this.subagentReadContext(sessionId);
+        if (context.adapter.interruptSubagent === undefined) throw this.nativeControlRejected('原生子 Agent 独立停止不可用', 409);
+        const result = await context.adapter.interruptSubagent(sessionId, childSessionId, { nativeId: context.nativeId, guard: context.guard });
+        try { context.guard(); }
+        catch { throw Object.assign(new Error('停止请求返回时父会话身份已变化，原生结果待核对'), { statusCode: 503, code: 'uncertain' }); }
+        return result;
+      });
+    }
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.interruptSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持打断子 Agent'), { statusCode: 400 });
