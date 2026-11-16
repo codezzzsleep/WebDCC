@@ -24,6 +24,10 @@ The controlled model observer passes already masked byte records to `recordModel
 
 When body capture overflows, the entire captured body is omitted and `coverage.truncated` is set. Counts and native transport continue. Omitting the whole body avoids storing a cut credential prefix as complete evidence. Queue and file limits record an incomplete summary; a small coverage marker survives a server restart when its directory remains writable. Native preload write failures use a sibling coverage marker and bounded error reporting.
 
+Cooperating writers use `flock` and one stable `.wdcc-diagnostic-writer.lock` file per directory. An owned helper checks the current size and performs append or replacement under that lock, including exact UTF-8 byte limits. Helpers serve queued writes and exit when the queue finishes; a parent exit closes their input and releases the kernel lock after the current write finishes.
+
+Optional diagnostic writes require the `flock` executable. A missing utility or a lock held beyond the one-second wait reports incomplete recording while native forwarding continues. The empty lock file contains no payload; keep its pathname while writers may be active. This coordinates single-file limits across cooperating processes; aggregate disk and capture budgets remain separate work.
+
 Retention cleanup runs at recorder initialization and at most once an hour when records arrive. It removes only expired regular diagnostic files in the trace directory, preserving unrelated files. It is not an idle background deletion timer.
 
 Limits apply per observer/writer/file. Cross-process aggregate disk quotas, a global active-capture budget and a complete retention/export policy remain acceptance work. Existing directories are not rewritten or migrated by this source repair.

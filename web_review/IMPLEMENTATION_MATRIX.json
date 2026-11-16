@@ -1670,7 +1670,9 @@
           "packages/server/src/manager.ts",
           "packages/server/test/native-actions.spec.ts",
           "packages/server/test/native-controls.spec.ts",
-          "browser-tests/native-controls.spec.ts"
+          "browser-tests/native-controls.spec.ts",
+          "packages/testing/model-proxy/src/fixtures/diagnostic-writer-child.ts",
+          "web_review/diagnostic-writer-concurrency-20261116.summary.json"
         ],
         "actualFiles": [
           "packages/server/src/config.ts",
@@ -1710,7 +1712,9 @@
           "packages/server/src/native-reconciliation.ts",
           "packages/adapters/claude/src/stdio-capture.ts",
           "packages/adapters/dsh/src/host.ts",
-          "packages/server/test/journal.spec.ts"
+          "packages/server/test/journal.spec.ts",
+          "packages/testing/model-proxy/src/fixtures/diagnostic-writer-child.ts",
+          "web_review/diagnostic-writer-concurrency-20261116.summary.json"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1718,12 +1722,14 @@
           "web_review/evidence/l1-20701b2.json",
           "web_review/evidence/native-live-dsh.json",
           "web_review/evidence/native-live-codex-revalidated.json",
-          "web_review/evidence/native-claude-stdio.json"
+          "web_review/evidence/native-claude-stdio.json",
+          "web_review/diagnostic-writer-concurrency-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
           "凭据跨chunk和nested字段不会出现在DB/trace/导出；脱敏hash语义有说明。",
-          "大输出和长期会话内存/磁盘有界，录制失败不阻断原生运行且coverage告警可见。"
+          "大输出和长期会话内存/磁盘有界，录制失败不阻断原生运行且coverage告警可见。",
+          "198 的目标平台 flock/三家实际Agent诊断恢复仍待绑定验证；单文件共享排他不代表全磁盘总配额或完整跨帧秘密策略。"
         ],
         "remainingWork": "已统一诊断写前 field/JSON/known-secret/Cookie/URL 脱敏，HTTP 跨分片拼接后脱敏；保留原始 request/response 流式转发与背压，录制正文/分片/排队字节/单文件有界，超限完整丢弃正文并标 coverage；诊断 hash 改为 redacted bytes。启动或路由录制失败保持原生配置；周期按活动触发的过期清理、跨重启缺失标记和真实 Node preload 故障回归已做。SQLite/command/queue/IndexedDB 的 secret-aware 存储、原生 SDK/RPC 跨帧连续脱敏、所有 credential/provider 来源、跨进程全局配额、旧录制导出与完整 native launch/config 对照仍待完成。",
         "budgetNote": "共用诊断 redactor/writer 覆盖 model proxy、native preload 与主 recorder，文件范围超过初始 NP-14 规划；其中新增测试/fixture 与公共边界提取单列。仍为分阶段实施，未下调完整验收。",
@@ -1743,7 +1749,7 @@
           "confidence": "中",
           "reason": "共用诊断 writer/redactor 已跨主 recorder、native preload、model proxy，且完整敏感存储、原生分片脱敏、跨进程配额和旧录制导出仍需实现；原审查预算保留为基线估算，此执行估算覆盖余项。"
         },
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-16 #198 fixes independent diagnostic writer stat/append race using an owned flock helper. 22 source/process/HTTP/preload cases and full types/lint passed on Linux; no actual Native Agent/provider/target deployment acceptance."
       },
       "dependencyIds": [
         "NP-02",
