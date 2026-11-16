@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { currentGoal, goalLabel, currentCodexSubagents, codexSubagentRecoveryText, currentClaudeTaskViews } from '@webdcc/protocol';
+import { currentGoal, goalLabel, currentCodexSubagents, codexSubagentRecoveryText, codexSubagentStatusLabel, codexSubagentSnapshotKey, currentClaudeTaskViews } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { agentText } from '../lib/agents.js';
@@ -37,9 +37,17 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
         </div>
         {recoveryText === undefined ? null : <p role="status">{recoveryText}</p>}
         {subagents.map(child => <details key={child.childId}>
-          <summary>{child.agentPath ?? child.childId} · {child.nativeStatus === 'completed' ? '已完成' : child.nativeStatus === 'failed' ? '失败' : child.nativeStatus === 'interrupted' ? '已中断' : child.nativeStatus === 'waiting' ? '等待原生交互' : child.nativeStatus === 'running' ? '运行中' : '状态待确认'}</summary>
+          <summary>{child.agentPath ?? child.childId} · {codexSubagentStatusLabel(child.nativeStatus)}</summary>
           <p>原生线程：{child.childId}<br />父线程：{child.parentThreadId}</p>
           {child.results.map(result => <pre className="output" key={`${result.nativeTurnId}:${result.itemId}`}>{result.text}</pre>)}
+          {child.snapshots?.map(snapshot => <details key={codexSubagentSnapshotKey(snapshot)} data-testid="codex-collab-observation"
+            data-child-id={child.childId} data-native-call-id={snapshot.callId}>
+            <summary>原生 {snapshot.tool} 观测 · {codexSubagentStatusLabel(snapshot.status)}</summary>
+            <p>调用：{snapshot.callId} · {snapshot.callStatus}<br />来源线程：{snapshot.senderThreadId}<br />
+              来源轮次：{snapshot.nativeTurnId ?? '原生未提供来源轮次'}</p>
+            {snapshot.applied ? null : <p role="status">此调用的观测未用于当前子状态。</p>}
+            {snapshot.message === null ? <p>原生没有返回正文</p> : <pre className="output" data-testid="codex-collab-message">{snapshot.message}</pre>}
+          </details>)}
         </details>)}
       </div> : null}
       {showGoal && goalData !== undefined ? (
