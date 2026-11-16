@@ -45,6 +45,7 @@ const FETCH_ROUTES: Record<string, readonly string[]> = {
   '/api/file': ['GET', 'HEAD'], '/api/plugin-manager/detail-file': ['GET'], '/api/plugin-market/detail-file': ['GET'],
   '/api/present.host': ['GET'], '/api/present.open': ['GET', 'POST'], '/api/changes.summary': ['GET'], '/api/changes.diff': ['GET'], '/api/changes.open': ['GET', 'POST'],
   '/api/session/uploadFileBinary': ['POST'],
+  '/api/session.export': ['GET', 'HEAD'], '/api/session.markdown': ['GET', 'HEAD'],
 };
 // Native inventory is an independent fixed manifest. Transport validation uses
 // the actual frozen catalog's request schemas from adapter-dsh.
