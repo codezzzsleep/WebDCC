@@ -81,8 +81,14 @@ export class NativeOwnerStore {
   }
   observe(sessionId: string, identity: RuntimeIdentity, nativeTurnId: string | null, seq?: number): void {
     this.assert(sessionId, identity);
-    this.db.prepare('UPDATE native_owners SET active_native_turn_id = ?, last_observed_seq = COALESCE(?, last_observed_seq), observed_at = ?, lease_until = ? WHERE session_id = ? AND owner_id = ? AND generation = ?')
-      .run(nativeTurnId, seq ?? null, new Date().toISOString(), Date.now() + this.leaseMs, sessionId, identity.ownerId, identity.generation);
+    const observedSeq = seq !== undefined && Number.isSafeInteger(seq) && seq >= 0 ? seq : null;
+    // Historical/repeated frames still count as observations. Keep the
+    // highest valid sequence atomically across connections, without claiming
+    // that every preceding event has been received or projected.
+    this.db.prepare(`UPDATE native_owners SET active_native_turn_id = ?, last_observed_seq = CASE
+      WHEN ? IS NOT NULL AND (last_observed_seq IS NULL OR last_observed_seq < ?) THEN ? ELSE last_observed_seq END,
+      observed_at = ?, lease_until = ? WHERE session_id = ? AND owner_id = ? AND generation = ?`)
+      .run(nativeTurnId, observedSeq, observedSeq, observedSeq, new Date().toISOString(), Date.now() + this.leaseMs, sessionId, identity.ownerId, identity.generation);
   }
   close(sessionId: string, identity: RuntimeIdentity): void {
     this.db.prepare("UPDATE native_owners SET state = 'closing' WHERE session_id = ? AND owner_id = ? AND generation = ? AND state IN ('opening','active')")
