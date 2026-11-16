@@ -1,0 +1,55 @@
+{
+  "issue": 45,
+  "parents": [
+    42,
+    44,
+    62
+  ],
+  "scope": "CAS reorder of WebDCC accepted queued input; complete NP-03 acceptance remains open",
+  "sourceBase": "d84c78f0b6d7a68f191e05e28c73b792d3e0507e",
+  "evidenceKind": "local-source-and-controlled-adapter-regression",
+  "sourceHashes": {
+    "packages/protocol/src/commands.ts": "ce456ea20a52d442fcf376ef329b8a0f09421534367d56f4702847528484e4f8",
+    "packages/server/src/command-journal.ts": "3e9fa6ba88875579bc16770bbaa69e8fd11343a12d58db183fbb4e1e9cd1f3c5",
+    "packages/server/src/store.ts": "d3f8cf63727024fcb6f1f3550af6fdf0d7314fcc8af4ac79391ed00d93a50be3",
+    "packages/server/src/manager.ts": "8af095f4c92c9e7187ce296000ee41b221bfa475c1ced8fd7ecb9907f7d5672e",
+    "packages/server/src/rest.ts": "336e784fc1647d26a65708e9e43c81e2f83413d4883039bea5ff985f397d51e8",
+    "packages/web/src/lib/api.ts": "e75a51cac8f1301d3db71436edea105c25380a3c022656da6128e3f9ac61cb87",
+    "packages/web/src/lib/store.ts": "bf7812b7335d20baa84a44fee1a4dc082b7831ff7d5d9cb43d483ddb29a00dd1",
+    "packages/web/src/components/Timeline.tsx": "a194484c36712dda1d1bf0dbab4e9d71f2adc8e7bf89e052d469def2ff33254b",
+    "packages/server/test/queue-order.spec.ts": "8b2934c4a8a7be4549980f6171bb4b3f1894ab174cd88af78d22c38cfb4838ed",
+    "packages/web/src/lib/store-recovery.spec.ts": "f8ad6243b6b65a952ac8d039e658b236b05bd337980dad5030509568a6a82b78",
+    "browser-tests/queue-order.spec.ts": "93cb6e81dbd1db4c51e623bd12c0cbde302f5a68f0256c5d69b3ab618a59712f",
+    "browser-tests/helpers.ts": "8cb4ed453e5deb9d530dcc9c4cace828ec1ec44522bd19c8110eeaf72ab4ed5b"
+  },
+  "checks": {
+    "unit": 38,
+    "browser": 1,
+    "typecheck": "full workspace and scripts passed",
+    "lint": "changed source/test files passed",
+    "concurrentReorder": "1 success / 99 conflicts from one version",
+    "controlledAdapters": [
+      "codex",
+      "claude-code",
+      "dsh"
+    ]
+  },
+  "retainedFailures": [
+    "HTTP baseline404",
+    "Restored outbox kept wrong queue order:1failed/6unrun",
+    "Preparation window:16passed/1timeout; pre-control check fixed",
+    "Order-cycle hash reused old version:1failed/8unrun; persistent per-session queue feed included",
+    "DB reopen:37passed/1failed globalfeed equality assertion; input/orderRevision remain identical, feed may increase",
+    "Helper type-only alias TS2307; relative import corrected"
+  ],
+  "databaseMigration": false,
+  "modelRequests": 0,
+  "actualNativeCalls": 0,
+  "liveProvider": false,
+  "deployment": "not performed",
+  "fullAcceptance": "incomplete",
+  "remaining": [
+    "Actual Codex/Claude/DSH admission order and target-platform recovery",
+    "Complete NP-03 send concurrency, crash windows, native reconciliation and ownership scope"
+  ]
+}
