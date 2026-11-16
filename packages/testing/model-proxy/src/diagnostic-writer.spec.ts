@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, symlink, writeFile, lstat, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, symlink, writeFile, lstat, readdir, mkdir, utimes } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { fork, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -6,6 +6,53 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage } from './diagnostic-writer.js';
+
+it('expiration removes only old regular diagnostic files and keeps boundary, fresh and operator files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-diagnostic-expiration-'));
+  const cutoff = 1_700_000_000_000;
+  const expired = ['old.jsonl', 'context-old.json', 'coverage-old.json', 'model-old.coverage.json', '.wdcc-diagnostic-quota.json'];
+  try {
+    for (const name of expired) {
+      const file = join(root, name); await writeFile(file, 'old');
+      const date = new Date(cutoff - 5000); await utimes(file, date, date);
+    }
+    for (const name of ['fresh.jsonl', 'context-fresh.json', 'coverage-fresh.json', 'model-fresh.coverage.json', 'boundary.jsonl', 'operator-notes.txt']) {
+      const file = join(root, name); await writeFile(file, name);
+      const date = new Date(name === 'boundary.jsonl' ? cutoff : name === 'operator-notes.txt' ? cutoff - 5000 : cutoff + 5000);
+      await utimes(file, date, date);
+    }
+    await mkdir(join(root, 'directory.jsonl'));
+    await symlink(join(root, 'operator-notes.txt'), join(root, 'link.jsonl'));
+    expect(spawnSync('mkfifo', [join(root, 'pipe.jsonl')]).status).toBe(0);
+    const writer = new DiagnosticFileWriter();
+    await writer.pruneExpired(root, cutoff);
+    await writer.flush();
+    for (const name of expired) await expect(lstat(join(root, name))).rejects.toMatchObject({ code: 'ENOENT' });
+    for (const name of ['fresh.jsonl', 'context-fresh.json', 'coverage-fresh.json', 'model-fresh.coverage.json', 'boundary.jsonl', 'operator-notes.txt']) expect(await readFile(join(root, name), 'utf8')).toBe(name);
+    expect((await lstat(join(root, 'directory.jsonl'))).isDirectory()).toBe(true);
+    expect((await lstat(join(root, 'link.jsonl'))).isSymbolicLink()).toBe(true);
+    expect((await lstat(join(root, 'pipe.jsonl'))).isFIFO()).toBe(true);
+    expect((await stat(join(root, '.wdcc-diagnostic-writer.lock'))).isFile()).toBe(true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('serializes same-directory writes and repeated expiration without changing bytes or leaving a held lease', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-diagnostic-prune-order-'));
+  const file = join(root, 'active.jsonl');
+  try {
+    await writeFile(file, 'expired');
+    const old = new Date(Date.now() - 10_000); await utimes(file, old, old);
+    const a = new DiagnosticFileWriter(), b = new DiagnosticFileWriter();
+    const writes = [a.write(file, 'first', 'replace'), b.pruneExpired(root, Date.now() - 1000), a.write(file, '-second'), a.pruneExpired(root, Date.now() - 1000), b.write(file, '-third')];
+    await Promise.all(writes);
+    await Promise.all([a.flush(), b.flush()]);
+    expect(await readFile(file, 'utf8')).toBe('first-second-third');
+    expect(a.pendingBytes + b.pendingBytes).toBe(0);
+    await Promise.all(Array.from({ length: 20 }, () => new DiagnosticFileWriter().pruneExpired(root, Date.now() - 1000)));
+    expect(await readFile(file, 'utf8')).toBe('first-second-third');
+    expect(spawnSync('flock', ['-n', join(root, '.wdcc-diagnostic-writer.lock'), process.execPath, '-e', '']).status).toBe(0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 async function terminateOwnedFixture(child: ChildProcess): Promise<void> {
   const descendants: { pid: number; start: string | undefined }[] = [];
