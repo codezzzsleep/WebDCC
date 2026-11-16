@@ -8,6 +8,8 @@ WebDCC 保留原始 waterfall `eventId`、每一道题的 `id` 及原生 `callId
 
 答案结果到达时，匹配此次本地提交的完整答案记为原生确认；其他原生答案收敛为 external。原生明确的 `ASK_CANCELLED`/`ASK_ABORTED` 结果收敛为取消，其他失败保留结果未确认。业务结果与 HTTP 返回的先后顺序不改变问题终态。
 
+实际命令入口也使用该业务证据：完整匹配的原生答案先到时，即使随后HTTP失败也可返回confirmed；外部不同答案/取消先到时，后来的void ACK不能把本地回答命令记作完成。前后原失败与回执仍可分别核查，旧回调只提供原命令的证据，不改当前pending。
+
 [选取的原生协议信封](../fixtures/dsh/question-settlement.json) 来自一次实际固定原生执行和 loopback scripted model 的历史采集，带原 capture/Host 哈希和原始身份；这是实际原生受控模型证据的有限回放，不是 live Provider 验证。定向 HTTP/Chromium 测试驱动受控原生帧，验证当前生产 adapter/manager/界面的确认和刷新语义，未执行新的原生或模型任务。原失败报告保留。
 
 另以既有 live `claude-sonnet-5`/Native0.2.2-rc.1 问答采集复核当前处理器的原生终态投影。原整批任务因后续 sandbox 写入/审批未触发而失败，该报告和完整轨迹保持原样；只核对其中实际问题、答案 batch、工具 callId 与业务结果。原 Host graph 与当前不同，有限回放不证明全部目录或当前 Provider，且原 per-session trace 未保存全局 ready；不补造握手或再次发送原回答。来源报告 SHA256 `45de74991419878e03ae89b4807133c988d94577a63c9d3df2956424bc107fbf`，完整 trace SHA256 `1b40828a7f368673e8076495608d7533670075752238a98d6c0d8a05d0bed677`；复核和原未触发范围分别记录在私有专项账本。

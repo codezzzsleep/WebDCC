@@ -1566,18 +1566,29 @@ export class DshAdapter implements AgentAdapter {
     if (pending.answers.size < (pending.questionIds?.length ?? 1)) return { submitted: false };
     const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch;
     pending.sending = true;
+    const reply = (confirmed: boolean): AnswerSubmission => ({ submitted: true, confirmed,
+      questionIds: (pending.questionIds ?? [id]).map(question => `${eventId}:${question}`) });
+    const nativeConfirmed = (): boolean => this.sessions.get(sessionId) === runtime && pending.settlement?.kind === 'answered'
+      && sameDshQuestionAnswers(pending.settlement.answers, pending.answers);
     try {
       if (pending.continued && pending.callId !== undefined) {
         const accepted = await this.call<boolean>(client, 'userQuestions/answer', { agentId: runtime.nativeId, callId: pending.callId, answer: { answers: [...pending.answers.values()] } }, sessionId);
         if (accepted !== true) throw dshNativeError('The native continued question has ended', 409);
       } else await this.call(client, '$events/result', { clientId, eventId, outcome: { kind: 'result', value: { answers: [...pending.answers.values()] } } }, sessionId);
+      // The business result may arrive before the HTTP reply. It belongs to
+      // this original call; returning its receipt never mutates a new pending.
+      if (nativeConfirmed()) return reply(true);
+      if (pending.settlement !== undefined) throw Object.assign(dshNativeError('原生问题已由其他结果结束，本次回答未确认', 503), { code: 'uncertain' });
       const current = runtime.pending.get(eventId);
       if (this.sessions.get(sessionId) !== runtime || this.client !== client || !pending.continued && this.clientId !== clientId || this.muxGeneration !== generation || this.hostEpoch !== epoch
         || current !== pending && (current !== undefined || pending.settlement === undefined))
         throw Object.assign(dshNativeError('问题回执属于旧连接，原生回答结果待核对', 503), { code: 'uncertain' });
       pending.sent = true;
       if (pending.waitStream !== undefined) client.closeStream(pending.waitStream);
-      return { submitted: true, confirmed: false, questionIds: (pending.questionIds ?? [id]).map(question => `${eventId}:${question}`) };
+      return reply(false);
+    } catch (error) {
+      if (nativeConfirmed()) return reply(true);
+      throw error;
     } finally { pending.sending = false; }
   }
 

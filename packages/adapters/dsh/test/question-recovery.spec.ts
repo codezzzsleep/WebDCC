@@ -89,7 +89,7 @@ it('a native result racing the HTTP ACK remains authoritative and does not reope
   await expect.poll(() => typeof release).toBe('function');
   expect(replay.feed(event('tool/result', 2, { message: { toolCallId: 'question-call', content: [{ type: 'text', text: '{"answers":[{"id":"one","selected":["Continue"]}]}' }], isError: false } })))
     .toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ status: 'answered', resolution: 'native-acknowledged' }) }));
-  release(); await expect(sending).resolves.toMatchObject({ submitted: true, confirmed: false });
+  release(); await expect(sending).resolves.toMatchObject({ submitted: true, confirmed: true });
   await expect(replay.adapter.answer('local', 'question-waterfall:one', 'again')).rejects.toThrow('不存在');
 });
 
