@@ -11,9 +11,9 @@ it('only a successful native /export acknowledges a download for the exact nativ
   const requests: unknown[] = [];
   vi.stubGlobal('fetch', async (_url: unknown, init: RequestInit) => {
     const request = JSON.parse(String(init.body));
-    if (request.method === 'commands/list') return new Response(JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value: {
-      commands: [{ name: 'export', definitionId: '@deepseek-ai/dsh-session-log-export', description: 'native export' }],
-    } } }));
+    if (request.method === 'commands/list') return new Response(JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value:
+      [{ name: 'export', definitionId: '@deepseek-ai/dsh-session-log-export', description: 'native export' }],
+    } }));
     requests.push(request.payload.args);
     return new Response(JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value: {
       commandId: 'native-export-command', result: { kind: failed ? 'error' : 'success', text: 'native command result' },

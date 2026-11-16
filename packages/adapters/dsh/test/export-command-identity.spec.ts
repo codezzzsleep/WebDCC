@@ -19,7 +19,7 @@ it.each([
       ...(definitionId.startsWith('custom/') ? [{ name: 'builtin-export', definitionId: '@deepseek-ai/dsh-session-log-export', description: 'builtin' }] : [])];
     if (request.method === 'commands/execute') executions.push(request.payload.args);
     return new Response(JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: { ok: true, value:
-      request.method === 'commands/list' ? { commands: catalog } : { commandId: 'native-command', result: { kind: 'success', text: 'native result' } },
+      request.method === 'commands/list' ? catalog : { commandId: 'native-command', result: { kind: 'success', text: 'native result' } },
     } }));
   });
   const result = await replay.adapter.executeSlashControl('web-session', line);
