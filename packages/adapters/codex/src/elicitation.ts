@@ -5,7 +5,7 @@ import type { McpServerElicitationRequestParams } from './schema/v2/McpServerEli
 import type { McpServerElicitationRequestResponse } from './schema/v2/McpServerElicitationRequestResponse.js';
 
 const invalid = (message: string): never => { throw Object.assign(new Error(message), { statusCode: 400 }); };
-const options = { strictSchema: true, strictTypes: false, allErrors: true, allowUnionTypes: true };
+const options = { strictSchema: true, strictTypes: false, allErrors: true, allowUnionTypes: true, ownProperties: true };
 const drafts = { legacy: new Ajv(options), modern: new Ajv2020(options), intermediate: new Ajv2019(options) };
 for (const ajv of Object.values(drafts)) {
   ajv.addKeyword('isSecret'); ajv.addKeyword('enumNames');

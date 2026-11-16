@@ -1,0 +1,55 @@
+{
+  "issues": [
+    240,
+    241
+  ],
+  "parents": [
+    48,
+    44,
+    42
+  ],
+  "dependency": {
+    "PR": 238,
+    "head": "525814fd51675b00c6b2c89cbc2f6af4d98b0732"
+  },
+  "sourceFingerprint": "f6e73f6acf524314492793ec1958cfbd1c45fea9fa5be6c7a9399f74d08cbd90",
+  "verification": {
+    "sourceTests": 27,
+    "browserTests": 8,
+    "types": "full workspace+scripts passed",
+    "lint": "changed files passed",
+    "scope": "actual source Chromium/WS/HTTP/SQLite+controlledproductionCodexcodec andAjv; optionalconstructorblank/ownedUnicode value,Nativeid,completedreceipt/reloadresolved",
+    "dialects": "legacy/2019/2020 JSON own field missing/explicit/type/extra/required andinheritedextra ignored",
+    "NativeSchema": "unchanged"
+  },
+  "failedEvidence": [
+    "ActualUI displayedObjectconstructorfunction foruntouchedoptionalfield,1/1 browsernegative",
+    "Same production validator rejected emptyJSON{} for optionalconstructor string"
+  ],
+  "evidenceSha256": {
+    "browser-before.log": "217d2cb4322b4ef42c1b610411ff53e2e5b88d113444690c77cec16b9b92a70f",
+    "validation-before.log": "f29de4952fc99593f34b1634963e137c50bf2abad68e7562ec7f6de71ba61d46",
+    "regression-first.log": "27e8d054c3f78ad0e9e16f5be386d133359e337139523d82d7f969d86ad54b84",
+    "browser-first.log": "7cc4e9f5eeb83ec9802d7cf3e3e06d4dcee239a47caac37a2ccbe838a8c0eb67",
+    "browser-final.log": "172799e271dcf8c37ae13a2c7b7eaf3abced0b4c966fa82278a3335e30dab557",
+    "regression-final.log": "e6037f49152d1b218d28a61ac97fabbe86e45709c573f34cc731bbf0343babb5",
+    "typecheck.log": "f6b408f52a5d9c09069de89afbdb034b0a3d3358c83db0db35af69670c8cf896",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ui-complete/initial-field-true.json": "964ba83000117b69354cb3e319e1119cb50e5cc05a23d3fc8c428e71ae8df201",
+    "ui-complete/complete-false.json": "d6feb10f5a9e0259a4c38d68fb818cfdae04226b0386e70f3fe0e02548317f4b",
+    "ui-complete/case-0.json": "4ab4f9ded1ab01800911bc2fdc582fb1a5ed816d9bc4b9868159aca604bfd6ee",
+    "ui-complete/case-1.json": "346f9b04f83c2ecebee901ff0e014a86c68a495ceac80358e0e3a3c560eec644",
+    "ui-complete/case-2.json": "71537a03102dc974ea30757c88a5fc1e61fb15219d4f01b15af341b814dbfbb8",
+    "ui-complete/initial-field-false.json": "964ba83000117b69354cb3e319e1119cb50e5cc05a23d3fc8c428e71ae8df201",
+    "ui-complete/complete-true.json": "b8c29f823ddb174ae7981aa7921144ed76b5608f6a607641dc822c3ed025d477"
+  },
+  "officialNativeCalls": 0,
+  "providerCalls": 0,
+  "deployment": "not performed",
+  "remainingAcceptance": [
+    "Independent exact-head source/dependency238 merge andretarget",
+    "Actual Native MCP tool effect/targetthreeAgents/schema versions",
+    "FullNP06 JSON/secret/URL/crossclient/recovery remain incomplete"
+  ],
+  "dataMigration": "none"
+}
