@@ -28,6 +28,7 @@ import { NativeOwnerStore } from './native-owners.js';
 import { NativeEventStore } from './native-events.js';
 import { NativeReconciliationStore } from './native-reconciliation.js';
 import { NativeActionStore } from './native-actions.js';
+import { InputAdmissionStore } from './input-admission.js';
 
 interface SessionRow {
   id: string;
@@ -222,9 +223,11 @@ export class Store {
   readonly nativeEvents: NativeEventStore;
   readonly reconciliations: NativeReconciliationStore;
   readonly nativeActions: NativeActionStore;
+  readonly inputAdmissions: InputAdmissionStore;
   constructor(private readonly db: Db) {
     this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db);
     this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); this.reconciliations = new NativeReconciliationStore(db, this); this.nativeActions = new NativeActionStore(db);
+    this.inputAdmissions = new InputAdmissionStore(db, this);
     this.restoreLegacyConversations();
   }
 
