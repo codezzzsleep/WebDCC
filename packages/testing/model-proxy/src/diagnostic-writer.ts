@@ -20,14 +20,29 @@ lines.on('line', line => {
   try { command = JSON.parse(line); }
   catch { process.stdout.write(JSON.stringify({ error: 'Invalid diagnostic helper command' }) + '\\n'); return; }
   try {
-    let previous = 0;
-    if (command.mode === 'append') {
-      try { previous = fs.statSync(command.file).size; }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
-    }
-    if (previous + Buffer.byteLength(command.text) > command.limit) throw new Error('Diagnostic file size limit reached');
-    if (command.mode === 'append') fs.appendFileSync(command.file, command.text, { mode: 0o600 });
-    else fs.writeFileSync(command.file, command.text, { mode: 0o600 });
+    const bytes = Buffer.byteLength(command.text);
+    if (bytes > command.limit) throw new Error('Diagnostic file size limit reached');
+    let descriptor;
+    try {
+      const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW
+        | (command.mode === 'append' ? fs.constants.O_APPEND : 0);
+      try { descriptor = fs.openSync(command.file, flags, 0o600); }
+      catch (error) {
+        if (error.code === 'ENXIO' || error.code === 'ELOOP') throw new Error('Diagnostic target must be a regular file');
+        throw error;
+      }
+      const target = fs.fstatSync(descriptor);
+      if (!target.isFile()) throw new Error('Diagnostic target must be a regular file');
+      const current = () => {
+        const named = fs.lstatSync(command.file);
+        if (!named.isFile() || named.dev !== target.dev || named.ino !== target.ino) throw new Error('Diagnostic target changed during write');
+      };
+      current();
+      if ((command.mode === 'append' ? target.size : 0) + bytes > command.limit) throw new Error('Diagnostic file size limit reached');
+      if (command.mode !== 'append') fs.ftruncateSync(descriptor, 0);
+      fs.writeFileSync(descriptor, command.text);
+      current();
+    } finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
     process.stdout.write(JSON.stringify({ ok: true }) + '\\n');
   } catch (error) { process.stdout.write(JSON.stringify({ error: error.message }) + '\\n'); }
 });
