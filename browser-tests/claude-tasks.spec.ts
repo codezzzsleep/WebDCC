@@ -30,6 +30,7 @@ it('Claude task hierarchy, run outputs and unknown states survive source UI refr
       description: `${task} task`, is_backgrounded: true, task_type: 'local_agent' });
     const output = (tool: string, id: string, text: string) => feed({ type: 'assistant', uuid: id, session_id: 'controlled-native', parent_tool_use_id: tool,
       message: { id, stop_reason: 'end_turn', content: [{ type: 'text', text }] } });
+    feed({ type: 'system', subtype: 'init', session_id: 'controlled-native', uuid: 'first-init', model: 'controlled-model', cwd: '/tmp' });
     emitter.emit(first.sessionId, { type: 'turn.start', nativeTurnId: 'parent-turn' });
     start('parent'); start('first', '001', 'first-tool', 'parent'); start('second', '001', 'second-tool', 'parent');
     output('first-tool', 'first-message', 'FIRST CHILD OUTPUT');
@@ -61,6 +62,20 @@ it('Claude task hierarchy, run outputs and unknown states survive source UI refr
     expect(await panel.getByRole('button', { name: /停止|继续|发送/ }).count()).toBe(0);
     feed({ type: 'system', subtype: 'task_notification', session_id: 'controlled-native', uuid: 'stopped-first', task_id: 'first', run_id: '001',
       status: 'stopped', summary: 'FIRST STOPPED', output_file: '/tmp/first-output' });
+    feed({ type: 'system', subtype: 'background_tasks_changed', session_id: 'controlled-native', uuid: 'sibling-level',
+      tasks: ['parent', 'second'].map(task_id => ({ task_id, run_id: '001', task_type: 'local_agent', description: `${task_id} task` })) });
+    feed({ type: 'system', subtype: 'init', session_id: 'controlled-native', uuid: 'same-query-next-init', model: 'controlled-model', cwd: '/tmp' });
+    await expect.poll(() => row('second').locator('.claude-task-status').textContent()).toBe('运行中');
+    await page.reload();
+    await panel.waitFor();
+    await panel.locator('summary').first().click();
+    await expect.poll(() => row('second').locator('.claude-task-status').textContent()).toBe('运行中');
+    emitter.emit(first.sessionId, { type: 'item.complete', itemKey: 'controlled-query-unavailable', kind: 'internal',
+      data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: { id: `replay:${first.sessionId}`, state: 'unavailable' } }, scope: 'session' });
+    await expect.poll(() => row('second').locator('.claude-task-status').textContent()).toBe('状态待确认');
+    expect(await row('first').locator('.claude-task-status').textContent()).toBe('已停止');
+    feed({ type: 'system', subtype: 'task_progress', session_id: 'controlled-native', uuid: 'sibling-confirmed', task_id: 'second', run_id: '001', description: 'second task' });
+    await expect.poll(() => row('second').locator('.claude-task-status').textContent()).toBe('运行中');
     start('first', '002', 'new-first-tool', 'parent');
     output('new-first-tool', 'new-first-message', 'NEW FIRST RUN OUTPUT');
     feed({ type: 'system', subtype: 'task_notification', session_id: 'controlled-native', uuid: 'failed-second', task_id: 'second', run_id: '001',
@@ -109,6 +124,7 @@ it('Claude task hierarchy, run outputs and unknown states survive source UI refr
     expect(childEvents.every(event => event.turnId === null && event.native !== undefined)).toBe(true);
     console.log('Claude task source browser proof', JSON.stringify({ evidence: 'controlled SDK-shaped producer into actual handler/server/SQLite/WebSocket/Chromium',
       evidenceDirectory, parentAnswer: 'MAIN ANSWER ONLY', childOutputs: childEvents.length, refreshedThroughSeq: throughSeq(), persistedThroughSeq: ctx.store.lastSeq(first.sessionId),
-      refresh: true, websocketReconnect: true, sessionSwitch: true, realProvider: false, actualStopControl: false }));
+      refresh: true, websocketReconnect: true, sessionSwitch: true, sameQueryInitKeepsSiblingRunning: true, unavailableQueryKeepsTerminalAndUnknown: true,
+      realProvider: false, actualStopControl: false }));
   } finally { await browser?.close(); await ctx.close(); }
 }, 60000);

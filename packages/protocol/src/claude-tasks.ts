@@ -13,6 +13,9 @@ export interface ClaudeOutputOrigin {
 }
 
 export type ClaudeTaskStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'stopped' | 'unknown';
+/** WebDCC observes query lifetime independently from native system/init,
+ * which the pinned CLI also emits for later turns in the same process. */
+export interface ClaudeTaskRuntime { id: string; state: 'started' | 'unavailable' }
 export interface ClaudeTask {
   taskId: string;
   runId?: string;
@@ -66,19 +69,44 @@ export class ClaudeTaskProjection {
   readonly tasks = new Map<string, ClaudeTask>();
   readonly runs = new Map<string, ClaudeTask>();
   private backgroundSnapshot?: Map<string, string | undefined>;
+  private runtimeId?: string;
+  private readonly unconfirmedLifecycle = new Set<string>();
+
+  runtime(signal: ClaudeTaskRuntime): void {
+    if (signal.state === 'started' && signal.id !== this.runtimeId) {
+      this.resetLiveness();
+      this.runtimeId = signal.id;
+    } else if (signal.state === 'unavailable' && signal.id === this.runtimeId) this.resetLiveness();
+  }
+
+  event(event: Pick<StoredEvent, 'kind' | 'data' | 'native'>): void {
+    const signal = object(object(event.data)['claudeTaskRuntime']);
+    if (event.kind === 'internal' && text(signal['id']) !== undefined && ['started', 'unavailable'].includes(String(signal['state']))) {
+      this.runtime(signal as unknown as ClaudeTaskRuntime);
+    }
+    this.system(event.native);
+  }
 
   resetLiveness(): void {
     this.backgroundSnapshot = undefined;
     for (const task of this.tasks.values()) {
       task.backgroundPresence = 'unknown';
-      if (!terminal(task.nativeStatus)) task.status = 'unknown';
+      if (!terminal(task.nativeStatus)) {
+        this.unconfirmedLifecycle.add(claudeTaskKey(task));
+        task.status = 'unknown';
+      }
     }
   }
 
   system(value: unknown): boolean {
     const message = object(value);
     if (message['type'] !== 'system') return true;
-    if (message['subtype'] === 'init') { this.resetLiveness(); return true; }
+    if (message['subtype'] === 'init') {
+      // Legacy stored events have no observed query identity. Keep their
+      // unproven restart boundary conservative instead of inferring liveness.
+      if (this.runtimeId === undefined) this.resetLiveness();
+      return true;
+    }
     if (!isClaudeTaskMessage(message)) return true;
     const nativeSessionId = text(message['session_id']);
     if (message['subtype'] === 'background_tasks_changed') {
@@ -117,12 +145,14 @@ export class ClaudeTaskProjection {
     if (task === undefined) return false;
     switch (message['subtype']) {
       case 'task_started':
+        this.unconfirmedLifecycle.delete(claudeTaskKey(task));
         this.details(task, message);
         if (!terminal(task.nativeStatus)) task.nativeStatus = 'running';
         break;
       case 'task_progress':
         // A delayed progress edge cannot replace a terminal summary/output.
         if (!terminal(task.nativeStatus)) {
+          this.unconfirmedLifecycle.delete(claudeTaskKey(task));
           this.details(task, message);
           task.nativeStatus = 'running';
           if (typeof message['summary'] === 'string') task.summary = message['summary'];
@@ -133,6 +163,7 @@ export class ClaudeTaskProjection {
         const patch = object(message['patch']);
         this.details(task, patch);
         const status = text(patch['status']);
+        if (status !== undefined) this.unconfirmedLifecycle.delete(claudeTaskKey(task));
         if (status !== undefined && task.terminalNotification === undefined && (!terminal(task.nativeStatus) || terminal(status))) task.nativeStatus = status;
         if (typeof patch['error'] === 'string') task.error = patch['error'];
         if (typeof patch['end_time'] === 'number') task.endTime = patch['end_time'];
@@ -142,6 +173,7 @@ export class ClaudeTaskProjection {
       case 'task_notification': {
         const status = text(message['status']);
         if (status === undefined || !['completed', 'failed', 'stopped'].includes(status)) return false;
+        this.unconfirmedLifecycle.delete(claudeTaskKey(task));
         task.nativeStatus = status;
         task.terminalNotification = status as ClaudeTask['terminalNotification'];
         if (typeof message['summary'] === 'string') task.summary = message['summary'];
@@ -208,6 +240,7 @@ export class ClaudeTaskProjection {
   private status(task: ClaudeTask): void {
     const status = task.nativeStatus === 'killed' ? 'stopped' : task.nativeStatus;
     task.status = status !== undefined && ['pending', 'running', 'paused', 'completed', 'failed', 'stopped'].includes(status) ? status as ClaudeTaskStatus : 'unknown';
+    if (!terminal(task.nativeStatus) && this.unconfirmedLifecycle.has(claudeTaskKey(task))) task.status = 'unknown';
     if (task.background && task.backgroundPresence === 'absent' && !terminal(task.nativeStatus)) task.status = 'unknown';
   }
 }
@@ -216,7 +249,7 @@ export class ClaudeTaskProjection {
  * remain available even when reconnecting produces an empty live set. */
 export function currentClaudeTasks(events: readonly StoredEvent[]): ClaudeTask[] {
   const projection = new ClaudeTaskProjection();
-  for (const event of events) projection.system(event.native);
+  for (const event of events) projection.event(event);
   return [...projection.tasks.values()];
 }
 
@@ -265,7 +298,7 @@ function taskOutput(item: { itemKey: string; kind: EventKind; data: unknown; nat
  * the newest run. Live items are the same keyed blocks before persistence. */
 export function currentClaudeTaskViews(events: readonly StoredEvent[], live: readonly { itemKey: string; kind: EventKind; data: unknown }[] = []): ClaudeTaskViews {
   const projection = new ClaudeTaskProjection();
-  for (const event of events) projection.system(event.native);
+  for (const event of events) projection.event(event);
   const runs = new Map<string, ClaudeTaskRun>([...projection.runs].map(([key, task]) => [key, { ...task, outputs: [] }]));
   const outputs = new Map<string, ClaudeTaskOutput>();
   for (const item of events) { const output = taskOutput(item, false); if (output !== undefined) outputs.set(item.itemKey, output); }
