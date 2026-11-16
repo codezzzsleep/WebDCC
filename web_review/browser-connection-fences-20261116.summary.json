@@ -1,0 +1,90 @@
+{
+  "formatVersion": 1,
+  "issue": 260,
+  "relatedIssues": [
+    46,
+    47,
+    42
+  ],
+  "baseCommit": "5aad9872d74d0c971a5e2828ecd32a076d5fc35d",
+  "behavior": "Only current live browser socket can open/deliver/close/refresh heartbeat/reconnect; replacements release previous sockets and timers",
+  "sourceFiles": {
+    "packages/web/src/lib/connection.ts": "42a46d2ba78fae244fac8457427532846204e59a2e17521168ecc4d8a09d518f",
+    "packages/web/src/lib/connection.spec.ts": "275c9b5d9a2718f0be6eafdfb7f88c5baf650ace1f360a3f685e8be2b9a26c2f",
+    "browser-tests/connection-generation.spec.ts": "b66672e7a579d9810fecbd811ec14cb88d48c848e9d20826bd442e66c76a6994",
+    "docs/browser-connection-fences.md": "87e9e761eee380de99b996d1fa61ae1e92065a133a23276d967051a34c3ecd47"
+  },
+  "verification": {
+    "rebasedSource": {
+      "passed": 44,
+      "files": 6,
+      "log": "connection-rebased-regression.log"
+    },
+    "rebasedSourceBrowser": {
+      "passed": 3,
+      "files": 3,
+      "log": "connection-rebased-browser.log",
+      "focusRace": "real standard WebSocketCONNECTING confirmed; sockets1/nativegeneration1→1/resume0/pageErrors0"
+    },
+    "webTypecheck": "passed",
+    "changedFileLint": "passed",
+    "build": "exact final-head manifest/log bound in PR and private ledger after final commit",
+    "independentSourceAcceptance": "pending",
+    "deployment": "not performed"
+  },
+  "preservedFailures": [
+    {
+      "log": "connection-before.log",
+      "failed": 6,
+      "passed": 1,
+      "scope": "controlled standard WebSocket event ordering; normal current reconnect passed"
+    },
+    {
+      "log": "connection-browser-before-triggered.log",
+      "failed": 1,
+      "scope": "real CONNECTING focus race triggered",
+      "expectedSockets": 1,
+      "finalSockets": 21,
+      "rawObservedDuringHandshake": 17
+    }
+  ],
+  "untriggered": [
+    {
+      "log": "connection-browser-before.log",
+      "passed": 1,
+      "scope": "ordinaryreconnect passed butCONNECTINGrace notobserved; not count as race proof",
+      "actualSockets": 1
+    }
+  ],
+  "reportCorrection": {
+    "commentId": 6919975401,
+    "originalMistake": "expected10 was reported as actual10/failed",
+    "correctedTo": "actual1passed/1socket/raceuntriggered",
+    "originalArtifactsPreserved": true
+  },
+  "evidenceSha256": {
+    "connection-before.log": "533893246e15a30074390e945904a0dfed6ec141b80eab5c94e80ac3c271cd9c",
+    "connection-first.log": "576f6ea1f7baf9e7fb9abc91d5252b530812328123d529c3f3605a9c32ff499e",
+    "connection-browser-before.log": "72c47575c79ed6f60f6220d1826801937d3eaa567b6982b33817cc87562792c8",
+    "connection-browser-before.json": "29f6acdb23df9a36e80702400d70a9e0aeb0b37721388feab36198bf95c9ba55",
+    "connection-browser-before-triggered.log": "f8af002b26a5834109883ef1f14407b81e83d46bf8673f81bef9caa23735adbe",
+    "connection-browser-before-triggered.json": "dc844452bd258c48db9bee778da27b44b575873caf3257da0c1807ad54fd9182",
+    "connection-browser-triggered-final.log": "f4c8329505bff8ac4582b20e5305a6cf5ff25410b740c3da476d7f5b9117932e",
+    "connection-rebased-regression.log": "06e659e2c8230b9037dcf6df014804f5162733c992159aa7e661d48169249475",
+    "connection-rebased-browser.log": "dd895aae2553ee5d7a29ec1cc6ce2b42d50677d6c764a8eb8001f30d48347825",
+    "connection-browser-final.json": "7cbf97b71a0573087579d3be61ad3f413fa659d49c675eba7090b09494d6ed44",
+    "connection-browser-recovered.png": "dcba915d60b0cd31c83744bdf9266f1d26c542d153c2b4adecf0af6f3a7c382e",
+    "connection-rebased-typecheck.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "connection-rebased-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "nativeEvidence": {
+    "officialAgentCalls": 0,
+    "providerCalls": 0,
+    "nativeAdapterAndProtocolChanges": false,
+    "controlledSocketAndActualBrowserSeparated": true
+  },
+  "remainingScope": [
+    "latest official provider and target-platform3Agent acceptance belongs to assigned windows",
+    "NP46 owner/Host/nativefault fullacceptance and NP47 fullprojection/oldergap remaining independently tracked"
+  ]
+}
