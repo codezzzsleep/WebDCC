@@ -33,9 +33,10 @@ async function readCache(page: Page, sessionId: string): Promise<StoredEvent[]> 
   }, sessionId);
 }
 async function scrollToHistory(page: Page): Promise<void> {
-  await page.getByTestId('timeline').evaluate(element => {
-    element.scrollTop = 0; element.dispatchEvent(new Event('scroll', { bubbles: true }));
-  });
+  const timeline = page.getByTestId('timeline');
+  await timeline.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect.poll(() => timeline.evaluate(element => element.scrollTop)).toBe(0);
 }
 
 it('real IndexedDB abort retains the pagination boundary and visible retry restores the identical HTTP history', async () => {
@@ -54,6 +55,7 @@ it('real IndexedDB abort retains the pagination boundary and visible retry resto
     await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
     await page.goto(`${base}/s/${sessionId}`); await expect.poll(snapshot).toBe(600);
     await expect.poll(() => readCache(page, sessionId)).toEqual(events.slice(400));
+    await browserExpect(page.getByText('History input 200', { exact: true })).toBeVisible();
     await page.evaluate(() => {
       const state = window as typeof window & { remainingOlderAborts: number; olderAborts: number; remainingReadAborts: number; readAborts: number };
       state.remainingOlderAborts = 1; state.olderAborts = 0; state.remainingReadAborts = 1; state.readAborts = 0;
@@ -88,6 +90,7 @@ it('real IndexedDB abort retains the pagination boundary and visible retry resto
     expect(requests).toEqual([601, 401, 401]);
     await browserExpect(page.getByTestId('older-history-recovery')).toHaveCount(0);
     await page.reload(); await expect.poll(snapshot).toBe(600);
+    await browserExpect(page.getByText('History input 200', { exact: true })).toBeVisible();
     expect(await readCache(page, sessionId)).toEqual(events.slice(200));
     await scrollToHistory(page); await expect.poll(() => readCache(page, sessionId)).toEqual(events);
     await browserExpect(page.getByText('History input 1', { exact: true })).toBeVisible();
@@ -113,6 +116,7 @@ it('a reloaded browser recovers older committed events offline without another h
     await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
     await page.goto(`${base}/s/${sessionId}`); await expect.poll(snapshot).toBe(600);
     await expect.poll(() => readCache(page, sessionId)).toEqual(events.slice(400));
+    await browserExpect(page.getByText('History input 200', { exact: true })).toBeVisible();
     // Seed previously committed pages using an actual completed transaction.
     // Reload closes the previous document and its database connection.
     await page.evaluate(async older => {
@@ -128,6 +132,7 @@ it('a reloaded browser recovers older committed events offline without another h
       } finally { database.close(); }
     }, events.slice(0, 400));
     await page.reload(); await expect.poll(snapshot).toBe(600);
+    await browserExpect(page.getByText('History input 200', { exact: true })).toBeVisible();
     await page.context().setOffline(true);
     let attemptedHistory = 0;
     page.on('request', request => { if (new URL(request.url()).pathname === `/api/sessions/${sessionId}/events`) attemptedHistory++; });
