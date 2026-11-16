@@ -26,6 +26,8 @@ When body capture overflows, the entire captured body is omitted and `coverage.t
 
 Cooperating writers use `flock` and one stable `.wdcc-diagnostic-writer.lock` file per directory. An owned helper checks the current size and performs append or replacement under that lock, including exact UTF-8 byte limits. Helpers serve queued writes and exit when the queue finishes; a parent exit closes their input and releases the kernel lock after the current write finishes.
 
+Diagnostic targets must be regular files. The helper opens without following a final symlink and with nonblocking flags, verifies the actual descriptor before truncation or writing, and closes it after the operation. FIFO, socket and device targets report incomplete recording; they do not create a permanently waiting writer. An oversized replacement leaves the existing content intact. Path changes during the write are reported as incomplete evidence.
+
 Optional diagnostic writes require the `flock` executable. A missing utility or a lock held beyond the one-second wait reports incomplete recording while native forwarding continues. The empty lock file contains no payload; keep its pathname while writers may be active. This coordinates single-file limits across cooperating processes; aggregate disk and capture budgets remain separate work.
 
 Retention cleanup runs at recorder initialization and at most once an hour when records arrive. It removes only expired regular diagnostic files in the trace directory, preserving unrelated files. It is not an idle background deletion timer.
