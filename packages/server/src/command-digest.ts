@@ -1,15 +1,12 @@
-import { createHash } from 'node:crypto';
 import type { Command, CommandRecord } from '@webdcc/protocol';
+import { stableJsonDigest } from './stable-json-digest.js';
 
-const PREFIX = 'sha256-json-v2:';
 export type CommandIdentity = 'same' | 'different' | 'unverified';
 
 /** Versioned JSON identity uses deterministic key order, independent of the
  * process's Intl locale. Arrays and ordinary JSON conversion retain order. */
 export function commandDigest(command: Command): string {
-  const canonical = JSON.stringify(command, (_key, value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : value);
-  return PREFIX + createHash('sha256').update(canonical).digest('hex');
+  return stableJsonDigest(command);
 }
 
 function completePayload(payload: Command | null): payload is Command {
