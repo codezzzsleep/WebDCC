@@ -757,7 +757,7 @@ export class SessionManager {
     try {
       await runtime.adapter.send(sessionId, { ...input, nativeRequestId: this.store.journal.nativeRequestId(turnId) });
       this.assertOwner(runtime);
-      if (this.store.journal.queue(sessionId).some(row => row.turnId === turnId)) this.store.journal.inputState(turnId, 'native-accepted');
+      this.store.journal.acceptInput(turnId);
       this.queueChanged(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -783,7 +783,7 @@ export class SessionManager {
     try {
       await runtime.adapter.steer(runtime.sessionId, { ...input, expectedTurnId: nativeTarget, nativeRequestId: this.store.journal.nativeRequestId(accepted.turnId) });
       this.assertOwner(runtime);
-      if (this.store.journal.get(accepted.commandId)?.state !== 'completed') this.store.journal.inputState(accepted.turnId, 'native-accepted');
+      this.store.journal.acceptInput(accepted.turnId);
     } catch (error) {
       // A real persisted echo can precede a lost RPC response. Its positive
       // admission proof must not be downgraded into blind-replay uncertainty.

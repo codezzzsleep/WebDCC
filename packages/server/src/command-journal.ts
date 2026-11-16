@@ -149,6 +149,22 @@ export class CommandJournal {
       return changed;
     })();
   }
+
+  /** A successful submission response only advances its still-dispatching
+   * admission. Later native outcomes and recovery own uncertainty/terminals. */
+  acceptInput(turnId: string): boolean {
+    return this.db.transaction(() => {
+      const row = this.db.prepare('SELECT * FROM input_queue WHERE turn_id = ?').get(turnId) as InputRow | undefined;
+      if (row === undefined || row.state !== 'dispatching') return false;
+      const command = this.get(row.command_id);
+      if (command !== undefined && (command.state !== 'dispatching' || command.sessionId !== row.session_id || command.turnId !== turnId)) return false;
+      if (this.db.prepare("UPDATE input_queue SET state = 'native-accepted' WHERE turn_id = ? AND state = 'dispatching'").run(turnId).changes !== 1) return false;
+      if (command !== undefined && this.db.prepare("UPDATE command_journal SET state = 'native-accepted', updated_at = ? WHERE command_id = ? AND state = 'dispatching'")
+        .run(new Date().toISOString(), row.command_id).changes !== 1) throw new Error('原生接收确认的命令状态已变化');
+      return true;
+    }).immediate();
+  }
+
   nativeRequestId(turnId: string): string {
     const row = this.db.prepare('SELECT native_request_id FROM native_input_ids WHERE turn_id = ?').get(turnId) as { native_request_id: string } | undefined;
     if (!row) throw new Error('原生输入身份尚未持久化');
