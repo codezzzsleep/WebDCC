@@ -9,7 +9,7 @@ import type { FileOperation } from './workspace-files.js';
 import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, redactDiagnosticValue, type DiagnosticWriteLimits, type ModelProxyEvent } from '@webdcc/model-proxy';
 
 export interface InteractionContext { sessionId: string; agent: AgentId; workspaceId: string; cwd: string; nativeId?: string; turnId?: string | null; model?: string; providerId?: string | null; }
-export interface InteractionRecord { version: 1; runId: string; seq: number; at: string; elapsedMs: number; source: string; channel: string; direction?: 'in' | 'out'; context?: InteractionContext; value: unknown; }
+export interface InteractionRecord { version: 1; runId: string; seq: number; at: string; elapsedMs: number; source: string; channel: string; direction?: 'in' | 'out'; context?: InteractionContext; contextError?: string; value: unknown; }
 export interface RecordingSummary { records: number; nativeFrames: number; modelRequests: number; fileOperations: number; incomplete: boolean; errors: string[]; }
 function key(id: string): string { return encodeURIComponent(id); }
 function isInference(value: unknown): boolean {
@@ -182,6 +182,9 @@ export class InteractionRecorder {
     }
     if (pending.size > 0) { summary.incomplete = true; summary.errors.push(`${pending.size} model requests lack a terminal recording (may still be running)`); }
     if (rows.some(row => row.source === 'recording' && row.channel === 'error')) summary.incomplete = true;
+    if (rows.some(row => row.source === 'model-http' && row.contextError !== undefined)) {
+      summary.incomplete = true; summary.errors.push('Native model request context unavailable');
+    }
     const truncated = new Set(rows.filter(row => {
       if (row.source !== 'model-http') return false;
       const value = row.value as { coverage?: { truncated?: boolean }; value?: { coverage?: { truncated?: boolean } } };
