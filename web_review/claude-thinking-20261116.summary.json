@@ -1,0 +1,148 @@
+{
+  "formatVersion": 1,
+  "issues": [
+    78,
+    51,
+    42
+  ],
+  "behavior": "Claude optional thinking budget uses pinned SDK mapping; invalid tagged values reject before query replacement; requested mapping and unobserved model effect remain separate",
+  "sourceBase": "2a0395fc83327225644fef688fa21709e578adcc",
+  "checkedSourceHead": "ef495aabd5be90c71de2827cea3b7791d5f4434e",
+  "sourceFingerprint": "4ebb0b994bd5f1c4e4bd0824887985444e593db0d2aa1dbffe938e88f116b505",
+  "sourceFilesSha256": {
+    "packages/adapters/claude/src/adapter.ts": "8f9d0a170205f36e8ef817011b1ef01837162a48652786b4c5d2ec064b67387d",
+    "packages/adapters/claude/src/native.ts": "4b272e7b3af161ee4e41fc4b3af5f52023777bb5c5ec83123ece6487477ed35c",
+    "packages/web/src/components/NativeControls.tsx": "3fb8bbfb28773ba12bdbb54b4a502cd56391053c15e44ea670eb54f6c2835683",
+    "packages/adapters/claude/test/thinking-contract.spec.ts": "85a2eb7c75b17f610e3a6c3aeb9404b75d34a7935df955e221c6c4d5fa946ace",
+    "packages/adapters/claude/test/thinking-controls.spec.ts": "533b58519cdf1d12bc2b9a5faa6f6de5d80ea7ac4a93c4db8b45619337dc81b4",
+    "browser-tests/claude-thinking.spec.ts": "d8dd55d67a89d43d88f1408dfa5405572ac1ea230535c8fa475ebca2d7495491"
+  },
+  "nativeContract": {
+    "sdkVersion": "0.3.322",
+    "cliVersion": "2.1.322",
+    "nativeHashes": {
+      "cli": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+      "sdk": "1c70356fe073f6c5423fb7138e2f2f6580a790eb055ad247e5d7927f57b53e8b",
+      "schema": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f"
+    },
+    "nativeModified": false,
+    "exportedBudget": "optional number",
+    "enabledWithoutBudget": "--thinking=adaptive"
+  },
+  "verification": {
+    "directed": {
+      "passed": 37,
+      "files": 6,
+      "scope": "controlled SDK source tests before main sync; all directed tested inputs/source blobs unchanged"
+    },
+    "currentSourceHTTP_SQLite_Chromium": {
+      "passed": 1,
+      "controlledSDK": true,
+      "optionalBudgetPreserved": true,
+      "invalidBudgetRejected": true,
+      "invalidDoesNotReplaceQuery": true,
+      "refreshLiveMapping": true,
+      "newNativeOrProviderRuns": 0
+    },
+    "types": [
+      "Claude adapter",
+      "web"
+    ],
+    "changedLint": "passed",
+    "actualOfficialStartup": {
+      "runId": "7a5280a5-b78c-4be3-89c2-323484b3de40",
+      "passed": 5,
+      "requestedAndActualFlags": [
+        {
+          "requested": {
+            "type": "enabled"
+          },
+          "flags": [
+            "--thinking=adaptive"
+          ]
+        },
+        {
+          "requested": {
+            "type": "adaptive",
+            "display": "omitted"
+          },
+          "flags": [
+            "--thinking=adaptive",
+            "--thinking-display=omitted"
+          ]
+        },
+        {
+          "requested": {
+            "type": "enabled",
+            "budgetTokens": 1024
+          },
+          "flags": [
+            "--max-thinking-tokens=1024"
+          ]
+        },
+        {
+          "requested": {
+            "type": "disabled"
+          },
+          "flags": [
+            "--thinking=disabled"
+          ]
+        },
+        {
+          "requested": null,
+          "flags": []
+        }
+      ],
+      "reportSha256": "f59fc1b1f6a186e6536dbca8e0fd08d6aeff00ece43bea245c29e34846745a0e",
+      "originalSourceFingerprint": "2748b51fa2e194265eb4182bd90927eecc60f7b48d730c6a488b3d68be8e52c4",
+      "readOnlyReconstructionMatchesOriginal": true,
+      "deliveredProductHashesMatchOriginal": true,
+      "trackedAfterClose": 0,
+      "userPrompts": 0,
+      "modelRequests": 0,
+      "liveProviderRequests": 0
+    }
+  },
+  "retainedFailures": [
+    {
+      "evidence": "thinking-before.log",
+      "status": "4 baseline failures,1 correct invalid-value test passed"
+    },
+    {
+      "evidence": "thinking-lint-first.log",
+      "status": "owned no-output generator lacked yield; changed fixture iterator"
+    },
+    {
+      "evidence": "thinking-browser-first.log",
+      "status": "NOT_RUN missing own node-pty binary; rebuilt own dependency only"
+    },
+    {
+      "evidence": "thinking-browser-second.log",
+      "status": "fixture waited for connection button when runtime already connected; timed out; corrected user flow"
+    }
+  ],
+  "evidenceSha256": {
+    "thinking-before.log": "0d65a4230053c548fac42d8f08c64573f0a9aae3b6f309b499c2afe02b7886ce",
+    "thinking-first.log": "9271e1fe1e8af25f9b94d984de71fc8241abbb39996cef5444586659a5d1d129",
+    "thinking-directed.log": "05358b63fe1320a01ac0c4cbb189c850c85f6e8cd6ec8e1fd0fa91ebc5fa3a8a",
+    "thinking-types-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "thinking-lint-first.log": "d314d028770ae3330b6b5888a3d124bf2f43205fcb25841e15af10d00526bbd4",
+    "thinking-matrix-final.log": "3725fe647d2c842c46462f7a774125eeaa5d8462e670b5a5ffbb122ccc54f8de",
+    "thinking-own-pty-build.log": "756b4a00102cba3c1f31102ed93c091368a360476b3b6ae4aa870d3d70ce7270",
+    "thinking-browser-first.log": "aa5b7cb7951d2326636ea77b44f5a9084be7b7bc3609c7d45c45d7b7d5b7a346",
+    "thinking-browser-second.log": "aa490ca6994c72843c1f81d41e0febfad4b4cab53eb6867a1828d334af74d4af",
+    "thinking-browser-third.log": "0aba93ca66d5ce5980ca52f05e87cda4a938f6588c342c7396bb4a8758201dd4",
+    "thinking-browser-current-main.log": "20e5cc2b8a85e3128339cbeabb0e4198f06f87a7bed2c6418d2d3b6c21e96303",
+    "thinking-claude-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "thinking-web-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "thinking-lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "thinking-native-first.log": "c73df4caa901be16aef46e93b3c11ad7247b54d06f05b3d01ed08baae96b98af",
+    "thinking-startup-source-binding.json": "5c08d0db770b8e28b798d3b500ae3cb43559a7cf35f4a45de44e8504ec6824d3"
+  },
+  "remaining": [
+    "current model thinking effect and live Provider acceptance",
+    "advanced configuration restoration after dispatcher restart",
+    "independent source/target-platform acceptance by other windows"
+  ],
+  "delivery": "author PR only; independent review/merge/Issue closure/deployment owned by existing windows"
+}
