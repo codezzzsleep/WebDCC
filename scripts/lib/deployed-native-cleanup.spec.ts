@@ -37,3 +37,35 @@ process.stdout.write(JSON.stringify({ownedPid:child.pid,stopped,foreignAlive})+'
     await rm(root, { recursive: true, force: true });
   }
 }, 10_000);
+
+it('final transport shutdown cleans a newly discovered owned child and preserves a foreign process using the same home', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-final-owner-'));
+  const home = join(root, 'profile'); await mkdir(home);
+  const native = join(root, 'dsh');
+  await writeFile(native, "process.stdout.write('READY\\n');setInterval(()=>{},1000);\n");
+  const foreign = spawn(process.execPath, [native, 'web'], { env: { ...process.env, DSH_HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    await new Promise<void>((resolve, reject) => { foreign.stdout.once('data', () => resolve()); foreign.once('error', reject); });
+    const helper = join(root, 'final-owner.mjs');
+    const cleanup = pathToFileURL(fileURLToPath(new URL('../deployed-native-cleanup.mjs', import.meta.url))).href;
+    await writeFile(helper, `import {spawn} from 'node:child_process';import {finalizeVerifiedServer} from ${JSON.stringify(cleanup)};
+const start=async()=>{const p=spawn(process.execPath,[${JSON.stringify(native)},'web'],{env:{...process.env,DSH_HOME:${JSON.stringify(home)}},stdio:['ignore','pipe','pipe']});await new Promise((r,j)=>{p.stdout.once('data',r);p.once('error',j)});return p;};
+const first=await start();let late;let shutdowns=0;const adapter={shutdown:async()=>{shutdowns++;}};
+const server={manager:{adapter:()=>adapter},close:async()=>{}};
+const stopped=await finalizeVerifiedServer(server,${JSON.stringify(home)},async()=>{late=await start();});
+let foreignAlive=true;try{process.kill(${foreign.pid!},0)}catch{foreignAlive=false}
+process.stdout.write(JSON.stringify({first:first.pid,late:late.pid,stopped,shutdowns,foreignAlive})+'\\n');\n`);
+    const owner = spawn(process.execPath, [helper], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '', error = '';
+    owner.stdout.on('data', chunk => output += String(chunk)); owner.stderr.on('data', chunk => error += String(chunk));
+    const code = await new Promise<number | null>((resolve, reject) => { owner.once('exit', resolve); owner.once('error', reject); });
+    expect({ code, error }).toEqual({ code: 0, error: '' });
+    const result = JSON.parse(output) as { first: number; late: number; stopped: number[]; shutdowns: number; foreignAlive: boolean };
+    expect(result.stopped).toEqual([result.first, result.late]); expect(result.shutdowns).toBe(2); expect(result.foreignAlive).toBe(true);
+  } finally {
+    if (foreign.exitCode === null && foreign.signalCode === null) {
+      const stopped = new Promise<void>(resolve => foreign.once('exit', resolve)); foreign.kill('SIGKILL'); await stopped;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+}, 10_000);

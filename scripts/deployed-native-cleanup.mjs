@@ -58,3 +58,18 @@ export async function closeVerifiedServer(server, home) {
   await adapter?.shutdown();
   return stopOwnedDsh(home);
 }
+
+/** Fence native discovery that settles while the verifier transport closes. */
+export async function finalizeVerifiedServer(server, home, closeTransport) {
+  const adapter = server?.manager.adapter('dsh');
+  const stopped = [];
+  try { stopped.push(...await closeVerifiedServer(server, home)); }
+  finally {
+    try { await closeTransport(); }
+    finally {
+      await adapter?.shutdown();
+      stopped.push(...await stopOwnedDsh(home));
+    }
+  }
+  return [...new Set(stopped)];
+}
