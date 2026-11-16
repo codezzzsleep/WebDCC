@@ -1058,7 +1058,22 @@
           "packages/adapters/claude/src/managed-process.ts",
           "packages/adapters/claude/test/managed-process.spec.ts",
           "packages/adapters/claude/src/handler.spec.ts",
-          "scripts/verify-native-questions.ts"
+          "scripts/verify-native-questions.ts",
+          "browser-tests/conversation-reset.spec.ts",
+          "packages/adapters/claude/test/conversation-reset.spec.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/events.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/validate.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/conversation-reset.spec.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-conversation-reset.spec.ts",
+          "packages/web/src/lib/store.ts"
         ],
         "actualFiles": [
           "packages/adapters/claude/src/adapter.ts",
@@ -1078,7 +1093,22 @@
           "packages/adapters/claude/src/managed-process.ts",
           "packages/adapters/claude/test/managed-process.spec.ts",
           "packages/adapters/claude/src/handler.spec.ts",
-          "scripts/verify-native-questions.ts"
+          "scripts/verify-native-questions.ts",
+          "browser-tests/conversation-reset.spec.ts",
+          "packages/adapters/claude/test/conversation-reset.spec.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/events.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/validate.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/conversation-reset.spec.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-conversation-reset.spec.ts",
+          "packages/web/src/lib/store.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1092,7 +1122,51 @@
           "compact/task/status生产listener与replay具有相同保留策略。",
           "权限切换后换模型保持effective权限；工具失败不产生成功任务或用户中断假象。"
         ],
-        "remainingWork": "已补 Claude 问题组的 SDK tool_result 确认：正常回答不提前完成，取消和原生终态使旧卡失效；真实 SDK0.3.322/CLI2.1.322 + 本机脚本模型 + Chromium 验证自由文本、多选、多题、继续、取消和刷新。块级 reducer/系统消息、权限/effort 与 query 替换的既有修复保留。完整 SDK 输出/任务实体、全部初始化/退出故障和真实 Provider 模型与权限结果仍待验收。"
+        "remainingWork": "已补 Claude 问题组的 SDK tool_result 确认：正常回答不提前完成，取消和原生终态使旧卡失效；真实 SDK0.3.322/CLI2.1.322 + 本机脚本模型 + Chromium 验证自由文本、多选、多题、继续、取消和刷新。块级 reducer/系统消息、权限/effort 与 query 替换的既有修复保留。完整 SDK 输出/任务实体、全部初始化/退出故障和真实 Provider 模型与权限结果仍待验收。",
+        "behaviorDeliveries": [
+          {
+            "issue": 116,
+            "behavior": "Claude native conversation_reset switches current transcript/title under unchanged Web session and keeps read-only prior records; stored legacy raw resets restore on upgrade",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "nativeContract": "Claude Agent SDK 0.3.322 SDKConversationResetMessage; all triggers incl absent/unknown; raw UUID/user_message_uuid retained",
+            "changedLines": {
+              "source": 296,
+              "tests": 372
+            },
+            "fileChanges": {
+              "added": [
+                "browser-tests/conversation-reset.spec.ts",
+                "packages/adapters/claude/test/conversation-reset.spec.ts",
+                "packages/server/test/conversation-reset.spec.ts",
+                "packages/web/src/lib/store-conversation-reset.spec.ts"
+              ],
+              "modified": [
+                "packages/adapters/claude/src/adapter.ts",
+                "packages/protocol/src/api.ts",
+                "packages/protocol/src/events.ts",
+                "packages/protocol/src/sync.ts",
+                "packages/protocol/src/validate.ts",
+                "packages/server/src/manager.ts",
+                "packages/server/src/store.ts",
+                "packages/web/src/App.tsx",
+                "packages/web/src/components/Composer.tsx",
+                "packages/web/src/components/TaskPanel.tsx",
+                "packages/web/src/components/Timeline.tsx",
+                "packages/web/src/lib/store.ts"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "verification": "317 server tests, 6 SDK mapping and 3 AppStore tests, 2 Chromium tests; full types and changed lint passed; SDK frames controlled fixtures, SQLite/HTTP/WS/browser actual local",
+            "dataCompatibility": "Existing DB schema, Web session IDs/URLs and raw/history events retained. One-time atomic context projection in app_settings; newer title and duplicate reset identities preserved. Malformed raw frames stay unrecovered. No schema removal.",
+            "remainingAcceptance": [
+              "Independent actual SDK/CLI reset triggers and Provider scenarios",
+              "Actual target upgrade, restart, multiple clients and complete native interactions recovery",
+              "Merge/deployment and complete NP-09 scope remain separate and unperformed by developer"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-02",

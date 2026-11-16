@@ -220,7 +220,65 @@ export class Store {
   readonly nativeEvents: NativeEventStore;
   readonly reconciliations: NativeReconciliationStore;
   readonly nativeActions: NativeActionStore;
-  constructor(private readonly db: Db) { this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db); this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); this.reconciliations = new NativeReconciliationStore(db, this); this.nativeActions = new NativeActionStore(db); }
+  constructor(private readonly db: Db) {
+    this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db);
+    this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); this.reconciliations = new NativeReconciliationStore(db, this); this.nativeActions = new NativeActionStore(db);
+    this.restoreLegacyConversations();
+  }
+
+  /** Older releases retained reset frames as unknown events. Restore only the
+   * surface projection, leaving original event identities and bytes intact. */
+  private restoreLegacyConversations(): void {
+    if (this.db.prepare('SELECT 1 FROM app_settings WHERE key = ?').get('conversation-index-v1') !== undefined) return;
+    const rows = this.db.prepare(`SELECT events.* FROM events JOIN sessions ON sessions.id = events.session_id
+      WHERE sessions.agent = 'claude-code' AND events.kind = 'unknown' AND events.native IS NOT NULL ORDER BY events.session_id, events.seq`).all() as EventRow[];
+    const latest = new Map<string, { row: EventRow; reset: ConversationReset; previousNativeId?: string }>();
+    const seen = new Map<string, Set<string>>();
+    for (const row of rows) {
+      let native: Record<string, unknown>;
+      try {
+        const value = JSON.parse(row.native!) as unknown;
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) continue;
+        native = value as Record<string, unknown>;
+      } catch { continue; }
+      if (native['type'] !== 'conversation_reset' || typeof native['new_conversation_id'] !== 'string' || native['new_conversation_id'] === ''
+        || typeof native['uuid'] !== 'string' || native['uuid'] === '') continue;
+      const uuids = seen.get(row.session_id) ?? new Set<string>();
+      seen.set(row.session_id, uuids);
+      if (uuids.has(native['uuid'])) continue;
+      uuids.add(native['uuid']);
+      latest.set(row.session_id, { row, reset: { id: native['new_conversation_id'], uuid: native['uuid'],
+        ...(typeof native['trigger'] === 'string' ? { trigger: native['trigger'] } : {}),
+        ...(typeof native['user_message_uuid'] === 'string' ? { userMessageUuid: native['user_message_uuid'] } : {}),
+        ...(typeof native['timestamp'] === 'string' ? { timestamp: native['timestamp'] } : {}) },
+        ...(typeof native['session_id'] === 'string' ? { previousNativeId: native['session_id'] } : {}) });
+    }
+    this.db.transaction(() => {
+      for (const [id, { row, reset, previousNativeId }] of latest) {
+        if (this.conversation(id) !== undefined) continue;
+        let newerTitle = false;
+        let previousTitle: string | undefined;
+        const feed = this.db.prepare('SELECT patch, at FROM feed WHERE session_id = ? ORDER BY feed_seq').all(id) as { patch: string; at: string }[];
+        for (const entry of feed) {
+          const patch = JSON.parse(entry.patch) as FeedPatch;
+          if (patch.title === undefined) continue;
+          // Cross-stream order is known only from stored receipt times. Equal
+          // or invalid times cannot disprove a newer explicit title.
+          if (!(Date.parse(entry.at) < Date.parse(row.at))) newerTitle = true;
+          else previousTitle = patch.title ?? undefined;
+        }
+        const conversation: ConversationState = { ...reset, resetSeq: row.seq,
+          ...(previousNativeId === undefined ? {} : { previousNativeId }), ...(previousTitle === undefined ? {} : { previousTitle }) };
+        this.saveConversation(id, conversation);
+        if (!newerTitle) {
+          this.setTitleSource(id, 'native');
+          this.updateSession(id, { title: null, touch: false });
+        }
+        this.appendFeed(id, { conversation, ...(!newerTitle ? { title: null } : {}) });
+      }
+      this.db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run('conversation-index-v1', '1');
+    })();
+  }
 
   watchdogSettings(): WatchdogSettings | undefined {
     const row = this.db.prepare("SELECT value FROM app_settings WHERE key = 'codex-watchdog'").get() as { value: string } | undefined;
@@ -309,8 +367,13 @@ export class Store {
   }
 
   hasConversationReset(id: string, uuid: string): boolean {
-    return this.db.prepare("SELECT 1 FROM events WHERE session_id = ? AND item_key = ? AND kind = 'notice' LIMIT 1")
-      .get(id, `conversation-reset-${uuid}`) !== undefined;
+    return this.db.prepare(`SELECT 1 FROM events WHERE session_id = ? AND
+      ((item_key = ? AND kind = 'notice') OR (kind = 'unknown'
+        AND json_extract(CASE WHEN json_valid(native) THEN native END, '$.type') = 'conversation_reset'
+        AND json_extract(CASE WHEN json_valid(native) THEN native END, '$.uuid') = ?
+        AND typeof(json_extract(CASE WHEN json_valid(native) THEN native END, '$.new_conversation_id')) = 'text'
+        AND json_extract(CASE WHEN json_valid(native) THEN native END, '$.new_conversation_id') != '')) LIMIT 1`)
+      .get(id, `conversation-reset-${uuid}`, uuid) !== undefined;
   }
 
   applyConversationReset(id: string, reset: ConversationReset, native: unknown, nativeEnvelopeId: number, previousNativeId: string):

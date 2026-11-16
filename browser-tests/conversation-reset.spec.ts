@@ -1,7 +1,12 @@
 import { chromium, type Browser } from '@playwright/test';
 import type { AdapterEvent } from '@webdcc/protocol';
 import { expect, it } from 'vitest';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.js';
+import { openDb } from '../packages/server/src/db.js';
+import { Store } from '../packages/server/src/store.js';
 import { seedWorkspaceAndSession } from '../packages/server/test/helpers.js';
 import { createSourceTestApp } from './helpers.js';
 
@@ -62,4 +67,50 @@ it('a native reset changes the current title/transcript, retains a read-only pri
     expect(ctx.store.getSession(sessionId)?.conversation?.id).toBe(next);
     expect(ctx.store.allEvents(sessionId)).toEqual(expect.arrayContaining(before));
   } finally { await browser?.close(); await ctx.close(); }
+}, 60000);
+
+it('opening a legacy database restores its raw reset boundary and keeps prior history separate after browser refresh', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'wdcc-legacy-reset-browser-'));
+  const dbPath = join(scratch, 'state.db');
+  const db = openDb(dbPath);
+  let browser: Browser | undefined;
+  let ctx: Awaited<ReturnType<typeof createSourceTestApp>> | undefined;
+  try {
+    const old = new Store(db);
+    const path = join(scratch, 'workspace');
+    await mkdir(path);
+    const workspace = old.createWorkspace('Legacy workspace', path);
+    const session = old.createSession({ workspaceId: workspace.id, agent: 'claude-code', title: 'Stale legacy title' });
+    old.appendEvent({ sessionId: session.id, turnId: 'prior', itemKey: 'old-answer', kind: 'assistant.message', data: { text: 'Original legacy answer', nativePhase: 'final_result' } });
+    old.appendEvent({ sessionId: session.id, turnId: 'prior', itemKey: 'old-complete', kind: 'turn.completed', data: { status: 'completed', durationMs: 1, answerItemKeys: ['old-answer'] } });
+    old.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'legacy-reset', kind: 'unknown', data: { nativeType: 'conversation_reset' },
+      native: { type: 'conversation_reset', new_conversation_id: '22222222-2222-4222-8222-222222222222', uuid: '33333333-3333-4333-8333-333333333333' } });
+    const original = old.allEvents(session.id);
+    db.prepare('DELETE FROM app_settings WHERE key = ?').run('conversation-index-v1');
+    db.close();
+    ctx = await createSourceTestApp({ dbPath });
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    const address = ctx.app.server.address();
+    if (!address || typeof address === 'string') throw new Error('missing test listener');
+    const base = `http://127.0.0.1:${address.port}`;
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.goto(`${base}/s/${session.id}`);
+    await page.getByTestId('conversation-boundary').waitFor();
+    expect(await page.getByTestId('session-title').textContent()).toBe('新会话');
+    expect(await page.getByTestId('timeline').textContent()).not.toContain('Original legacy answer');
+    await page.getByRole('button', { name: '查看此前对话' }).click();
+    await expect.poll(() => page.getByTestId('timeline').textContent()).toContain('Original legacy answer');
+    expect(await page.getByTestId('composer-input').isDisabled()).toBe(true);
+    await page.reload();
+    await page.getByTestId('conversation-boundary').waitFor();
+    expect(await page.getByTestId('timeline').textContent()).not.toContain('Original legacy answer');
+    expect(ctx.store.allEvents(session.id)).toEqual(original);
+  } finally {
+    await browser?.close();
+    await ctx?.close();
+    if (db.open) db.close();
+    await rm(scratch, { recursive: true, force: true });
+  }
 }, 60000);
