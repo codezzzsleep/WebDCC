@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto, SlashCommand, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
-import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
+import { claudeOutputOrigin, parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
@@ -938,7 +938,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   onClick={() => {
                     const final = store
                       .getEvents(item.id)
-                      .filter((event) => event.kind === 'assistant.message')
+                      .filter((event) => event.kind === 'assistant.message' && claudeOutputOrigin(event) === undefined)
                       .at(-1);
                     insertAtMention(final === undefined ? '' : (final.data as { text: string }).text);
                   }}

@@ -51,7 +51,8 @@ it('NP-09 isolates equal block indices across main and child actors', () => {
   const main = completions(replay.feed(complete('same-model-message-id', [{ type: 'text', text: 'main' }], 'main-uuid')));
   expect(child.map(event => event.itemKey)).toEqual([starts[1]]);
   expect(main.map(event => event.itemKey)).toEqual([starts[0]]);
-  expect(child[0]?.data).toEqual({ text: 'child' });
+  expect(child[0]?.data).toEqual({ text: 'child', claudeActor: { agent: 'claude-code', nativeSessionId: 'native-session',
+    parentToolUseId: 'parent-tool', nativeMessageId: 'same-model-message-id', blockIndex: 0 } });
   expect(main[0]?.data).toEqual({ text: 'main' });
 });
 
