@@ -24,5 +24,7 @@ then stops that process and awaits its original `command/exec` result. Input and
 native request/process identities are recorded before forwarding. It neither
 submits a model turn nor changes native prompts, tools, permissions or version.
 Reports and screenshots require new private paths so prior failures remain intact.
+Cleanup targets the original API process ID. A PID printed by the sandboxed
+command is diagnostic output and can belong to its native PID namespace.
 This scope does not establish current Provider availability, binary output
 fidelity, full terminal programs or target-platform acceptance under #77/#42.

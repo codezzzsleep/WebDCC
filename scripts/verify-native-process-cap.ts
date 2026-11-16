@@ -130,7 +130,7 @@ try {
   assert.equal(before['cwd'], workspacePath);
   assert.deepEqual(before['command'], command);
   assert.equal(before['outputTruncated'], false);
-  evidence['commandPid'] = Number(stdout().toString('utf8').match(/READY_PID:(\d+)/)![1]);
+  evidence['nativeReportedPid'] = Number(stdout().toString('utf8').match(/READY_PID:(\d+)/)![1]);
   const terminal = surface.getByRole('region', { name: '原生交互终端', exact: true });
   await until(async () => (await terminal.getByRole('status').textContent())?.includes('已连接') === true, 'Native process browser stream not connected');
   assert.ok(states.some(frame => frame.type === 'snapshot' && frame.process['id'] === id && frame.process['outputTruncated'] === false));
@@ -167,13 +167,14 @@ try {
   assert.equal(exited['confirmed'], true);
   assert.equal(frames.some(frame => frame.dir === 'out' && (frame.frame as { method?: string }).method === 'turn/start'), false);
   assert.deepEqual(errors, []);
-  Object.assign(evidence, { passed: true, before, capped, exited, nativeResult: result.result,
+  Object.assign(evidence, { passed: true, phase: 'verified', before, capped, exited, nativeResult: result.result,
     nativeCapCount: deltas().filter(delta => delta.capReached).length, retainedBytes: bytes.length,
     retainedLogSha256: createHash('sha256').update(bytes).digest('hex'), nativeStdoutSha256: createHash('sha256').update(stdout()).digest('hex'),
     refreshPreserved: true, nativeStarts: 1, newModelRequests: 0, browserErrors: errors });
   await restoredTerminal.getByRole('button', { name: '关闭并清除日志', exact: true }).click();
   await until(async () => !(await page.request.get(base + '/api/native-process/' + id)).ok(), 'Native process/log record did not close');
 } catch (error) {
+  evidence['passed'] = false;
   evidence['error'] = String(error);
   evidence['phase'] = 'failed';
   process.exitCode = 1;
@@ -216,7 +217,7 @@ try {
   else await rm(isolated.dirs.root, { recursive: true, force: true });
   const fingerprint = sourceFingerprint();
   if (fingerprint !== evidence['sourceFingerprint']) cleanupErrors.push('Source changed during native verification');
-  if (cleanupErrors.length) { evidence['passed'] = false; process.exitCode = 1; }
+  if (cleanupErrors.length) { evidence['passed'] = false; evidence['phase'] = 'failed-cleanup'; process.exitCode = 1; }
   Object.assign(evidence, { cleanupErrors, processesAfter: alive, finalSourceFingerprint: fingerprint, endedAt: new Date().toISOString() });
   save();
   process.stdout.write(JSON.stringify({ passed: evidence['passed'], error: evidence['error'], cleanupErrors, report }) + '\n');
