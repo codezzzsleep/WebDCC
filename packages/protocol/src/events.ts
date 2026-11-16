@@ -105,10 +105,12 @@ export interface EventData {
     outputFileId?: string;
     status: 'running' | 'completed' | 'failed';
   };
-  'file.read': { path: string; label?: string };
+  'file.read': { path: string; label?: string; status?: 'running' | 'completed' | 'failed'; error?: string };
   'file.change': {
     changes: FileChangeEntry[];
     status: 'running' | 'completed' | 'failed';
+    path?: string;
+    error?: string;
     /** @deprecated Codex cumulative snapshots use turn.diff. */
     snapshot?: boolean;
   };

@@ -1630,8 +1630,13 @@ export class DshAdapter implements AgentAdapter {
         this.finishLiveAssistant(sessionId, runtime);
         this.finishLiveReasoning(sessionId, runtime);
         const reason = (data['reason'] ?? {}) as { kind?: string };
+        const outputLimited = reason.kind === 'max-tokens';
         const interrupted = reason.kind === 'interrupted' || reason.kind === 'cancelled' || reason.kind === 'aborted';
-        const status = interrupted ? 'interrupted' : reason.kind === 'failed' || reason.kind === 'error' ? 'failed' : 'completed';
+        const status = interrupted ? 'interrupted' : outputLimited || reason.kind === 'failed' || reason.kind === 'error' ? 'failed' : 'completed';
+        if (outputLimited) complete(`dsh-output-limit-${nativeSeq}`, 'notice', {
+          level: 'warning', nativeType: 'turn/end:max-tokens',
+          text: 'DSH 达到原生输出 Token 上限（max-tokens）；输出或工具调用可能未完成。',
+        });
         for (const view of runtime.retries?.ended(data, status) ?? []) complete(view.itemKey, 'notice', view.data);
         this.emit(sessionId, { type: 'turn.end', nativeTurnId: this.nativeTurnId(data), status, native });
         return;
@@ -1715,14 +1720,17 @@ export class DshAdapter implements AgentAdapter {
             nativeTurnId: this.nativeTurnId(data),
           });
         } else if (item.kind === 'file.read') {
-          this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'], nativeSeq, native, nativeTurnId: this.nativeTurnId(data) });
+          this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read',
+            data: { ...(item.data as EventData['file.read']), status: isError ? 'failed' : 'completed', ...(isError ? { error: output } : {}) },
+            nativeSeq, native, nativeTurnId: this.nativeTurnId(data) });
         } else if (item.kind === 'file.change') {
           // C2：DSH 的 write/edit 结果不带 diff，用入参算 hunk（第 2/3 级）
           this.emit(sessionId, {
             type: 'item.complete',
             itemKey: item.itemKey,
             kind: 'file.change',
-            data: { changes: buildFileChanges(item.name, item.input), status: isError ? 'failed' : 'completed' },
+            data: { changes: isError ? [] : buildFileChanges(item.name, item.input), status: isError ? 'failed' : 'completed',
+              ...(isError ? { path: String(item.input['file_path'] ?? item.input['path'] ?? ''), error: output } : {}) },
             nativeSeq,
             native,
             nativeTurnId: this.nativeTurnId(data),
