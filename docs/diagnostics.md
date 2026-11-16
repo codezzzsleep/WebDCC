@@ -20,6 +20,7 @@ The controlled model observer passes already masked byte records to `recordModel
 | `WDCC_TRACE_MAX_CAPTURE_CHUNKS` | 4,096 | Each captured body |
 | `WDCC_TRACE_MAX_FILE_BYTES` | 64 MiB | Each diagnostic JSONL file |
 | `WDCC_TRACE_MAX_QUEUED_BYTES` | 32 MiB | Each writer's pending serialized records |
+| `WDCC_TRACE_MAX_DIRECTORY_BYTES` | 512 MiB | Regular diagnostic files in each recording directory |
 | `WDCC_TRACE_RETENTION_MS` | 7 days | Diagnostic file cleanup |
 
 When body capture overflows, the entire captured body is omitted and `coverage.truncated` is set. Counts and native transport continue. Omitting the whole body avoids storing a cut credential prefix as complete evidence. Queue and file limits record an incomplete summary; a small coverage marker survives a server restart when its directory remains writable. Native preload write failures use a sibling coverage marker and bounded error reporting.
@@ -28,11 +29,15 @@ Cooperating writers use `flock` and one stable `.wdcc-diagnostic-writer.lock` fi
 
 Diagnostic targets must be regular files. The helper opens without following a final symlink and with nonblocking flags, verifies the actual descriptor before truncation or writing, and closes it after the operation. FIFO, socket and device targets report incomplete recording; they do not create a permanently waiting writer. An oversized replacement leaves the existing content intact. Path changes during the write are reported as incomplete evidence.
 
-Optional diagnostic writes require the `flock` executable. A missing utility or a lock held beyond the one-second wait reports incomplete recording while native forwarding continues. The empty lock file contains no payload; keep its pathname while writers may be active. This coordinates single-file limits across cooperating processes; aggregate disk and capture budgets remain separate work.
+Optional diagnostic writes require the `flock` executable. A missing utility or a lock held beyond the one-second wait reports incomplete recording while native forwarding continues. The empty lock file contains no payload; keep its pathname while writers may be active. The same lock coordinates file and directory limits across cooperating processes.
+
+The directory budget counts current regular-file lengths, including existing files, context records and per-session coverage markers. Append and replacement use their actual growth; restarting a writer does not reset consumed space. A full directory rejects new growth without creating empty recording files or deleting old content. Per-session failure records are bounded to 64 KiB and count against the directory budget, independently of the JSONL file limit.
+
+One reserved `.wdcc-diagnostic-quota.json` file has an additional fixed 4 KiB allowance. It keeps a directory-wide incomplete signal and quota-rejection count when ordinary coverage cannot fit. Its reads and writes use bounded, verified regular-file descriptors; unavailable metadata stays explicit. This internal path cannot be used as a normal recording destination. A directory that already exceeds the configured budget is not automatically reduced. The budget governs cooperating writers and logical file bytes in that directory, rather than external file mutations or totals across different directories.
 
 Retention cleanup runs at recorder initialization and at most once an hour when records arrive. It removes only expired regular diagnostic files in the trace directory, preserving unrelated files. It is not an idle background deletion timer.
 
-Limits apply per observer/writer/file. Cross-process aggregate disk quotas, a global active-capture budget and a complete retention/export policy remain acceptance work. Existing directories are not rewritten or migrated by this source repair.
+Capture and pending-write limits still apply per observer/writer. A global active-capture budget, totals across different directories and a complete retention/export policy remain implementation and acceptance work. Existing recording content is not rewritten or migrated to satisfy a smaller budget.
 
 ## Failures and remaining scope
 

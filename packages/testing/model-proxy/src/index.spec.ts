@@ -1,9 +1,28 @@
 import { createServer, request, type Server } from 'node:http';
 import { once } from 'node:events';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { ModelProxy, type ModelProxyRecord } from './index.js';
 async function listen(server: Server): Promise<number> { server.listen(0, '127.0.0.1'); await once(server, 'listening'); return (server.address() as { port: number }).port; }
 async function close(server: Server): Promise<void> { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+
+it('a standalone proxy directory quota marks recording incomplete after unchanged forwarding', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-proxy-directory-'));
+  let sent = '';
+  const upstream = createServer(async (req, res) => { for await (const part of req) sent += String(part); res.end('original response'); });
+  const port = await listen(upstream);
+  const proxy = new ModelProxy({ target: `http://127.0.0.1:${port}`, recordFile: join(directory, 'trace.jsonl'), maxRecordDirectoryBytes: 0 });
+  try {
+    const address = await proxy.listen();
+    const response = await fetch(address.url, { method: 'POST', body: 'original request' });
+    expect(response.status).toBe(200); expect(await response.text()).toBe('original response');
+    expect(sent).toBe('original request');
+    await expect(proxy.flush()).rejects.toThrow('Model recording is incomplete');
+    expect(JSON.parse(await readFile(join(directory, '.wdcc-diagnostic-quota.json'), 'utf8'))).toMatchObject({ incomplete: true, scope: 'directory' });
+  } finally { await proxy.close().catch(() => undefined); await close(upstream); await rm(directory, { recursive: true, force: true }); }
+});
 it('forwards the first SSE bytes before upstream ends and redacts a secret split across chunks', async () => {
   const records: ModelProxyRecord[] = [];
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });

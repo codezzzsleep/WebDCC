@@ -3,7 +3,8 @@ const file = process.argv[2]!;
 const many = process.argv[3] === 'many';
 process.send?.({ ready: true });
 process.once('message', async () => {
-  const writer = new DiagnosticFileWriter({ maxFileBytes: many ? 1024 * 1024 : 64 });
+  const writer = new DiagnosticFileWriter({ maxFileBytes: many ? 1024 * 1024 : 64,
+    maxDirectoryBytes: process.argv[4] === undefined ? undefined : Number(process.argv[4]) });
   const errors: string[] = [];
   const count = many ? 3000 : 1;
   const writes = Array.from({ length: count }, () => writer.write(file, 'x'.repeat(64), 'append', error => errors.push(error.message)));
