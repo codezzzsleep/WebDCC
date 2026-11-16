@@ -1,0 +1,48 @@
+{
+  "issue": 200,
+  "parents": [
+    198,
+    56,
+    42
+  ],
+  "sourceBase": "73d37b90b914b7ad9fc1064139f27c50cc08e2fd",
+  "sourceHashes": {
+    "packages/testing/model-proxy/src/diagnostic-writer.ts": "9453259f8449ef28b24265e3bc2d1cf90b0281bb7f49d699d19ba79d53395104",
+    "packages/testing/model-proxy/src/diagnostic-writer.spec.ts": "b4516dc85ec446bf1698086af496cf9351a6398130cb688ff77ca094316f461b",
+    "docs/diagnostics.md": "d83bfbdcf828dd13b16e12503f622ef35578e33b77675bdf207e4b7409aeea9d"
+  },
+  "evidenceKind": "actual-source-controlled-special-file/process/HTTP-regression",
+  "checks": {
+    "regression": 25,
+    "typecheck": "full workspace/scripts passed; final added device case package typecheck separately recorded",
+    "lint": "changed source/spec passed",
+    "platform": "Linux / util-linux 2.39.3",
+    "targets": [
+      "FIFO",
+      "symlink",
+      "socket",
+      "isolated character device"
+    ],
+    "preserved": [
+      "original referenced file bytes",
+      "FIFO/socket/device type",
+      "UTF8/append/replace limits",
+      "kernel lock lifecycle",
+      "native Node preload/local HTTP streaming bytes"
+    ]
+  },
+  "retainedEvidence": [
+    "PR199 candidate helper wait_for_partner and held lock after parent SIGKILL; own descendants cleaned after PID start identity check",
+    "Initial early-cut probe did not enter blocked IO; untriggered, retained",
+    "Original FIFO unit negative:1failed/7unrun timeout"
+  ],
+  "actualNativeAgentCalls": 0,
+  "paidProviderCalls": 0,
+  "liveProvider": false,
+  "fullAcceptance": "incomplete",
+  "deployment": "not performed",
+  "remaining": [
+    "Target-platform actual three Agent optional diagnostics/file faults and recovery",
+    "Complete NP-14 quotas/credential-source/cross-frame policy"
+  ]
+}

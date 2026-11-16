@@ -1,10 +1,30 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { fork, spawn, spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, stat, symlink, writeFile, lstat } from 'node:fs/promises';
+import { createServer } from 'node:net';
+import { fork, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { DiagnosticFileWriter } from './diagnostic-writer.js';
+
+async function terminateOwnedFixture(child: ChildProcess): Promise<void> {
+  const descendants: { pid: number; start: string | undefined }[] = [];
+  const identity = async (pid: number) => {
+    const value = await readFile(`/proc/${pid}/stat`, 'utf8');
+    return value.slice(value.lastIndexOf(')') + 2).split(' ')[19];
+  };
+  const collect = async (pid: number): Promise<void> => {
+    try {
+      const ids = (await readFile(`/proc/${pid}/task/${pid}/children`, 'utf8')).trim().split(/\s+/).filter(Boolean).map(Number);
+      for (const id of ids) { descendants.push({ pid: id, start: await identity(id) }); await collect(id); }
+    } catch { /* fixture may already have exited */ }
+  };
+  if (child.pid !== undefined) await collect(child.pid);
+  for (const item of descendants.reverse()) {
+    try { if (item.start !== undefined && await identity(item.pid) === item.start) process.kill(item.pid, 'SIGKILL'); } catch { /* owned process already ended */ }
+  }
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+}
 
 it('NP-14 limits queued writes and files without throwing into the native transport', async () => {
   const root = await mkdtemp(join(tmpdir(), 'wdcc-diagnostic-quota-'));
@@ -39,6 +59,63 @@ it('independent writers enforce one file limit across concurrent appends', async
     expect((await stat(file)).size).toBe(64);
     expect(errors).toEqual(Array.from({ length: 3 }, () => 'Diagnostic file size limit reached'));
     expect(writers.every(writer => writer.pendingBytes === 0)).toBe(true);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('FIFO diagnostic targets fail and flush instead of retaining an owned writer indefinitely', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-writer-fifo-'));
+  const file = join(directory, 'trace.jsonl');
+  expect(spawnSync('mkfifo', [file]).status).toBe(0);
+  const child = fork(join(import.meta.dirname, 'fixtures/diagnostic-writer-child.ts'), [file],
+    { execArgv: ['--import', 'tsx'], stdio: ['ignore', 'ignore', 'inherit', 'ipc'] });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await once(child, 'message');
+    const complete = once(child, 'message');
+    child.send('go');
+    const [result] = await Promise.race([complete, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('FIFO diagnostic write did not settle')), 2000); })]);
+    expect(result).toMatchObject({ done: true, pendingBytes: 0, errors: ['Diagnostic target must be a regular file'] });
+    expect((await stat(file)).isFIFO()).toBe(true);
+    expect(spawnSync('flock', ['-n', join(directory, '.wdcc-diagnostic-writer.lock'), 'true']).status).toBe(0);
+  } finally {
+    clearTimeout(timer); await terminateOwnedFixture(child); await rm(directory, { recursive: true, force: true });
+  }
+}, 10000);
+
+it('symlink and socket targets fail without changing the referenced content or socket', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-writer-special-'));
+  const original = join(directory, 'original');
+  const link = join(directory, 'trace.jsonl');
+  const socket = join(directory, 'trace.socket');
+  const server = createServer();
+  try {
+    await writeFile(original, 'original bytes'); await symlink(original, link);
+    server.listen(socket); await once(server, 'listening');
+    const writer = new DiagnosticFileWriter();
+    const errors: string[] = [];
+    await writer.write(link, 'replacement', 'replace', error => errors.push(error.message));
+    await writer.write(socket, 'socket bytes', 'append', error => errors.push(error.message));
+    await writer.flush();
+    expect(errors).toEqual(['Diagnostic target must be a regular file', 'Diagnostic target must be a regular file']);
+    expect(await readFile(original, 'utf8')).toBe('original bytes');
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect((await lstat(socket)).isSocket()).toBe(true);
+    expect(writer.pendingBytes).toBe(0);
+  } finally { if (server.listening) await new Promise<void>(resolve => server.close(() => resolve())); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('a device created inside the isolated fixture is rejected without retaining its descriptor', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-writer-device-'));
+  const file = join(directory, 'test-null-device');
+  try {
+    const created = spawnSync('mknod', [file, 'c', '1', '3']);
+    expect(created.status, created.stderr?.toString()).toBe(0);
+    const writer = new DiagnosticFileWriter(); const errors: string[] = [];
+    await writer.write(file, 'device bytes', 'append', error => errors.push(error.message));
+    await writer.flush();
+    expect(errors).toEqual(['Diagnostic target must be a regular file']);
+    expect((await lstat(file)).isCharacterDevice()).toBe(true);
+    expect(writer.pendingBytes).toBe(0);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
