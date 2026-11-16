@@ -19,7 +19,7 @@ export function ElicitationForm({ form, busy, submit }: { form: Form; busy: bool
           const object: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
           for (const [name, value] of fields) {
             const schema = record(value); const raw = values[name] ?? (schema['type'] === 'boolean' && required.has(name) ? false : undefined);
-            if (raw === undefined || raw === '' && !required.has(name)) continue;
+            if (raw === undefined || raw === '' && !required.has(name) && ['integer', 'number', 'object', 'array'].includes(String(schema['type']))) continue;
             if (raw === '' && (schema['type'] === 'integer' || schema['type'] === 'number')) throw new Error('Missing number');
             object[name] = schema['type'] === 'integer' || schema['type'] === 'number' ? Number(raw)
               : schema['type'] === 'object' || schema['type'] === 'array' ? JSON.parse(String(raw)) as unknown : raw;
@@ -41,11 +41,17 @@ export function ElicitationForm({ form, busy, submit }: { form: Form; busy: bool
       : fields.map(([name, value]) => {
         const schema = record(value); const title = typeof schema['title'] === 'string' ? schema['title'] : name;
         const secret = schema['writeOnly'] === true || schema['isSecret'] === true || schema['format'] === 'password';
+        const options = Array.isArray(schema['enum']) && schema['enum'].every(option => typeof option === 'string') ? schema['enum'] : undefined;
+        const selection = options?.findIndex(option => option === values[name]);
+        const labels = Array.isArray(schema['enumNames']) && schema['enumNames'].every(label => typeof label === 'string') ? schema['enumNames'] : undefined;
         return <label key={name} style={{ display: 'block', margin: '8px 0' }}>{title}{required.has(name) ? '（必填）' : ''}
           {typeof schema['description'] === 'string' ? <span className="desc">{schema['description']}</span> : null}
           {schema['type'] === 'boolean' ? <input type="checkbox" checked={values[name] === true} disabled={busy} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.checked }))} />
-            : Array.isArray(schema['enum']) && schema['enum'].every(option => typeof option === 'string') ? <select className="text-input" disabled={busy} value={String(values[name] ?? '')} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))}>
-              <option value="">请选择</option>{schema['enum'].map(option => <option key={option} value={option}>{option}</option>)}
+            : options !== undefined ? <select className="text-input" disabled={busy} value={selection === undefined || selection < 0 ? '' : String(selection)} onChange={event => {
+              const selected = options.find((_option, index) => String(index) === event.target.value);
+              setValues(previous => { const next = { ...previous }; if (selected === undefined) delete next[name]; else next[name] = selected; return next; });
+            }}>
+              <option value="">请选择</option>{options.map((option, index) => <option key={index} value={String(index)}>{labels?.[index] ?? (option === '' ? '空字符串' : option)}</option>)}
             </select>
             : schema['type'] === 'object' || schema['type'] === 'array' ? <textarea className="text-input" disabled={busy} value={String(values[name] ?? '')} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))} />
             : <input className="text-input" type={secret ? 'password' : schema['type'] === 'number' || schema['type'] === 'integer' ? 'number' : 'text'} autoComplete={secret ? 'off' : undefined} disabled={busy} value={String(values[name] ?? '')} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))} />}

@@ -1,0 +1,60 @@
+{
+  "issue": 237,
+  "parents": [
+    48,
+    44,
+    42
+  ],
+  "base": "5d398130d8e9ed6e8f05e4d6552eaebd30706735",
+  "sourceFingerprint": "29dbfe501d5265f31c0eee9c2257368ca67961a94aacab767c88aa23654363b4",
+  "verification": {
+    "sourceTests": 24,
+    "browserTests": 6,
+    "finalEvidenceCases": 3,
+    "types": "full workspace+scripts passed; evidence instrumentation scripts check passed",
+    "lint": "changed files passed",
+    "scope": "actual source Chromium/HTTP/WebSocket/SQLite + controlled productionCodex codec/native schema validator, no official Agent",
+    "actualCommandTransport": "WebSocket",
+    "nativeReplies": [
+      {
+        "choice": "",
+        "emptyText": ""
+      },
+      {
+        "choice": "blue",
+        "emptyText": ""
+      },
+      {
+        "emptyText": ""
+      }
+    ],
+    "receiptState": "completed",
+    "afterReload": "resolved; unchanged1 native response",
+    "priorEvidence": "ui-evidence only captured HTTP but command traveledWebSocket; prior packets/reload valid,command/receiptmissing; preserved and not counted as full identity proof"
+  },
+  "evidenceSha256": {
+    "browser-before.log": "03d7fa23e097f8c0603e8590ecb530c8fc831e672596dbc5a92acffb082d80e0",
+    "browser-first.log": "fa6b7c818ab2afa592444eb41c3214811b7762b0ddadacd3bb68eebcdc9c021a",
+    "browser-final.log": "cc5fcd40202d16dcf9db976290521785985dcdb82383cb433ebe33844c76bc69",
+    "browser-evidence-complete.log": "cb3e80da46e9e335a6974a21a5f27e12bf2abf8f5fdc19d015d6ea5a229c9662",
+    "regression.log": "5bf6bd3852d83497ff73aeb3900655d881df922ee4b7edd9aeadd76d284bbdd2",
+    "typecheck.log": "bf3abdd2b7dbd524ddf274a8edbeb04aa38456d02034a6560cb34f62ef5bb62d",
+    "scripts-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ui-evidence-complete/case-0.json": "283b3a623edc182782c63c5a32dd642f9495aec1b5be45a82efcad72adcdd3af",
+    "ui-evidence-complete/case-1.json": "e47a4181d6116b8f7c148c5aab81cc292ff5c0f5024f346864f9ef4a6f9137d1",
+    "ui-evidence-complete/case-2.json": "c1dd2b306d71ca9b3b5bc02e0b8ec88dcc56aca59df2d8fb5b3e6c5e5b1fa555"
+  },
+  "failedEvidence": "2/2 sourceChromium semantic negatives; accepted original string content changed to{} orblue-only atcodec boundary",
+  "nativeVersion": "installedcodex-cli0.169.0 version-only; officialAgentnotinvoked",
+  "officialNativeCalls": 0,
+  "providerCalls": 0,
+  "deployment": "not performed",
+  "remainingAcceptance": [
+    "Independent exact-head source acceptance",
+    "Actual Native MCP tool effect/alltargetAgent/platform/provider compatibility",
+    "FullNP06 secret/schema/crossclient/recovery remaining scope"
+  ],
+  "dataMigration": "none"
+}
