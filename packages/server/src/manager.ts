@@ -32,7 +32,7 @@ import type {
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
-import { findUserEcho, resolveAnswer, currentCodexSubagents } from '@webdcc/protocol';
+import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -134,6 +134,24 @@ export class SessionManager {
         this.store.updateSessionAndFeed(session.id, { permissions, touch: false }, { permissions });
       }
       const events = this.store.allEvents(session.id);
+      if (session.agent === 'claude-code' && currentClaudeTasks(events).some(task => !['completed', 'failed', 'stopped'].includes(task.status))) {
+        const latestQuery = events.findLast(event => event.kind === 'internal'
+          && (event.data as EventData['internal']).claudeTaskRuntime?.state === 'started'
+          && typeof (event.data as EventData['internal']).claudeTaskRuntime?.id === 'string'
+          && (event.data as EventData['internal']).claudeTaskRuntime!.id !== '');
+        const latestQueryId = (latestQuery?.data as EventData['internal'] | undefined)?.claudeTaskRuntime?.id;
+        const observed = events.findLast(event => event.kind === 'internal'
+          && typeof (event.data as EventData['internal']).claudeTaskRuntime?.id === 'string'
+          && (event.data as EventData['internal']).claudeTaskRuntime!.id !== ''
+          && (latestQueryId === undefined || (event.data as EventData['internal']).claudeTaskRuntime!.id === latestQueryId)
+          && ['started', 'unavailable'].includes((event.data as EventData['internal']).claudeTaskRuntime!.state));
+        const signal = (observed?.data as EventData['internal'] | undefined)?.claudeTaskRuntime;
+        if (signal?.state !== 'unavailable') {
+          const id = signal?.id ?? `legacy:${session.id}`;
+          this.store.appendEvent({ sessionId: session.id, turnId: null, itemKey: `claude-server-recovery:${id}`, kind: 'internal',
+            data: { nativeType: 'claude-server-recovery', claudeTaskRuntime: { id, state: 'unavailable' } } });
+        }
+      }
       const started = events.filter((event) => event.kind === 'turn.started');
       for (const begin of started) {
         if (events.some((event) => event.turnId === begin.turnId && event.kind === 'turn.completed')) continue;
