@@ -53,6 +53,32 @@ export interface DshSubagentInterruptReceipt {
   confirmed: false;
 }
 
+export interface DshSubagentInputRequest {
+  commandId: string;
+  text: string;
+  delivery: 'queue' | 'steer';
+  clientTimeZone?: string;
+}
+export interface DshSubagentPromptOptions {
+  requestId: string;
+  delivery: 'queue' | 'steer';
+  clientTimeZone?: string;
+  /** Persist the observed native cursor before the Host receives the input. */
+  beforeDispatch?: (cursor: number) => void;
+}
+export interface DshSubagentInputReference {
+  parentSessionId: string;
+  childSessionId: string;
+  nativeRequestId: string;
+  contentHash: string;
+  afterSeq?: number;
+  messageId?: string;
+  rejection?: { code: string; message: string };
+}
+export type DshSubagentPromptReceipt = { accepted: true; messageId: string; requestId: string }
+  | { accepted: false; failed: true; requestId: string; rejection: { code: string; message: string } };
+export interface DshSubagentInputObservation { messageId: string; source: 'queue' | 'history'; seq?: number }
+
 export interface DshSubagentHistoryOptions {
   limit: number;
   throughSeq?: number;

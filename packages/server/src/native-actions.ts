@@ -1,4 +1,4 @@
-import type { NativeActionReceipt, NativeActionRequest, NativeActionResponse, NativeActionState, ManagedProcessIdentity, RuntimeIdentity } from '@webdcc/protocol';
+import type { NativeActionReceipt, NativeActionRequest, NativeActionResponse, NativeActionState, ManagedProcessIdentity, RuntimeIdentity, DshSubagentInputReference } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { payloadHash } from './command-journal.js';
 import { captureProcess, processState } from './process-identity.js';
@@ -14,7 +14,8 @@ const receipt = (row: Row): NativeActionReceipt => {
   const reference = row.reference === null ? undefined : JSON.parse(row.reference) as NonNullable<NativeActionReceipt['reference']> & { callReturnedAt?: string };
   return { commandId: row.command_id, sessionId: row.session_id, type: row.type, state: row.state, updatedAt: row.updated_at,
     ...(row.error === null ? {} : { error: row.error }), ...(reference === undefined ? {} : {
-      reference: { id: reference.id, ...(reference.generation === undefined ? {} : { generation: reference.generation }), ...(reference.runId === undefined ? {} : { runId: reference.runId }) },
+      reference: { id: reference.id, ...(reference.generation === undefined ? {} : { generation: reference.generation }), ...(reference.runId === undefined ? {} : { runId: reference.runId }),
+        ...(reference.dshChild === undefined ? {} : { dshChild: reference.dshChild }) },
       ...(reference.callReturnedAt === undefined ? {} : { callReturnedAt: reference.callReturnedAt }),
     }) };
 };
@@ -90,6 +91,28 @@ export class NativeActionStore {
   confirmReference(sessionId: string, identity: RuntimeIdentity, nativeId: string, type: string, id: string): void {
     this.db.prepare("UPDATE native_actions SET state = 'completed', error = NULL, updated_at = ? WHERE session_id = ? AND runtime_key = ? AND native_id = ? AND type = ? AND json_extract(reference, '$.id') = ? AND state IN ('dispatching','submitted')")
       .run(new Date().toISOString(), sessionId, payloadHash(identity), nativeId, type, id);
+  }
+  /** Bind a passive child's input before native admission, without a parent writer. */
+  bindChildPrompt(commandId: string, sessionId: string, target: DshSubagentInputReference): void {
+    const reference = { id: target.childSessionId, dshChild: target };
+    const updated = this.db.prepare("UPDATE native_actions SET native_id = ?, reference = ? WHERE command_id = ? AND session_id = ? AND type = 'dsh-child-prompt' AND state = 'dispatching'")
+      .run(target.parentSessionId, JSON.stringify(reference), commandId, sessionId);
+    if (updated.changes !== 1) throw error('子消息身份未持久化，不能发送');
+  }
+  /** Only native queue/history or the exact RPC receipt proves input acceptance. */
+  acceptChildPrompt(commandId: string, sessionId: string, target: DshSubagentInputReference, messageId: string): void {
+    const current = this.get(commandId, sessionId); const saved = current?.reference?.dshChild;
+    if (current?.type !== 'dsh-child-prompt' || saved?.parentSessionId !== target.parentSessionId || saved.childSessionId !== target.childSessionId
+      || saved.nativeRequestId !== target.nativeRequestId || saved.contentHash !== target.contentHash || typeof messageId !== 'string' || messageId === '') throw error('子消息接收身份不匹配');
+    const reference = { id: messageId, dshChild: { ...saved, messageId } };
+    this.db.prepare("UPDATE native_actions SET state = 'completed', error = NULL, reference = ?, updated_at = ? WHERE command_id = ? AND session_id = ? AND type = 'dsh-child-prompt' AND state IN ('dispatching','submitted','uncertain')")
+      .run(JSON.stringify(reference), new Date().toISOString(), commandId, sessionId);
+  }
+  rejectChildPrompt(commandId: string, sessionId: string, rejection: { code: string; message: string }): void {
+    const current = this.get(commandId, sessionId); const target = current?.reference?.dshChild;
+    if (current?.type !== 'dsh-child-prompt' || target === undefined) throw error('子消息拒绝身份不匹配');
+    this.db.prepare("UPDATE native_actions SET reference = ? WHERE command_id = ? AND session_id = ? AND state = 'dispatching'")
+      .run(JSON.stringify({ id: target.childSessionId, dshChild: { ...target, rejection } }), commandId, sessionId);
   }
   async execute(sessionId: string, value: NativeActionRequest, run: () => Promise<unknown>): Promise<NativeActionResponse> {
     if (!value || typeof value !== 'object' || typeof value.commandId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(value.commandId)

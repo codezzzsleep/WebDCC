@@ -3,6 +3,7 @@ import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentRecord, DshSuba
 import { api } from '../lib/api.js';
 import { Icon, Spinner } from './Icon.js';
 import { DshChildStop } from './DshChildStop.js';
+import { DshChildComposer } from './DshChildComposer.js';
 import './DshSubagentPanel.css';
 
 const statusText: Record<DshSubagentSummary['status'], string> = {
@@ -138,6 +139,7 @@ function DshChildHistory({ sessionId, child, onClose }: { sessionId: string; chi
     {history?.hasMore ? <button type="button" className="btn small ghost" disabled={loading} onClick={() => void loadOlder()}>加载更早的子会话记录</button> : null}
     {history?.records.map(record => <DshHistoryRecord key={`${child.childId}:${record.event.seq}`} record={record} ownDescriptorSeq={history.ownDescriptorSeq} />)}
     {history?.records.length === 0 ? <p className="muted">原生子会话暂无记录。</p> : null}
+    <DshChildComposer sessionId={sessionId} child={child} disabled={error !== undefined || history === undefined} onReadCurrent={() => { setOlder(false); setRefresh(value => value + 1); }} />
     <DshChildStop sessionId={sessionId} child={child} disabled={error !== undefined || history === undefined} onReadCurrent={() => { setOlder(false); setRefresh(value => value + 1); }} />
   </section>;
 }

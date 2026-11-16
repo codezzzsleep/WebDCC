@@ -1,0 +1,222 @@
+{
+  "nativeVersion": "0.2.2-rc.1",
+  "nativeCommit": "fcc0ad4",
+  "hostFingerprint": "932fdfe376de37d1d0cf4c17978e066604874d2586ebd1de870cff21d65d73c2",
+  "compiledTypertSha256": "da62ec30c2e46021d8c7cf21c366c355bd7c6e32f71bfe9a079f1bb229ab92c3",
+  "cliSha256": "54d9e9fee0d005835a1967dba39246459a65133e13555239c5b6a2a229ab48e0",
+  "source": "actual isolated native Host, copied completed real child, nonresident native root, no provider requests",
+  "descriptor": {
+    "package": "@deepseek-ai/dsh-subagent",
+    "description": "Deliver one browser-authored message to a continuable child through its live subagent tree root, retaining the caller-minted request identity and validated browser zone on the accepted message. Success identifies the message the child's inbox accepted; later execution is independent of this call. Queue delivery targets a later turn; steer delivery targets the nearest step and retains the Agent loop's best-effort fallback semantics. Image parts are admitted and persisted through the attachment store before delivery, and the child's model must accept image input. Cold resume at capacity rejects with `subagent/delivery-unavailable`. Access is checked on the target Session before attachment admission or restoration.",
+    "kind": "direct",
+    "parameters": [
+      {
+        "name": "request",
+        "description": "target id, delivery, minted identity, content, and optional browser zone.",
+        "jsonSchema": {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "type": "string",
+              "description": "Identity persisted on the accepted message, minted before the call."
+            },
+            "childSessionId": {
+              "type": "string"
+            },
+            "delivery": {
+              "type": "string",
+              "enum": [
+                "queue",
+                "steer"
+              ],
+              "description": "Whether this message queues a later turn or targets the nearest step."
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "text"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "image"
+                      },
+                      "mediaType": {
+                        "type": "string",
+                        "enum": [
+                          "image/png",
+                          "image/jpeg",
+                          "image/webp",
+                          "image/gif"
+                        ]
+                      },
+                      "data": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "mediaType",
+                      "data"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "Browser prompt parts delivered as the child's user message. The Host admits and persists image parts before delivery, so the wire never carries a durable attachment reference the caller could fabricate."
+            },
+            "clientTimeZone": {
+              "type": "string",
+              "description": "Optional browser zone sampled for this exact human prompt."
+            }
+          },
+          "required": [
+            "requestId",
+            "childSessionId",
+            "delivery",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "result": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId"
+      ],
+      "additionalProperties": true
+    },
+    "source": {
+      "file": "packages/subagent/subagent/src/index.ts",
+      "line": 451,
+      "column": 9
+    }
+  },
+  "captureSha256": "8a4317cceeccc0ab27b173809536b57fa4e67bcc9257e841dd43a45f9ef21fbd",
+  "probes": {
+    "old-frozen-address": {
+      "request": {
+        "type": "client-request",
+        "rpcId": "411ce63c-3276-4ba6-8430-149316212889",
+        "method": "subagents/prompt",
+        "payload": {
+          "args": {
+            "request": {
+              "requestId": "e03099a3-fe9b-4fa4-8a5a-937a0f68d281-old-frozen-address",
+              "childSessionId": "0461406f-beb9-4a31-a27c-e4041e28a3d2",
+              "delivery": "queue",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Read the existing proof.txt and report its exact contents."
+                }
+              ],
+              "parentSessionId": "session-a4f773b5-c591-438b-a038-31573c709ec6",
+              "mode": "continuable"
+            }
+          }
+        }
+      },
+      "httpStatus": 200,
+      "response": {
+        "type": "server-response",
+        "rpcId": "411ce63c-3276-4ba6-8430-149316212889",
+        "result": {
+          "ok": false,
+          "error": {
+            "code": "subagent/delivery-unavailable",
+            "message": "subagent follow-up is temporarily unavailable",
+            "details": {
+              "childSessionId": "0461406f-beb9-4a31-a27c-e4041e28a3d2"
+            }
+          }
+        }
+      }
+    },
+    "actual-compiled-child-address": {
+      "request": {
+        "type": "client-request",
+        "rpcId": "ccbdc083-484e-4acd-b9f6-bfa46b6b2d8b",
+        "method": "subagents/prompt",
+        "payload": {
+          "args": {
+            "request": {
+              "requestId": "e03099a3-fe9b-4fa4-8a5a-937a0f68d281-actual-compiled-child-address",
+              "childSessionId": "0461406f-beb9-4a31-a27c-e4041e28a3d2",
+              "delivery": "queue",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Read the existing proof.txt and report its exact contents."
+                }
+              ]
+            }
+          }
+        }
+      },
+      "httpStatus": 200,
+      "response": {
+        "type": "server-response",
+        "rpcId": "ccbdc083-484e-4acd-b9f6-bfa46b6b2d8b",
+        "result": {
+          "ok": false,
+          "error": {
+            "code": "subagent/delivery-unavailable",
+            "message": "subagent follow-up is temporarily unavailable",
+            "details": {
+              "childSessionId": "0461406f-beb9-4a31-a27c-e4041e28a3d2"
+            }
+          }
+        }
+      }
+    }
+  },
+  "rootStateBefore": {
+    "cursor": 37,
+    "active": false,
+    "running": false,
+    "queue": null,
+    "pendingInput": []
+  },
+  "rootStateAfter": {
+    "cursor": 37,
+    "active": false,
+    "running": false,
+    "queue": null,
+    "pendingInput": []
+  },
+  "newModelRequests": 0,
+  "limits": [
+    "both native RPCs rejected with delivery-unavailable; HTTP200 is not input acceptance",
+    "legacy parent/mode fields were ignored by this actual decoder, not rejected as400",
+    "does not prove continuation or current provider availability",
+    "native source has existing CLI/boot/docs changes; bind actual compiled carrier and bootstrap"
+  ]
+}

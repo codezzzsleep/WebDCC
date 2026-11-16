@@ -41,7 +41,7 @@ it('all finite DSH controls use the frozen 193-endpoint contract and preserve hu
     expect(() => validateDshArgs(call.endpoint, call.args)).not.toThrow();
   }
   const action = parseDshNativeAction({ ...cases.find(action => action.type === 'child-prompt'), revision });
-  expect(dshNativeCall(action, 'actual-parent')).toMatchObject({ endpoint: 'subagents/prompt', args: { request: { parentSessionId: 'actual-parent', mode: 'continuable', content: [{ type: 'text', text: '  exact\r\ntext  ' }] } } });
+  expect(dshNativeCall(action, 'actual-parent')).toMatchObject({ endpoint: 'subagents/prompt', args: { request: { childSessionId: 'child', content: [{ type: 'text', text: '  exact\r\ntext  ' }] } } });
   expect(() => parseDshNativeAction({ type: 'rpc', endpoint: 'credentials/set', revision })).toThrow('Unknown');
   expect(() => parseDshNativeAction({ type: 'goal-pause', ref: goal })).toThrow('revision');
   expect(() => parseDshNativeAction({ type: 'child-interrupt', childSessionId: 'child', parentSessionId: 'another', revision })).toThrow('field');

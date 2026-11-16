@@ -30,7 +30,7 @@
     },
     "dsh": {
       "path": "fixtures/dsh/host-api-catalog.json",
-      "sha256": "aae8a88ca5dafe740bd5b71e531938b921930f4348f5015ea052b2fd246f4b9f"
+      "sha256": "7657ac04ba463fa9a64b9a1cdbbb3b6ce8c93afad6ea074c66097f6963ea3384"
     },
     "claude": {
       "path": "@anthropic-ai/claude-agent-sdk/sdk.d.ts",

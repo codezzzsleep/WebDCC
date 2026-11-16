@@ -28,6 +28,7 @@ import type {
   DshSubagentCatalog,
   DshSubagentHistory,
   DshSubagentHistoryOptions,
+  DshSubagentInputRequest,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
@@ -1160,13 +1161,48 @@ export class SessionManager {
     return response;
   }
 
-  async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
+  async sendSubagent(sessionId: string, childSessionId: string, text: string, input?: Omit<DshSubagentInputRequest, 'text'>): Promise<void | NativeActionResponse> {
     const session = this.requireSession(sessionId);
+    if (session.agent === 'dsh') {
+      if (input === undefined) throw this.nativeControlRejected('子消息需要独立命令身份', 400);
+      const action = { type: 'dsh-child-prompt', childSessionId, text, requestId: input.commandId, delivery: input.delivery,
+        ...(input.clientTimeZone === undefined ? {} : { clientTimeZone: input.clientTimeZone }) };
+      const existing = this.store.nativeActions.get(input.commandId, sessionId)?.reference?.dshChild;
+      if (existing !== undefined && existing.parentSessionId !== session.nativeId) throw this.nativeControlRejected('子消息属于旧父会话，请刷新');
+      return this.store.nativeActions.execute(sessionId, { commandId: input.commandId, action }, async () => {
+        const context = this.subagentReadContext(sessionId);
+        if (context.adapter.sendSubagent === undefined) throw this.nativeControlRejected('此原生子会话不能继续', 409);
+        const reference = { parentSessionId: context.nativeId, childSessionId, nativeRequestId: input.commandId, contentHash: payloadHash(text) };
+        this.store.nativeActions.bindChildPrompt(input.commandId, sessionId, reference);
+        const result = await context.adapter.sendSubagent(sessionId, childSessionId, text, { requestId: input.commandId, delivery: input.delivery,
+          ...(input.clientTimeZone === undefined ? {} : { clientTimeZone: input.clientTimeZone }),
+          beforeDispatch: cursor => { context.guard(); this.store.nativeActions.bindChildPrompt(input.commandId, sessionId, { ...reference, afterSeq: cursor }); } },
+        { nativeId: context.nativeId, guard: context.guard });
+        try { context.guard(); }
+        catch { throw Object.assign(new Error('子消息结果属于旧父会话，接收状态待核对'), { statusCode: 503, code: 'uncertain' }); }
+        if (result?.accepted === true) this.store.nativeActions.acceptChildPrompt(input.commandId, sessionId, reference, result.messageId);
+        else if (result?.accepted === false) this.store.nativeActions.rejectChildPrompt(input.commandId, sessionId, result.rejection);
+        else throw Object.assign(new Error('原生子消息接收回执未确认'), { statusCode: 503, code: 'uncertain' });
+        return result;
+      });
+    }
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.sendSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持继续子 Agent'), { statusCode: 400 });
     await runtime.adapter.sendSubagent(sessionId, childSessionId, text);
     this.assertOwner(runtime);
+  }
+
+  async subagentInputReceipt(sessionId: string, childSessionId: string, commandId: string): Promise<NativeActionResponse> {
+    const context = this.subagentReadContext(sessionId); const receipt = this.store.nativeActions.get(commandId, sessionId); const reference = receipt?.reference?.dshChild;
+    if (receipt?.type !== 'dsh-child-prompt' || reference === undefined || reference.childSessionId !== childSessionId) throw Object.assign(new Error('子消息回执不存在'), { statusCode: 404 });
+    if (reference.parentSessionId !== context.nativeId) throw this.nativeControlRejected('子消息回执属于旧父会话');
+    if (receipt.state === 'uncertain' || receipt.state === 'submitted') {
+      if (context.adapter.findSubagentInput === undefined) throw this.nativeControlRejected('原生子消息接收查询不可用');
+      const observed = await context.adapter.findSubagentInput(sessionId, childSessionId, reference, { nativeId: context.nativeId }); context.guard();
+      if (observed !== undefined) this.store.nativeActions.acceptChildPrompt(commandId, sessionId, reference, observed.messageId);
+    }
+    return { receipt: this.store.nativeActions.get(commandId, sessionId)! };
   }
 
   async listSubagents(sessionId: string): Promise<DshSubagentCatalog> {

@@ -4,7 +4,8 @@ import stopEvidence from '../../../../fixtures/dsh/subagent-stop-contract.json' 
 
 it('NP-02/11 checks real catalog wrappers, exact parent identity fields and mode discriminators', () => {
   expect(() => validateDshArgs('subagents/prompt', { requestId: 'one', childSessionId: 'child', content: [] })).toThrow('request');
-  expect(() => validateDshArgs('subagents/prompt', { request: { requestId: 'one', childSessionId: 'child', mode: 'continuable', delivery: 'queue', content: [] } })).toThrow('parentSessionId');
+  expect(() => validateDshArgs('subagents/prompt', { request: { requestId: 'one', childSessionId: 'child', mode: 'continuable', parentSessionId: 'parent', delivery: 'queue', content: [] } })).toThrow('additional');
+  expect(() => validateDshArgs('subagents/prompt', { request: { requestId: 'one', childSessionId: 'child', delivery: 'queue', content: [] } })).not.toThrow();
   expect(() => validateDshArgs('subagents/interruptByUser', { childSessionId: 'child' })).not.toThrow();
   expect(() => validateDshArgs('subagents/interruptByUser', { childSessionId: 'child', parentSessionId: 'parent', mode: 'continuable' })).toThrow('additional');
   expect(() => validateDshArgs('subagents/interruptByParent', { childSessionId: 'child', parentSessionId: 'parent', mode: 'continuable' })).toThrow('absent');

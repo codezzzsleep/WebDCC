@@ -115,7 +115,7 @@ export function dshNativeCall(action: DshNativeControl, nativeId: string): { end
     case 'schedule-create': return request('schedule/create', action.request);
     case 'schedule-edit': return request('schedule/edit', action.request);
     case 'schedule-run': return request('schedule/run', { id: action.id });
-    case 'child-prompt': return request('subagents/prompt', { requestId: action.requestId, parentSessionId: nativeId, childSessionId: action.childSessionId, mode: 'continuable', delivery: action.delivery, content: [{ type: 'text', text: action.text }] });
+    case 'child-prompt': return request('subagents/prompt', { requestId: action.requestId, childSessionId: action.childSessionId, delivery: action.delivery, content: [{ type: 'text', text: action.text }] });
     case 'child-interrupt': return { endpoint: 'subagents/interruptByUser', args: { childSessionId: action.childSessionId } };
     case 'job-kill': return request('job/kill', { sessionId: nativeId, jobId: action.jobId });
     case 'card-dismiss': return { endpoint: 'actionCards/act', args: { agentId: nativeId, callId: action.callId, verb: 'dismiss', payload: {} } };

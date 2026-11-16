@@ -494,10 +494,13 @@ function StepRow({
       const canControlChild = childId !== undefined && toolInput?.['mode'] === 'continuable';
       const sendSubagent = async (): Promise<void> => {
         if (childId === undefined || subagentText.trim() === '') return;
-        setSubagentBusy(true);
+        setSubagentBusy(true); setSubagentNotice(undefined); setSubagentError(undefined);
         try {
-          await api.sendSubagent(event.sessionId, childId, subagentText);
-          setSubagentText('');
+          const result = await api.sendSubagent(event.sessionId, childId, subagentText);
+          if ('receipt' in result && result.receipt.state === 'completed') { setSubagentText(''); setSubagentNotice('原生已接收子消息；运行结果请查看子会话。'); }
+          else setSubagentError('子消息接收待核对，请打开子会话查看回执和原生队列。');
+        } catch (cause) {
+          setSubagentError(`${cause instanceof Error ? cause.message : String(cause)}。子消息接收待核对。`);
         } finally {
           setSubagentBusy(false);
         }

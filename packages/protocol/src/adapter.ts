@@ -9,7 +9,8 @@ import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } 
 import type { InputSkillPart, ResolvedInputContent } from './input.js';
 import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './slash.js';
 import type { CodexSubagentView } from './subagents.js';
-import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions, DshSubagentReadTarget, DshSubagentControlTarget, DshSubagentInterruptReceipt } from './dsh-subagents.js';
+import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions, DshSubagentReadTarget, DshSubagentControlTarget, DshSubagentInterruptReceipt,
+  DshSubagentPromptOptions, DshSubagentPromptReceipt, DshSubagentInputReference, DshSubagentInputObservation } from './dsh-subagents.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -187,11 +188,12 @@ export interface AgentAdapter {
   executeSlashControl?(sessionId: string, line: string, options?: { replaceGoal?: boolean; editGoal?: boolean; contentParts?: ResolvedInputContent }): Promise<SlashControlResult>;
   /** Read-only mode discovery; it must not activate or resume a native writer. */
   inputModes?(sessionId?: string): Promise<CodexInputModeCatalog>;
-  sendSubagent?(sessionId: string, childSessionId: string, text: string): Promise<void>;
+  sendSubagent?(sessionId: string, childSessionId: string, text: string, options?: DshSubagentPromptOptions, target?: DshSubagentControlTarget): Promise<void | DshSubagentPromptReceipt>;
   interruptSubagent?(sessionId: string, childSessionId: string, target?: DshSubagentControlTarget): Promise<void | DshSubagentInterruptReceipt>;
   /** Passive direct-child discovery and reads; these never submit a prompt. */
   listSubagents?(sessionId: string, target?: DshSubagentReadTarget): Promise<DshSubagentCatalog>;
   readSubagentHistory?(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions, target?: DshSubagentReadTarget): Promise<DshSubagentHistory>;
+  findSubagentInput?(sessionId: string, childSessionId: string, reference: DshSubagentInputReference, target?: DshSubagentReadTarget): Promise<DshSubagentInputObservation | undefined>;
   dispose(sessionId: string): Promise<void>;
   onEvent(cb: (sessionId: string, e: AdapterEvent) => void): void;
   /** Bind transport-free handlers and adapter lifecycle callbacks before activation. */

@@ -45,7 +45,7 @@ it('retains the existing per-command child requestId generation and exact user t
   const input = { type: 'child-prompt', childSessionId: 'child', delivery: 'steer', text: '  原样\r\nmessage  ' };
   const result = nativeActionFields(input, schema(input.type), catalog, 'outer-command');
   const parsed = parseDshNativeAction({ ...result, revision });
-  expect(dshNativeCall(parsed, 'native-parent')).toEqual({ endpoint: 'subagents/prompt', args: { request: { requestId: 'outer-command', parentSessionId: 'native-parent', childSessionId: 'child', mode: 'continuable', delivery: 'steer', content: [{ type: 'text', text: input.text }] } } });
+  expect(dshNativeCall(parsed, 'native-parent')).toEqual({ endpoint: 'subagents/prompt', args: { request: { requestId: 'outer-command', childSessionId: 'child', delivery: 'steer', content: [{ type: 'text', text: input.text }] } } });
   expect(input).not.toHaveProperty('requestId');
 });
 
