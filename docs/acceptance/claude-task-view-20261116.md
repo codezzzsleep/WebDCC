@@ -80,3 +80,7 @@ pnpm exec vitest run --config vitest.browser.config.ts browser-tests/claude-task
 Claude, server, web and script types and changed-file lint are checked before
 PR delivery. Validation outcomes and evidence hashes are bound to the delivered
 PR head in its private summary; the public PR records the scope and results.
+
+Each browser run retains its desktop and mobile screenshots in a unique
+`.artifacts/browser-tests/claude-tasks-*` directory under the current workspace.
+The test reports that path and preserves artifacts from earlier runs.

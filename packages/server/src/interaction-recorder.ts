@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, readdir, lstat, rm } from 'node:fs/promises';
+import { chmod, mkdir, readdir, lstat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { AdapterEvent, AgentId, TraceFrame, TraceSink } from '@webdcc/protocol';
@@ -6,10 +6,10 @@ import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'nod
 import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve } from 'node:path';
 import type { FileOperation } from './workspace-files.js';
-import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, redactDiagnosticValue, type DiagnosticWriteLimits, type ModelProxyEvent } from '@webdcc/model-proxy';
+import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, readDiagnosticText, redactDiagnosticValue, type DiagnosticWriteLimits, type ModelProxyEvent } from '@webdcc/model-proxy';
 
 export interface InteractionContext { sessionId: string; agent: AgentId; workspaceId: string; cwd: string; nativeId?: string; turnId?: string | null; model?: string; providerId?: string | null; }
-export interface InteractionRecord { version: 1; runId: string; seq: number; at: string; elapsedMs: number; source: string; channel: string; direction?: 'in' | 'out'; context?: InteractionContext; value: unknown; }
+export interface InteractionRecord { version: 1; runId: string; seq: number; at: string; elapsedMs: number; source: string; channel: string; direction?: 'in' | 'out'; context?: InteractionContext; contextError?: string; value: unknown; }
 export interface RecordingSummary { records: number; nativeFrames: number; modelRequests: number; fileOperations: number; incomplete: boolean; errors: string[]; }
 function key(id: string): string { return encodeURIComponent(id); }
 function isInference(value: unknown): boolean {
@@ -29,12 +29,14 @@ export class InteractionRecorder {
   private readonly secrets = new Set<string>();
   private readonly writer: DiagnosticFileWriter;
   private readonly retentionMs: number;
+  private readonly maxReadBytes: number;
   readonly captureLimits: { maxCaptureBytes?: number; maxCaptureChunks?: number; maxActiveCaptureBytes?: number };
   private nextPruneAt = 0;
   private pruning?: Promise<void>;
   private seq = 0;
   constructor(dataDir: string, limits: DiagnosticWriteLimits & { retentionMs?: number; maxCaptureBytes?: number; maxCaptureChunks?: number; maxActiveCaptureBytes?: number } = {}) {
     this.directory = join(dataDir, 'traces'); this.writer = new DiagnosticFileWriter(limits); this.retentionMs = limits.retentionMs ?? 7 * 24 * 60 * 60 * 1000;
+    this.maxReadBytes = limits.maxFileBytes ?? 64 * 1024 * 1024;
     this.captureLimits = { maxCaptureBytes: limits.maxCaptureBytes, maxCaptureChunks: limits.maxCaptureChunks, maxActiveCaptureBytes: limits.maxActiveCaptureBytes };
     if (!Number.isSafeInteger(this.retentionMs) || this.retentionMs < 1) throw new Error('Invalid diagnostic retention');
   }
@@ -138,7 +140,7 @@ export class InteractionRecorder {
     const paths = [join(this.directory, `${key(sessionId)}.jsonl`)];
     if (nativeId !== undefined && nativeId !== '') paths.push(join(this.directory, `model-${key(nativeId)}.jsonl`));
     if (workspaceId !== undefined) paths.push(join(this.directory, `${key(`workspace-${workspaceId}`)}.jsonl`));
-    const lines = (await Promise.all(paths.map(path => readFile(path, 'utf8').catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return ''; throw error; })))).join('').split('\n').filter(Boolean);
+    const lines = (await Promise.all(paths.map(path => readDiagnosticText(path, this.maxReadBytes, true)))).map(text => text ?? '').join('').split('\n').filter(Boolean);
     const rows = lines.map(line => ({ line, record: JSON.parse(line) as InteractionRecord }));
     const native = rows.filter(row => row.record.source === 'native' && row.record.context?.agent === 'dsh');
     if (native.length > 0) {
@@ -148,7 +150,7 @@ export class InteractionRecorder {
       // run and sequence bound both inherited state and later refreshes.
       const through = new Map<string, number>();
       for (const { record } of native) through.set(record.runId, Math.max(through.get(record.runId) ?? 0, record.seq));
-      const host = await readFile(join(this.directory, 'dsh-host.jsonl'), 'utf8').catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return ''; throw error; });
+      const host = await readDiagnosticText(join(this.directory, 'dsh-host.jsonl'), this.maxReadBytes, true) ?? '';
       const seen = new Set(rows.map(({ record }) => `${record.runId}:${record.seq}`));
       for (const line of host.split('\n').filter(Boolean)) {
         const record = JSON.parse(line) as InteractionRecord;
@@ -162,13 +164,20 @@ export class InteractionRecorder {
   }
   async summary(sessionId: string, nativeId?: string, workspaceId?: string): Promise<RecordingSummary> {
     const summary = { ...this.summaryFor(sessionId), errors: [...this.summaryFor(sessionId).errors] };
-    const rows = (await this.read(sessionId, nativeId, workspaceId)).split('\n').filter(Boolean).map(line => JSON.parse(line) as InteractionRecord);
+    let rows: InteractionRecord[];
+    try { rows = (await this.read(sessionId, nativeId, workspaceId)).split('\n').filter(Boolean).map(line => JSON.parse(line) as InteractionRecord); }
+    catch { return { records: 0, nativeFrames: 0, modelRequests: 0, fileOperations: 0, incomplete: true, errors: [...new Set([...summary.errors, 'Diagnostic recording read failed; counters are incomplete'])].slice(0, 16) }; }
     const directoryCoverage = await readDiagnosticDirectoryCoverage(this.directory);
     if (directoryCoverage !== undefined) { summary.incomplete = true; summary.errors = [...new Set([...summary.errors, ...directoryCoverage.errors])].slice(0, 16); }
     const coverageFiles = [join(this.directory, `coverage-${key(sessionId)}.json`), ...(nativeId === undefined ? [] : [join(this.directory, `model-${key(nativeId)}.coverage.json`)])];
     for (const file of coverageFiles) {
-      const persisted = await readFile(file, 'utf8').then(text => JSON.parse(text) as { incomplete: boolean; errors: string[] }).catch(() => undefined);
-      if (persisted?.incomplete) { summary.incomplete = true; summary.errors = [...new Set([...summary.errors, ...persisted.errors])].slice(0, 16); }
+      try {
+        const text = await readDiagnosticText(file, 64 * 1024, true);
+        if (text === undefined) continue;
+        const persisted = JSON.parse(text) as { incomplete?: unknown; errors?: unknown };
+        if (typeof persisted?.incomplete !== 'boolean' || !Array.isArray(persisted.errors) || !persisted.errors.every((error: unknown) => typeof error === 'string')) throw new Error('Invalid coverage');
+        if (persisted.incomplete) { summary.incomplete = true; summary.errors = [...new Set([...summary.errors, ...persisted.errors as string[]])].slice(0, 16); }
+      } catch { summary.incomplete = true; summary.errors = [...new Set([...summary.errors, 'Diagnostic coverage read failed'])].slice(0, 16); }
     }
     summary.records = rows.length;
     summary.nativeFrames = rows.filter(row => row.source === 'native').length;
@@ -182,6 +191,9 @@ export class InteractionRecorder {
     }
     if (pending.size > 0) { summary.incomplete = true; summary.errors.push(`${pending.size} model requests lack a terminal recording (may still be running)`); }
     if (rows.some(row => row.source === 'recording' && row.channel === 'error')) summary.incomplete = true;
+    if (rows.some(row => row.source === 'model-http' && row.contextError !== undefined)) {
+      summary.incomplete = true; summary.errors.push('Native model request context unavailable');
+    }
     const truncated = new Set(rows.filter(row => {
       if (row.source !== 'model-http') return false;
       const value = row.value as { coverage?: { truncated?: boolean }; value?: { coverage?: { truncated?: boolean } } };

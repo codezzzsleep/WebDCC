@@ -17,7 +17,7 @@ The controlled model observer passes already masked byte records to `recordModel
 | Setting | Default | Applies to |
 |---|---:|---|
 | `WDCC_TRACE_MAX_CAPTURE_BYTES` | 8 MiB | Each model request or response body |
-| `WDCC_TRACE_MAX_CAPTURE_CHUNKS` | 4,096 | Each captured body |
+| `WDCC_TRACE_MAX_CAPTURE_CHUNKS` | 4,096 | Each captured body and queued chunk events for each native HTTP response |
 | `WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES` | 64 MiB | Retained raw request/response chunks across all captures in one JavaScript process |
 | `WDCC_TRACE_MAX_FILE_BYTES` | 64 MiB | Each diagnostic JSONL file |
 | `WDCC_TRACE_MAX_QUEUED_BYTES` | 32 MiB | Each writer's pending serialized records |
@@ -25,6 +25,8 @@ The controlled model observer passes already masked byte records to `recordModel
 | `WDCC_TRACE_RETENTION_MS` | 7 days | Diagnostic file cleanup |
 
 All captures in one process share a reservation pool, including independent module copies in a preload bundle. Storage is reserved before copying native chunks; body overflow, capture failure, stream completion, cancellation and request abort release reservations. A completed native request releases its raw chunks before context lookup or diagnostic writes; slow record observers do not retain the raw buffers. A zero active budget observes sizes while omitting nonempty bodies. Configuring a pool below its current usage is rejected. Each native process has its own pool.
+
+Native HTTP chunk metadata also respects the response's chunk limit while request/context I/O is pending. Extra chunks do not queue another diagnostic event. Terminal coverage retains all observed `responseBytes` and `responseChunks`, and `omittedChunkEvents` reports how many metadata events were omitted. Native streaming continues. This bounds metadata jobs for one response; pending contexts and total jobs across simultaneous requests still require separate bounds.
 
 When body capture overflows, the entire captured body is omitted and `coverage.truncated` is set. Counts and native transport continue. Model terminal coverage identifies `requestLimitReason` and `responseLimitReason` as `body-bytes`, `body-chunks`, `active-buffer-budget` or `capture-failed` when applicable. Omitting the whole body avoids storing a cut credential prefix as complete evidence. Queue and file limits record an incomplete summary; a small coverage marker survives a server restart when its directory remains writable. Native preload write failures use a sibling coverage marker and bounded error reporting.
 
@@ -38,9 +40,13 @@ The directory budget counts current regular-file lengths, including existing fil
 
 One reserved `.wdcc-diagnostic-quota.json` file has an additional fixed 4 KiB allowance. It keeps a directory-wide incomplete signal and quota-rejection count when ordinary coverage cannot fit. Its reads and writes use bounded, verified regular-file descriptors; unavailable metadata stays explicit. This internal path cannot be used as a normal recording destination. A directory that already exceeds the configured budget is not automatically reduced. The budget governs cooperating writers and logical file bytes in that directory, rather than external file mutations or totals across different directories.
 
+Recording downloads and summaries also open verified ordinary descriptors without following final symlinks or waiting on FIFO peers. JSONL reads for sessions, native models, workspaces and DSH Host context use the configured file-byte limit; coverage reads have a separate 64 KiB bound. Files that grow beyond the bound and invalid UTF-8 are rejected. Existing source files remain intact. Unreadable or invalid coverage marks the summary incomplete. A failed recording read reports incomplete counters; JSONL download returns a JSON 503 error without an attachment header. Optional absent files and valid causal ordering remain compatible. This bounds file payload reads, while aggregate concurrent memory, ordinary filesystem stalls and the full export/retention policy remain separate work.
+
 Retention cleanup runs at recorder initialization and at most once an hour when records arrive. It removes only expired regular diagnostic files in the trace directory, preserving unrelated files. It is not an idle background deletion timer.
 
 The active budget bounds retained raw chunks in one process. It does not bound JavaScript VM memory, native transport queues, temporary redaction/JSON/Base64 copies or RAM summed across child processes. File and serialized queue limits have separate accounting. Totals across processes or different directories and a complete retention/export policy remain acceptance work. Existing recording content is not rewritten or migrated to satisfy a smaller budget.
+
+Native HTTP attribution contexts use ordinary file descriptors opened without following a final symlink or waiting on a FIFO. Reads stop at 64 KiB plus one byte to detect overflow, including file growth after the size check. Invalid JSON or UTF-8, special files and unavailable or oversized contexts are omitted. Model bytes continue, records include `contextError`, and the recording summary reports incomplete attribution. Rejected special-file contexts no longer keep a completed model call waiting for a peer. This bounds the context payload size; total pending reads, stalled ordinary filesystem I/O and other diagnostic readers remain part of the full scope.
 
 ## Failures and remaining scope
 

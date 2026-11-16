@@ -1,10 +1,41 @@
-import { fork } from 'node:child_process';
-import { createServer } from 'node:http';
+import { fork, spawnSync } from 'node:child_process';
+import { createServer, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm, readdir, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
+
+it.each([{ chunks: 4, activeBytes: 64 * 1024 * 1024 }, { chunks: 100, activeBytes: 64 * 1024 * 1024 }, { chunks: 4, activeBytes: 0 }])('NP-14 chunk metadata stays bounded while context waits, with limits $chunks/$activeBytes', async ({ chunks, activeBytes }) => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-native-metadata-'));
+  const context = join(root, 'context-native-fixture.json');
+  await writeFile(context, '{}');
+  const heldFiles = Array.from({ length: 4 }, (_, i) => join(root, `hold-${i}`));
+  for (const file of heldFiles) expect(spawnSync('mkfifo', [file]).status).toBe(0);
+  let stream: ServerResponse | undefined; let sent = 0;
+  const upstream = createServer((_req, res) => { stream = res; res.write('x'); sent++; });
+  await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const port = (upstream.address() as { port: number }).port;
+  const child = fork(join(import.meta.dirname, 'fixtures/native-recorder-stream.ts'), [`http://127.0.0.1:${port}/responses`, root], { execArgv: ['--import', 'tsx'], env: { ...process.env, UV_THREADPOOL_SIZE: '4', WDCC_TRACE_DIR: root, WDCC_TRACE_MAX_CAPTURE_CHUNKS: String(chunks), WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES: String(activeBytes) }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let errors = ''; child.stderr?.on('data', data => { errors += String(data); });
+  const exited = once(child, 'exit');
+  const finished = new Promise<number>(resolve => { child.on('message', (value: { read?: boolean; done?: boolean; bytes?: number }) => {
+    // Wait for actual native consumption before every next frame, so coalesced
+    // network writes cannot hide an unbounded number of observer events.
+    if (value.read) { if (sent === 50) stream!.end(); else { stream!.write('x'); sent++; } }
+    if (value.done) resolve(value.bytes!);
+  }); });
+  try {
+    const bytes = await Promise.race([finished, exited.then(() => { throw new Error(errors); })]);
+    expect(bytes).toBe(50);
+    await Promise.all(heldFiles.map(file => writeFile(file, ''))); await exited; expect(child.exitCode).toBe(0);
+    const rows = (await readFile(join(root, 'model-native-fixture.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+    expect(rows.filter(row => row.channel === 'chunk')).toHaveLength(Math.min(50, chunks));
+    const terminal = rows.find(row => row.channel === 'complete').value.value;
+    expect(terminal.coverage).toMatchObject({ responseBytes: 50, responseChunks: 50, omittedChunkEvents: Math.max(0, 50 - chunks), truncated: chunks < 50 || activeBytes === 0 });
+    expect(terminal.chunks.length).toBe(chunks < 50 || activeBytes === 0 ? 0 : 50);
+  } finally { if (child.exitCode === null) child.kill('SIGTERM'); upstream.closeAllConnections(); await new Promise<void>(resolve => upstream.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
+});
 
 it.each([{ captureBytes: 10000, fileBytes: 1000000, directoryBytes: 512 * 1024 * 1024, activeBytes: 64 * 1024 * 1024 },
   { captureBytes: 8, fileBytes: 1000000, directoryBytes: 512 * 1024 * 1024, activeBytes: 64 * 1024 * 1024 },

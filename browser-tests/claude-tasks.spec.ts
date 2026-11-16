@@ -1,4 +1,6 @@
 import { chromium, type Browser } from '@playwright/test';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.js';
 import type { AdapterEvent, EventData } from '@webdcc/protocol';
@@ -6,6 +8,9 @@ import { createSourceTestApp, observeSessionSnapshots } from './helpers.js';
 import { seedWorkspaceAndSession } from '../packages/server/test/helpers.js';
 
 it('Claude task hierarchy, run outputs and unknown states survive source UI refresh, reconnect and session switching', async () => {
+  const evidenceRoot = join(process.cwd(), '.artifacts', 'browser-tests');
+  await mkdir(evidenceRoot, { recursive: true });
+  const evidenceDirectory = await mkdtemp(join(evidenceRoot, 'claude-tasks-'));
   const ctx = await createSourceTestApp();
   let browser: Browser | undefined;
   try {
@@ -85,7 +90,7 @@ it('Claude task hierarchy, run outputs and unknown states survive source UI refr
     await expect.poll(() => throughSeq()).toBeGreaterThanOrEqual(recoveredEvent!.seq);
     await expect.poll(() => panel.textContent()).toContain('FIRST RECOVERED TASK');
     if (await panel.locator('details').first().getAttribute('open') === null) await panel.locator('summary').first().click();
-    await page.screenshot({ path: '/root/.codex/project-state/WebDCC/claude-native-tasks-20261116/view-desktop.png', fullPage: true });
+    await page.screenshot({ path: join(evidenceDirectory, 'desktop.png'), fullPage: true });
     const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
     const mobileThroughSeq = observeSessionSnapshots(mobile, first.sessionId);
     await mobile.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
@@ -97,13 +102,13 @@ it('Claude task hierarchy, run outputs and unknown states survive source UI refr
     expect(await mobilePanel.locator('[data-task-id="first"]').getAttribute('data-run-id')).toBe('002');
     expect(await mobilePanel.textContent()).toContain('NEW FIRST RUN OUTPUT');
     expect(await mobile.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await mobile.screenshot({ path: '/root/.codex/project-state/WebDCC/claude-native-tasks-20261116/view-mobile.png', fullPage: true });
+    await mobile.screenshot({ path: join(evidenceDirectory, 'mobile.png'), fullPage: true });
     const events = ctx.store.allEvents(first.sessionId);
     const childEvents = events.filter(event => event.kind === 'assistant.message' && (event.data as EventData['assistant.message']).claudeActor !== undefined);
     expect(childEvents).toHaveLength(3);
     expect(childEvents.every(event => event.turnId === null && event.native !== undefined)).toBe(true);
     console.log('Claude task source browser proof', JSON.stringify({ evidence: 'controlled SDK-shaped producer into actual handler/server/SQLite/WebSocket/Chromium',
-      parentAnswer: 'MAIN ANSWER ONLY', childOutputs: childEvents.length, refreshedThroughSeq: throughSeq(), persistedThroughSeq: ctx.store.lastSeq(first.sessionId),
+      evidenceDirectory, parentAnswer: 'MAIN ANSWER ONLY', childOutputs: childEvents.length, refreshedThroughSeq: throughSeq(), persistedThroughSeq: ctx.store.lastSeq(first.sessionId),
       refresh: true, websocketReconnect: true, sessionSwitch: true, realProvider: false, actualStopControl: false }));
   } finally { await browser?.close(); await ctx.close(); }
 }, 60000);
