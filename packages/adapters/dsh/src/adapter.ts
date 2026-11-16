@@ -871,7 +871,7 @@ export class DshAdapter implements AgentAdapter {
     if (observesGoal && Object.hasOwn(baseline.values, 'goal')) {
       const goal = dshGoalProjection(baseline.values['goal']);
       if (goal !== undefined) this.projectGoal(sessionId, runtime, goal, baseline.asOfSeq, origin, true, replace);
-      else this.emit(sessionId, { type: 'item.complete', itemKey: `unknown-goal-projection-${++runtime.frameSeq}`, kind: 'unknown',
+      else this.emit(sessionId, { type: 'item.complete', itemKey: `unknown-goal-projection-${baseline.asOfSeq}`, kind: 'unknown',
         data: { nativeType: 'session/projections:goal' }, scope: 'session', native: origin });
     }
     const selected = projectedModelSelection(baseline.values['modelSelection']);
@@ -903,7 +903,7 @@ export class DshAdapter implements AgentAdapter {
       || data.goalId !== undefined && data.goalId === previous.data.goalId && (data.nativeRevision ?? 0) < (previous.data.nativeRevision ?? 0))) return;
     runtime.goalObservation = { data, throughSeq, projection };
     if (previous !== undefined && JSON.stringify(previous.data) === JSON.stringify(data)) return;
-    this.emit(sessionId, { type: 'item.complete', itemKey: `goal-${projection ? 'projection' : 'change'}-${throughSeq}-${++runtime.frameSeq}`,
+    this.emit(sessionId, { type: 'item.complete', itemKey: `goal-${projection ? 'projection' : 'change'}-${throughSeq}`,
       kind: 'goal', data, nativeSeq: throughSeq, native, scope: 'session' });
   }
   private projectContinuedQuestions(sessionId: string, runtime: SessionRuntime, value: unknown): void {
