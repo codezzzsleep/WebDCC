@@ -168,9 +168,9 @@
       "kind": "controlled SDK and source reducers/store"
     },
     "browser": {
-      "passed": 3,
-      "files": 2,
-      "kind": "current source controlled SDK/SQLite/HTTP/WebSocket/Chromium; Claude2 + retained Codex reasoning1",
+      "passed": 2,
+      "files": 1,
+      "kind": "controlled SDK, actual source SQLite/HTTP/WebSocket/Chromium",
       "refresh": true,
       "reconnect": true,
       "sessionSwitch": true,
@@ -210,8 +210,7 @@
         "events.json": "4eb54ffb9a9c17d259b85ca85019237a16d70225d0df45e78c743895a01fecb5",
         "requests.json": "f28963eede83a15d6c908b719834fd472d637c9cc8fd33ab3bef07a792678697",
         "local-model.jsonl": "c2731e034184cf3f5fc06a1241dd49577bb0a8de49c5e387c5c44c804e8208f4"
-      },
-      "recordedSourceFingerprint": "0e42158245a5dcaf82576215e83ef8c187c22afbe5a860c97c7ef4c13e8b171e"
+      }
     },
     "realTrajectoryReplay": {
       "kind": "offline captured real native/model trajectory; no new SDK/CLI/model/provider calls",
@@ -220,8 +219,7 @@
       "traceSha256": "159efc0462aa075b85a19d5c275dcdee1505c603e755c538a34e786eb1d6e584",
       "historicalCaptureStatus": "failed",
       "projectionStatus": "passed",
-      "scope": "text/thinking/tool/file projection only",
-      "currentSourceReportSha256": "859939bd0553517256840ce02a3479ed86df681ce13acdd7f0b8de7b926f35af"
+      "scope": "text/thinking/tool/file projection only"
     }
   },
   "mainSync": {
