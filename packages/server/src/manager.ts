@@ -774,8 +774,9 @@ export class SessionManager {
     return this.control(sessionId, async () => {
       const row = this.store.journal.queue(sessionId).find(row => row.commandId === commandId);
       if (row === undefined || row.state !== 'queued' || row.input.delivery === 'steer') throw Object.assign(new Error('此输入不是可重试的未发送队列输入'), { statusCode: 409 });
-      await this.prepareInput(sessionId, row.input, false); this.store.journal.preparationError(row.turnId, null); this.queueChanged(sessionId);
-      this.store.journal.state(commandId, 'queued', { ok: true, value: { turnId: row.turnId, queued: true } });
+      await this.prepareInput(sessionId, row.input, false);
+      const { patch, feedSeq } = this.store.retryQueuePreparation(row);
+      this.syncAsyncSubmissions(sessionId); this.hooks.onFeed(sessionId, patch, feedSeq);
       const session = this.requireSession(sessionId); const workspace = this.requireWorkspace(session.workspaceId); const runtime = await this.ensureReady(session, workspace.path);
       await this.drainQueue(runtime);
     });
