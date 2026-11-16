@@ -1,0 +1,110 @@
+{
+  "issue": 216,
+  "parents": [
+    56,
+    57,
+    42
+  ],
+  "related": [
+    200,
+    213
+  ],
+  "base": "053d6c9a8ef9a2e5b7c04b69dca7ab0178eb7088",
+  "at": "2026-11-16T08:47:04.719175+00:00",
+  "scope": "verified nonfollowing/nonblocking ordinary FD reads forrecordingJSONL/native/workspace/DSHhost andcoverage; configurableperfilebytebound,64KiBcoverage,UTF8strict andbytegrowth rejection",
+  "before": [
+    {
+      "kind": "recording-fifo",
+      "root": "/tmp/wdcc-read-before-cuTuLK",
+      "settledBeforeWriter": false,
+      "result": {
+        "records": 1,
+        "nativeFrames": 0,
+        "modelRequests": 0,
+        "fileOperations": 0,
+        "incomplete": false,
+        "errors": []
+      }
+    },
+    {
+      "kind": "coverage-fifo",
+      "root": "/tmp/wdcc-read-before-Z1bTzE",
+      "settledBeforeWriter": false,
+      "result": {
+        "records": 1,
+        "nativeFrames": 0,
+        "modelRequests": 0,
+        "fileOperations": 0,
+        "incomplete": true,
+        "errors": [
+          "controlled coverage"
+        ]
+      }
+    },
+    {
+      "kind": "oversized",
+      "root": "/tmp/wdcc-read-before-vEPqBN",
+      "settledBeforeWriter": true,
+      "result": {
+        "bytes": 170,
+        "configuredFileLimit": 32
+      }
+    }
+  ],
+  "after": {
+    "readFifo": "explicit503 error, no externalwriter required",
+    "coverageFifo": "summaryincomplete/readerror",
+    "oversizedRecording": "download503 andunknown/incompletecounters",
+    "httpError": "JSON503, no attachment/NDJSON successheaders",
+    "recovery": "validreplacement restores200NDJSON content/attachment andnormal summary"
+  },
+  "verification": {
+    "negative": "3fail FIFOrecord/coverage andexistingrecordabove32bytecap; originalprivateFIFO/data retained",
+    "first": "8/8 then14/14 passed",
+    "httpFailure": "first7/8 andthird17/18 failed expectingmessage ratherthanexistingerror JSONfield; originals preserved; correctedcontract/503JSON/noattachment tested",
+    "final": "52/52 fullrelatedsource/runtime/API/NativeHTTP/Recorder/reader checks plusworkspace/scripts types andchangedLint; strengthenedHTTPreplacement/recovery11/11 subsequentlypassed",
+    "growth": "actual regularfile append after observedFDstat causesreadlimit rejection; originalfile retained",
+    "fd": "20 repeated valid/symlink/FIFO/directory/device reads keep processFDcount unchanged"
+  },
+  "runtime": {
+    "node": "26.13.0",
+    "pnpm": "12.18.0"
+  },
+  "officialNativeAgentRuns": 0,
+  "paidProviderCalls": 0,
+  "deployment": "notperformed bymainline",
+  "remaining": [
+    "ordinary filesystem IO latency",
+    "aggregate concurrent read/VM/encoded/native/childprocessmemory",
+    "all sensitive/retention/export policies",
+    "independent three-Agent target/native validation"
+  ],
+  "sourceSha256": {
+    "docs/diagnostics.md": "6876be7e6270101f2deaf5a85688f8f19a532b907b94ad499dfdbeb5317d0b1e",
+    "packages/server/src/interaction-recorder.ts": "8275377e5790ffa4ecb57049c592e8ebbd2b458324464ccbc2ba0f8645c60af8",
+    "packages/server/src/rest.ts": "44d7ed09de8cb330a4070b7dae76c46a15ed2c3e880b57a183794fbbf85ef09f",
+    "packages/server/test/diagnostic-read.spec.ts": "58fc89cf0de401a6b66f5b175860b9b4453119221247c7a426a76f4f45a3a309",
+    "packages/server/test/helpers.ts": "d1e9038c28bc248db4ba9b8466551a5d935fd92eb6c531c7dda5020fd8f29528",
+    "packages/testing/model-proxy/src/diagnostic-reader.spec.ts": "0439ddd5e71518a7ce8a0a89d53cd0417b2d0a3c491168375bdedfad30d22de1",
+    "packages/testing/model-proxy/src/diagnostic-reader.ts": "54e63454f95c9d8075616a220d78b52ea5531705ae33727058e13102832af708",
+    "packages/testing/model-proxy/src/index.ts": "3a447efb86035ff477b85d06ea349a94bf206b14c5544a2c1b20fd1f464467c7",
+    "web_review/IMPLEMENTATION_MATRIX.json": "88024828b6858f031bbf9824fe061b037a7433246cb2846e1d182821a21720f8"
+  },
+  "sourceFingerprint": "2b155fefbfcfb39acb285bf83c1520a14bd168b0fe329bb26b5415ae4ae3c5bc",
+  "evidenceSha256": {
+    "regression-matrix-first.log": "e14c557ff9cf55df76ff6ab7231c26cea15a207e4dc1733426eebe3aa3d52d57",
+    "regression-before.log": "57a29041a7232986b70803accaf265213f5813ec4911d3361d6b45573f3c912a",
+    "http-first.log": "b2b2a965e16c976f816114264c2d2f0abfb351043f5d4320b2f799b81e274792",
+    "typecheck-first.log": "1243126b352849df17298a13296341b22e3521e9d4e440857e4dbea796905fdf",
+    "regression-first.log": "4647b4bdfc0937c137704db0d8d7afb9aeb7e95b0c8b816be0f4c55fd8f0d3a2",
+    "http-recovery.log": "82f2b0fd8ebba30b147116c0b52a5e043329b89ce392e162467ce755369fd6c8",
+    "reproduction-before.log": "49abda1dea26b63a92eb3618262a1f9ad9a5b40f1bdd1c4c436575dc7114ed95",
+    "lint-second.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "regression-second.log": "297584d16505f4fea323691d06c127d81dfa0731ab6afcbf2dea07ba13c23bf3",
+    "typecheck-second.log": "4cee04411ab3de42c1cd191d04a36f89f85b6016e77907e222242f076901ec8d",
+    "regression-third.log": "02526deb5f3253b19704dfba9a8b5ccc32d94224ac717ed9a4bb89e984c65bf1",
+    "regression-fifth.log": "6fc75e5e4e9b8b0273a5ae8a2f4b02d4747c9b12d17be3e9b194938e9e56c876",
+    "lint-first.log": "a8a218a7f3318496e800ecba4ee9c0d5e7f221c4ed114038380dce8ebdceab63",
+    "regression-fourth.log": "3e01812dc76906ced17a3d9132a46baec5a1ae7f52d91e1be3b9146fb1e43295"
+  }
+}

@@ -7,6 +7,7 @@ import { DiagnosticCapture, configureDiagnosticCaptureBudget, diagnosticSecretsF
 export { DiagnosticCapture, DiagnosticCaptureBudget, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBytes, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from './redaction.js';
 import { DiagnosticFileWriter } from './diagnostic-writer.js';
 export { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, type DiagnosticWriteLimits } from './diagnostic-writer.js';
+export { readDiagnosticText, DiagnosticReadError } from './diagnostic-reader.js';
 
 export interface ModelProxyChunk { t: number; data: string; bytes?: number; sha256?: string; }
 export interface ModelProxyRecord {

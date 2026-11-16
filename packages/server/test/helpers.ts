@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { issueCookie } from '../src/auth.js';
 import type { Config } from '../src/config.js';
+import type { InteractionRecorder } from '../src/interaction-recorder.js';
 import { openDb, type Db } from '../src/db.js';
 import { FileStore } from '../src/files.js';
 import { SessionManager } from '../src/manager.js';
@@ -38,7 +39,7 @@ for (const key of ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'DSH_HOME'] as con
 process.env['WDCC_TEST_HOOKS'] = '1';
 assertTestIsolation(process.env);
 
-export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN, configPatch: Partial<Config> = {}, options: { webDist?: string; dbPath?: string } = {}): Promise<TestApp> {
+export async function createTestApp(adapterOptions: FakeAdapterOptions = {}, token: string = TEST_TOKEN, configPatch: Partial<Config> = {}, options: { webDist?: string; dbPath?: string; recorder?: InteractionRecorder } = {}): Promise<TestApp> {
   const dataDir = await mkdtemp(join(tmpdir(), 'wdcc-test-'));
   const db: Db = openDb(options.dbPath ?? ':memory:');
   const store = new Store(db);
