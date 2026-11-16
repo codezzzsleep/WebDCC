@@ -674,28 +674,45 @@ export class ClaudeAdapter implements AgentAdapter {
   private async replaceIdleQuery(sessionId: string, patch: Partial<CreateOpts>, nativePatch: Partial<ClaudeNativeOptions> = {}): Promise<void> {
     const previous = this.require(sessionId);
     if (previous.turnActive || previous.pending.size > 0 || [...previous.nativePending.values()].some(pending => pending.status === 'pending') || previous.backgroundTasks.size > 0) throw Object.assign(new Error('请等待当前 Claude 轮次、交互和后台任务结束后更改启动选项'), { statusCode: 409 });
+    const owns = (query: SessionRuntime): boolean => this.generations.get(sessionId) === query.generation
+      && (this.sessions.get(sessionId) === undefined || this.sessions.get(sessionId) === query);
+    const superseded = (cause?: unknown): Error => Object.assign(nativeError(`Claude 配置操作已被后续 query 或关闭操作接替，旧结果未应用${cause === undefined ? '' : `：${String(cause)}`}`, 409), { code: 'uncertain', cause });
     const launchOpts = { ...previous.launchOpts, ...patch };
     previous.retiring = true; previous.state.transport = 'closed';
     this.emitTaskRuntime(sessionId, previous, 'unavailable');
     await this.closeQuery(previous, true);
+    if (!owns(previous)) throw superseded();
     if (this.sessions.get(sessionId) === previous) this.sessions.delete(sessionId);
     await previous.pump;
+    if (!owns(previous)) throw superseded();
     this.emit(sessionId, { type: 'permissions', observation: { effective: null, source: 'query:replacing', scope: 'query' } });
     const resume = previous.nativeId === '' ? undefined : previous.nativeId;
+    let replacement: SessionRuntime | undefined;
     try {
-      const replacement = this.startQuery(sessionId, launchOpts, resume, { ...previous.nativeOptions, ...nativePatch });
+      replacement = this.startQuery(sessionId, launchOpts, resume, { ...previous.nativeOptions, ...nativePatch });
       await replacement.q.initializationResult();
-      if (this.sessions.get(sessionId) !== replacement) throw new Error('原生运行实例已替换');
+      if (this.sessions.get(sessionId) !== replacement || replacement.retiring || replacement.state.transport !== 'live') throw new Error('原生运行实例已替换或结束');
     } catch (error) {
-      await this.dispose(sessionId);
+      const owner = replacement ?? previous;
+      // Native stream failure may already have removed this query. Restore
+      // only if no newer query or explicit close has taken over its generation.
+      if (replacement?.retiring || !owns(owner)) throw superseded(error);
+      if (replacement !== undefined && this.sessions.get(sessionId) === replacement) await this.dispose(sessionId);
+      if (!owns(owner)) throw superseded(error);
       // The failed model/default-permission change must leave the previously
       // accepted launch configuration resumable, with only one native writer.
+      let rollback: SessionRuntime | undefined;
       try {
-        const rollback = this.startQuery(sessionId, previous.launchOpts, resume, previous.nativeOptions);
+        rollback = this.startQuery(sessionId, previous.launchOpts, resume, previous.nativeOptions);
         await rollback.q.initializationResult();
+        if (this.sessions.get(sessionId) !== rollback || rollback.retiring || rollback.state.transport !== 'live') throw new Error('原配置恢复实例已替换或结束', { cause: error });
       } catch (rollbackError) {
-        await this.dispose(sessionId);
-        throw Object.assign(new Error(`Claude 切换失败且原配置恢复失败：${String(error)}；${String(rollbackError)}`), { code: 'native-runtime-unavailable', statusCode: 503 });
+        const rollbackOwner = rollback ?? owner;
+        const failure = new Error(`Claude 切换失败且原配置恢复失败：${String(error)}；${String(rollbackError)}`, { cause: rollbackError });
+        if (rollback?.retiring || !owns(rollbackOwner)) throw superseded(failure);
+        if (rollback !== undefined && this.sessions.get(sessionId) === rollback) await this.dispose(sessionId);
+        if (!owns(rollbackOwner)) throw superseded(failure);
+        throw Object.assign(failure, { code: 'native-runtime-unavailable', statusCode: 503 });
       }
       throw error;
     }
