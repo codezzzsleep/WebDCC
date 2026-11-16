@@ -1,5 +1,6 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
 import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse, QueueSnapshot } from '@webdcc/protocol';
+import type { DshApprovalRecoveryView } from '@webdcc/protocol';
 import { isInputContent, isQueueInputReorderable, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { completeRecentEventPage } from './recent-event-history.js';
@@ -907,7 +908,8 @@ export class AppStore {
       void cache.deleteOutbox(command.clientCommandId);
       return;
     }
-    if (state !== 'pending' || this.dispatchedInteractions.has(command.clientCommandId)) return;
+    const recovery = command.op === 'approve' && command.retryOf !== undefined && state === 'awaiting';
+    if (state !== 'pending' && !recovery || this.dispatchedInteractions.has(command.clientCommandId)) return;
     this.dispatchedInteractions.add(command.clientCommandId);
     this.connection.sendCommand(command);
   }
@@ -1058,6 +1060,14 @@ export class AppStore {
     if (!this.isInteractionSynced(sessionId, 'approve', approvalId) || this.interactionState({ op: 'approve', clientCommandId: '', sessionId, approvalId, optionId }) !== 'pending') return;
     if (['pending', 'sent', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'approve', approvalId)?.status ?? '')) return;
     this.enqueue({ op: 'approve', clientCommandId: ulid(), sessionId, approvalId, optionId });
+  }
+
+  retryDshApproval(sessionId: string, recovery: Extract<DshApprovalRecoveryView, { status: 'available' }>): boolean {
+    if (this.getSession(sessionId)?.agent !== 'dsh' || !this.isInteractionSynced(sessionId, 'approve', recovery.approvalId)
+      || ['pending', 'sent'].includes(this.getInteractionSubmission(sessionId, 'approve', recovery.approvalId)?.status ?? '')) return false;
+    const command = { op: 'approve' as const, clientCommandId: ulid(), sessionId, approvalId: recovery.approvalId, optionId: recovery.optionId, retryOf: recovery.retryOf };
+    if (['resolved', 'unknown'].includes(this.interactionState(command))) return false;
+    this.enqueue(command); return true;
   }
 
   getInteractionSubmission(sessionId: string, op: 'answer' | 'approve', id: string): InteractionSubmission | undefined {

@@ -98,7 +98,7 @@ export class CommandDispatcher {
           await this.manager.approve(command.sessionId, {
             approvalId: command.approvalId,
             optionId: command.optionId,
-          }, command.clientCommandId);
+          }, command.clientCommandId, command.retryOf);
           return { ok: true };
         }
         case 'answer': {

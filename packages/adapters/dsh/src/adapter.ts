@@ -49,6 +49,8 @@ import { dshCommandAliases, mapDshCommands, type DshCommandDescriptor } from './
 import { dshGoalChange, dshGoalProjection } from './goals.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
+import { randomUUID } from 'node:crypto';
+import { sameDshApproval, type DshApprovalAttempt, type DshApprovalDelivery } from '@webdcc/protocol';
 import { dshSubagentCatalog, dshSubagentAddress, checkDshSubagentPage, dshSubagentSummary, dshSubagentDescriptorSeq, dshSubagentInputHash } from './subagents.js';
 import { dshQuestionSignature, dshQuestionAnswers, dshQuestionResult, sameDshQuestionAnswers, type DshQuestionResult } from './questions.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
@@ -247,6 +249,8 @@ interface PendingInteraction {
   answerAttempt?: object;
   approvalTool?: string;
   approvalItem?: EventData['approval.request'];
+  approvalAgentId?: string;
+  approvalDeliveryId?: string;
   transportClosed?: boolean;
   settlement?: DshQuestionResult;
   waitClosers?: Set<() => void>;
@@ -1309,15 +1313,17 @@ export class DshAdapter implements AgentAdapter {
 
   /** 所有 RPC 都经过白名单检查 */
   private async call<T>(client: DshHostClient, endpoint: string, args: Record<string, unknown> = {}, sessionId?: string,
-    inputReference?: { fileIds: string[]; nativeRequestId?: string }): Promise<T> {
+    inputReference?: { fileIds: string[]; nativeRequestId?: string }, idempotentApproval?: () => boolean): Promise<T> {
     if (!isAllowedEndpoint(endpoint)) throw new Error(`dsh: 端点不在白名单内：${endpoint}`);
+    if (idempotentApproval !== undefined && (endpoint !== '$events/result' || !idempotentApproval()))
+      throw Object.assign(dshNativeError('原审批投递已变化，请重新核对', 409), { nativeAdmission: 'not-submitted' });
     const request = (args['request'] ?? {}) as Record<string, unknown>;
     const address = (request['address'] ?? {}) as Record<string, unknown>;
     const nativeId = args['agentId'] ?? args['sessionId'] ?? request['sessionId'] ?? (address['kind'] === 'session' ? address['sessionId'] : undefined);
     const matches = typeof nativeId === 'string' && nativeId !== '' ? [...this.sessions].filter(([, runtime]) => runtime.nativeId === nativeId) : [];
     const owner = sessionId ?? (matches.length === 1 ? matches[0]![0] : '');
     const readonly = DSH_READ_RPC_ENDPOINTS.has(endpoint);
-    if (!readonly && this.rpcWritesBlocked) throw Object.assign(new Error('DSH native transport capture is incomplete; reconcile before another write'), { code: 'uncertain' });
+    if (!readonly && this.rpcWritesBlocked && idempotentApproval === undefined) throw Object.assign(new Error('DSH native transport capture is incomplete; reconcile before another write'), { code: 'uncertain' });
     // Preserve the pre-existing intent durability gate. Actual transport
     // admission below records the independently generated native rpcId.
     let intentAccepted = false;
@@ -1349,7 +1355,7 @@ export class DshAdapter implements AgentAdapter {
         if (!persistedAttachmentInput) { this.rpcWritesBlocked = true; if (!readonly) accepted = false; }
       }
       if (!accepted) this.rpcWritesBlocked = true;
-      return accepted;
+      return accepted && (idempotentApproval === undefined || idempotentApproval());
     });
   }
 
@@ -1642,7 +1648,38 @@ export class DshAdapter implements AgentAdapter {
     await this.call(client, 'session/cancel', { request: { sessionId: runtime.nativeId } });
   }
 
+  private approvalRevision(runtime: SessionRuntime, pending: PendingInteraction, hostId: string, hostFingerprint: string): string {
+    return dshRevision({ hostId, hostFingerprint, clientId: this.clientId, epoch: this.hostEpoch, generation: this.muxGeneration,
+      runtime: runtime.identity, delivery: pending.approvalDeliveryId });
+  }
+
+  async dshApprovalDelivery(sessionId: string, approvalId: string): Promise<DshApprovalDelivery | undefined> {
+    const client = await this.ensureSidecar(); const runtime = this.require(sessionId); const pending = runtime.pending.get(approvalId);
+    if (pending?.kind !== 'approval' || !pending.approvalAgentId || pending.approvalDeliveryId === undefined
+      || pending.generation !== this.muxGeneration || this.clientId === '' || pending.sent || pending.transportClosed) return undefined;
+    const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch;
+    const host = await this.hostIdentity().catch(() => undefined);
+    if (host?.status !== 'verified' || host.fingerprint === undefined || this.client !== client || this.clientId !== clientId
+      || this.muxGeneration !== generation || this.hostEpoch !== epoch || this.sessions.get(sessionId) !== runtime
+      || runtime.pending.get(approvalId) !== pending || pending.sent || pending.transportClosed) return undefined;
+    const hostId = dshRevision({ endpoint: host.url });
+    return { nativeId: runtime.nativeId, agentId: pending.approvalAgentId, eventId: pending.eventId,
+      ...(pending.callId ? { callId: pending.callId } : {}), ...(pending.durableId === undefined ? {} : { durableId: pending.durableId }),
+      hostId, hostFingerprint: host.fingerprint, clientId, revision: this.approvalRevision(runtime, pending, hostId, host.fingerprint) };
+  }
+
+  async retryDshApproval(sessionId: string, attempt: DshApprovalAttempt, revision: string): Promise<NativeInteractionSubmission> {
+    const current = await this.dshApprovalDelivery(sessionId, attempt.delivery.eventId);
+    if (current === undefined || current.revision !== revision || !sameDshApproval(attempt.delivery, current))
+      throw Object.assign(dshNativeError('原审批身份或投递已变化，不能重发旧回应', 409), { nativeAdmission: 'not-submitted' });
+    return this.replyApproval(sessionId, { approvalId: attempt.delivery.eventId, optionId: attempt.optionId }, current);
+  }
+
   async respond(sessionId: string, decision: ApprovalDecision): Promise<NativeInteractionSubmission> {
+    return this.replyApproval(sessionId, decision);
+  }
+
+  private async replyApproval(sessionId: string, decision: ApprovalDecision, recovery?: DshApprovalDelivery): Promise<NativeInteractionSubmission> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
     const pending = runtime.pending.get(decision.approvalId);
@@ -1651,11 +1688,16 @@ export class DshAdapter implements AgentAdapter {
     if (pending.sent) throw dshNativeError('DSH approval was submitted; wait for its durable decision', 409);
     if (!['allowed-once', 'rejected'].includes(decision.optionId)) throw Object.assign(new Error('DSH 审批选项无效'), { statusCode: 400 });
     const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch;
+    const current = (): boolean => this.sessions.get(sessionId) === runtime && this.client === client && this.clientId === clientId
+      && this.muxGeneration === generation && this.hostEpoch === epoch && runtime.pending.get(decision.approvalId) === pending
+      && !pending.sent && !pending.transportClosed && (recovery === undefined
+        || this.approvalRevision(runtime, pending, recovery.hostId, recovery.hostFingerprint) === recovery.revision);
+    if (!current()) throw Object.assign(dshNativeError('原审批投递已变化，请重新核对', 409), { nativeAdmission: 'not-submitted' });
     await this.call(client, '$events/result', {
       clientId,
       eventId: decision.approvalId,
       outcome: { kind: 'result', value: decision.optionId },
-    }, sessionId);
+    }, sessionId, undefined, recovery === undefined ? undefined : current);
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || this.clientId !== clientId
       || this.muxGeneration !== generation || this.hostEpoch !== epoch || pending.transportClosed || runtime.pending.get(decision.approvalId) !== pending)
       throw Object.assign(dshNativeError('审批回执属于已结束的原生交互或旧连接，本次回应结果待核对', 503), { code: 'uncertain' });
@@ -2350,7 +2392,8 @@ export class DshAdapter implements AgentAdapter {
         || approval.eventId === undefined && callId !== '' && approval.callId === callId);
       const durableId = matches.length === 1 ? matches[0]?.[0] : undefined;
       if (durableId !== undefined) { const approval = runtime.approvals.get(durableId); if (approval !== undefined) approval.eventId = eventId; }
-      const pending: PendingInteraction = { kind: 'approval', eventId, callId, durableId, approvalTool: toolName, generation: this.muxGeneration };
+      const pending: PendingInteraction = { kind: 'approval', eventId, callId, durableId, approvalTool: toolName,
+        approvalAgentId: String(value['agentId'] ?? ''), approvalDeliveryId: randomUUID(), generation: this.muxGeneration };
       runtime.pending.set(eventId, pending);
       const args = {
         ...(runtime.toolInputs.get(callId) ?? {}),

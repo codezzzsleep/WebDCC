@@ -41,6 +41,7 @@ import type {
   DshSubagentCatalog,
   DshSubagentHistory,
   DshSubagentHistoryOptions,
+  DshApprovalRecoveryView,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -120,6 +121,7 @@ export const api = {
   feed: (after: number) => request<{ entries: { feedSeq: number; sessionId: string; patch: Record<string, unknown> }[] }>(`/api/feed?after=${after}`),
   session: (id: string) => request<SessionDetailResponse>(`/api/sessions/${id}`),
   interaction: (sessionId: string, kind: InteractionKind, id: string) => request<InteractionEventResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/interactions/${kind}?${new URLSearchParams({ interactionId: id })}`),
+  dshApprovalRecovery: (sessionId: string, approvalId: string) => request<DshApprovalRecoveryView>(`/api/sessions/${encodeURIComponent(sessionId)}/dsh/approval-recovery?${new URLSearchParams({ approvalId })}`),
   events: (id: string, params: { before?: number; after?: number; limit?: number }) => {
     const search = new URLSearchParams();
     if (params.before !== undefined) search.set('before', String(params.before));

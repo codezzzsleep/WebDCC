@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
 import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, nativeReasoningContent, codexReviewItem } from '@webdcc/protocol';
 import { NativeReasoningContent } from './NativeReasoningContent.js';
+import type { DshApprovalRecoveryView } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -664,6 +665,27 @@ function approvalWhat(data: EventData['approval.request']): string {
   return data.detail.split('\n')[0] ?? '';
 }
 
+function DshApprovalRecovery({ event, data }: { event: StoredEvent; data: EventData['approval.request'] }): React.ReactElement {
+  const [view, setView] = useState<DshApprovalRecoveryView>();
+  const [error, setError] = useState(''); const [retrying, setRetrying] = useState(false); const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    let current = true; setView(undefined); setError(''); setRetrying(false);
+    void api.dshApprovalRecovery(event.sessionId, data.approvalId).then(value => { if (current) setView(value); })
+      .catch(error => { if (current) setError(String(error)); });
+    return () => { current = false; };
+  }, [event.sessionId, event.seq, data.approvalId, refresh]);
+  if (view?.status === 'available') return <div className="approval-recovery">
+    <p>原回应：{data.options.find(option => option.id === view.optionId)?.label ?? view.optionId}</p>
+    <button type="button" className="btn" disabled={retrying} onClick={() => {
+      if (store.retryDshApproval(event.sessionId, view)) setRetrying(true);
+    }}>{retrying ? '正在提交原回应…' : '重试原回应'}</button>
+  </div>;
+  return <div className="approval-recovery">
+    <p role={error ? 'alert' : 'status'}>{error || (view?.status === 'unavailable' ? view.reason : '正在核对原审批…')}</p>
+    {view !== undefined || error ? <button type="button" className="btn" onClick={() => setRefresh(value => value + 1)}>重新核对审批</button> : null}
+  </div>;
+}
+
 function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['approval.request'] }): React.ReactElement {
   useStoreVersion();
   const submission = data.submission === 'sent' || data.submission === 'uncertain'
@@ -725,6 +747,8 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
         <pre className="output">{data.detail}</pre>
       </details>
       {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="approve" id={data.approvalId} />}
+      {synchronized && submission?.status === 'uncertain' && store.getSession(event.sessionId)?.agent === 'dsh'
+        ? <DshApprovalRecovery event={event} data={data} /> : null}
       <div className="approval-actions">
         {data.options.map((option, index) => {
           const deny = /deny|reject|decline|cancel/i.test(option.id);
