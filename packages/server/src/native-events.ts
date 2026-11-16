@@ -1,3 +1,4 @@
+import { nativeCompletionIdentity } from './native-completion-identity.js';
 import { createHash } from 'node:crypto';
 import type { AdapterEvent, NativeDshRpcCaptureMetadata, NativeEnvelopeDetail, NativeEnvelopeSummary, NativeStdioCaptureMetadata, RuntimeIdentity, TraceFrame } from '@webdcc/protocol';
 import { redactDiagnosticValue } from '@webdcc/model-proxy';
@@ -108,9 +109,27 @@ export class NativeEventStore {
     const immutable = event.kind === 'assistant.message' || event.kind === 'reasoning' || event.kind === 'file.read'
       || ['command', 'file.change', 'tool.call'].includes(event.kind) && ['completed', 'failed'].includes(String(object(event.data)['status']));
     if (event.nativeSeq === undefined && (!immutable || event.native === undefined)) return { id, duplicate: false };
-    const key = payloadHash({ sessionId: context.sessionId, nativeId: context.nativeId, seq: event.nativeSeq,
-      kind: event.kind, itemKey: event.itemKey, turnId: event.nativeTurnId, data: event.data });
-    const previous = this.db.prepare('SELECT event_seq FROM native_event_projections WHERE projection_version = 1 AND event_key = ?').get(key) as { event_seq: number | null } | undefined;
+    const scope = this.db.prepare('SELECT native_id FROM native_event_envelopes WHERE id = ?').get(id) as { native_id: string | null };
+    const identity = nativeCompletionIdentity(context, event, scope.native_id);
+    const key = payloadHash(identity.canonical);
+    let previous = this.db.prepare('SELECT event_seq FROM native_event_projections WHERE projection_version = 1 AND event_key = ?').get(key) as { event_seq: number | null } | undefined;
+    if (previous?.event_seq == null && scope.native_id !== null) {
+      for (const legacy of new Set(identity.legacy.map(payloadHash))) {
+        // A digest alone cannot certify another native scope. The legacy
+        // mapping must belong to this Agent/session and its real event.
+        const committed = this.db.prepare(`SELECT p.envelope_id, p.event_seq FROM native_event_projections p
+          JOIN native_event_envelopes e ON e.id = p.envelope_id
+          JOIN events v ON v.session_id = e.session_id AND v.seq = p.event_seq AND v.native_envelope_id = e.id
+          WHERE p.projection_version = 1 AND p.event_key = ? AND e.session_id = ? AND e.agent = ? AND e.native_id = ?`)
+          .get(legacy, context.sessionId, context.agent, scope.native_id) as { envelope_id: number; event_seq: number } | undefined;
+        if (committed === undefined) continue;
+        this.db.prepare(`INSERT INTO native_event_projections (projection_version, event_key, envelope_id, event_seq) VALUES (1, ?, ?, ?)
+          ON CONFLICT(projection_version, event_key) DO UPDATE SET envelope_id = excluded.envelope_id, event_seq = excluded.event_seq WHERE event_seq IS NULL`)
+          .run(key, committed.envelope_id, committed.event_seq);
+        previous = committed;
+        break;
+      }
+    }
     const duplicate = previous?.event_seq != null;
     if (duplicate) this.db.prepare("UPDATE native_event_envelopes SET disposition = 'duplicate-projection' WHERE id = ?").run(id);
     else this.db.prepare('INSERT INTO native_event_projections (projection_version, event_key, envelope_id) VALUES (1, ?, ?) ON CONFLICT(projection_version, event_key) DO UPDATE SET envelope_id = excluded.envelope_id WHERE event_seq IS NULL').run(key, id);
