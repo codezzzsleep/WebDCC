@@ -47,6 +47,8 @@ pnpm install
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
 
+附件复制只生成请求的工作区文件，不自动修改 `.git/info/exclude` 或共享 worktree 的 Git 配置。需要忽略 `.webdcc/` 时，由用户在原生 Git 或有明确目标/作用域/diff 的配置动作中显式设置；已有忽略规则保持原样。
+
 
 ## 本机按生产方式运行（M7 已验收）
 
