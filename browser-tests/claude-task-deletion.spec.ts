@@ -50,8 +50,9 @@ it('successful native task deletion clears the current plan and stays deleted af
     const expectedSeq = ctx.store.lastSeq(sessionId);
     await expect.poll(() => throughSeq()).toBe(expectedSeq);
     console.log('task deletion refresh boundary', JSON.stringify({ cachedPanel, throughSeq: throughSeq(), expectedSeq, currentPanel: await panel.textContent() }));
-    expect(await panel.textContent()).toContain('0 待处理');
-    expect(await panel.textContent()).not.toContain(subject);
+    // Receiving the snapshot frame precedes applying it to the React view.
+    await expect.poll(() => panel.textContent()).toContain('0 待处理');
+    await expect.poll(() => panel.textContent()).not.toContain(subject);
     const stored = ctx.store.allEvents(sessionId);
     expect(stored.findLast(event => event.kind === 'plan')?.data).toEqual({ items: [] });
     expect(stored.some(event => event.kind === 'tool.call' && (event.data as EventData['tool.call']).name === 'TaskUpdate' && JSON.stringify(event.native) === JSON.stringify(original))).toBe(true);
