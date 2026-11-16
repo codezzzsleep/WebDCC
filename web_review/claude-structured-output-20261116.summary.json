@@ -1,0 +1,231 @@
+{
+  "formatVersion": 1,
+  "issues": [
+    78,
+    51,
+    42
+  ],
+  "behavior": "Claude native structured results have independent identity/status and survive refresh, reconnect, session switch and reopening",
+  "sourceBase": "0d66e0a8e81e74cc3550b6464a7de88befdfbc0b",
+  "sourceFingerprint": "296a73901895fd629c8bfc0bc8546af3943558f23ea0cac17fb3a6797b44a6d3",
+  "sourceFilesSha256": {
+    "packages/adapters/claude/src/adapter.ts": "f8eab911f7559eb1ee4de3125028357ad258d461be67a28cd7e67910831a4a42",
+    "packages/protocol/src/claude-output.ts": "a8d6829177d653dc69a7e7577b90ec637d3cdf184d516e58d823d82c710a6316",
+    "packages/protocol/src/events.ts": "c1d631744337ebddf0e936d372d0b6a5430e2fb1e2445b8a90526639cfae13b0",
+    "packages/protocol/src/index.ts": "db3718604db18d798ee22b3c39523d86a37a184d21355f0c012afee7c6a73004",
+    "packages/protocol/src/turn.ts": "7bd2ab10ade847f67fa5394055c6b4896966bea157f0940471f45060fef515e4",
+    "packages/protocol/src/validate.ts": "cf93a97bd880a52074d5f7f5448c63c02517a8b45376746e07b765297cc083b8",
+    "packages/server/src/store.ts": "9cd1588b6280faae258e7aa04e81f2ea4b75ea09864543b18d704abc7946c06e",
+    "packages/web/src/components/Timeline.tsx": "eb3d941738706fa7c45e340d6bd4f07c9dc4d9b30d47426967f08fc8f4b6dfe5",
+    "packages/web/src/components/ClaudeStructuredOutput.tsx": "c57646b45235f246fa95a81853d0056e1f9e863581287422683e74f9dba0a4ab",
+    "scripts/verify-claude-output.ts": "c469360d9d69b82ba841beaf2569546733058e89319984af6a3dfe72a90d3939",
+    "packages/adapters/claude/test/structured-output.spec.ts": "20a58d71f90999b03edbe464211e36258bc3b08eabf3c9d0ce8928e7f9f4e2b8",
+    "packages/protocol/test/claude-output.spec.ts": "278abe47eae8420aebcb13d63f451417abf89753e53d22cc5dcab349468496cd",
+    "packages/server/test/claude-output-redaction.spec.ts": "06bc309aab4b0689c32e72d8c7518e76fe0c43392cdd9f45b3ed3f617749d976",
+    "browser-tests/claude-structured-output.spec.ts": "188cda0a7106af56e2a004845098eb08411f65116111be1839ec025d709db9ca"
+  },
+  "implementation": "author verified, PR delivery; independent review/merge/deployment owned by other windows",
+  "verification": {
+    "directedUnits": {
+      "passed": 99,
+      "files": 13,
+      "kind": "current main combination; Claude behavior plus retained Codex reasoning/envelope/recent history regressions"
+    },
+    "browser": {
+      "passed": 3,
+      "files": 2,
+      "kind": "current source controlled SDK/SQLite/HTTP/WebSocket/Chromium; Claude2 + retained Codex reasoning1",
+      "refresh": true,
+      "reconnect": true,
+      "sessionSwitch": true,
+      "reopen": true,
+      "queryDuplication": false
+    },
+    "types": [
+      "protocol",
+      "Claude adapter",
+      "Codex adapter",
+      "server",
+      "web",
+      "scripts"
+    ],
+    "lint": "all changed TypeScript/TSX passed",
+    "actualNative": {
+      "runId": "b4c93f84-513e-4eb8-a737-a3747985d48e",
+      "kind": "official SDK/CLI plus controlled local model and real native StructuredOutput tool",
+      "sdk": "0.3.322",
+      "cli": "2.1.322",
+      "hashes": {
+        "binary": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+        "sdk": "1c70356fe073f6c5423fb7138e2f2f6580a790eb055ad247e5d7927f57b53e8b",
+        "schema": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f"
+      },
+      "checks": {
+        "version": "passed",
+        "illegalSchema": "passed",
+        "schemaAccepted": "passed",
+        "nativeResult": "passed",
+        "projection": "passed"
+      },
+      "localModelRequests": 1,
+      "realProviderRequests": 0,
+      "reportSha256": "24848db932b5ced94e1d3e743e1b3d2677f32241b8fba0409598e95b393ad2da",
+      "evidenceHashes": {
+        "sdk.jsonl": "f2c612dedbc5344fb43047dcf78e8bd4462303f2d8e45a526d450089f0cfd6cc",
+        "events.json": "4eb54ffb9a9c17d259b85ca85019237a16d70225d0df45e78c743895a01fecb5",
+        "requests.json": "f28963eede83a15d6c908b719834fd472d637c9cc8fd33ab3bef07a792678697",
+        "local-model.jsonl": "c2731e034184cf3f5fc06a1241dd49577bb0a8de49c5e387c5c44c804e8208f4"
+      },
+      "recordedSourceFingerprint": "0e42158245a5dcaf82576215e83ef8c187c22afbe5a860c97c7ef4c13e8b171e"
+    },
+    "realTrajectoryReplay": {
+      "kind": "offline captured real native/model trajectory; no new SDK/CLI/model/provider calls",
+      "frames": 156,
+      "unchangedProjectedItems": 14,
+      "traceSha256": "159efc0462aa075b85a19d5c275dcdee1505c603e755c538a34e786eb1d6e584",
+      "historicalCaptureStatus": "failed",
+      "projectionStatus": "passed",
+      "scope": "text/thinking/tool/file projection only",
+      "currentSourceReportSha256": "859939bd0553517256840ce02a3479ed86df681ce13acdd7f0b8de7b926f35af"
+    },
+    "nativeCaptureCurrentSourceReplay": {
+      "status": "passed",
+      "sourceFingerprint": "296a73901895fd629c8bfc0bc8546af3943558f23ea0cac17fb3a6797b44a6d3",
+      "kind": "captured actual official SDK/CLI with controlled local model; current source projection only;0newSDK/CLI/model/provider",
+      "nativeResultId": "d9da3272-dbfe-48c8-8e98-3514f1c7a58f",
+      "captureRunId": "b4c93f84-513e-4eb8-a737-a3747985d48e",
+      "reportSha256": "019b518699086f68f1ecea7c18233b9f8debc03169a1aad47d0874a05a0ede21"
+    }
+  },
+  "evidenceSha256": {
+    "output-before.json": "ec0020186029ef77446e520516beb7ca42f5559624a7145d26c900f5a1175f5d",
+    "output-units-before.log": "27e120552024c3e56e7a5e998faeb2b2cc45224aa2c467bb6573a06788eaaf57",
+    "output-units-first.log": "8aca43f64572cedbad96449ca7d2f3a892388c8b454650e5cb77def9d04ea592",
+    "output-units-final.log": "4402dc89e7dff3bdf92fc8b03b84c67c83406f10aced5e09a7874e594143cf17",
+    "output-redaction-final.log": "b3fe1b4f32f940500dd3610e2d9a60a2273a3430bbac2d34fdce82ce3f24b505",
+    "output-browser-first.log": "0f4bb72d55c18caadc3b13335a1a1ccee847d32236c9e482405ec32d7c893e8d",
+    "output-browser-second.log": "269f4f52bd8b12bc361e8c2192f651993ed9b85bc137c8fc3248a1e4f3fca547",
+    "output-browser-final.log": "94308a0eb31a2779f5cac21fbf3af9398f13fa7999289088e60c6143e55f29ad",
+    "output-native-first.log": "0435ae1f307addff07669fd12bf1459518571f44779c44df7078947435964d4b",
+    "output-native-second.log": "47f0d988754ed025725753be6da3e3e672320294f809113b20136c4c6606adcf",
+    "output-matrix-final.log": "b2b5c17914dc67ccdde8e2471f1f849b3fcc257058991e15ea775babe4ab1c92",
+    "output-protocol-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output-claude-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output-scripts-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output-web-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output-server-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output-lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output-real-replay.json": "79010aee1bc75225d7bc4f0ac2c55dc873b788f114613a0941cfb78b164c4743",
+    "output-real-replay-final.json": "859939bd0553517256840ce02a3479ed86df681ce13acdd7f0b8de7b926f35af",
+    "output-current-main-units.log": "ab316788d8afbb53df07eee8da7832de3bbfa004e38640bf35e771322235430e",
+    "output-current-main-browser.log": "9801ca88f26fa194a2c96bdf3e5e72e6ff9b096e4cc1c86ddb2d8917ed6cc785",
+    "output-current-types.json": "7d97bab837bf33951e13be98a046c2ed17ee0d0db1c86119332394514e5bddb5",
+    "output-current-main-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output-current-native-replay.json": "019b518699086f68f1ecea7c18233b9f8debc03169a1aad47d0874a05a0ede21",
+    "output-current-main-real-replay.json": "859939bd0553517256840ce02a3479ed86df681ce13acdd7f0b8de7b926f35af"
+  },
+  "retainedFailures": [
+    {
+      "file": "output-units-before.log",
+      "scope": "10 baseline projection failures; ordinary no-parse case passed"
+    },
+    {
+      "file": "output-units-first.log",
+      "scope": "replay test compared its synthetic query identity to an actual adapter query; original preserved, final test verifies separate identities and same native semantics"
+    },
+    {
+      "file": "output-units-final.log",
+      "scope": "16 passed; server test NOT_RUN because own node-pty binding was missing; dependency repaired locally and final checks passed"
+    },
+    {
+      "file": "output-browser-first.log",
+      "scope": "one passed; success flow failed on author test aria-label selector"
+    },
+    {
+      "file": "output-browser-second.log",
+      "scope": "earlier flows passed; reopening NOT_RUN because implicit Playwright context was unsuitable; explicit context fixed"
+    },
+    {
+      "file": "output-native-first.log",
+      "scope": "NOT_LAUNCHED before SDK/CLI/model; missing parent evidence directory fixed, old log/identity retained"
+    },
+    {
+      "file": "output-real-replay.json",
+      "scope": "first private verifier referenced a missing currentProjection field; final uses the unchanged existing replayProjection; no evidence overwritten"
+    }
+  ],
+  "remaining": [
+    "effective advanced configuration recovery is the next Claude V1 stage",
+    "internal query initialization/rollback handoff defect recorded on Issue51, separate worktree in progress",
+    "real current Provider/model schema and thinking acceptance",
+    "full target-platform acceptance, review, merge and deployment by other windows"
+  ],
+  "previousVerifiedHead": "7aaa2b5265d662012f495929f7427eff7037b40f",
+  "previousVerification": {
+    "directedUnits": {
+      "passed": 59,
+      "files": 10,
+      "kind": "controlled SDK and source reducers/store"
+    },
+    "browser": {
+      "passed": 2,
+      "files": 1,
+      "kind": "controlled SDK, actual source SQLite/HTTP/WebSocket/Chromium",
+      "refresh": true,
+      "reconnect": true,
+      "sessionSwitch": true,
+      "reopen": true,
+      "queryDuplication": false
+    },
+    "types": [
+      "protocol",
+      "Claude adapter",
+      "server",
+      "web",
+      "scripts"
+    ],
+    "lint": "all changed TypeScript/TSX passed",
+    "actualNative": {
+      "runId": "b4c93f84-513e-4eb8-a737-a3747985d48e",
+      "kind": "official SDK/CLI plus controlled local model and real native StructuredOutput tool",
+      "sdk": "0.3.322",
+      "cli": "2.1.322",
+      "hashes": {
+        "binary": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+        "sdk": "1c70356fe073f6c5423fb7138e2f2f6580a790eb055ad247e5d7927f57b53e8b",
+        "schema": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f"
+      },
+      "checks": {
+        "version": "passed",
+        "illegalSchema": "passed",
+        "schemaAccepted": "passed",
+        "nativeResult": "passed",
+        "projection": "passed"
+      },
+      "localModelRequests": 1,
+      "realProviderRequests": 0,
+      "reportSha256": "24848db932b5ced94e1d3e743e1b3d2677f32241b8fba0409598e95b393ad2da",
+      "evidenceHashes": {
+        "sdk.jsonl": "f2c612dedbc5344fb43047dcf78e8bd4462303f2d8e45a526d450089f0cfd6cc",
+        "events.json": "4eb54ffb9a9c17d259b85ca85019237a16d70225d0df45e78c743895a01fecb5",
+        "requests.json": "f28963eede83a15d6c908b719834fd472d637c9cc8fd33ab3bef07a792678697",
+        "local-model.jsonl": "c2731e034184cf3f5fc06a1241dd49577bb0a8de49c5e387c5c44c804e8208f4"
+      }
+    },
+    "realTrajectoryReplay": {
+      "kind": "offline captured real native/model trajectory; no new SDK/CLI/model/provider calls",
+      "frames": 156,
+      "unchangedProjectedItems": 14,
+      "traceSha256": "159efc0462aa075b85a19d5c275dcdee1505c603e755c538a34e786eb1d6e584",
+      "historicalCaptureStatus": "failed",
+      "projectionStatus": "passed",
+      "scope": "text/thinking/tool/file projection only"
+    }
+  },
+  "mainSync": {
+    "main": "0d66e0a8e81e74cc3550b6464a7de88befdfbc0b",
+    "candidate": "d833ae0",
+    "conflictResolution": "additive ClaudeStructuredOutput/isClaudeStructuredOutput and main NativeReasoningPart/validNativeReasoningParts; preserve main nativeContent and all other fields",
+    "newNativeOrProviderExecutions": 0
+  }
+}
