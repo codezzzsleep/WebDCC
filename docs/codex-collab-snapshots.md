@@ -30,12 +30,27 @@ pnpm exec vitest run packages/adapters/codex/test/collab-snapshots.spec.ts packa
 pnpm test:browser browser-tests/codex-collab-snapshots.spec.ts
 ```
 
-These checks use typed, controlled native shapes through the production handler,
+These tests use typed, controlled native shapes through the production handler,
 manager, SQLite and source UI. The reviewed 0.169 schema defines the fields; the
 official 0.168 TUI `multi_agents.rs` also demonstrates separate completed and
-errored wait results. They do not establish a new actual 0.169 collab execution or
-live Provider availability. Native V2 waits may wake for mailbox/input/timeout
-and carry empty `agentsStates`; that behavior remains explicit. V2-only tool
-results/activity, full independent child controls and target acceptance are
-separate scopes. Official prompts, tools, permissions, features and versions
-must not be changed to force these scenarios to trigger.
+errored wait results. This controlled state matrix includes late returns,
+overlapping child turns, restored call identities and unknown targets.
+
+Actual unchanged Codex 0.169 with an isolated local model fixture also emitted
+two native `spawnAgent` pending-init snapshots and completed two child tasks.
+The capture contains 183 transport frames, including 105 RPC frames, and retains
+the original child IDs, turns, result messages and failed parent. Its overall
+verification failed: the fixture used the wrong wait argument and mishandled
+internal child notifications. A native wait observation was **NOT_TRIGGERED**.
+The 35 local fixture requests are recorded separately from paid Provider calls,
+of which there were zero; cleanup reported no errors. Completed tasks are not
+resubmitted to fill this missing scope.
+
+Replay of those original 105 RPC frames verifies the pending-init snapshots,
+completed child outputs, parent failure and browser refresh through production
+code. It does not turn the failed native run into a successful wait validation,
+and does not prove current Provider availability. Native V2 waits may wake for
+mailbox/input/timeout and carry empty `agentsStates`; V2-only tool results/activity,
+full independent child controls and target acceptance remain separate scopes.
+Official prompts, tools, permissions, features and versions must not be changed
+to force these scenarios to trigger.
