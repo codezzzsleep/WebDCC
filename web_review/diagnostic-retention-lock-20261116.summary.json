@@ -1,0 +1,47 @@
+{
+  "issue": 227,
+  "parents": [
+    56,
+    42
+  ],
+  "dependency": {
+    "issue": 229,
+    "PR": 231,
+    "head": "e01b4465f7399eec710de373e6f68366c816987c"
+  },
+  "base": "e01b4465f7399eec710de373e6f68366c816987c",
+  "sourceFingerprint": "31872a589e6ac158440b7e6ec7686e0d20ef54b5dced5d034d10fb2cf20dd9bd",
+  "verification": {
+    "testsPassed": 53,
+    "testFilesPassed": 7,
+    "typecheck": "all workspace+scripts passed",
+    "lint": "all changed combination files passed",
+    "scope": "actual OS writer lock, helper/FS/HTTP/SQLite and controlled model transport; locked refresh retained; strict expiration cutoff and all diagnostic names; operator files/symlinks/FIFO/directories/lock kept; repeated maintenance/writes; bounded lock failure/startup and activity summary recovery",
+    "failedEvidence": "original1/1 held-lock negative; actual writer refreshed before stale-stat unlink confirmed twice;24/25 and50/51 summary failure led to separate229 before implementation",
+    "priorPartial": "21/21 and50/50 initial checks passed, not complete acceptance"
+  },
+  "evidenceSha256": {
+    "reproduction-before.log": "01e4b047cd4e0904ea4bf0028fa3b98d205b843955985a347fd9a2b18f614106",
+    "reproduction-confirmed.log": "01e4b047cd4e0904ea4bf0028fa3b98d205b843955985a347fd9a2b18f614106",
+    "regression-before.log": "108f6778feba11a5d4a254d5cd181f18d2fbf011fdca6c31c455292e4c93ec07",
+    "regression-first.log": "77cd597bca81e94d856f6e0a24d6dcede268f923b46a890ca301555d61db9f42",
+    "regression-expanded.log": "8c5a60225c4c4e9208bc3ced021c673f155b8725ee553f8616572532bfe82330",
+    "retention-final.log": "18daf3b1994c63d1ca618f96e5fc0f08fa88d2946ffd442917d6d99aa6cdcfdd",
+    "regression-final.log": "8f3db62e4b254984d8a3b0e7556d77416dc96a8f108ae1ef0a57f2891d51fadb",
+    "typecheck-first.log": "80dfa9f33b722ceffed0dbe1570855fb3c10b090d3331136b9ff1af01d2f4ba1",
+    "typecheck-final.log": "f18a33205f1882aa5d38e09135d5b1d07c36eefb5d714813688993e8e794ab4a",
+    "combination-regression.log": "7522505ca1829be2a83f2c4c8f4808d0eb7ef58b8f7c03322df65a6658f9a5ef",
+    "combination-typecheck.log": "3675e274a29d7f2dc28322432e564c99d0676c8719f0235c354bb5e141db833c",
+    "combination-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "officialNativeCalls": 0,
+  "providerCalls": 0,
+  "deployment": "not performed",
+  "dataMigration": "none",
+  "limitations": [
+    "Guarantee covers cooperating directory-lock writers; external unsynchronized mutations remain outside scope",
+    "Retention remains startup/activity driven; no idle deletion daemon",
+    "Full cross-process secret policy/global memory and old recording exports remain unimplemented",
+    "Independent exact-head source and three target Agents acceptance pending"
+  ]
+}
