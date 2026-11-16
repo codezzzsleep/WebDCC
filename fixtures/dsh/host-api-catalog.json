@@ -19992,12 +19992,12 @@
     },
     "subagents/prompt": {
       "package": "@deepseek-ai/dsh-subagent",
-      "description": "Deliver one browser-authored message to a continuable child through the exact live direct parent, retaining the caller-minted request identity and validated browser zone on the accepted message. Success identifies the message the child's inbox accepted; later execution is independent of this call. Queue delivery targets a later turn; steer delivery targets the nearest step and retains the Agent loop's best-effort fallback semantics. Image parts are admitted and persisted through the attachment store before delivery, and the child's model must accept image input. Cold resume at capacity rejects with `subagent/delivery-unavailable`.",
+      "description": "Deliver one browser-authored message to a continuable child through its live subagent tree root, retaining the caller-minted request identity and validated browser zone on the accepted message. Success identifies the message the child's inbox accepted; later execution is independent of this call. Queue delivery targets a later turn; steer delivery targets the nearest step and retains the Agent loop's best-effort fallback semantics. Image parts are admitted and persisted through the attachment store before delivery, and the child's model must accept image input. Cold resume at capacity rejects with `subagent/delivery-unavailable`. Access is checked on the target Session before attachment admission or restoration.",
       "kind": "direct",
       "parameters": [
         {
           "name": "request",
-          "description": "durable address, delivery, minted identity, content, and optional browser zone.",
+          "description": "target id, delivery, minted identity, content, and optional browser zone.",
           "jsonSchema": {
             "type": "object",
             "properties": {
@@ -20005,16 +20005,8 @@
                 "type": "string",
                 "description": "Identity persisted on the accepted message, minted before the call."
               },
-              "parentSessionId": {
-                "type": "string"
-              },
               "childSessionId": {
                 "type": "string"
-              },
-              "mode": {
-                "type": "string",
-                "const": "continuable",
-                "description": "Required discriminator retained from the browser control address."
               },
               "delivery": {
                 "type": "string",
@@ -20086,9 +20078,7 @@
             },
             "required": [
               "requestId",
-              "parentSessionId",
               "childSessionId",
-              "mode",
               "delivery",
               "content"
             ],
@@ -20110,7 +20100,7 @@
       },
       "source": {
         "file": "packages/subagent/subagent/src/index.ts",
-        "line": 450,
+        "line": 451,
         "column": 9
       }
     },

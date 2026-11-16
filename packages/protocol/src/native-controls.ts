@@ -1,5 +1,6 @@
 import type { AgentId } from './adapter.js';
 import type { RuntimeIdentity } from './runtime.js';
+import type { DshSubagentInputReference } from './dsh-subagents.js';
 
 export interface NativeControlSnapshot {
   sessionId: string;
@@ -24,7 +25,7 @@ export interface NativeActionReceipt {
   state: NativeActionState;
   updatedAt: string;
   error?: string;
-  reference?: { id: string; generation?: number; runId?: string | null };
+  reference?: { id: string; generation?: number; runId?: string | null; dshChild?: DshSubagentInputReference };
   /** The SDK call returned; this does not establish a task's terminal outcome. */
   callReturnedAt?: string;
 }

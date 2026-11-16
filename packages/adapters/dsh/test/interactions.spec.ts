@@ -54,14 +54,12 @@ it('NP-11 keeps questions after failed replies and closes each card on a native 
 });
 
 it('NP-11 limits child controls to the exact direct parent and continuable catalog entries', async () => {
-  const replay = DshAdapter.replay('session');
-  replay.feed(frame({ type: 'snapshot', header: { id: 'native-parent' }, cursor: -1, records: [], hasMore: false }));
-  replay.feed(frame({ type: 'event', event: { type: 'subagent/catalog', seq: 0, time: 1000, data: { childId: 'child', mode: 'continuable' } } }));
-  await replay.adapter.sendSubagent('session', 'child', '  original\r\n');
-  expect(replay.replies.at(-1)).toMatchObject({ endpoint: 'subagents/prompt', args: { request: { parentSessionId: 'native-parent', childSessionId: 'child', mode: 'continuable', delivery: 'queue', content: [{ type: 'text', text: '  original\r\n' }] } } });
-  await expect(replay.adapter.sendSubagent('session', 'other-parent-child', 'text')).rejects.toMatchObject({ statusCode: 409 });
   const native = await createDshSubagentFixture('session');
   try {
+    const receipt = await native.adapter.sendSubagent('session', 'reviewer', '  original\r\n', { requestId: 'retained-message', delivery: 'queue' });
+    expect(receipt).toMatchObject({ accepted: true, requestId: 'retained-message' });
+    expect(native.calls.at(-1)).toMatchObject({ method: 'subagents/prompt', args: { request: { requestId: 'retained-message', childSessionId: 'reviewer', delivery: 'queue', content: [{ type: 'text', text: '  original\r\n' }] } } });
+    await expect(native.adapter.sendSubagent('session', 'other-parent-child', 'text')).rejects.toMatchObject({ statusCode: 409 });
     expect(await native.adapter.interruptSubagent('session', 'reviewer')).toMatchObject({ accepted: true, confirmed: false });
     expect(native.calls.at(-1)).toMatchObject({ method: 'subagents/interruptByUser', args: { childSessionId: 'reviewer' } });
     for (const child of ['foreign', 'once']) await expect(native.adapter.interruptSubagent('session', child)).rejects.toMatchObject({ statusCode: 409 });

@@ -410,10 +410,18 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   app.post('/api/sessions/:id/subagents/:childId/prompt', async (request) => {
     const { id, childId } = request.params as { id: string; childId: string };
-    const body = request.body as { text?: string };
-    if (typeof body?.text !== 'string' || body.text.trim() === '') throw badRequest('需要子 Agent 消息');
-    await manager.sendSubagent(id, childId, body.text);
-    return { accepted: true };
+    const body = request.body as { text?: string; commandId?: string; delivery?: 'queue' | 'steer'; clientTimeZone?: string };
+    if (body === null || typeof body !== 'object' || Array.isArray(body) || typeof body.text !== 'string' || body.text.trim() === ''
+      || typeof body.commandId !== 'string' || !['queue', 'steer'].includes(body.delivery ?? '')
+      || body.clientTimeZone !== undefined && typeof body.clientTimeZone !== 'string'
+      || Object.keys(body).some(key => !['text', 'commandId', 'delivery', 'clientTimeZone'].includes(key))) throw badRequest('需要子消息正文、命令身份和交付方式');
+    return await manager.sendSubagent(id, childId, body.text, { commandId: body.commandId, delivery: body.delivery!,
+      ...(body.clientTimeZone === undefined ? {} : { clientTimeZone: body.clientTimeZone }) }) ?? { accepted: true };
+  });
+
+  app.get('/api/sessions/:id/subagents/:childId/prompts/:commandId', request => {
+    const { id, childId, commandId } = request.params as { id: string; childId: string; commandId: string };
+    return manager.subagentInputReceipt(id, childId, commandId);
   });
 
   app.post('/api/sessions/:id/subagents/:childId/interrupt', async (request) => {

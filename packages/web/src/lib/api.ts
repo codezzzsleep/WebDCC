@@ -33,6 +33,7 @@ import type {
   NativeControlSnapshot,
   NativeActionRequest,
   NativeActionResponse,
+  DshSubagentInputRequest,
   NativeActionReceipt,
   InputContent,
   ModelOption,
@@ -141,8 +142,10 @@ export const api = {
   previewSlashCommands: (agent: string, workspaceId?: string) => request<SlashCommandCatalog>(`/api/agents/${encodeURIComponent(agent)}/slash-commands${workspaceId === undefined ? '' : `?workspaceId=${encodeURIComponent(workspaceId)}`}`),
   slashControl: (sessionId: string, input: SlashControlRequest) => request<NativeActionResponse>(`/api/sessions/${sessionId}/slash-commands`, { method: 'POST', body: JSON.stringify(input) }),
   slashControlResult: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${sessionId}/slash-commands/${encodeURIComponent(commandId)}`),
-  sendSubagent: (sessionId: string, childSessionId: string, text: string) =>
-    request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/prompt`, { method: 'POST', body: JSON.stringify({ text }) }),
+  sendSubagent: (sessionId: string, childSessionId: string, text: string, options: Omit<DshSubagentInputRequest, 'text'> = { commandId: crypto.randomUUID(), delivery: 'queue', clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }) =>
+    request<NativeActionResponse | { accepted: true }>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(childSessionId)}/prompt`, { method: 'POST', body: JSON.stringify({ ...options, text }) }),
+  subagentInputReceipt: (sessionId: string, childSessionId: string, commandId: string) =>
+    request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(childSessionId)}/prompts/${encodeURIComponent(commandId)}`),
   interruptSubagent: (sessionId: string, childSessionId: string, commandId = crypto.randomUUID()) =>
     request<NativeActionResponse | { accepted: true }>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(childSessionId)}/interrupt`, { method: 'POST', body: JSON.stringify({ commandId }) }),
   subagents: (sessionId: string) => request<DshSubagentCatalog>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents`),

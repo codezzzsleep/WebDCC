@@ -16,7 +16,7 @@ export interface DshPageRequest {
 }
 export interface DshFollowRequest { address: DshSessionAddress; activate?: boolean; assistantStream?: true; maxMessages?: number }
 export interface DshSubagentPrompt {
-  request: { requestId: string; parentSessionId: string; childSessionId: string; mode: 'continuable'; delivery: 'queue' | 'steer'; content: { type: 'text'; text: string }[] };
+  request: { requestId: string; childSessionId: string; delivery: 'queue' | 'steer'; content: { type: 'text'; text: string }[]; clientTimeZone?: string };
 }
 export interface DshSubagentInterrupt { childSessionId: string }
 

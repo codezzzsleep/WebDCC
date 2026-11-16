@@ -37,6 +37,8 @@ export async function createDshSubagentFixture(localId = 'parent') {
   const calls: { rpcId: string; method: string; args: Record<string, unknown> }[] = [];
   const holds: { endpoint: string; matches?: string; hit: () => void; release: Promise<void> }[] = [];
   const releases: (() => void)[] = [];
+  let loseResponse: string | undefined;
+  let promptRejection: string | undefined;
   const server = createServer((request, response) => {
     void (async () => {
       const chunks: Buffer[] = [];
@@ -44,10 +46,25 @@ export async function createDshSubagentFixture(localId = 'parent') {
       const body = JSON.parse(Buffer.concat(chunks).toString()) as { rpcId: string; method: string; payload: { args: Record<string, unknown> } };
       const args = body.payload.args;
       calls.push({ rpcId: body.rpcId, method: body.method, args: structuredClone(args) });
+      if (body.method === 'subagents/prompt' && promptRejection !== undefined) {
+        const code = promptRejection; promptRejection = undefined;
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: false, error: { code, message: 'Native child input not admitted' } } })); return;
+      }
       const target = args['request'] as { sessionId?: string } | undefined;
       let value: unknown;
       if (body.method === 'commands/list') value = { commands: [] };
       else if (body.method === 'subagents/interruptByUser') value = { accepted: true };
+      else if (body.method === 'subagents/prompt') {
+        const input = args['request'] as { childSessionId: string; requestId: string; delivery: string; content: unknown[] };
+        const state = states.get(input.childSessionId); const rows = records.get(input.childSessionId);
+        if (state === undefined || rows === undefined) throw new Error('fixture child absent');
+        const messageId = `native-input-${body.rpcId}`;
+        state.active = true; state.cursor++; state.queue ??= [];
+        state.queue.push({ id: messageId, placement: input.delivery === 'steer' ? 'steering' : 'queued', rpcId: input.requestId, content: structuredClone(input.content) });
+        rows.push(childRecord(state.cursor, 'user/message', { id: messageId, source: { kind: 'user', rpcId: input.requestId }, content: structuredClone(input.content) }));
+        value = { messageId };
+      }
       else if (body.method === 'session/projections' && target?.sessionId === parentId) value = { kind: 'sequenced', asOfSeq: 10, values: { subagentCatalog: structuredClone(catalog) } };
       else if (body.method === 'session/projections') value = { kind: 'sequenced', asOfSeq: states.get(target?.sessionId ?? '')?.cursor ?? -1, values: {
         subagent: descriptorSeqs.get(target?.sessionId ?? '') === null ? null : { seq: descriptorSeqs.get(target?.sessionId ?? '') ?? 0, mode: catalog.find(child => child.id === target?.sessionId)?.mode, label: target?.sessionId },
@@ -65,6 +82,7 @@ export async function createDshSubagentFixture(localId = 'parent') {
       } else throw new Error(`fixture does not implement ${body.method}`);
       const holdIndex = holds.findIndex(hold => hold.endpoint === body.method && (hold.matches === undefined || JSON.stringify(args).includes(hold.matches)));
       if (holdIndex >= 0) { const held = holds.splice(holdIndex, 1)[0]!; held.hit(); await held.release; }
+      if (loseResponse === body.method) { loseResponse = undefined; response.destroy(); return; }
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: true, value } }));
     })().catch(error => { response.writeHead(500); response.end(JSON.stringify({ error: String(error) })); });
@@ -92,6 +110,8 @@ export async function createDshSubagentFixture(localId = 'parent') {
     },
     setPageSize(value: number) { pageSize = value; },
     setCatalog(value: typeof catalog) { catalog = value; },
+    loseNextResponse(endpoint: string) { loseResponse = endpoint; },
+    rejectNextPrompt(code: string) { promptRejection = code; },
     disconnect() { for (const socket of sockets.clients) socket.terminate(); },
     hold(endpoint: string, matches?: string) {
       let release!: () => void; let hit!: () => void;

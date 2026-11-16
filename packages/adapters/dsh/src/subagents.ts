@@ -1,8 +1,15 @@
 import type { DshSubagentIdentity, DshSubagentSummary, DshSubagentState, DshSubagentRecord } from '@webdcc/protocol';
-import { dshNativeError } from './native.js';
+import { dshNativeError, dshRevision } from './native.js';
 import type { DshPage, DshSessionAddress } from './contracts.js';
 
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+/** Human text stays exact; context/attachments cannot prove this text input. */
+export function dshSubagentInputHash(content: unknown): string | undefined {
+  if (!Array.isArray(content) || content.length !== 1) return undefined;
+  const part = object(content[0]);
+  return part['type'] === 'text' && typeof part['text'] === 'string' ? dshRevision(part['text']) : undefined;
+}
 
 /** The catalog is membership, not a lifecycle notification. */
 export function dshSubagentCatalog(parentSessionId: string, value: unknown): DshSubagentIdentity[] {
