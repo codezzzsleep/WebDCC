@@ -7,8 +7,9 @@ const assistant = (parent: string | null, text: string, id = 'message') => ({ ty
   session_id: 'native', parent_tool_use_id: parent, message: { id, stop_reason: 'end_turn', content: [{ type: 'text', text }] } });
 function stored(events: AdapterEvent[]): StoredEvent[] {
   return events.flatMap((event, seq) => event.type === 'item.start' || event.type === 'item.complete'
-    ? [{ sessionId: 'web', seq: seq + 1, turnId: 'turn', at: new Date(seq).toISOString(), itemKey: event.itemKey, kind: event.kind, data: event.data, native: event.native }] : []);
+    ? [{ sessionId: 'web', seq: seq + 1, turnId: 'turn', at: new Date(seq).toISOString(), itemKey: event.itemKey, kind: event.kind, data: event.data as StoredEvent['data'], native: event.native }] : []);
 }
+const firstKey = (events: AdapterEvent[]) => events.find((event): event is Extract<AdapterEvent, { type: 'item.start' | 'item.complete' }> => event.type === 'item.start' || event.type === 'item.complete')?.itemKey;
 
 it('preserves stream/message/block/parent identities for interleaved child output and keeps the parent independent', () => {
   const replay = ClaudeAdapter.replay('web');
@@ -25,8 +26,8 @@ it('preserves stream/message/block/parent identities for interleaved child outpu
   expect(start).toContainEqual(expect.objectContaining({ type: 'item.start', kind: 'assistant.message', scope: 'session', data: { text: '', claudeActor: origin } }));
   expect(child).toContainEqual(expect.objectContaining({ type: 'item.complete', kind: 'assistant.message', scope: 'session', data: { text: 'CHILD', claudeActor: origin } }));
   expect(delta).toContainEqual(expect.objectContaining({ type: 'item.delta', scope: 'session', append: 'CHILD' }));
-  expect(child[0]?.itemKey).toBe(start[0]?.itemKey);
-  expect(child[0]?.itemKey).not.toBe(parent[0]?.itemKey);
+  expect(firstKey(child)).toBe(firstKey(start));
+  expect(firstKey(child)).not.toBe(firstKey(parent));
 });
 
 it('excludes child native end_turn blocks from parent answers, including old persisted rows', () => {

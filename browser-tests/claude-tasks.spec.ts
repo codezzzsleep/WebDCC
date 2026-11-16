@@ -85,6 +85,9 @@ it('Claude task hierarchy, run outputs and unknown states survive source UI refr
     if (await panel.locator('details').first().getAttribute('open') === null) await panel.locator('summary').first().click();
     await page.screenshot({ path: '/root/.codex/project-state/WebDCC/claude-native-tasks-20261116/view-desktop.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
+    const closeSidebar = page.getByRole('button', { name: '收起侧边栏', exact: true });
+    if (await closeSidebar.count() > 0) await closeSidebar.click();
+    await expect.poll(() => panel.isVisible()).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: '/root/.codex/project-state/WebDCC/claude-native-tasks-20261116/view-mobile.png', fullPage: true });
     const events = ctx.store.allEvents(first.sessionId);

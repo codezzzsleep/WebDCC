@@ -9,7 +9,7 @@ function capture() {
   return { events, push(frame: unknown) {
     for (const event of replay.feed({ i: ++i, t: i, dir: 'in', ch: 'sdk', frame })) {
       if (event.type !== 'item.start' && event.type !== 'item.complete') continue;
-      events.push({ sessionId: 'web', seq: events.length + 1, turnId: null, itemKey: event.itemKey, kind: event.kind, data: event.data,
+      events.push({ sessionId: 'web', seq: events.length + 1, turnId: null, itemKey: event.itemKey, kind: event.kind, data: event.data as StoredEvent['data'],
         native: event.native, at: new Date(i).toISOString() });
     }
   } };
