@@ -4,7 +4,7 @@ import type { InputContent, SlashControlResult } from '@webdcc/protocol';
 import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
-import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultChoice, rememberAccessMode, rememberModel, rememberReasoning, type ModelChoice } from '../lib/agents.js';
+import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultAccessMode, defaultChoice, rememberAccessMode, rememberModel, rememberReasoning, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { AgentMark } from '../components/AgentMark.js';
 import { Composer } from '../components/Composer.js';
@@ -51,7 +51,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const choice = choiceOverride[agent] ?? defaultChoice(agent, meta?.agents[agent], providers);
   const availableAccessModes = meta?.agents[agent]?.accessModes ?? [];
-  const selectedMode = accessModes[agent] ?? availableAccessModes[0]?.id;
+  const selectedMode = defaultAccessMode(agent, availableAccessModes, accessModes[agent], meta?.runningAsRoot);
 
   const cards = useMemo(
     () =>

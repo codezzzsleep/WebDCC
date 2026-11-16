@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultChoice, rememberModel, rememberReasoning } from './agents.js';
+import { defaultAccessMode, defaultChoice, isAccessModeSelectable, rememberAccessMode, rememberedAccessMode, rememberModel, rememberReasoning } from './agents.js';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -64,5 +64,41 @@ describe('新会话默认选择', () => {
     rememberReasoning('dsh', 'max');
     expect(defaultChoice('dsh', meta, []).reasoningEffort).toBeUndefined();
     expect(defaultChoice('dsh', { ...meta, models: [{ id: 'plain', label: 'Plain' }] }, []).reasoningEffort).toBeUndefined();
+  });
+
+  it('restores each Harness preference independently and an explicit current choice takes precedence', () => {
+    const modes = [{ id: 'inherit', label: 'Inherit' }, { id: 'workspace', label: 'Workspace' }, { id: 'acceptEdits', label: 'Accept edits' }];
+    rememberAccessMode('codex', 'workspace'); rememberAccessMode('claude-code', 'acceptEdits'); rememberAccessMode('dsh', 'inherit');
+    expect(defaultAccessMode('codex', modes)).toBe('workspace');
+    expect(defaultAccessMode('claude-code', modes)).toBe('acceptEdits');
+    expect(defaultAccessMode('dsh', modes)).toBe('inherit');
+    expect(defaultAccessMode('codex', modes, 'inherit')).toBe('inherit');
+    expect(rememberedAccessMode('codex')).toBe('workspace');
+  });
+
+  it('falls back from absent, forbidden and unimplemented preferences without overwriting the stored value', () => {
+    const modes = [{ id: 'blocked-first', label: 'Blocked', allowed: false }, { id: 'inherit', label: 'Inherit' }, { id: 'missing-implementation', label: 'Not implemented', implemented: false }];
+    for (const value of ['removed-mode', 'blocked-first', 'missing-implementation']) {
+      rememberAccessMode('codex', value);
+      expect(defaultAccessMode('codex', modes)).toBe('inherit');
+      expect(rememberedAccessMode('codex')).toBe(value);
+    }
+    expect(defaultAccessMode('codex', [])).toBeUndefined();
+    expect(defaultAccessMode('codex', [{ id: 'blocked-first', label: 'Blocked', allowed: false }])).toBeUndefined();
+  });
+
+  it('shares the root restriction with the menu without replacing native inheritance', () => {
+    const bypass = { id: 'bypassPermissions', label: 'Bypass' };
+    const modes = [{ id: 'inherit', label: 'Inherit' }, bypass];
+    rememberAccessMode('claude-code', 'bypassPermissions');
+    expect(defaultAccessMode('claude-code', modes, undefined, true)).toBe('inherit');
+    expect(defaultAccessMode('claude-code', modes, undefined, false)).toBe('bypassPermissions');
+    expect(isAccessModeSelectable('claude-code', bypass, true)).toBe(false);
+    expect(isAccessModeSelectable('codex', bypass, true)).toBe(true);
+  });
+
+  it('uses the available default when browser storage cannot be read', () => {
+    vi.stubGlobal('window', { get localStorage() { throw new Error('storage unavailable'); } });
+    expect(defaultAccessMode('codex', [{ id: 'inherit', label: 'Inherit' }])).toBe('inherit');
   });
 });
