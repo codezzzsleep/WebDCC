@@ -42,7 +42,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     if (event.kind === 'notice' && ['slash.command', 'conversation_reset_projection_failed'].includes((event.data as EventData['notice']).nativeType ?? '')) standalone.set(event.itemKey, event);
     if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
     if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
-    if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
+    if (event.kind === 'approval.resolved' && store.getSession(sessionId)?.agent !== 'dsh') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
   }
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
