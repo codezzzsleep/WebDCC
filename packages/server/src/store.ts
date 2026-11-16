@@ -14,6 +14,8 @@ import type {
   InputContent,
   InteractionKind,
   InteractionEventResponse,
+  ConversationState,
+  ConversationReset,
 } from '@webdcc/protocol';
 import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
@@ -291,7 +293,41 @@ export class Store {
 
   getSession(id: string): SessionDto | undefined {
     const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;
-    return row === undefined ? undefined : toSessionDto(row);
+    if (row === undefined) return undefined;
+    const conversation = this.conversation(id);
+    return { ...toSessionDto(row), ...(conversation === undefined ? {} : { conversation }) };
+  }
+
+  conversation(id: string): ConversationState | undefined {
+    const row = this.db.prepare('SELECT value FROM app_settings WHERE key = ?').get(`conversation:${id}`) as { value: string } | undefined;
+    return row === undefined ? undefined : JSON.parse(row.value) as ConversationState;
+  }
+
+  saveConversation(id: string, conversation: ConversationState): void {
+    this.db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(`conversation:${id}`, JSON.stringify(conversation));
+  }
+
+  hasConversationReset(id: string, uuid: string): boolean {
+    return this.db.prepare("SELECT 1 FROM events WHERE session_id = ? AND item_key = ? AND kind = 'notice' LIMIT 1")
+      .get(id, `conversation-reset-${uuid}`) !== undefined;
+  }
+
+  applyConversationReset(id: string, reset: ConversationReset, native: unknown, nativeEnvelopeId: number, previousNativeId: string):
+    { stored: StoredEvent; patch: FeedPatch; feedSeq: number } | undefined {
+    return this.db.transaction(() => {
+      if (this.hasConversationReset(id, reset.uuid)) return undefined;
+      const previous = this.getSession(id);
+      const stored = this.appendEvent({ sessionId: id, turnId: null, itemKey: `conversation-reset-${reset.uuid}`, kind: 'notice',
+        data: { level: 'info', text: '已开始新的对话', nativeType: 'conversation_reset', contextReset: reset }, native, nativeEnvelopeId });
+      const conversation: ConversationState = { ...reset, resetSeq: stored.seq,
+        ...(previousNativeId === '' ? {} : { previousNativeId }), ...(previous?.title === undefined ? {} : { previousTitle: previous.title }) };
+      this.saveConversation(id, conversation);
+      this.setTitleSource(id, 'native');
+      this.updateSession(id, { title: null });
+      const patch: FeedPatch = { title: null, conversation };
+      return { stored, patch, feedSeq: this.appendFeed(id, patch) };
+    })();
   }
 
   createSession(input: CreateSessionInput): SessionDto {
@@ -307,6 +343,7 @@ export class Store {
   }
 
   deleteSession(id: string): void {
+    this.db.prepare('DELETE FROM app_settings WHERE key = ?').run(`conversation:${id}`);
     this.db.prepare('DELETE FROM events WHERE session_id = ?').run(id);
     this.db.prepare('DELETE FROM feed WHERE session_id = ?').run(id);
     this.db.prepare('DELETE FROM drafts WHERE session_id = ?').run(id);
@@ -316,7 +353,7 @@ export class Store {
   updateSession(
     id: string,
     patch: {
-      title?: string;
+      title?: string | null;
       status?: SessionDto['status'];
       nativeId?: string | null;
       model?: string | null;

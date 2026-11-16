@@ -25,7 +25,7 @@ import type {
   SlashControlRequest,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
-import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
+import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
@@ -1272,6 +1272,30 @@ export class SessionManager {
         nativeId: runtime?.nativeId, identity: event.runtime ?? runtime?.identity }, event, disposition);
     } catch { if (runtime !== undefined) this.fenceRuntime(runtime); return; }
     if (runtime === undefined || disposition !== 'accepted') return;
+    if (event.type === 'item.complete' && event.kind === 'notice' && isValidEventData('notice', event.data)
+      && event.data.contextReset !== undefined && runtime.adapter.id === 'claude-code') {
+      const reset = event.data.contextReset;
+      const native = event.native as { type?: string; uuid?: string; new_conversation_id?: string } | undefined;
+      if (native?.type === 'conversation_reset' && native.uuid === reset.uuid && native.new_conversation_id === reset.id) {
+        try {
+          const result = this.store.applyConversationReset(sessionId, reset, event.native, event.nativeEnvelopeId ?? envelope.id, runtime.nativeId);
+          if (result !== undefined) {
+            runtime.hot.clear();
+            this.hooks.onFeed(sessionId, result.patch, result.feedSeq);
+            this.hooks.onEvent(result.stored);
+          }
+        } catch {
+          this.fenceRuntime(runtime);
+          try {
+            const failed = this.store.appendEvent({ sessionId, turnId: null, itemKey: `conversation-reset-failed-${reset.uuid}`, kind: 'notice',
+              data: { level: 'warning', nativeType: 'conversation_reset_projection_failed', text: '原生对话已重置，但本地上下文未能保存。请重新连接并核对原生历史。' }, native: event.native, nativeEnvelopeId: event.nativeEnvelopeId ?? envelope.id });
+            this.hooks.onEvent(failed);
+            this.updateSessionAndFeed(sessionId, { status: 'error' }, { status: 'error' });
+          } catch { /* Storage failure retains the fenced runtime and original native envelope. */ }
+        }
+        return;
+      }
+    }
     if ('native' in event && event.native !== null && typeof event.native === 'object') {
       const native = event.native as Record<string, unknown>;
       const params = native['params'] !== null && typeof native['params'] === 'object' ? native['params'] as Record<string, unknown> : {};
@@ -1505,6 +1529,8 @@ export class SessionManager {
         runtime.nativeId = event.nativeId;
         this.store.nativeOwners.activate(sessionId, runtime.identity, event.nativeId);
         this.store.updateSession(sessionId, { nativeId: event.nativeId });
+        const patch = { nativeId: event.nativeId };
+        this.hooks.onFeed(sessionId, patch, this.store.appendFeed(sessionId, patch));
         break;
       }
     }

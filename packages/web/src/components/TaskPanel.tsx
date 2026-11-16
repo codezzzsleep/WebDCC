@@ -15,9 +15,9 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
   const session = store.getSession(sessionId);
   const turns = store.getTurns(sessionId);
   const plan = [...turns].reverse().find((turn) => turn.plan !== undefined)?.plan;
-  const goalData = currentGoal(store.getEvents(sessionId));
+  const goalData = currentGoal(store.getConversationEvents(sessionId));
   const showGoal = goalData !== undefined && goalData.status !== 'cleared' && goalData.objective !== '';
-  if (plan === undefined && !showGoal) return null;
+  if (store.isViewingConversationHistory(sessionId) || plan === undefined && !showGoal) return null;
 
   const agentName = agentText(session?.agent ?? '').name;
   const items = plan ?? [];
