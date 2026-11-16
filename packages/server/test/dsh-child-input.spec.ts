@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { createTestApp } from './helpers.js';
 import { bindDshSubagentFixture, createDshSubagentFixture, childRecord } from '../../adapters/dsh/test/subagent-fixture.js';
+import { waitUntil } from '../../adapters/dsh/src/host.js';
 
 async function setup() {
   const ctx = await createTestApp(); const workspace = ctx.store.createWorkspace('DSH child input', ctx.dataDir);
@@ -106,4 +107,38 @@ it('child steer preserves native request identity, exact content and time zone w
       content: [{ type: 'text', text: '  原样\r\ntext  ' }], clientTimeZone: 'Asia/Shanghai' });
     expect(native.calls.some(call => call.method === 'session/prompt')).toBe(false);
   } finally { await close(); }
+});
+
+it('parent replacement rejects an input before dispatch and keeps an already accepted old-parent return uncertain', async () => {
+  const before = await setup(); const preflight = before.native.hold('session/projections', before.native.parentId);
+  try {
+    const pending = before.post('child-parent-preflight-001', 'not sent to a replaced parent'); await preflight.seen;
+    before.ctx.store.updateSession(before.session.id, { nativeId: 'new-parent' }); preflight.release();
+    expect((await pending).statusCode).toBe(409); expect(before.native.calls.some(call => call.method === 'subagents/prompt')).toBe(false);
+  } finally { preflight.release(); await before.close(); }
+  const after = await setup(); const accepted = after.native.hold('subagents/prompt');
+  try {
+    const pending = after.post('child-parent-return-001', 'accepted on the old parent'); await accepted.seen;
+    after.ctx.store.updateSession(after.session.id, { nativeId: 'new-parent' }); accepted.release();
+    expect((await pending).statusCode).toBe(503);
+    expect(after.ctx.store.nativeActions.get('child-parent-return-001', after.session.id)).toMatchObject({ state: 'uncertain', reference: { dshChild: { parentSessionId: after.native.parentId } } });
+    expect((await after.ctx.app.inject({ method: 'GET', url: receiptPath(after.session.id, 'child-parent-return-001'), headers: { cookie: after.ctx.cookie } })).statusCode).toBe(409);
+    expect((await after.post('child-parent-return-001', 'accepted on the old parent')).statusCode).toBe(409);
+    expect(after.native.calls.filter(call => call.method === 'subagents/prompt')).toHaveLength(1);
+  } finally { accepted.release(); await after.close(); }
+});
+
+it('a physical native connection change fences the old ACK and current queue evidence recovers without resending', async () => {
+  const { ctx, session, native, post, close } = await setup(); const accepted = native.hold('subagents/prompt');
+  try {
+    const pending = post('child-generation-return-001', 'one accepted input across reconnect'); await accepted.seen;
+    native.disconnect(); await waitUntil(() => !native.client.isConnected, 2000, 'native child input connection loss');
+    accepted.release(); expect((await pending).statusCode).toBe(503);
+    expect(ctx.store.nativeActions.get('child-generation-return-001', session.id)?.state).toBe('uncertain');
+    expect((await post('child-generation-return-001', 'one accepted input across reconnect')).json().receipt.state).toBe('uncertain');
+    await waitUntil(() => native.client.isConnected, 8000, 'native child input reconnect');
+    const current = await ctx.app.inject({ method: 'GET', url: receiptPath(session.id, 'child-generation-return-001'), headers: { cookie: ctx.cookie } });
+    expect(current.statusCode).toBe(200); expect(current.json().receipt.state).toBe('completed');
+    expect(native.calls.filter(call => call.method === 'subagents/prompt')).toHaveLength(1);
+  } finally { accepted.release(); await close(); }
 });

@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { Icon, Spinner } from './Icon.js';
 import { DshChildStop } from './DshChildStop.js';
 import { DshChildComposer } from './DshChildComposer.js';
+import { onDshSubagentOpen } from '../lib/dsh-subagent-navigation.js';
 import './DshSubagentPanel.css';
 
 const statusText: Record<DshSubagentSummary['status'], string> = {
@@ -33,6 +34,11 @@ export function DshSubagentPanel({ sessionId, nativeId }: { sessionId: string; n
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
+
+  useEffect(() => onDshSubagentOpen(target => {
+    if (target.sessionId !== sessionId || target.parentSessionId !== nativeId) return;
+    setSelected(target.childSessionId); setOpen(true); setRefresh(value => value + 1);
+  }), [sessionId, nativeId]);
 
   useEffect(() => {
     try { sessionStorage.setItem(storageKey, JSON.stringify({ open, selected })); } catch { /* Native reads still work without browser storage. */ }

@@ -13,6 +13,7 @@ import { Markdown, MarkdownWorkspace } from './Markdown.js';
 import { ElicitationForm } from './ElicitationForm.js';
 import { InputAttachments } from './InputAttachments.js';
 import { DshSubagentPanel } from './DshSubagentPanel.js';
+import { openDshSubagent } from '../lib/dsh-subagent-navigation.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -491,7 +492,11 @@ function StepRow({
       const data = event.data as EventData['tool.call'];
       const toolInput = data.input as Record<string, unknown>;
       const childId = data.name === 'subagent' && typeof toolInput?.['childId'] === 'string' ? toolInput['childId'] : undefined;
-      const canControlChild = childId !== undefined && toolInput?.['mode'] === 'continuable';
+      const dsh = store.getSession(event.sessionId)?.agent === 'dsh';
+      const parentSessionId = typeof toolInput?.['parentSessionId'] === 'string' ? toolInput['parentSessionId'] : undefined;
+      const canOpenDshChild = dsh && childId !== undefined && parentSessionId !== undefined && toolInput?.['mode'] !== 'external'
+        && !store.isViewingConversationHistory(event.sessionId) && parentSessionId === store.getSession(event.sessionId)?.nativeId;
+      const canControlChild = !dsh && childId !== undefined && toolInput?.['mode'] === 'continuable';
       const sendSubagent = async (): Promise<void> => {
         if (childId === undefined || subagentText.trim() === '') return;
         setSubagentBusy(true); setSubagentNotice(undefined); setSubagentError(undefined);
@@ -535,6 +540,8 @@ function StepRow({
             </pre>
           ) : null}
           {canControlChild ? <div className="subagent-controls"><input className="text-input" value={subagentText} onChange={(event) => setSubagentText(event.target.value)} placeholder="给子 Agent 发送消息" disabled={subagentBusy} /><button type="button" className="btn small" onClick={() => void sendSubagent()} disabled={subagentBusy || subagentText.trim() === ''}>继续</button><button type="button" className="btn small ghost danger-text" onClick={() => void stopSubagent()} disabled={subagentBusy}>打断</button></div> : null}
+          {canOpenDshChild ? <div className="subagent-controls"><button type="button" className="btn small" data-testid="dsh-timeline-child-open" onClick={() => openDshSubagent({ sessionId: event.sessionId, parentSessionId, childSessionId: childId })}>打开子会话</button></div> : null}
+          {dsh && childId !== undefined && !canOpenDshChild ? <p className="muted">请从当前子 Agent 面板核对子会话身份和可用操作。</p> : null}
           {subagentNotice === undefined ? null : <p role="status">{subagentNotice}</p>}
           {subagentError === undefined ? null : <p role="alert">{subagentError}</p>}
         </div>
