@@ -28,6 +28,7 @@ import type {
   DshSubagentHistory,
   DshSubagentHistoryOptions,
   DshSubagentState,
+  DshSubagentReadTarget,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode, slashCommandFor, parseSlashInput } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
@@ -594,8 +595,11 @@ export class DshAdapter implements AgentAdapter {
     return { nativeId: runtime.nativeId, records: page.records, hasMore: page.hasMore, nextCursor: page.records[0]?.event.seq.toString() };
   }
 
-  private async childReadContext(sessionId: string) {
-    const runtime = this.require(sessionId);
+  private async childReadContext(sessionId: string, target?: DshSubagentReadTarget) {
+    const runtime = this.sessions.get(sessionId);
+    const nativeId = runtime?.nativeId ?? target?.nativeId;
+    if (typeof nativeId !== 'string' || nativeId === '' || target !== undefined && target.nativeId !== nativeId)
+      throw dshNativeError('DSH 父会话没有可确认的原生身份', 409);
     const client = await this.ensureSidecar();
     const epoch = this.hostEpoch; const generation = this.muxGeneration;
     const current = (): void => {
@@ -603,24 +607,25 @@ export class DshAdapter implements AgentAdapter {
         throw dshNativeError('DSH 子 Agent 读取属于旧连接，请刷新', 409);
     };
     current();
-    const baseline = await this.call<{ kind: string; asOfSeq: number; values: Record<string, unknown> } | null>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
+    if (runtime === undefined) { requireDshBaseline(await this.hostIdentity()); current(); }
+    const baseline = await this.call<{ kind: string; asOfSeq: number; values: Record<string, unknown> } | null>(client, 'session/projections', { request: { sessionId: nativeId } }, sessionId);
     current();
     if (baseline?.kind !== 'sequenced' || !Number.isSafeInteger(baseline.asOfSeq) || baseline.asOfSeq < -1 || !baseline.values)
       throw dshNativeError('DSH 父会话目录尚未恢复，无法确认子 Agent 身份', 409);
-    const children = dshSubagentCatalog(runtime.nativeId, baseline.values['subagentCatalog']);
+    const children = dshSubagentCatalog(nativeId, baseline.values['subagentCatalog']);
     const catalogKey = JSON.stringify(baseline.values['subagentCatalog']);
-    this.applyProjections(sessionId, runtime, baseline);
+    if (runtime !== undefined) this.applyProjections(sessionId, runtime, baseline);
     const guard = (): void => {
       current();
-      if (JSON.stringify(runtime.projections?.values['subagentCatalog']) !== catalogKey)
+      if (runtime !== undefined && JSON.stringify(runtime.projections?.values['subagentCatalog']) !== catalogKey)
         throw dshNativeError('DSH 子 Agent 目录已变化，请刷新', 409);
     };
     guard();
-    return { client, runtime, children, baseline, guard };
+    return { client, nativeId, children, baseline, guard };
   }
 
-  async listSubagents(sessionId: string): Promise<DshSubagentCatalog> {
-    const context = await this.childReadContext(sessionId);
+  async listSubagents(sessionId: string, target?: DshSubagentReadTarget): Promise<DshSubagentCatalog> {
+    const context = await this.childReadContext(sessionId, target);
     const items: DshSubagentCatalog['items'] = [];
     // Bound concurrent passive reads without dropping catalog members.
     let index = 0;
@@ -643,14 +648,14 @@ export class DshAdapter implements AgentAdapter {
       }
     }));
     context.guard();
-    return { nativeId: context.runtime.nativeId, asOfSeq: context.baseline.asOfSeq, items };
+    return { nativeId: context.nativeId, asOfSeq: context.baseline.asOfSeq, items };
   }
 
-  async readSubagentHistory(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions): Promise<DshSubagentHistory> {
+  async readSubagentHistory(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions, target?: DshSubagentReadTarget): Promise<DshSubagentHistory> {
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 200
       || options.throughSeq !== undefined && (!Number.isSafeInteger(options.throughSeq) || options.throughSeq < -1)
       || options.beforeSeq !== undefined && (!Number.isSafeInteger(options.beforeSeq) || options.beforeSeq < 0)) throw dshNativeError('DSH 子会话历史分页参数无效', 400);
-    const context = await this.childReadContext(sessionId);
+    const context = await this.childReadContext(sessionId, target);
     const child = context.children.find(entry => entry.childId === childSessionId);
     if (child === undefined) throw dshNativeError('子 Agent 不属于当前父会话', 409);
     const address = dshSubagentAddress(child);
