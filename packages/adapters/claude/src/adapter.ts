@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import type {
   AdapterEvent,
@@ -21,6 +21,7 @@ import type {
   SlashCommand,
   SlashCommandPreview,
   ClaudeOutputOrigin,
+  ClaudeTaskRuntime,
 } from '@webdcc/protocol';
 import {
   query,
@@ -197,6 +198,7 @@ interface PendingInteraction {
 type PermissionIdentityOptions = Pick<Parameters<CanUseTool>[2], 'signal'> & Partial<Pick<Parameters<CanUseTool>[2], 'toolUseID' | 'requestId'>>;
 
 interface SessionRuntime {
+  instanceId: string;
   generation: number;
   permissionRequestIds: Set<string>;
   conversationId?: string;
@@ -295,6 +297,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const adapter = new ClaudeAdapter();
     const decisions: PermissionResult[] = [];
     const runtime: SessionRuntime = {
+      instanceId: `replay:${sessionId}`,
       generation: 1, permissionRequestIds: new Set(),
       stdio: { enabled: false, failed: false },
       nativeOptions: {}, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
@@ -304,6 +307,7 @@ export class ClaudeAdapter implements AgentAdapter {
       slashCommands: [], terminalSlashCommands: [], content: new ClaudeContentReducer(1), ready: Promise.resolve(), frameSeq: 0,
     };
     adapter.sessions.set(sessionId, runtime);
+    runtime.state.taskProjection.runtime({ id: runtime.instanceId, state: 'started' });
     let events: AdapterEvent[] = [];
     adapter.onEvent((_id, event) => events.push(event));
     return { adapter, decisions, feed(frame) {
@@ -328,6 +332,13 @@ export class ClaudeAdapter implements AgentAdapter {
 
   onEvent(cb: (sessionId: string, event: AdapterEvent) => void): void {
     this.listeners.push(cb);
+  }
+
+  private emitTaskRuntime(sessionId: string, runtime: SessionRuntime, state: ClaudeTaskRuntime['state']): void {
+    const signal = { id: runtime.instanceId, state };
+    runtime.state.taskProjection.runtime(signal);
+    this.emit(sessionId, { type: 'item.complete', itemKey: `claude-runtime:${signal.id}:${state}`, kind: 'internal',
+      data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: signal }, scope: 'session' });
   }
 
   bindRuntime(sessionId: string, identity: NonNullable<CreateOpts['runtime']>): void {
@@ -516,6 +527,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const generation = (this.generations.get(sessionId) ?? 0) + 1;
     this.generations.set(sessionId, generation);
     const runtime: SessionRuntime = {
+      instanceId: randomUUID(),
       generation, permissionRequestIds: new Set(),
       stdio,
       nativeOptions, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
@@ -543,6 +555,7 @@ export class ClaudeAdapter implements AgentAdapter {
     };
     this.sessions.set(sessionId, runtime);
     ownerRef.current = runtime;
+    this.emitTaskRuntime(sessionId, runtime, 'started');
     let closeReason = 'sdk-stream-ended'; let activeWorkOnExit = false;
     runtime.pump = (async () => {
       try {
@@ -585,6 +598,7 @@ export class ClaudeAdapter implements AgentAdapter {
                 data: { message: error instanceof Error ? error.message : String(error) } });
             }
             if (this.sessions.get(sessionId) === runtime) {
+              this.emitTaskRuntime(sessionId, runtime, 'unavailable');
               this.emit(sessionId, { type: 'transport.closed', reason: closeReason, activeWork: activeWorkOnExit });
               if (closed && this.sessions.get(sessionId) === runtime) this.sessions.delete(sessionId);
             }
@@ -662,6 +676,7 @@ export class ClaudeAdapter implements AgentAdapter {
     if (previous.turnActive || previous.pending.size > 0 || [...previous.nativePending.values()].some(pending => pending.status === 'pending') || previous.backgroundTasks.size > 0) throw Object.assign(new Error('请等待当前 Claude 轮次、交互和后台任务结束后更改启动选项'), { statusCode: 409 });
     const launchOpts = { ...previous.launchOpts, ...patch };
     previous.retiring = true; previous.state.transport = 'closed';
+    this.emitTaskRuntime(sessionId, previous, 'unavailable');
     await this.closeQuery(previous, true);
     if (this.sessions.get(sessionId) === previous) this.sessions.delete(sessionId);
     await previous.pump;
@@ -768,6 +783,7 @@ export class ClaudeAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     runtime.retiring = true;
     if (runtime.state.transport === 'live') runtime.state.transport = 'closed';
+    this.emitTaskRuntime(sessionId, runtime, 'unavailable');
     await this.cancelPending(sessionId);
     await this.closeQuery(runtime, true);
     if (this.sessions.get(sessionId) === runtime) this.sessions.delete(sessionId);
@@ -1174,7 +1190,9 @@ export class ClaudeAdapter implements AgentAdapter {
           runtime.capabilities = message.capabilities ?? [];
         }
         if ((message.subtype === 'init' || message.subtype === 'status') && typeof message.permissionMode === 'string') this.emit(sessionId, { type: 'permissions', observation: { effective: message.permissionMode, source: `system/${message.subtype}`, scope: 'query', policy: { permissionMode: message.permissionMode } } });
-        this.emit(sessionId, claudeSystemEvent(message, runtime.frameSeq, 'task_id' in message ? runtime.state.tasks.get(message.task_id) : undefined));
+        const event = claudeSystemEvent(message, runtime.frameSeq, 'task_id' in message ? runtime.state.tasks.get(message.task_id) : undefined);
+        this.emit(sessionId, message.subtype === 'init' && event.type === 'item.complete'
+          ? { ...event, data: { ...record(event.data), claudeTaskRuntime: { id: runtime.instanceId, state: 'started' } }, scope: 'session' } : event);
         return;
       }
       case 'stream_event': {

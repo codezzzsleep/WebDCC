@@ -1,7 +1,7 @@
 /** 统一事件模型（SPEC 第 6 节） */
 import type { ElicitationForm, ElicitationAction } from './elicitation.js';
 import type { InputContent, InputIntent } from './input.js';
-import type { ClaudeOutputOrigin } from './claude-tasks.js';
+import type { ClaudeOutputOrigin, ClaudeTaskRuntime } from './claude-tasks.js';
 
 export type EventKind =
   | 'user.message'
@@ -173,7 +173,7 @@ export interface EventData {
   usage: UsageData;
   error: { message: string };
   unknown: { nativeType: string };
-  internal: { nativeType: string };
+  internal: { nativeType: string; claudeTaskRuntime?: ClaudeTaskRuntime };
 }
 
 export interface StoredEvent<K extends EventKind = EventKind> {

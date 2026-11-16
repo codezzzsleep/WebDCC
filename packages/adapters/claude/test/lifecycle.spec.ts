@@ -129,7 +129,8 @@ it('NP-04 uses complete native background snapshots even when task bookends are 
   try {
     await adapter.create({ sessionId: 'local', cwd: '.', providerId: null });
     queries[0]!.push({ type: 'system', subtype: 'background_tasks_changed', tasks: [{ task_id: 'task', run_id: '002', task_type: 'shell', description: 'busy' }], session_id: 'native' });
-    await vi.waitFor(() => expect(seen.some(event => event.type === 'item.complete' && event.kind === 'internal')).toBe(true));
+    await vi.waitFor(() => expect(seen.some(event => event.type === 'item.complete' && event.kind === 'internal'
+      && event.data.nativeType === 'system/background_tasks_changed')).toBe(true));
     await expect(adapter.setModel('local', 'next')).rejects.toMatchObject({ statusCode: 409 });
     queries[0]!.push({ type: 'system', subtype: 'background_tasks_changed', tasks: [], session_id: 'native' });
     queries[0]!.push({ type: 'system', subtype: 'task_started', task_id: 'task', run_id: '002', description: 'late bookend', session_id: 'native' });
