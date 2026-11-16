@@ -18,6 +18,7 @@ import { isImagePath, workspaceAsset, sendWorkspaceAsset } from './workspace-ass
 import { registerNativeSurfaces } from './native-surfaces-integration.js';
 import { createDshNativeSurface } from './dsh-native-surface.js';
 import { payloadHash } from './command-journal.js';
+import { registerWorkspacePreview } from './workspace-preview.js';
 
 export interface BuildAppOptions {
   config: Config;
@@ -126,6 +127,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     recordFileOperation: options.recorder === undefined ? undefined : event => options.recorder?.file(event),
   });
   registerNativeSurfaces(app, store, manager, config, event => hub.broadcastEvent(event));
+  registerWorkspacePreview(app, store);
   app.get('/api/dsh/native-surface', () => dshSurface.status());
   app.post('/api/dsh/native-surface/open', { bodyLimit: 1024 }, async request => {
     const body = request.body as { sessionId?: unknown };
@@ -140,7 +142,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
 
   app.setNotFoundHandler(async (request, reply) => {
     const path = request.url.split('?')[0] ?? '/';
-    if (path.startsWith('/api/') || path.startsWith('/files/')) return reply.status(404).send({ error: 'not found' });
+    if (path.startsWith('/api/') || path.startsWith('/files/') || path.startsWith('/workspace-preview/')) return reply.status(404).send({ error: 'not found' });
     if (isImagePath(path)) {
       if (!isAuthenticated(config.token, request.headers.cookie, authorityOf(request.headers, config.host, config.port))) return reply.status(401).send({ error: 'unauthorized' });
       let decoded: string;

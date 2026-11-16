@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { Markdown } from './Markdown.js';
 import { ImagePreview } from './ImagePreview.js';
 import { isImageUrl } from '../lib/workspace-url.js';
+import { HtmlPreview } from './HtmlPreview.js';
 
 interface Draft { version: string; baseContent: string; content: string; }
 const drafts = new Map<string, Draft>();
@@ -47,6 +48,8 @@ export function FileEditor({ workspaceId, initial }: { workspaceId: string; init
   const [file, setFile] = useState<FsReadResponse>(() => cached === undefined ? initial : { ...initial, version: cached.version, content: cached.baseContent });
   const [text, setText] = useState(() => cached?.content ?? normalise(initial.content));
   const [editing, setEditing] = useState(cached !== undefined);
+  const [view, setView] = useState<'preview' | 'source'>(cached === undefined ? 'preview' : 'source');
+  const [previewExternal, setPreviewExternal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(() => cached !== undefined && cached.version !== initial.version ? '磁盘文件已更新，保留了你的未保存编辑。' : null);
   const [saved, setSaved] = useState(false);
@@ -54,6 +57,8 @@ export function FileEditor({ workspaceId, initial }: { workspaceId: string; init
   const fileRef = useRef(file); fileRef.current = file;
   const dirty = text !== normalise(file.content);
   const image = isImageUrl(file.path);
+  const html = /\.html?$/i.test(file.path);
+  const binary = file.readOnlyReason?.startsWith('二进制') === true;
 
   useEffect(() => {
     if (initial.version === fileRef.current.version) return;
@@ -98,14 +103,16 @@ export function FileEditor({ workspaceId, initial }: { workspaceId: string; init
         <span className="file-editor-name">{file.path}</span>
         {dirty ? <span className="muted" role="status">未保存 · 草稿已暂存</span> : saved ? <span className="muted" role="status">已保存</span> : null}
         <span className="spacer" />
-        {image ? <a href={api.rawUrl(workspaceId, file.path)} target="_blank" rel="noreferrer">打开原图</a> : !editing ? <button type="button" className="btn small" disabled={!file.editable} onClick={() => setEditing(true)}>编辑</button> : <>
+        <a className="btn small" href={api.rawUrl(workspaceId, file.path)} download={file.path.split('/').at(-1)} title={dirty ? '下载磁盘中已保存的原文件' : undefined}>下载</a>
+        {html ? <div className="file-preview-tabs" aria-label="HTML 查看方式"><button type="button" className={`btn small ${view === 'preview' ? 'primary' : ''}`} aria-pressed={view === 'preview'} onClick={() => setView('preview')}>页面</button><button type="button" className={`btn small ${view === 'source' ? 'primary' : ''}`} aria-pressed={view === 'source'} onClick={() => setView('source')}>源码</button></div> : null}
+        {image ? <a href={api.rawUrl(workspaceId, file.path)} target="_blank" rel="noreferrer">打开原图</a> : binary ? null : !editing ? <button type="button" className="btn small" disabled={!file.editable} onClick={() => { setEditing(true); setView('source'); }}>编辑</button> : <>
           <button type="button" className="btn primary small" disabled={saving || !dirty || !file.editable} onClick={() => void save()}>{saving ? '保存中…' : '保存'}</button>
           <button type="button" className="btn small" disabled={saving} onClick={() => void reload(true)}>取消编辑</button>
         </>}
       </div>
       {error !== null ? <div className="file-editor-error" role="alert">{error} <button type="button" className="link-button" disabled={saving} onClick={() => void reload()}>重新加载</button></div> : null}
-      {file.readOnlyReason !== undefined && !image ? <p className="muted">{file.readOnlyReason}</p> : null}
-      {image ? <ImagePreview src={api.rawUrl(workspaceId, file.path)} alt={file.path} /> : editing ? <textarea className="text-input file-editor-input" aria-label={`编辑 ${file.path}`} value={text} spellCheck={false} wrap="off" readOnly={!file.editable} onChange={event => update(event.target.value)} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }} /> : <Markdown text={`\`\`\`\n${file.content}\n\`\`\``} />}
+      {file.readOnlyReason !== undefined && !image && (!html || view === 'source') ? <p className="muted">{file.readOnlyReason}</p> : null}
+      {image ? <ImagePreview src={api.rawUrl(workspaceId, file.path)} alt={file.path} /> : html && view === 'preview' ? <HtmlPreview workspaceId={workspaceId} path={file.path} version={file.version} content={dirty ? text : undefined} external={previewExternal} onExternal={setPreviewExternal} /> : binary ? <p className="muted">此文件不支持页内预览，可直接下载。</p> : editing ? <textarea className="text-input file-editor-input" aria-label={`编辑 ${file.path}`} value={text} spellCheck={false} wrap="off" readOnly={!file.editable} onChange={event => update(event.target.value)} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void save(); } }} /> : file.content === '' ? <p className="muted">文件为空</p> : <Markdown text={`\`\`\`\n${file.content}\n\`\`\``} />}
     </section>
   );
 }
