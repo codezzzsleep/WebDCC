@@ -18,7 +18,7 @@ import type { Store } from './store.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { isImagePath, workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
 import { registerNativeSurfaces } from './native-surfaces-integration.js';
-import { createDshNativeSurface } from './dsh-native-surface.js';
+import { createDshNativeSurface, type DshSurfaceConnection } from './dsh-native-surface.js';
 import { payloadHash } from './command-journal.js';
 import { registerWorkspacePreview } from './workspace-preview.js';
 
@@ -64,7 +64,13 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const mainHost = config.host === '0.0.0.0' || config.host === '::' ? '127.0.0.1' : config.host.includes(':') ? `[${config.host}]` : config.host;
   const dshSurface = await createDshNativeSurface({ publicOrigin: config.nativeDshPublicOrigin,
     applicationOrigins: config.publicOrigins?.length ? config.publicOrigins : [`http://${mainHost}:${config.port}`],
-    connection: () => options.dsh.connection,
+    connection: () => {
+      const adapter = manager.adapter('dsh') as { nativeBrowserConnection?: () => DshSurfaceConnection | null | undefined } | undefined;
+      const runtime = adapter?.nativeBrowserConnection?.();
+      // A stopped/cold owned Host explicitly revokes its surface. Only attach
+      // mode or adapters without this capability use the persisted connection.
+      return runtime === undefined ? options.dsh.connection : runtime;
+    },
     authRevision: () => payloadHash(config.token),
   });
   if (config.nativeDshPublicOrigin) await dshSurface.start({ host: config.nativeDshListenHost ?? '127.0.0.1', port: config.nativeDshListenPort ?? 8788 });
