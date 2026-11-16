@@ -16,6 +16,7 @@ import { InputAttachments } from './InputAttachments.js';
 import { DshSubagentPanel } from './DshSubagentPanel.js';
 import { openDshSubagent } from '../lib/dsh-subagent-navigation.js';
 import { DshQuestionWait, useDshQuestionWait } from './DshQuestionWait.js';
+import { ClaudeStructuredOutput } from './ClaudeStructuredOutput.js';
 import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
@@ -42,7 +43,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     if (event.kind === 'notice' && ['slash.command', 'conversation_reset_projection_failed'].includes((event.data as EventData['notice']).nativeType ?? '')) standalone.set(event.itemKey, event);
     if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
     if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
-    if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
+    if (event.kind === 'approval.resolved' && store.getSession(sessionId)?.agent !== 'dsh') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
   }
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -158,8 +159,9 @@ function TurnView({
   // Retain both source events and display that exact native text once.
   const reviewCopy = (data: EventData['assistant.message']) =>
     (data.nativePhase === undefined || data.nativePhase === 'final_answer') && reviewTexts.has(data.text);
-  const visibleSteps = steps.filter(event => event.kind !== 'assistant.message' || !reviewCopy(event.data as EventData['assistant.message']));
+  const visibleSteps = steps.filter(event => event.kind !== 'structured.output' && (event.kind !== 'assistant.message' || !reviewCopy(event.data as EventData['assistant.message'])));
   const answerKeys = new Set(turn.answer.map((answer) => answer.itemKey));
+  for (const output of turn.structuredOutputs ?? []) answerKeys.add(output.itemKey);
   const changes = turn.changes.map((change) => ({ ...change, ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }) }));
   // 运行中、或用户展开时显示全部步骤；完成后默认只显示摘要和最终回答（DSH 的做法）
   const showAll = running || expanded;
@@ -253,6 +255,8 @@ function TurnView({
               ))}
 
         {turn.live.filter(item => item.kind !== 'assistant.message' || !reviewCopy(item.data as EventData['assistant.message'])).map((item) => <HotRow key={item.itemKey} item={item} />)}
+
+        {turn.structuredOutputs?.map(output => <ClaudeStructuredOutput key={output.itemKey} output={output} />)}
 
         {!running && changes.length > 0 ? <ChangesCard changes={changes} onOpenDiff={onOpenDiff} /> : null}
 

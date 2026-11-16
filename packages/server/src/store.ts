@@ -572,6 +572,7 @@ export class Store {
     const data = input.data as unknown as Record<string, unknown>;
     const contentFields: Partial<Record<EventKind, string[]>> = {
       'user.message': ['text'], 'assistant.message': ['text'], reasoning: ['text'], error: ['message'],
+      'structured.output': ['value', 'rawText', 'errors'],
       command: ['command', 'label', 'outputTail'], 'file.read': ['label'],
       'tool.call': ['label', 'input', 'output'], goal: ['objective'], notice: ['text'],
       question: ['prompt', 'header'], 'approval.request': ['title', 'detail', 'reason', 'planMarkdown'],
