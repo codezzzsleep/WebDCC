@@ -245,7 +245,6 @@ interface PendingInteraction {
   sent?: boolean;
   sending?: boolean;
   answerAttempt?: object;
-  approvalOption?: string;
   approvalTool?: string;
   approvalItem?: EventData['approval.request'];
   transportClosed?: boolean;
@@ -1652,7 +1651,6 @@ export class DshAdapter implements AgentAdapter {
     if (pending.sent) throw dshNativeError('DSH approval was submitted; wait for its durable decision', 409);
     if (!['allowed-once', 'rejected'].includes(decision.optionId)) throw Object.assign(new Error('DSH 审批选项无效'), { statusCode: 400 });
     const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch;
-    pending.approvalOption = decision.optionId;
     await this.call(client, '$events/result', {
       clientId,
       eventId: decision.approvalId,
@@ -2146,7 +2144,9 @@ export class DshAdapter implements AgentAdapter {
         runtime.approvals.delete(durableId);
         const raw = String(data['outcome'] ?? data['decision'] ?? data['optionId'] ?? 'unavailable');
         const optionId = ['allowed-once', 'rejected', 'cancelled', 'unavailable'].includes(raw) ? raw : 'unavailable';
-        complete(`approval-resolved-${nativeSeq}`, 'approval.resolved', { approvalId, optionId, by: pending.sent && pending.approvalOption === optionId ? 'user' : 'other' });
+        // The durable audit has no responding Client. A void ACK may be an
+        // idempotent no-op, even when it precedes the same-option audit.
+        complete(`approval-resolved-${nativeSeq}`, 'approval.resolved', { approvalId, optionId, by: 'unknown' });
         return;
       }
       case 'user-questions/answered': {

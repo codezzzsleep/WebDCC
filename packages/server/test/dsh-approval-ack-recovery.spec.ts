@@ -31,7 +31,7 @@ for (const outcome of ['rejected', 'cancelled', 'allowed-once'] as const) it(`na
     expect((await response).json()).toMatchObject({ ok: false, code: 'uncertain' });
     expect(ctx.store.journal.get(ctx.commandId)?.state).toBe('uncertain');
     expect(ctx.store.interactions.get(ctx.session.id, 'approve', 'native-approval-waterfall')?.state).toBe('resolved');
-    expect(ctx.store.latestInteractionEvent(ctx.session.id, 'approve', 'native-approval-waterfall').event?.data).toMatchObject({ optionId: outcome, by: 'other' });
+    expect(ctx.store.latestInteractionEvent(ctx.session.id, 'approve', 'native-approval-waterfall').event?.data).toMatchObject({ optionId: outcome, by: 'unknown' });
   } finally { await ctx.close(); }
 });
 
@@ -48,14 +48,14 @@ it('a superseded native Client ACK cannot turn a re-delivered pending approval i
   } finally { await ctx.close(); }
 });
 
-for (const outcome of ['allowed-once', 'rejected'] as const) it(`after a current transport ACK, the native ${outcome} is matched against the original choice`, async () => {
+for (const outcome of ['allowed-once', 'rejected'] as const) it(`after a current transport ACK, native ${outcome} still lacks answering Client provenance`, async () => {
   const ctx = await approval();
   try {
     const response = ctx.send(); await expect.poll(ctx.dispatched).toBe(true); ctx.release();
     expect((await response).json()).toEqual({ ok: true });
     expect(ctx.store.interactions.get(ctx.session.id, 'approve', 'native-approval-waterfall')?.state).toBe('sent');
     ctx.record('approval/decided', { id: 'native-durable-id', outcome });
-    expect(ctx.store.journal.get(ctx.commandId)?.state).toBe(outcome === 'allowed-once' ? 'completed' : 'uncertain');
+    expect(ctx.store.journal.get(ctx.commandId)?.state).toBe('uncertain');
   } finally { await ctx.close(); }
 });
 
@@ -66,6 +66,17 @@ it('forwarding cancellation before the durable decision does not invent a native
     expect(ctx.store.hasApprovalResolved(ctx.session.id, 'native-approval-waterfall')).toBe(false);
     ctx.record('approval/decided', { id: 'native-durable-id', outcome: 'rejected' });
     expect(ctx.store.latestInteractionEvent(ctx.session.id, 'approve', 'native-approval-waterfall').event?.data).toMatchObject({ optionId: 'rejected' });
+  } finally { await ctx.close(); }
+});
+
+it('a void current ACK before the same-option native audit cannot establish which Client was accepted', async () => {
+  const ctx = await approval();
+  try {
+    const response = ctx.send(); await expect.poll(ctx.dispatched).toBe(true); ctx.release();
+    expect((await response).json()).toEqual({ ok: true });
+    ctx.record('approval/decided', { id: 'native-durable-id', outcome: 'allowed-once' });
+    expect(ctx.store.journal.get(ctx.commandId)?.state).toBe('uncertain');
+    expect(ctx.store.latestInteractionEvent(ctx.session.id, 'approve', 'native-approval-waterfall').event?.data).toMatchObject({ optionId: 'allowed-once', by: 'unknown' });
   } finally { await ctx.close(); }
 });
 
