@@ -29,14 +29,27 @@ export class CapabilityRegistry {
     if (workspaceId !== null && this.store.getWorkspace(workspaceId) === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     const runtimes: CapabilityRuntime[] = [];
     const capabilities: Capability[] = [];
-    const providers = this.store.listProviders().map(provider => ({ id: provider.id, models: provider.models, details: provider.modelDetails }));
+    const providers = this.store.listProviders().map(provider => ({
+      id: provider.id, models: provider.models, details: provider.modelDetails,
+      baseUrl: provider.baseUrl, endpoints: provider.endpoints, protocols: provider.protocols,
+      codexCatalogPath: provider.codexCatalogPath,
+    }));
     for (const adapter of this.manager.adaptersList()) {
       const probe: ProbeResult = await adapter.probe().catch(() => ({ installed: false, pinnedVersion: nativeInventory.baseline[adapter.id], auth: 'unknown' as const, notes: ['原生探测失败'] }));
       const kind = adapter.kind ?? 'real';
       const expected = nativeInventory.baseline[adapter.id];
       const compatibility = runtimeCompatibility(probe, kind, expected);
       const source = nativeInventory.sources[adapter.id === 'claude-code' ? 'claude' : adapter.id];
-      runtimes.push({ agent: adapter.id, hostId: fingerprint({ hostname: hostname(), agent: adapter.id }).slice(0, 24), os: platform(), profile: 'native-default', probe, adapterKind: kind, compatibility, schemaHash: source.sha256, configurationFingerprint: fingerprint({ providers, workspaceId }), pluginStatus: 'unverified' });
+      const context = probe.runtimeContext;
+      runtimes.push({
+        agent: adapter.id,
+        hostId: context?.hostId ?? fingerprint({ hostname: hostname(), agent: adapter.id }).slice(0, 24),
+        os: context === undefined ? platform() : context.os ?? 'unknown',
+        profile: context === undefined ? 'native-default' : context.profile.identity ?? context.profile.scope,
+        probe, adapterKind: kind, compatibility, schemaHash: source.sha256,
+        configurationFingerprint: fingerprint({ providers, workspaceId }), pluginStatus: 'unverified',
+        ...(context === undefined ? {} : { runtimeContext: context }),
+      });
       const groups = new Map<string, NativeMethodInventoryEntry[]>();
       for (const entry of frozenNativeInventory.filter(entry => entry.agent === adapter.id && entry.role !== 'internal')) {
         const group = groups.get(entry.capabilityId) ?? [];

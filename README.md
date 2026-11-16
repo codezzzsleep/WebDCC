@@ -77,6 +77,8 @@ pnpm build
 
 服务端产物包含 `build-manifest.json`，绑定提交、源码和原生 schema 指纹及数据库兼容范围。M8/M9 失败仍生成本轮报告，跳过 E2E 或原生场景未触发会阻止相应验收通过。
 
+`pnpm release` 会在激活前及失败回滚前检查数据库与旧产物的兼容性；不兼容的 schema 升级需要单独的迁移方案。详见 [发布失败与数据库兼容](docs/release-rollback.md)。
+
 分别启动服务端和前端：
 
 ```bash

@@ -12,6 +12,7 @@ import type {
   LaunchSpec,
   ModelOption,
   ProbeResult,
+  NativeRuntimeContext,
   UserInput,
   TraceSink,
   TraceFrame,
@@ -21,9 +22,10 @@ import type {
   NativeInteractionSubmission,
   NativeDshRpcCaptureMetadata,
   SlashCommand,
+  SlashControlResult,
   ResolvedInputContent,
 } from '@webdcc/protocol';
-import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode, slashCommandFor, parseSlashInput } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
 import type { DshHistoryRecord, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
 import { DshHistoryBridge, type DshOpening } from './history.js';
@@ -326,6 +328,7 @@ export class DshAdapter implements AgentAdapter {
   private options: DshAdapterOptions;
   private traceSeq = 0;
   private readonly nativeSinks = new Map<string, NonNullable<CreateOpts['nativeEvents']>>();
+  private readonly capabilityGeneration = ulid();
   private globalNativeSink?: NonNullable<CreateOpts['nativeEvents']>;
   private rpcWritesBlocked = false;
   private readonly traceSinks = new Map<string, TraceSink>();
@@ -613,7 +616,8 @@ export class DshAdapter implements AgentAdapter {
       const identity = await this.hostIdentity().catch(() => undefined);
       return { installed: identity !== undefined, ...(identity?.version === undefined ? {} : { version: identity.version }), pinnedVersion: PINNED_VERSION,
         auth: this.options.attachCookie ? 'ok' : 'missing', compatible: identity?.status === 'verified',
-        notes: identity?.status === 'verified' ? [] : [identity?.reason ?? '目标 DSH Host 身份尚未验证'] };
+        notes: identity?.status === 'verified' ? [] : [identity?.reason ?? '目标 DSH Host 身份尚未验证'],
+        runtimeContext: this.capabilityContext(identity) };
     }
     if ((this.options.mode ?? 'spawn') === 'spawn') {
       const dshHome = this.options.env?.['DSH_HOME'] ?? process.env['DSH_HOME'] ?? join(homedir(), '.dsh');
@@ -807,9 +811,23 @@ export class DshAdapter implements AgentAdapter {
   private muxGeneration = 0;
   private controlStream?: string;
   private observedHost?: DshHostIdentity;
+  private hostEndpoint(): string {
+    return dshBaseUrl(this.options.attachUrl ?? (this.sidecar?.port ?? this.options.port ?? 3091));
+  }
+  private capabilityContext(identity?: DshHostIdentity): NativeRuntimeContext {
+    return {
+      hostId: dshRevision({ endpoint: identity?.url ?? this.hostEndpoint() }),
+      source: 'native-bootstrap',
+      status: identity?.fingerprint === undefined ? 'unverified' : 'observed',
+      ...(identity?.fingerprint === undefined ? {} : { hostFingerprint: identity.fingerprint }),
+      // The pinned native bootstrap exposes neither OS nor a profile name/path.
+      profile: { scope: 'current-host-profile', status: identity?.status === 'verified' ? 'unavailable-in-api' : 'unverified' },
+      connectionRevision: dshRevision({ adapter: this.capabilityGeneration, hostEpoch: this.hostEpoch, muxGeneration: this.muxGeneration }),
+    };
+  }
   async hostIdentity(): Promise<DshHostIdentity> {
     const epoch = this.hostEpoch;
-    const endpoint = this.options.attachUrl ?? (this.sidecar === null ? `http://127.0.0.1:${this.options.port ?? 3091}/` : dshBaseUrl(this.sidecar.port));
+    const endpoint = this.hostEndpoint();
     const cookie = (this.options.mode ?? 'spawn') === 'attach' ? this.options.attachBrowserCookie : this.client?.cookieHeader;
     const identity = await readDshHostIdentity(endpoint, cookie);
     if (epoch !== this.hostEpoch) throw dshNativeError('DSH Host was replaced during identity verification', 409);
@@ -853,7 +871,7 @@ export class DshAdapter implements AgentAdapter {
     if (observesGoal && Object.hasOwn(baseline.values, 'goal')) {
       const goal = dshGoalProjection(baseline.values['goal']);
       if (goal !== undefined) this.projectGoal(sessionId, runtime, goal, baseline.asOfSeq, origin, true, replace);
-      else this.emit(sessionId, { type: 'item.complete', itemKey: `unknown-goal-projection-${++runtime.frameSeq}`, kind: 'unknown',
+      else this.emit(sessionId, { type: 'item.complete', itemKey: `unknown-goal-projection-${baseline.asOfSeq}`, kind: 'unknown',
         data: { nativeType: 'session/projections:goal' }, scope: 'session', native: origin });
     }
     const selected = projectedModelSelection(baseline.values['modelSelection']);
@@ -885,7 +903,7 @@ export class DshAdapter implements AgentAdapter {
       || data.goalId !== undefined && data.goalId === previous.data.goalId && (data.nativeRevision ?? 0) < (previous.data.nativeRevision ?? 0))) return;
     runtime.goalObservation = { data, throughSeq, projection };
     if (previous !== undefined && JSON.stringify(previous.data) === JSON.stringify(data)) return;
-    this.emit(sessionId, { type: 'item.complete', itemKey: `goal-${projection ? 'projection' : 'change'}-${throughSeq}-${++runtime.frameSeq}`,
+    this.emit(sessionId, { type: 'item.complete', itemKey: `goal-${projection ? 'projection' : 'change'}-${throughSeq}`,
       kind: 'goal', data, nativeSeq: throughSeq, native, scope: 'session' });
   }
   private projectContinuedQuestions(sessionId: string, runtime: SessionRuntime, value: unknown): void {
@@ -946,15 +964,28 @@ export class DshAdapter implements AgentAdapter {
       return mapDshCommands(commands);
   }
 
-  async executeSlashControl(sessionId: string, line: string, options: { contentParts?: ResolvedInputContent } = {}) {
+  async executeSlashControl(sessionId: string, line: string, options: { contentParts?: ResolvedInputContent } = {}): Promise<SlashControlResult> {
     const runtime = this.require(sessionId); const client = await this.ensureSidecar();
     const generation = this.muxGeneration;
     const input = { text: line, ...(options.contentParts === undefined ? {} : { contentParts: options.contentParts }) } as UserInput & DshResolvableInput;
     const encoded = await encodeDshInput(input, { inputModalities: ['text', 'image'], uploadFile: (part, bytes) => this.uploadNativeFile(sessionId, runtime, client, part, bytes) });
+    const command = slashCommandFor(await this.slashCommands(sessionId), line);
+    // Native UI resolves localized spellings before calling commands/execute,
+    // whose registry accepts only the exact registered name. Retain argument
+    // bytes and the original Web request; capture the actual canonical RPC.
+    const parsed = parseSlashInput(line);
+    const nativeLine = command && parsed ? `${command.name}${parsed.rawArguments}` : line;
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令运行实例已变化'), { code: 'native-control-rejected', statusCode: 409 });
-    const result = await this.call<{ commandId: string; result: { kind: 'success' | 'error'; text?: string } }>(client, 'commands/execute', { agentId: runtime.nativeId, line, submittedAttachments: encoded.submittedAttachments }, sessionId);
+    const result = await this.call<{ commandId: string; result: { kind: 'success' | 'error'; text?: string } } | undefined>(client, 'commands/execute', { agentId: runtime.nativeId, line: nativeLine, submittedAttachments: encoded.submittedAttachments }, sessionId);
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令结果需要核对'), { code: 'uncertain' });
-    return { text: result.result.text ?? '', result, failed: result.result.kind === 'error' };
+    if (!result || typeof result.commandId !== 'string' || !result.commandId || !['success', 'error'].includes(result.result?.kind)) {
+      return { failed: true, text: 'DSH 未返回可确认的原生指令执行结果，请读取原生状态。', result };
+    }
+    return { text: result.result.text ?? '', result, failed: result.result.kind === 'error',
+      ...(result.result.kind === 'success' && command?.definitionId === '@deepseek-ai/dsh-session-log-export' ? {
+        confirmed: true, form: 'dsh-export' as const, download: { kind: 'dsh-session-log' as const, nativeId: runtime.nativeId },
+      } : {}),
+    };
   }
 
   async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {
@@ -1629,8 +1660,13 @@ export class DshAdapter implements AgentAdapter {
         this.finishLiveAssistant(sessionId, runtime);
         this.finishLiveReasoning(sessionId, runtime);
         const reason = (data['reason'] ?? {}) as { kind?: string };
+        const outputLimited = reason.kind === 'max-tokens';
         const interrupted = reason.kind === 'interrupted' || reason.kind === 'cancelled' || reason.kind === 'aborted';
-        const status = interrupted ? 'interrupted' : reason.kind === 'failed' || reason.kind === 'error' ? 'failed' : 'completed';
+        const status = interrupted ? 'interrupted' : outputLimited || reason.kind === 'failed' || reason.kind === 'error' ? 'failed' : 'completed';
+        if (outputLimited) complete(`dsh-output-limit-${nativeSeq}`, 'notice', {
+          level: 'warning', nativeType: 'turn/end:max-tokens',
+          text: 'DSH 达到原生输出 Token 上限（max-tokens）；输出或工具调用可能未完成。',
+        });
         for (const view of runtime.retries?.ended(data, status) ?? []) complete(view.itemKey, 'notice', view.data);
         this.emit(sessionId, { type: 'turn.end', nativeTurnId: this.nativeTurnId(data), status, native });
         return;
@@ -1714,14 +1750,17 @@ export class DshAdapter implements AgentAdapter {
             nativeTurnId: this.nativeTurnId(data),
           });
         } else if (item.kind === 'file.read') {
-          this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read', data: item.data as EventData['file.read'], nativeSeq, native, nativeTurnId: this.nativeTurnId(data) });
+          this.emit(sessionId, { type: 'item.complete', itemKey: item.itemKey, kind: 'file.read',
+            data: { ...(item.data as EventData['file.read']), status: isError ? 'failed' : 'completed', ...(isError ? { error: output } : {}) },
+            nativeSeq, native, nativeTurnId: this.nativeTurnId(data) });
         } else if (item.kind === 'file.change') {
           // C2：DSH 的 write/edit 结果不带 diff，用入参算 hunk（第 2/3 级）
           this.emit(sessionId, {
             type: 'item.complete',
             itemKey: item.itemKey,
             kind: 'file.change',
-            data: { changes: buildFileChanges(item.name, item.input), status: isError ? 'failed' : 'completed' },
+            data: { changes: isError ? [] : buildFileChanges(item.name, item.input), status: isError ? 'failed' : 'completed',
+              ...(isError ? { path: String(item.input['file_path'] ?? item.input['path'] ?? ''), error: output } : {}) },
             nativeSeq,
             native,
             nativeTurnId: this.nativeTurnId(data),

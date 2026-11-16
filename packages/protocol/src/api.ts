@@ -1,5 +1,5 @@
 /** REST DTO（SPEC 11.1） */
-import type { EventData, EventKind, StoredEvent } from './events.js';
+import type { EventData, EventKind, StoredEvent, ConversationState } from './events.js';
 import type { ProbeResult, ModelOption } from './adapter.js';
 import type { BuildManifest } from './build.js';
 import type { AccessModeOption, PermissionState } from './permissions.js';
@@ -33,6 +33,7 @@ export interface SessionDto {
   workspaceId: string;
   agent: string;
   nativeId?: string;
+  conversation?: ConversationState;
   title?: string;
   providerId?: string | null;
   model?: string;

@@ -1001,7 +1001,12 @@ button.step-line:hover {
 .approval-card.resolved svg {
   color: var(--success);
 }
+.approval-card.resolved .approval-result {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .approval-card.resolved .what {
+  flex: 1 1 0;
   font-family: var(--font-code);
   font-size: 13px;
   color: var(--text-2);
@@ -2233,3 +2238,8 @@ button.step-line:hover {
 }
 
 .workspace-image { display: block; max-width: 100%; max-height: 70vh; height: auto; object-fit: contain; margin: 10px 0; border-radius: 8px; }
+/* Workspace HTML keeps its own page layout inside the file dock. */
+.file-editor-head { flex-wrap: wrap; }
+.file-preview-tabs, .file-preview-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.file-preview-actions { margin: 8px 0; }
+.html-file-preview iframe { display: block; width: 100%; height: min(70vh, 760px); min-height: 320px; border: 1px solid var(--border-l1); border-radius: 6px; background: #fff; }

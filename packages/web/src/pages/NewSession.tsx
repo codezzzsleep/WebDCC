@@ -199,7 +199,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
             choice,
             onChoice: (next) => {
               if (next.model !== '') rememberModel(agent, next.providerId, next.model);
-              if (agent === 'dsh' || next.reasoningEffort !== undefined) rememberReasoning(agent, next.reasoningEffort);
+              if (agent === 'dsh' || agent === 'codex' || next.reasoningEffort !== undefined) rememberReasoning(agent, next.reasoningEffort);
               setChoiceOverride((prev) => ({ ...prev, [agent]: next }));
             },
             accessMode: selectedMode,

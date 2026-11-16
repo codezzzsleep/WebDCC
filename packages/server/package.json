@@ -16,11 +16,14 @@
     "@webdcc/adapter-claude": "workspace:*",
     "@webdcc/adapter-codex": "workspace:*",
     "@webdcc/adapter-dsh": "workspace:*",
-    "@webdcc/protocol": "workspace:*",
     "@webdcc/model-proxy": "workspace:*",
+    "@webdcc/protocol": "workspace:*",
     "better-sqlite3": "^13.0.3",
+    "es-module-lexer": "1.7.0",
     "fastify": "^5.12.8",
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "parse5": "8.0.0",
+    "postcss": "8.5.32"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

@@ -1091,7 +1091,22 @@
           "packages/adapters/claude/src/managed-process.ts",
           "packages/adapters/claude/test/managed-process.spec.ts",
           "packages/adapters/claude/src/handler.spec.ts",
-          "scripts/verify-native-questions.ts"
+          "scripts/verify-native-questions.ts",
+          "browser-tests/conversation-reset.spec.ts",
+          "packages/adapters/claude/test/conversation-reset.spec.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/events.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/validate.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/conversation-reset.spec.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-conversation-reset.spec.ts",
+          "packages/web/src/lib/store.ts"
         ],
         "actualFiles": [
           "packages/adapters/claude/src/adapter.ts",
@@ -1111,7 +1126,22 @@
           "packages/adapters/claude/src/managed-process.ts",
           "packages/adapters/claude/test/managed-process.spec.ts",
           "packages/adapters/claude/src/handler.spec.ts",
-          "scripts/verify-native-questions.ts"
+          "scripts/verify-native-questions.ts",
+          "browser-tests/conversation-reset.spec.ts",
+          "packages/adapters/claude/test/conversation-reset.spec.ts",
+          "packages/protocol/src/api.ts",
+          "packages/protocol/src/events.ts",
+          "packages/protocol/src/sync.ts",
+          "packages/protocol/src/validate.ts",
+          "packages/server/src/manager.ts",
+          "packages/server/src/store.ts",
+          "packages/server/test/conversation-reset.spec.ts",
+          "packages/web/src/App.tsx",
+          "packages/web/src/components/Composer.tsx",
+          "packages/web/src/components/TaskPanel.tsx",
+          "packages/web/src/components/Timeline.tsx",
+          "packages/web/src/lib/store-conversation-reset.spec.ts",
+          "packages/web/src/lib/store.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1125,7 +1155,51 @@
           "compact/task/status生产listener与replay具有相同保留策略。",
           "权限切换后换模型保持effective权限；工具失败不产生成功任务或用户中断假象。"
         ],
-        "remainingWork": "已补 Claude 问题组的 SDK tool_result 确认：正常回答不提前完成，取消和原生终态使旧卡失效；真实 SDK0.3.322/CLI2.1.322 + 本机脚本模型 + Chromium 验证自由文本、多选、多题、继续、取消和刷新。块级 reducer/系统消息、权限/effort 与 query 替换的既有修复保留。完整 SDK 输出/任务实体、全部初始化/退出故障和真实 Provider 模型与权限结果仍待验收。"
+        "remainingWork": "已补 Claude 问题组的 SDK tool_result 确认：正常回答不提前完成，取消和原生终态使旧卡失效；真实 SDK0.3.322/CLI2.1.322 + 本机脚本模型 + Chromium 验证自由文本、多选、多题、继续、取消和刷新。块级 reducer/系统消息、权限/effort 与 query 替换的既有修复保留。完整 SDK 输出/任务实体、全部初始化/退出故障和真实 Provider 模型与权限结果仍待验收。",
+        "behaviorDeliveries": [
+          {
+            "issue": 116,
+            "behavior": "Claude native conversation_reset switches current transcript/title under unchanged Web session and keeps read-only prior records; stored legacy raw resets restore on upgrade",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "nativeContract": "Claude Agent SDK 0.3.322 SDKConversationResetMessage; all triggers incl absent/unknown; raw UUID/user_message_uuid retained",
+            "changedLines": {
+              "source": 296,
+              "tests": 372
+            },
+            "fileChanges": {
+              "added": [
+                "browser-tests/conversation-reset.spec.ts",
+                "packages/adapters/claude/test/conversation-reset.spec.ts",
+                "packages/server/test/conversation-reset.spec.ts",
+                "packages/web/src/lib/store-conversation-reset.spec.ts"
+              ],
+              "modified": [
+                "packages/adapters/claude/src/adapter.ts",
+                "packages/protocol/src/api.ts",
+                "packages/protocol/src/events.ts",
+                "packages/protocol/src/sync.ts",
+                "packages/protocol/src/validate.ts",
+                "packages/server/src/manager.ts",
+                "packages/server/src/store.ts",
+                "packages/web/src/App.tsx",
+                "packages/web/src/components/Composer.tsx",
+                "packages/web/src/components/TaskPanel.tsx",
+                "packages/web/src/components/Timeline.tsx",
+                "packages/web/src/lib/store.ts"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "verification": "317 server tests, 6 SDK mapping and 3 AppStore tests, 2 Chromium tests; full types and changed lint passed; SDK frames controlled fixtures, SQLite/HTTP/WS/browser actual local",
+            "dataCompatibility": "Existing DB schema, Web session IDs/URLs and raw/history events retained. One-time atomic context projection in app_settings; newer title and duplicate reset identities preserved. Malformed raw frames stay unrecovered. No schema removal.",
+            "remainingAcceptance": [
+              "Independent actual SDK/CLI reset triggers and Provider scenarios",
+              "Actual target upgrade, restart, multiple clients and complete native interactions recovery",
+              "Merge/deployment and complete NP-09 scope remain separate and unperformed by developer"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-02",
@@ -1443,7 +1517,10 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/src/cas-read.ts",
+          "packages/server/test/cas-read-boundary.spec.ts",
+          "docs/deploy.md"
         ],
         "actualFiles": [
           "packages/server/src/auth.ts",
@@ -1464,7 +1541,10 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/src/cas-read.ts",
+          "packages/server/test/cas-read-boundary.spec.ts",
+          "docs/deploy.md"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1476,7 +1556,38 @@
           "非法Origin和错误Host mutation/WS被拒；合法代理部署通过；坏cookie得到401/400而非500。",
           "越界/负数/重复/缺块/超大小上传不能变成成功文件，workspace symlink逃逸被拒。"
         ],
-        "remainingWork": "Remaining exhaustive request/upload/WS and workspace descriptor/race boundaries need completion; HTML/browser/Origin/Cookie/chunk regressions passed."
+        "remainingWork": "Remaining exhaustive request/upload/WS and workspace descriptor/race boundaries need completion; HTML/browser/Origin/Cookie/chunk regressions passed.",
+        "behaviorDeliveries": [
+          {
+            "issue": 188,
+            "behavior": "CAS download/readAll/admission pin data/files/prefix/object identities; reject changed paths including async cleanup before returning verified bytes/path",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "fileChanges": {
+              "added": [
+                "packages/server/src/cas-read.ts",
+                "packages/server/test/cas-read-boundary.spec.ts"
+              ],
+              "modified": [
+                "packages/server/src/files.ts",
+                "docs/deploy.md"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "changedLines": {
+              "source": 115,
+              "tests": 254
+            },
+            "verification": "28 source local tests; full types and changed lint passed. Joint165/163 combination45 tests passed after explicit platform-contract update; original36pass/1repair failure and44pass/1oldDarwinread-contract failure preserved separately. Node/SQLite/FS/HTTP actual local; native/model/provider/remote0.",
+            "dataCompatibility": "No database/ID/schema change. Read requires Linux/proc, reports501 when unavailable. Internal createReadStream is now async and streams verified bytes; no existing source callers depend on synchronous return. Existing native plain-path admission format remains.",
+            "remainingAcceptance": [
+              "Independent actual target/platform and three native Agent/Provider scenarios",
+              "Plain path return to native process open handoff race remains outside this local check",
+              "Full NP13/NP17 matrix, acceptance, merge and deployment remain separate and unperformed by developer"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-02"
@@ -2368,6 +2479,8 @@
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
           "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/claude/test/task-deletion.spec.ts",
+          "browser-tests/claude-task-deletion.spec.ts",
           "packages/adapters/dsh/src/goals.ts",
           "packages/adapters/dsh/src/adapter.ts",
           "packages/protocol/src/events.ts",
@@ -2391,6 +2504,8 @@
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
           "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/claude/test/task-deletion.spec.ts",
+          "browser-tests/claude-task-deletion.spec.ts",
           "packages/adapters/dsh/src/goals.ts",
           "packages/adapters/dsh/src/adapter.ts",
           "packages/adapters/dsh/test/goals.spec.ts",
@@ -2410,7 +2525,37 @@
           "主Agent与子Agent任务隔离；UI空状态不把缺数据当已完成。",
           "DSH 真实 Host 生命周期、外部改变、重连恢复与 process-local activation/自动续跑尚未完整验收。"
         ],
-        "latestScope": "2026-11-16 #128: DSH durable goal/change and goal projection mapping, native identity/revision/rounds/block reason, goal-specific replay watermark and source UI refresh/clear. Controlled fixtures checked against actual upstream strict fold; no live Host/provider or target deployment acceptance."
+        "latestScope": "2026-11-16 #125 task deletion and #128 DSH durable goal/change/projection mapping; native identity/revision/rounds/block reason, goal-specific replay watermark and source UI refresh/clear. Controlled fixtures checked against actual upstream strict fold; no complete live Host/provider or target deployment acceptance.",
+        "behaviorDeliveries": [
+          {
+            "issue": 125,
+            "behavior": "Successful authoritative TaskUpdate statusChange.to=deleted removes its known plan task; last task publishes durable empty plan and refresh stays empty; failed and non-deleted actual results preserved",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "nativeContract": "Claude SDK0.3.322 TaskUpdateInput.status includes deleted; TaskUpdateOutput success/taskId/statusChange authoritative; requested input alone cannot imply deletion",
+            "changedLines": {
+              "source": 1,
+              "tests": 104
+            },
+            "fileChanges": {
+              "added": [
+                "packages/adapters/claude/test/task-deletion.spec.ts",
+                "browser-tests/claude-task-deletion.spec.ts"
+              ],
+              "modified": [
+                "packages/adapters/claude/src/native-state.ts"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "verification": "13 adapter/reducer/handler local tests and1 real localChromium/SQLite/HTTP/WS refresh passed; full types/changedlint passed; original2failed/2passed retained. Native SDK result fixtures; real native tools/provider/model0.",
+            "remainingAcceptance": [
+              "Actual pinned native tool deletion with supplied Provider",
+              "Target server restart/multipleclients/current task entity reconciliation",
+              "Full NP23/NP37 scope and merge/deploy remain separate and unperformed by developer"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-05",

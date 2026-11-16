@@ -89,6 +89,16 @@ it('native surface is explicitly unavailable without an isolated origin and reje
   await expect(disabled.issueTicket()).rejects.toMatchObject({ statusCode: 503 });
   await expect(createDshNativeSurface({ publicOrigin: mainOrigin, applicationOrigins: [mainOrigin], connection: () => null })).rejects.toMatchObject({ statusCode: 400 });
 });
+it('application receipt exports use a fixed authenticated Host resource without a native page ticket or writer', async () => {
+  const f = await fixture({ writable: false });
+  const response = await f.surface.sessionExport('native-session');
+  expect(response.status).toBe(200); expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from('504b030400000000ff0013', 'hex'));
+  expect(f.requests.at(-1)).toMatchObject({ url: '/dsh/api/session.export?sessionId=native-session&includeDescendants=true', cookie: nativeCookie });
+  expect(f.authorized).toBe(0); expect(f.journaled).toBe(0);
+  const count = f.requests.length;
+  await expect(f.surface.sessionExport('../external')).rejects.toMatchObject({ statusCode: 400 }); expect(f.requests).toHaveLength(count);
+  f.changeVersion(); await expect(f.surface.sessionExport('native-session')).rejects.toMatchObject({ code: 'dsh-host-version-blocked' });
+});
 it('one-use POST tickets authenticate native HTML and resources without forwarding WebDCC cookies', async () => {
   const f = await fixture();
   expect((await f.surface.app.inject({ url: '/', headers: f.headers })).statusCode).toBe(401);

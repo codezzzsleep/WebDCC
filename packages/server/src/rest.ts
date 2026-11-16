@@ -1,5 +1,4 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -35,8 +34,11 @@ import { buildManifest } from './build-info.js';
 import { isCommand, isInputContent } from '@webdcc/protocol';
 import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
+import { listWorkspaceDirectory } from './workspace-list.js';
+import { copyWorkspaceAttachment } from './workspace-attach.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
+import { createWorkspaceEntry } from './workspace-create.js';
 import { registerNativeControlRoutes } from './native-control-routes.js';
 
 export interface RouteDeps {
@@ -79,21 +81,6 @@ export async function resolveInsideWorkspace(workspacePath: string, requested: s
   const rel = relative(root, target);
   if (rel !== '' && (rel.startsWith('..') || isAbsolute(rel))) throw badRequest('路径必须在工作区内');
   return target;
-}
-
-/** 解析尚不存在的目标，先解析父目录，避免新建文件时 realpath 失败。 */
-async function resolveNewInsideWorkspace(workspacePath: string, requested: string): Promise<string> {
-  const root = await realpath(workspacePath);
-  const normalized = requested.replace(/^\/+/, '');
-  if (normalized === '' || isAbsolute(requested)) throw badRequest('需要工作区内的相对路径');
-  const target = resolve(root, normalized);
-  const rel = relative(root, target);
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) throw badRequest('路径必须在工作区内');
-  const parent = await realpath(dirname(target)).catch(() => undefined);
-  if (parent === undefined) throw badRequest('父目录不存在');
-  const parentRel = relative(root, parent);
-  if (parentRel !== '' && (parentRel.startsWith('..') || isAbsolute(parentRel))) throw badRequest('路径必须在工作区内');
-  return join(parent, basename(target));
 }
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -269,6 +256,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/workspaces/:id/fs', async (request): Promise<FsListResponse | FsReadResponse> => {
     const { id } = request.params as { id: string };
     const query = request.query as { path?: string; q?: string };
+    if (query.path !== undefined && typeof query.path !== 'string' || query.q !== undefined && typeof query.q !== 'string') throw badRequest('目录路径和筛选必须为文本');
     const workspace = store.getWorkspace(id);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     const relativePath = query.path ?? '';
@@ -279,14 +267,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
     if (info.isDirectory()) {
       const query2 = query.q?.toLowerCase();
-      const entries = await readdir(target, { withFileTypes: true });
+      const { root, entries } = await listWorkspaceDirectory(workspace.path, target);
       return {
-        path: relative(workspace.path, target) || '.',
+        path: relative(root, target) || '.',
         entries: entries
           .filter((entry) => (query2 === undefined ? true : entry.name.toLowerCase().includes(query2)))
           .map((entry) => ({
             name: entry.name,
-            path: relative(workspace.path, join(target, entry.name)),
+            path: relative(root, join(target, entry.name)),
             type: entry.isDirectory() ? ('dir' as const) : ('file' as const),
           }))
           .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1)),
@@ -313,19 +301,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const body = request.body as { path?: string; kind?: string; content?: string };
     if (typeof body?.path !== 'string' || body.path.trim() === '') throw badRequest('需要文件路径');
     if (body.kind !== 'file' && body.kind !== 'dir') throw badRequest('kind 必须是 file 或 dir');
-    const target = await resolveNewInsideWorkspace(workspace.path, body.path.trim());
-    if (body.kind === 'dir') {
-      await mkdir(target).catch((error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw badRequest('目录已存在');
-        throw error;
-      });
-    } else {
-      await writeFile(target, body.content ?? '', { encoding: 'utf8', flag: 'wx' }).catch((error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw badRequest('文件已存在');
-        throw error;
-      });
-    }
-    return { path: relative(workspace.path, target), kind: body.kind };
+    if (body.content !== undefined && typeof body.content !== 'string') throw badRequest('content 必须是文本');
+    return createWorkspaceEntry(workspace.path, body.path.trim(), body.kind, body.content ?? '');
   });
 
   app.get('/api/workspaces/:id/raw', async (request, reply) => {
@@ -335,7 +312,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     const target = await workspaceAsset(workspace.path, query.path ?? '').catch(() => undefined);
     if (target === undefined) throw badRequest('路径必须在工作区内');
-    return sendWorkspaceAsset(reply, target);
+    return sendWorkspaceAsset(reply, target, workspace.path);
   });
 
   // ---------- feed / sessions ----------
@@ -679,7 +656,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const models = adapter === undefined ? [] : await adapter.listModels(null).catch(() => []);
       return { models: models.map((model) => model.id), options: models };
     }
-    return { models: deps.providers.modelsFor(agent, providerId) };
+    const models = deps.providers.modelsFor(agent, providerId);
+    const details = deps.providers.get(providerId)?.modelDetails ?? [];
+    return { models, options: models.map(id => {
+      const detail = details.find(model => model.id === id);
+      return { id, label: detail?.name ?? id, ...(detail?.reasoningEfforts === undefined ? {} : { reasoningEfforts: detail.reasoningEfforts }), source: 'provider-config' };
+    }) };
   });
 
   // ---------- uploads ----------
@@ -722,27 +704,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const workspace = store.getWorkspace(id);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     if (typeof body?.fileId !== 'string') throw badRequest('需要 fileId');
+    if (body.name !== undefined && typeof body.name !== 'string') throw badRequest('附件文件名必须为文本');
     const found = await files.readAll(body.fileId);
     if (found === undefined) throw Object.assign(new Error('文件不存在'), { statusCode: 404 });
     if (found.buffer.byteLength > 100 * 1024 * 1024) throw Object.assign(new Error('文件超过 100 MB 上限'), { statusCode: 413 });
     const original = body.name ?? found.file.name;
     const safeName = original.replace(/[/\\]/g, '_');
-    const dir = join(workspace.path, '.webdcc', 'uploads');
-    await mkdir(dir, { recursive: true });
-    const target = join(dir, `${body.fileId}-${safeName}`);
-    await writeFile(target, found.buffer);
-    // 工作区是 git 仓库时把 .webdcc/ 写进 .git/info/exclude（不改用户的 .gitignore）
-    const gitDir = join(workspace.path, '.git');
-    if (existsSync(gitDir)) {
-      const exclude = join(gitDir, 'info', 'exclude');
-      await mkdir(join(gitDir, 'info'), { recursive: true });
-      const current = existsSync(exclude) ? await readFile(exclude, 'utf8') : '';
-      if (!current.split('\n').some((line) => line.trim() === '.webdcc/')) {
-        await writeFile(exclude, `${current}${current.endsWith('\n') || current === '' ? '' : '\n'}.webdcc/\n`);
-      }
-    }
+    const copied = await copyWorkspaceAttachment(workspace.path, `${body.fileId}-${safeName}`, found.buffer);
     return {
-      path: relative(workspace.path, target),
+      path: copied.path,
       name: safeName,
       fileId: body.fileId,
       size: found.buffer.byteLength,

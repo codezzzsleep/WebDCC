@@ -7,6 +7,22 @@ beforeAll(async () => { ctx = await createTestApp(); });
 afterAll(async () => { await ctx.close(); });
 
 describe('Provider → Model 三级数据', () => {
+  it('模型目录按Provider保留声明档位，不借用同名模型或不兼容Provider的能力', async () => {
+    const create = (name: string, reasoningEfforts?: string[]) => ctx.app.inject({ method: 'POST', url: '/api/providers', headers: { cookie: ctx.cookie }, payload: {
+      name, baseUrl: 'https://fixture.invalid', protocols: ['openai-responses'], models: ['same', 'undeclared'],
+      modelDetails: [{ id: 'same', name, ...(reasoningEfforts === undefined ? {} : { reasoningEfforts }) }],
+    } });
+    const one = (await create('One', ['ultra', 'high'])).json<{ id: string }>();
+    const two = (await create('Two', ['low'])).json<{ id: string }>();
+    const read = (agent: string, id: string) => ctx.app.inject({ method: 'GET', url: `/api/models?agent=${agent}&providerId=${id}`, headers: { cookie: ctx.cookie } });
+    expect((await read('codex', one.id)).json()).toEqual({ models: ['same', 'undeclared'], options: [
+      { id: 'same', label: 'One', reasoningEfforts: ['ultra', 'high'], source: 'provider-config' },
+      { id: 'undeclared', label: 'undeclared', source: 'provider-config' },
+    ] });
+    expect((await read('codex', two.id)).json<{ options: unknown[] }>().options[0]).toEqual({ id: 'same', label: 'Two', reasoningEfforts: ['low'], source: 'provider-config' });
+    expect((await read('claude-code', one.id)).json()).toEqual({ models: [], options: [] });
+  });
+
   it('Provider 保留模型 ID 列表，并保存模型展示信息', async () => {
     const created = await ctx.app.inject({
       method: 'POST',
@@ -43,6 +59,9 @@ describe('Provider → Model 三级数据', () => {
 
     const modelList = await ctx.app.inject({ method: 'GET', url: '/api/models?agent=codex&providerId=' + body.id, headers: { cookie: ctx.cookie } });
     expect(modelList.statusCode).toBe(200);
-    expect(modelList.json()).toEqual({ models: ['model-b', 'model-c'] });
+    expect(modelList.json()).toEqual({ models: ['model-b', 'model-c'], options: [
+      { id: 'model-b', label: '模型 B', source: 'provider-config' },
+      { id: 'model-c', label: '模型 C', source: 'provider-config' },
+    ] });
   });
 });

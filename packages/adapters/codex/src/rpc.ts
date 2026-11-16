@@ -126,7 +126,15 @@ export class JsonRpcStdio {
       if (!pending) return;
       clearTimeout(pending.timer);
       this.pending.delete(id);
-      if ('error' in frame) pending.reject(new Error(`${pending.method} 失败：${JSON.stringify(frame['error'])}`));
+      const resultPresent = Object.hasOwn(frame, 'result');
+      const errorPresent = Object.hasOwn(frame, 'error');
+      const error = frame['error'];
+      const validError = error !== null && typeof error === 'object' && !Array.isArray(error)
+        && Number.isInteger((error as Frame)['code']) && typeof (error as Frame)['message'] === 'string';
+      // A void native ACK still carries result:null. Never guess success from an ID alone.
+      if (resultPresent === errorPresent || errorPresent && !validError) {
+        pending.reject(Object.assign(new Error(`${pending.method} 原生响应格式无效`), { code: 'native-protocol-error' }));
+      } else if (errorPresent) pending.reject(new Error(`${pending.method} 失败：${JSON.stringify(error)}`));
       else pending.resolve(frame['result']);
       return;
     }

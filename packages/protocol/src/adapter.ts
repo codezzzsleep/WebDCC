@@ -8,6 +8,7 @@ import type { NativeObservation } from './native-observation.js';
 import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } from './native-controls.js';
 import type { InputSkillPart, ResolvedInputContent } from './input.js';
 import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './slash.js';
+import type { CodexSubagentView } from './subagents.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -18,6 +19,18 @@ export interface CodexInputModeCatalog {
   reason?: string;
 }
 
+/** Public observation metadata; endpoint IDs are opaque and contain no credentials. */
+export interface NativeRuntimeContext {
+  hostId: string;
+  source: 'native-bootstrap' | 'local-process';
+  status: 'observed' | 'unverified';
+  /** Release/bootstrap evidence, not an immutable machine identity. */
+  hostFingerprint?: string;
+  os?: string;
+  profile: { scope: string; identity?: string; status: 'observed' | 'unverified' | 'unavailable-in-api' };
+  connectionRevision: string;
+}
+
 export interface ProbeResult {
   installed: boolean;
   version?: string;
@@ -25,6 +38,7 @@ export interface ProbeResult {
   auth: 'ok' | 'missing' | 'unknown';
   notes?: string[];
   compatible?: boolean;
+  runtimeContext?: NativeRuntimeContext;
 }
 
 export interface ModelOption {
@@ -62,6 +76,8 @@ export interface CreateOpts {
   accessMode?: string;
   /** Server-owned roundtrip from a verified CLI writer; preserve native settings. */
   restoreNativeHistory?: boolean;
+  /** Passive persisted task identities for reconnect; never sent to native prompts/tools. */
+  restoreCodexSubagents?: CodexSubagentView[];
   /** Optional side-channel recorder; it never changes Agent input/output. */
   traceSink?: TraceSink;
   /** Observer-only endpoint override; keeps the native provider/auth identity. */

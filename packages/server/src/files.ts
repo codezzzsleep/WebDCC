@@ -1,11 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { constants, createReadStream, mkdirSync, writeFileSync } from 'node:fs';
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { lstat, mkdir, open, realpath, rename, rm, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 import type { FileDto, InputAttachmentPart, ResolvedInputAttachmentPart, UploadCompleteResponse, UploadInitResponse, UploadStatusResponse } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
+import { isUploadId, openUploadStaging } from './upload-staging.js';
+import { publishCasFile, writeCasBuffer, writeCasBufferSync } from './cas-write.js';
+import { openCasObject } from './cas-read.js';
 
 export const CHUNK_SIZE = 1024 * 1024;
 /** 单个文件上限 100 MB（SPEC-M8 F7 / ATT-04） */
@@ -23,7 +27,6 @@ function invalidUpload(message: string, statusCode = 400): Error {
 }
 function corruptObject(message: string): Error { return Object.assign(invalidUpload(message, 409), { code: 'cas-corrupt' }); }
 function repairableObject(error: unknown): boolean { return ['ENOENT', 'ELOOP', 'cas-corrupt'].includes((error as { code?: string }).code ?? ''); }
-async function syncDirectory(path: string): Promise<void> { const handle = await open(path, 'r'); try { await handle.sync(); } finally { await handle.close(); } }
 
 /** 内容寻址文件存储（SPEC 7.6、7.7） */
 export class FileStore {
@@ -39,7 +42,10 @@ export class FileStore {
   async init(): Promise<void> {
     await mkdir(this.objectsDir, { recursive: true });
     await mkdir(this.uploadsDir, { recursive: true });
-    await this.cleanupUploads();
+    // Keep recovery metadata when secure staging is unavailable. Upload
+    // actions still fail explicitly; other file features can initialize.
+    try { await this.cleanupUploads(); }
+    catch (error) { if ((error as { statusCode?: number }).statusCode !== 501) throw error; }
   }
 
   private async serialize<T>(id: string, action: () => Promise<T>): Promise<T> {
@@ -51,9 +57,12 @@ export class FileStore {
 
   async cancelUpload(uploadId: string): Promise<void> {
     await this.serialize(uploadId, async () => {
-      this.store.deleteUpload(uploadId);
       // Only generated IDs address upload directories.
-      if (/^[a-f0-9-]{36}$/.test(uploadId)) await rm(join(this.uploadsDir, uploadId), { recursive: true, force: true });
+      if (isUploadId(uploadId)) {
+        const root = await openUploadStaging(this.uploadsDir);
+        try { await root.remove(uploadId); } finally { await root.close(); }
+      }
+      this.store.deleteUpload(uploadId);
     });
   }
 
@@ -62,11 +71,13 @@ export class FileStore {
     for (const upload of this.store.listUploads()) {
       if (Date.parse(upload.created_at) < cutoff) await this.cancelUpload(upload.id);
     }
-    for (const entry of await readdir(this.uploadsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !/^[a-f0-9-]{36}$/.test(entry.name) || this.store.getUpload(entry.name) !== undefined) continue;
-      const path = join(this.uploadsDir, entry.name);
-      if ((await stat(path)).mtimeMs < cutoff) await rm(path, { recursive: true, force: true });
-    }
+    const root = await openUploadStaging(this.uploadsDir);
+    try {
+      for (const entry of await root.entries()) {
+        if (!entry.isDirectory() || !isUploadId(entry.name) || this.store.getUpload(entry.name) !== undefined) continue;
+        if ((await root.entryInfo(entry.name)).mtimeMs < cutoff) await root.remove(entry.name);
+      }
+    } finally { await root.close(); }
   }
 
   objectPath(sha256: string): string {
@@ -91,8 +102,9 @@ export class FileStore {
   private async verifiedObject(file: FileDto, collect: boolean): Promise<{ path: string; buffer?: Buffer; imageMime?: string }> {
     if (!/^[a-f0-9]{64}$/.test(file.sha256) || !Number.isSafeInteger(file.size) || file.size < 0 || file.size > MAX_FILE_SIZE
       || typeof file.mime !== 'string' || !/^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/.test(file.mime)) throw invalidUpload('存储附件元数据无效', 409);
-    const directory = await this.casDirectory(file.sha256);
-    const path = join(directory, file.sha256); const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const source = await openCasObject(this.objectsDir, file.sha256);
+    const { path, file: handle } = source;
+    let verified = false;
     try {
       const info = await handle.stat();
       if (!info.isFile()) throw invalidUpload('附件 CAS 对象不是普通文件', 409);
@@ -105,12 +117,14 @@ export class FileStore {
         if (collect) chunks.push(chunk);
       }
       if (bytes !== file.size || hash.digest('hex') !== file.sha256) throw corruptObject('附件内容 hash 与已存记录不一致');
+      await source.check();
       const imageMime = prefix.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? 'image/png'
         : prefix[0] === 255 && prefix[1] === 216 && prefix[2] === 255 ? 'image/jpeg'
         : ['GIF87a', 'GIF89a'].includes(prefix.subarray(0, 6).toString('ascii')) ? 'image/gif'
         : prefix.subarray(0, 4).toString('ascii') === 'RIFF' && prefix.subarray(8, 12).toString('ascii') === 'WEBP' ? 'image/webp' : undefined;
+      verified = true;
       return { path, ...(collect ? { buffer: Buffer.concat(chunks, bytes) } : {}), ...(imageMime === undefined ? {} : { imageMime }) };
-    } finally { await handle.close(); }
+    } finally { if (verified) await source.finish(); else await source.close(); }
   }
 
   /** Browser/queued paths and receipts are never authorities. Reopen the
@@ -137,37 +151,35 @@ export class FileStore {
 
   /** 直接存一个 buffer（图片、diff、命令全文等） */
   async putBuffer(buffer: Buffer, name: string, mime: string): Promise<FileDto> {
-    const sha256 = createHash('sha256').update(buffer).digest('hex');
+    const payload = Buffer.from(buffer);
+    const sha256 = createHash('sha256').update(payload).digest('hex');
+    await writeCasBuffer(this.objectsDir, sha256, payload);
     const existing = this.store.getFileByMetadata(sha256, name, mime);
     if (existing !== undefined) return existing;
-    const target = this.objectPath(sha256);
-    await mkdir(join(this.objectsDir, sha256.slice(0, 2)), { recursive: true });
-    await writeFile(target, buffer);
-    return this.store.insertFile({ id: ulid(), sha256, name, mime, size: buffer.byteLength });
+    return this.store.insertFile({ id: ulid(), sha256, name, mime, size: payload.byteLength });
   }
 
   /** 同步版本：manager 在处理事件时同步写入 diff 文本（C2 / F10） */
   putBufferSync(buffer: Buffer, name: string, mime: string): FileDto {
     const sha256 = createHash('sha256').update(buffer).digest('hex');
+    writeCasBufferSync(this.objectsDir, sha256, buffer);
     const existing = this.store.getFileByMetadata(sha256, name, mime);
     if (existing !== undefined) return existing;
-    const dir = join(this.objectsDir, sha256.slice(0, 2));
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(this.objectPath(sha256), buffer);
     return this.store.insertFile({ id: ulid(), sha256, name, mime, size: buffer.byteLength });
   }
 
   async readAll(id: string): Promise<{ file: FileDto; buffer: Buffer } | undefined> {
     const file = this.store.getFile(id);
     if (file === undefined) return undefined;
-    const verified = await this.verifiedObject(file, true);
+    let verified: Awaited<ReturnType<FileStore['verifiedObject']>>;
+    try { verified = await this.verifiedObject(file, true); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw invalidUpload('附件 CAS 文件缺失', 404); throw error; }
     return { file, buffer: verified.buffer! };
   }
 
-  createReadStream(id: string): { file: FileDto; stream: NodeJS.ReadableStream } | undefined {
-    const file = this.store.getFile(id);
-    if (file === undefined) return undefined;
-    return { file, stream: createReadStream(this.objectPath(file.sha256)) };
+  async createReadStream(id: string): Promise<{ file: FileDto; stream: NodeJS.ReadableStream } | undefined> {
+    const found = await this.readAll(id);
+    return found === undefined ? undefined : { file: found.file, stream: Readable.from([found.buffer]) };
   }
 
   // ---------- 可续传上传 ----------
@@ -200,8 +212,9 @@ export class FileStore {
       if (this.store.listUploads().length >= (this.limits.maxPendingUploads ?? 128)) throw invalidUpload('待完成上传数量已达上限', 413);
       if (usage.pending + input.size > (this.limits.maxPendingBytes ?? 1024 ** 3) || usage.stored + usage.pending + input.size > (this.limits.maxTotalBytes ?? 5 * 1024 ** 3)) throw invalidUpload('上传存储配额已用尽', 413);
       const uploadId = randomUUID();
-      await mkdir(join(this.uploadsDir, uploadId), { recursive: true });
-      this.store.createUpload({ id: uploadId, ...input, sha256: input.sha256 ?? '' });
+      const slot = await openUploadStaging(this.uploadsDir, uploadId, true);
+      try { await slot.check(); this.store.createUpload({ id: uploadId, ...input, sha256: input.sha256 ?? '' }); }
+      finally { await slot.close(); }
       return { uploadId, chunkSize: CHUNK_SIZE, received: [] };
     });
   }
@@ -214,22 +227,26 @@ export class FileStore {
       if (!Number.isSafeInteger(index) || index < 0 || index >= count) throw invalidUpload('分片索引越界');
       const expected = Math.min(CHUNK_SIZE, upload.size - index * CHUNK_SIZE);
       if (!Buffer.isBuffer(buffer) || buffer.length !== expected) throw invalidUpload('分片长度不匹配');
-      const dir = join(this.uploadsDir, uploadId);
-      await mkdir(dir, { recursive: true });
-      const target = join(dir, String(index));
-      if (upload.receivedList.includes(index)) {
-        const existing = await readFile(target).catch(() => undefined);
-        if (existing !== undefined && !existing.equals(buffer)) throw invalidUpload('重复分片内容冲突', 409);
-        if (existing !== undefined) return { uploadId, received: upload.receivedList, size: upload.size };
-      }
-      const tmp = join(dir, `${index}-${randomUUID()}.tmp`);
+      const slot = await openUploadStaging(this.uploadsDir, uploadId);
       try {
-        const chunk = await open(tmp, 'wx', 0o600); try { await chunk.writeFile(buffer); await chunk.sync(); } finally { await chunk.close(); }
-        await rename(tmp, target); await syncDirectory(dir);
-      } finally { await rm(tmp, { force: true }); }
-      const received = [...new Set([...upload.receivedList, index])].sort((a, b) => a - b);
-      this.store.setUploadReceived(uploadId, received);
-      return { uploadId, received, size: upload.size };
+        const target = slot.path(String(index));
+        if (upload.receivedList.includes(index)) {
+          const existing = await slot.readChunk(index, expected).catch(error => { if ((error as { code?: string }).code === 'chunk-missing') return undefined; throw error; });
+          if (existing !== undefined && !existing.equals(buffer)) throw invalidUpload('重复分片内容冲突', 409);
+          if (existing !== undefined) return { uploadId, received: upload.receivedList, size: upload.size };
+        }
+        const tmp = slot.path(`${index}-${randomUUID()}.tmp`); let replaced = false;
+        try {
+          const chunk = await open(tmp, 'wx', 0o600); try { await chunk.writeFile(buffer); await chunk.sync(); } finally { await chunk.close(); }
+          await slot.check(); await rename(tmp, target); replaced = true; await slot.sync();
+        } catch (error) {
+          if (replaced) throw invalidUpload('分片已写入原目录，但暂存路径或同步无法确认，请检查后续传', 409);
+          throw error;
+        } finally { await rm(tmp, { force: true }); }
+        const received = [...new Set([...upload.receivedList, index])].sort((a, b) => a - b);
+        this.store.setUploadReceived(uploadId, received);
+        return { uploadId, received, size: upload.size };
+      } finally { await slot.close(); }
     });
   }
 
@@ -247,53 +264,56 @@ export class FileStore {
   private async completeUploadLocked(uploadId: string): Promise<UploadCompleteResponse> {
     const upload = this.store.getUpload(uploadId);
     if (upload === undefined) throw Object.assign(new Error('upload 不存在'), { statusCode: 404 });
-    const dir = join(this.uploadsDir, uploadId);
-    const count = Math.ceil(upload.size / CHUNK_SIZE);
-    if (upload.receivedList.length !== count || upload.receivedList.some((index, ordinal) => index !== ordinal)) throw invalidUpload('上传分片不完整');
-    const hash = createHash('sha256');
-    let total = 0;
-    for (let index = 0; index < upload.receivedList.length; index += 1) {
-      const chunk = await readFile(join(dir, String(index))).catch(() => { throw invalidUpload('上传分片缺失'); });
-      if (chunk.length !== Math.min(CHUNK_SIZE, upload.size - index * CHUNK_SIZE)) throw invalidUpload('上传分片长度不匹配');
-      hash.update(chunk);
-      total += chunk.byteLength;
-    }
-    if (total !== upload.size) {
-      throw Object.assign(new Error(`上传不完整：已收到 ${total} 字节，期望 ${upload.size}`), { statusCode: 400 });
-    }
-    const sha256 = hash.digest('hex');
-    if (upload.sha256 !== '' && sha256 !== upload.sha256) {
-      throw Object.assign(new Error('sha256 校验失败'), { statusCode: 400 });
-    }
-    const existing = this.store.getFileBySha(sha256);
-    let healthy = existing !== undefined;
-    if (existing !== undefined) try { await this.verifiedObject(existing, false); } catch (error) { if (!repairableObject(error)) throw error; healthy = false; }
-    let fileId: string;
-    if (existing !== undefined && healthy) {
-      fileId = (this.store.getFileByMetadata(sha256, upload.name, upload.mime) ?? this.store.insertFile({ id: ulid(), sha256, name: upload.name, mime: upload.mime, size: upload.size })).id;
-    } else {
-      const tmp = join(dir, `complete-${randomUUID()}.bin`);
-      const source = upload.receivedList.map((index) => join(dir, String(index)));
-      const merged = await open(tmp, 'wx', 0o600); const mergedHash = createHash('sha256'); let mergedBytes = 0;
-      try {
-        for (const chunkPath of source) {
-          const data = await readFile(chunkPath);
-          mergedHash.update(data); mergedBytes += data.length; await merged.writeFile(data);
-        }
-        if (mergedBytes !== upload.size || mergedHash.digest('hex') !== sha256) throw invalidUpload('分片在合并过程中改变，上传尚未完成', 409);
-        await merged.sync();
-      } catch (error) { await rm(tmp, { force: true }); throw error;
-      } finally {
-        await merged.close();
+    const slot = await openUploadStaging(this.uploadsDir, uploadId);
+    try {
+      const count = Math.ceil(upload.size / CHUNK_SIZE);
+      if (upload.receivedList.length !== count || upload.receivedList.some((index, ordinal) => index !== ordinal)) throw invalidUpload('上传分片不完整');
+      const hash = createHash('sha256');
+      let total = 0;
+      for (let index = 0; index < upload.receivedList.length; index += 1) {
+        const chunk = await slot.readChunk(index, Math.min(CHUNK_SIZE, upload.size - index * CHUNK_SIZE));
+        if (chunk.length !== Math.min(CHUNK_SIZE, upload.size - index * CHUNK_SIZE)) throw invalidUpload('上传分片长度不匹配');
+        hash.update(chunk);
+        total += chunk.byteLength;
       }
-      try { const directory = await this.casDirectory(sha256, true); await rename(tmp, join(directory, sha256)); await syncDirectory(directory); await syncDirectory(dirname(directory)); }
-      finally { await rm(tmp, { force: true }); }
-      fileId = this.store.getFileByMetadata(sha256, upload.name, upload.mime)?.id ?? this.store.insertFile({ id: ulid(), sha256, name: upload.name, mime: upload.mime, size: upload.size }).id;
-    }
-    if (upload.session_id !== null) this.store.grantFile(upload.session_id, fileId, 'upload');
-    this.store.deleteUpload(uploadId);
-    await rm(dir, { recursive: true, force: true });
-    return { fileId, url: `/files/${fileId}` };
+      if (total !== upload.size) {
+        throw Object.assign(new Error(`上传不完整：已收到 ${total} 字节，期望 ${upload.size}`), { statusCode: 400 });
+      }
+      const sha256 = hash.digest('hex');
+      if (upload.sha256 !== '' && sha256 !== upload.sha256) {
+        throw Object.assign(new Error('sha256 校验失败'), { statusCode: 400 });
+      }
+      const existing = this.store.getFileBySha(sha256);
+      let healthy = existing !== undefined;
+      if (existing !== undefined) try { await this.verifiedObject(existing, false); } catch (error) { if (!repairableObject(error)) throw error; healthy = false; }
+      let fileId: string;
+      if (existing !== undefined && healthy) {
+        fileId = (this.store.getFileByMetadata(sha256, upload.name, upload.mime) ?? this.store.insertFile({ id: ulid(), sha256, name: upload.name, mime: upload.mime, size: upload.size })).id;
+      } else {
+        const tmp = slot.path(`complete-${randomUUID()}.bin`);
+        const merged = await open(tmp, 'wx', 0o600); const mergedHash = createHash('sha256'); let mergedBytes = 0;
+        try {
+          for (const index of upload.receivedList) {
+            const data = await slot.readChunk(index, Math.min(CHUNK_SIZE, upload.size - index * CHUNK_SIZE));
+            mergedHash.update(data); mergedBytes += data.length; await merged.writeFile(data);
+          }
+          if (mergedBytes !== upload.size || mergedHash.digest('hex') !== sha256) throw invalidUpload('分片在合并过程中改变，上传尚未完成', 409);
+          await merged.sync();
+        } catch (error) { await rm(tmp, { force: true }); throw error;
+        } finally {
+          await merged.close();
+        }
+        try { await publishCasFile(this.objectsDir, sha256, tmp, upload.size); }
+        finally { await rm(tmp, { force: true }); }
+        await slot.check();
+        fileId = this.store.getFileByMetadata(sha256, upload.name, upload.mime)?.id ?? this.store.insertFile({ id: ulid(), sha256, name: upload.name, mime: upload.mime, size: upload.size }).id;
+      }
+      await slot.check();
+      if (upload.session_id !== null) this.store.grantFile(upload.session_id, fileId, 'upload');
+      this.store.deleteUpload(uploadId);
+      await slot.remove(uploadId);
+      return { fileId, url: `/files/${fileId}` };
+    } finally { await slot.close(); }
   }
 
   async exists(path: string): Promise<boolean> {

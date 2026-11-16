@@ -177,7 +177,8 @@ export function modelGroups(agent: string, meta: AgentMeta | undefined, provider
 export function defaultChoice(agent: string, meta: AgentMeta | undefined, providers: ProviderDto[]): ModelChoice {
   const storedModel = rememberedModel(agent);
   const rememberedReasoningLevel = rememberedReasoning(agent);
-  const withDefaultReasoning = agent === 'codex' || agent === 'claude-code' ? { reasoningEffort: rememberedReasoningLevel ?? 'medium' } : {};
+  const withDefaultReasoning = agent === 'claude-code' ? { reasoningEffort: rememberedReasoningLevel ?? 'medium' }
+    : agent === 'codex' && rememberedReasoningLevel !== undefined ? { reasoningEffort: rememberedReasoningLevel } : {};
   if (agent === 'dsh') {
     const models = (meta?.models ?? []).map((model) => model.id);
     let model = models[0] ?? '';

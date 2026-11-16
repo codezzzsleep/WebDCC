@@ -2,6 +2,7 @@ import { glob, mkdir, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionDto, StoredEvent, WatchdogJob, WatchdogSettings, WatchdogView } from '@webdcc/protocol';
+import { currentCodexSubagents } from '@webdcc/protocol';
 import type { Store } from './store.js';
 
 export const DEFAULT_WATCHDOG: WatchdogSettings = {
@@ -52,11 +53,12 @@ function readableEvents(events: StoredEvent[]): string {
   }).join('\n\n');
 }
 
-export function handoffPrompt(session: SessionDto, contextPath: string): string {
+export function handoffPrompt(session: SessionDto, contextPath: string, subagentsPath?: string): string {
   return [
     `旧 Codex 会话 ID：${session.nativeId ?? session.id}`,
     '看一下这个会话的完整上下文，然后继续做。',
     `会话记录：${contextPath}`,
+    ...(subagentsPath === undefined ? [] : [`已有原生子任务及结果：${subagentsPath}`]),
   ].join('\n');
 }
 
@@ -231,6 +233,18 @@ export class CodexWatchdog {
         const workspace = this.store.getWorkspace(source.workspaceId);
         if (workspace === undefined) throw new Error('工作区不存在');
         let contextPath = await nativeHistoryPath(source.nativeId);
+        const children = currentCodexSubagents(events);
+        let subagentsPath: string | undefined;
+        if (children.length > 0) {
+          for (const child of children) child.rolloutPath ??= await nativeHistoryPath(child.childId);
+          const dir = join(this.dataDir, 'watchdog', sessionId);
+          await mkdir(dir, { recursive: true, mode: 0o700 });
+          subagentsPath = join(dir, `${claim.failedTurnId}.subagents.json`);
+          // A separate reference is required even when the parent rollout exists:
+          // children can finish after the parent's last recorded turn.
+          await writeFile(subagentsPath, JSON.stringify({ nativeId: source.nativeId, capturedAt: new Date().toISOString(),
+            children, recovery: 'Reuse the recorded native tasks and completed results; do not dispatch or execute them again.' }, null, 2) + '\n', { mode: 0o600 });
+        }
         if (contextPath === undefined) {
           const dir = join(this.dataDir, 'watchdog', sessionId);
           await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -245,7 +259,7 @@ export class CodexWatchdog {
         // Record linkage before sending: a crash cannot lose the identity of
         // an already-created recovery thread.
         this.save({ ...claim, targetSessionId: target.id, handoffs: child.handoffs });
-        await this.host.send(target.id, handoffPrompt(source, contextPath), commandId, valid);
+        await this.host.send(target.id, handoffPrompt(source, contextPath, subagentsPath), commandId, valid);
         if (valid()) {
           this.save({ ...claim, handoffs: child.handoffs, targetSessionId: target.id, status: 'handed-off', detail: '已在新会话接续原任务' });
           this.host.notice(sessionId, `Watchdog 已建立接续会话：${target.id}`);

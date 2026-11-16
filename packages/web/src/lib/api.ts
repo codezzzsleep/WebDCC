@@ -68,6 +68,13 @@ export const api = {
   inputModes: (sessionId?: string): Promise<CodexInputModeCatalog> => request(`/api/agents/codex/input-modes${sessionId === undefined ? '' : `?sessionId=${encodeURIComponent(sessionId)}`}`),
   nativeDshSurface: () => request<{ status: string; writable: boolean }>('/api/dsh/native-surface'),
   openNativeDshSurface: (sessionId: string) => request<{ actionUrl: string; ticket: string; expiresAt: string }>('/api/dsh/native-surface/open', { method: 'POST', body: JSON.stringify({ sessionId }) }),
+  downloadDshSessionLog: async (sessionId: string, commandId: string): Promise<{ blob: Blob; filename: string }> => {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/dsh-export?commandId=${encodeURIComponent(commandId)}`, { credentials: 'same-origin' });
+    if (!response.ok) throw new Error(`会话下载失败：${response.status} ${(await response.text()).slice(0, 200)}`);
+    if (response.headers.get('content-type')?.split(';')[0] !== 'application/zip') throw new Error('原生导出没有返回 ZIP 文件');
+    const filename = /filename="([^"]+)"/u.exec(response.headers.get('content-disposition') ?? '')?.[1] ?? 'dsh-session.zip';
+    return { blob: await response.blob(), filename };
+  },
   nativeControls: (sessionId: string, catalog = false) => request<NativeControlSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/native${catalog ? '?catalog=1' : ''}`),
   connectNativeControls: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/connect`, { method: 'POST', body: JSON.stringify({ commandId, action: { type: 'connect' } }) }),
   nativeAction: (sessionId: string, value: NativeActionRequest) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions`, { method: 'POST', body: JSON.stringify(value) }),
@@ -102,6 +109,8 @@ export const api = {
     request<FsReadResponse>(`/api/workspaces/${workspaceId}/fs`, { method: 'PUT', body: JSON.stringify(input) }),
   rawUrl: (workspaceId: string, path: string) =>
     `/api/workspaces/${workspaceId}/raw?path=${encodeURIComponent(path)}`,
+  previewWorkspaceFile: (workspaceId: string, path: string, content?: string, external = false) => request<{ url: string; expiresAt: number }>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/preview`, { method: 'POST', body: JSON.stringify({ path, external, ...(content === undefined ? {} : { content }) }) }),
   feed: (after: number) => request<{ entries: { feedSeq: number; sessionId: string; patch: Record<string, unknown> }[] }>(`/api/feed?after=${after}`),
   session: (id: string) => request<SessionDetailResponse>(`/api/sessions/${id}`),
   interaction: (sessionId: string, kind: InteractionKind, id: string) => request<InteractionEventResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/interactions/${kind}?${new URLSearchParams({ interactionId: id })}`),

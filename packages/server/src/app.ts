@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import type { SlashControlResult } from '@webdcc/protocol';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
@@ -18,6 +20,7 @@ import { isImagePath, workspaceAsset, sendWorkspaceAsset } from './workspace-ass
 import { registerNativeSurfaces } from './native-surfaces-integration.js';
 import { createDshNativeSurface } from './dsh-native-surface.js';
 import { payloadHash } from './command-journal.js';
+import { registerWorkspacePreview } from './workspace-preview.js';
 
 export interface BuildAppOptions {
   config: Config;
@@ -126,6 +129,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     recordFileOperation: options.recorder === undefined ? undefined : event => options.recorder?.file(event),
   });
   registerNativeSurfaces(app, store, manager, config, event => hub.broadcastEvent(event));
+  registerWorkspacePreview(app, store);
   app.get('/api/dsh/native-surface', () => dshSurface.status());
   app.post('/api/dsh/native-surface/open', { bodyLimit: 1024 }, async request => {
     const body = request.body as { sessionId?: unknown };
@@ -134,20 +138,36 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     if (session.agent !== 'dsh' || !session.nativeId) throw Object.assign(new Error('此会话没有可读的 DSH 原生身份'), { statusCode: 409 });
     return dshSurface.issueTicket({ nativeId: session.nativeId });
   });
+  app.get('/api/sessions/:id/dsh-export', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const query = request.query as { commandId?: unknown };
+    if (typeof query.commandId !== 'string' || !query.commandId || Object.keys(query).some(key => key !== 'commandId')) throw Object.assign(new Error('需要已确认的导出指令'), { statusCode: 400 });
+    const session = manager.requireSession(id);
+    const receipt = manager.slashControlResult(id, query.commandId);
+    const result = receipt.result as SlashControlResult | undefined;
+    const nativeId = result?.download?.nativeId;
+    if (session.agent !== 'dsh' || receipt.receipt.state !== 'completed' || result?.failed || result?.download?.kind !== 'dsh-session-log' || !nativeId || nativeId !== session.nativeId) throw Object.assign(new Error('原生导出未确认或会话身份已变化'), { statusCode: 409 });
+    const response = await dshSurface.sessionExport(nativeId);
+    if (manager.requireSession(id).nativeId !== nativeId) { await response.body?.cancel(); throw Object.assign(new Error('下载期间原生会话身份已变化'), { statusCode: 409 }); }
+    if (response.ok && response.headers.get('content-type')?.split(';')[0] !== 'application/zip') { await response.body?.cancel(); throw Object.assign(new Error('原生导出没有返回 ZIP 文件'), { statusCode: 502 }); }
+    reply.status(response.status).type(response.ok ? 'application/zip' : 'text/plain; charset=utf-8');
+    if (response.ok && response.headers.has('content-disposition')) reply.header('content-disposition', response.headers.get('content-disposition')!);
+    return response.body === null ? reply.send() : reply.send(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]));
+  });
   hub.attach(app);
 
   app.setErrorHandler((error, _request, reply) => sendJsonError(reply, error));
 
   app.setNotFoundHandler(async (request, reply) => {
     const path = request.url.split('?')[0] ?? '/';
-    if (path.startsWith('/api/') || path.startsWith('/files/')) return reply.status(404).send({ error: 'not found' });
+    if (path.startsWith('/api/') || path.startsWith('/files/') || path.startsWith('/workspace-preview/')) return reply.status(404).send({ error: 'not found' });
     if (isImagePath(path)) {
       if (!isAuthenticated(config.token, request.headers.cookie, authorityOf(request.headers, config.host, config.port))) return reply.status(401).send({ error: 'unauthorized' });
       let decoded: string;
       try { decoded = decodeURIComponent(path); } catch { return reply.status(400).send({ error: 'invalid path' }); }
       for (const workspace of store.listWorkspaces()) {
         const target = await workspaceAsset(workspace.path, decoded).catch(() => undefined);
-        if (target !== undefined) return sendWorkspaceAsset(reply, target);
+        if (target !== undefined) return sendWorkspaceAsset(reply, target, workspace.path);
       }
       return reply.status(404).send({ error: '工作区内没有这张图片' });
     }

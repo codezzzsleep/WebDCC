@@ -82,3 +82,16 @@ it('an unrelated partial projection does not attest an old goal value through it
   const pause = fixture.events.find(event => event.type === 'goal/change' && 'operation' in event.data && event.data.operation === 'pause')!;
   expect(goal(replay.feed(frame(pause, pause.seq)))?.data).toMatchObject({ status: 'paused', nativeRevision: 3 });
 });
+
+it.each([null, 'active', 'invalid'] as const)('goal projection %s preserves the following native usage identity and bytes', value => {
+  const replay = DshAdapter.replay('s', 'native');
+  const goalValue = value === 'active' ? dshGoalFixture().activeProjection : value === 'invalid' ? { invalid: true } : null;
+  replay.feed(projection(goalValue, 1));
+  const nativeUsage = { type: 'usage', usage: { inputTokens: 3, outputTokens: 8 } };
+  const events = replay.feed({ i: 3, t: 2, dir: 'in', ch: 'mux:session/follow', frame: { value: {
+    type: 'assistant-stream', frame: { type: 'chunk', chunk: nativeUsage },
+  } } });
+  expect(events.find(event => event.type === 'item.complete' && event.kind === 'usage')).toMatchObject({
+    itemKey: 'usage-1', data: { inputTokens: 3, outputTokens: 8, scope: 'attempt' }, native: nativeUsage,
+  });
+});

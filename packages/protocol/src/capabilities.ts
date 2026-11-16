@@ -1,4 +1,4 @@
-import type { AgentId, ProbeResult } from './adapter.js';
+import type { AgentId, NativeRuntimeContext, ProbeResult } from './adapter.js';
 
 export type NativeAvailability = 'available' | 'environment-blocked' | 'not-applicable' | 'unknown';
 export type ApiExposure = 'public' | 'experimental' | 'unsupported-in-api' | 'unverified';
@@ -33,6 +33,7 @@ export interface CapabilityRuntime {
   schemaHash: string;
   configurationFingerprint: string;
   pluginStatus: 'unverified' | 'verified';
+  runtimeContext?: NativeRuntimeContext;
 }
 export interface CapabilitySnapshot {
   formatVersion: 1;

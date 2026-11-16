@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData, displayCodexAsyncReply } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -29,10 +29,12 @@ interface TimelineProps {
 
 export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compact = false }: TimelineProps): React.ReactElement {
   const turns = useTurns(sessionId);
+  const conversation = store.getSession(sessionId)?.conversation;
+  const history = store.isViewingConversationHistory(sessionId);
   const hotCount = store.getHot(sessionId).length;
   const standalone = new Map<string, StoredEvent>();
-  for (const event of store.getEvents(sessionId)) {
-    if (event.kind === 'notice' && (event.data as EventData['notice']).nativeType === 'slash.command') standalone.set(event.itemKey, event);
+  for (const event of store.getConversationEvents(sessionId, history)) {
+    if (event.kind === 'notice' && ['slash.command', 'conversation_reset_projection_failed'].includes((event.data as EventData['notice']).nativeType ?? '')) standalone.set(event.itemKey, event);
     if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
     if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
     if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
@@ -40,6 +42,8 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [stickToBottom, setStickToBottom] = useState(true);
+
+  useEffect(() => { setExpanded({}); setStickToBottom(true); }, [sessionId, conversation?.uuid, history]);
 
   useEffect(() => {
     if (!performance.getEntriesByName('wdcc:first-turns').length && turns.length > 0) {
@@ -71,6 +75,12 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   return (
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      {conversation !== undefined ? <div className="timeline-inner" role="status" data-testid="conversation-boundary">
+        <span>{history ? `此前对话${conversation.previousTitle ? ` · ${conversation.previousTitle}` : ''}（只读）` : '当前对话'}</span>
+        <button type="button" className="btn ghost" onClick={() => store.viewConversationHistory(sessionId, !history)}>
+          {history ? '返回当前对话' : '查看此前对话'}
+        </button>
+      </div> : null}
       {[...standalone.values()].filter(event => event.turnId === null).map(event => <div key={event.itemKey} className="timeline-inner">
         {event.kind === 'notice' ? <pre className="notice-card" style={{ whiteSpace: 'pre-wrap' }}>{(event.data as EventData['notice']).text}</pre> : event.kind === 'question' ? <QuestionCard event={event} data={event.data as EventData['question']} /> : <ApprovalCard event={event} data={event.data as EventData['approval.request']} />}
       </div>)}
@@ -214,7 +224,8 @@ function TurnView({
               </ErrorBoundary>
             ))
           : steps
-              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey))
+              .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey)
+                || failedFileOperation(event))
               .map((event) => (
                 <ErrorBoundary key={`always-${event.itemKey}-${event.seq}`} label="timeline-item">
                   <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
@@ -444,7 +455,8 @@ function StepRow({
       const data = event.data as EventData['file.read'];
       return (
         <div className={className}>
-          <StepLine icon="fileText" label="读取" detail={data.label ?? data.path} />
+          <StepLine icon="fileText" label={failedFileOperation(event) ? '读取失败' : '读取'} detail={data.label ?? data.path} failed={failedFileOperation(event)} />
+          {fileOperationError(event) === undefined ? null : <pre className="output">{fileOperationError(event)}</pre>}
         </div>
       );
     }
@@ -452,16 +464,17 @@ function StepRow({
       const data = event.data as EventData['file.change'];
       const first = data.changes[0];
       const detail =
-        first === undefined ? '' : data.changes.length > 1 ? `${first.path} 等 ${data.changes.length} 个文件` : first.path;
+        first === undefined ? data.path ?? '' : data.changes.length > 1 ? `${first.path} 等 ${data.changes.length} 个文件` : first.path;
       return (
         <div className={className}>
           <StepLine
             icon="edit"
-            label="编辑"
+            label={failedFileOperation(event) ? '编辑失败' : '编辑'}
             detail={detail}
-            failed={data.status === 'failed'}
-            {...(first?.diffFileId === undefined ? {} : { onClick: () => onOpenDiff(first.diffFileId ?? '', first.path) })}
+            failed={failedFileOperation(event)}
+            {...(failedFileOperation(event) || first?.diffFileId === undefined ? {} : { onClick: () => onOpenDiff(first.diffFileId ?? '', first.path) })}
           />
+          {fileOperationError(event) === undefined ? null : <pre className="output">{fileOperationError(event)}</pre>}
         </div>
       );
     }
@@ -608,6 +621,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
     if (resolution === undefined) return null;
     const resolved = resolution.data as EventData['approval.resolved'];
     if (resolved.optionId === 'outcome-unknown') return '原生轮次已结束，审批结果未确认';
+    if (resolved.optionId === 'allow-native-suggestions') return '已允许一次并提交原生权限建议';
     const option = resolved.optionId.toLowerCase();
     if (option === 'grant-turn') return '已允许本轮额外权限';
     if (option === 'grant-session') return '已允许本会话额外权限';
@@ -628,7 +642,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
     return (
       <div className="approval-card resolved" data-testid="approval-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName} data-resolved="true" id={`e-${event.seq}`}>
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>{resolvedText}</span>
+        <span className="approval-result">{resolvedText}</span>
         {what === '' ? null : <span className="what">· {what}</span>}
         {synchronized ? null : <span>历史记录，当前状态尚未核对</span>}
       </div>

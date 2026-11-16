@@ -25,9 +25,9 @@ import type {
   SlashControlRequest,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
-import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
+import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
-import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
+import { findUserEcho, resolveAnswer, currentCodexSubagents } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -181,6 +181,7 @@ export class SessionManager {
   }
 
   private async prepareLaunch<T extends CreateOpts>(session: SessionDto, opts: T): Promise<T> {
+    if (session.agent === 'codex') opts = { ...opts, restoreCodexSubagents: currentCodexSubagents(this.store.allEvents(session.id)) };
     const runtime = this.runtimes.get(session.id);
     if (runtime === undefined) throw new Error('原生实例尚未绑定运行身份');
     this.store.nativeEvents.addSecret(opts.provider?.apiKey);
@@ -274,11 +275,28 @@ export class SessionManager {
     return this.control(sessionId, async () => {
       const runtime = this.runtimes.get(sessionId); const process = this.store.nativeOwners.managedProcess(sessionId);
       if (!runtime || runtime.adapter.id !== 'codex' || !process || processState(process) !== 'running') throw this.nativeControlRejected('同会话接管需要可验证的原生 writer');
-      if (runtime.turnId !== null || runtime.nativeActivity || runtime.status !== 'idle' || this.store.journal.queue(sessionId).length || this.pendingApprovalIds(sessionId).length) throw this.nativeControlRejected('请先结束当前轮次、队列和交互后接管');
-      const state = await runtime.adapter.nativeState?.(sessionId) as { turnActive?: boolean; goal?: { status?: string }; interactions?: unknown[]; thread?: { status?: { type?: string } }; permissions?: { effective?: unknown } };
-      if (!state || state.turnActive !== false || state.thread?.status?.type !== 'idle' || state.permissions?.effective == null || state.goal?.status === 'active' || state.interactions?.length) throw this.nativeControlRejected('原生工作或权限状态未确认，不能接管');
-      const history = await runtime.adapter.readNativeHistory?.(sessionId, { limit: 200 }) as { nextCursor?: string | null; data?: { status: string; itemsView?: string }[] };
-      if (!history || history.nextCursor !== null || !history.data?.every(turn => turn.status !== 'inProgress' && turn.itemsView === 'full')) throw this.nativeControlRejected('原生历史未完整核对，不能接管');
+      const idleState = async () => {
+        this.assertOwner(runtime);
+        if (runtime.turnId !== null || runtime.nativeActivity || runtime.status !== 'idle' || this.store.journal.queue(sessionId).length || this.pendingApprovalIds(sessionId).length) throw this.nativeControlRejected('请先结束当前轮次、队列和交互后接管');
+        const state = await runtime.adapter.nativeState?.(sessionId) as { turnActive?: boolean; goal?: { status?: string }; interactions?: unknown[]; thread?: { status?: { type?: string } }; permissions?: { effective?: unknown } };
+        this.assertOwner(runtime);
+        if (!state || state.turnActive !== false || state.thread?.status?.type !== 'idle' || state.permissions?.effective == null || state.goal?.status === 'active' || state.interactions?.length) throw this.nativeControlRejected('原生工作或权限状态未确认，不能接管');
+        return state;
+      };
+      await idleState();
+      let cursor: string | undefined;
+      const cursors = new Set<string>();
+      for (;;) {
+        const history = await runtime.adapter.readNativeHistory?.(sessionId, { limit: 200, ...(cursor === undefined ? {} : { cursor }) }) as { nextCursor?: string | null; data?: { status: string; itemsView?: string }[] };
+        this.assertOwner(runtime);
+        if (!history || !Array.isArray(history.data) || !history.data.every(turn => turn.status !== 'inProgress' && turn.itemsView === 'full')) throw this.nativeControlRejected('原生历史未完整核对，不能接管');
+        if (history.nextCursor === null) break;
+        if (typeof history.nextCursor !== 'string' || history.nextCursor === '' || cursors.has(history.nextCursor)) throw this.nativeControlRejected('原生历史游标未完整核对，不能接管');
+        cursors.add(history.nextCursor);
+        cursor = history.nextCursor;
+      }
+      // An autonomous native turn can start while older pages are being read.
+      const state = await idleState();
       await this.dispose(sessionId);
       if (processState(process) !== 'exited') throw this.nativeControlRejected('旧原生 writer 未确认退出');
       return { state, previousProcess: process };
@@ -1272,6 +1290,30 @@ export class SessionManager {
         nativeId: runtime?.nativeId, identity: event.runtime ?? runtime?.identity }, event, disposition);
     } catch { if (runtime !== undefined) this.fenceRuntime(runtime); return; }
     if (runtime === undefined || disposition !== 'accepted') return;
+    if (event.type === 'item.complete' && event.kind === 'notice' && isValidEventData('notice', event.data)
+      && event.data.contextReset !== undefined && runtime.adapter.id === 'claude-code') {
+      const reset = event.data.contextReset;
+      const native = event.native as { type?: string; uuid?: string; new_conversation_id?: string } | undefined;
+      if (native?.type === 'conversation_reset' && native.uuid === reset.uuid && native.new_conversation_id === reset.id) {
+        try {
+          const result = this.store.applyConversationReset(sessionId, reset, event.native, event.nativeEnvelopeId ?? envelope.id, runtime.nativeId);
+          if (result !== undefined) {
+            runtime.hot.clear();
+            this.hooks.onFeed(sessionId, result.patch, result.feedSeq);
+            this.hooks.onEvent(result.stored);
+          }
+        } catch {
+          this.fenceRuntime(runtime);
+          try {
+            const failed = this.store.appendEvent({ sessionId, turnId: null, itemKey: `conversation-reset-failed-${reset.uuid}`, kind: 'notice',
+              data: { level: 'warning', nativeType: 'conversation_reset_projection_failed', text: '原生对话已重置，但本地上下文未能保存。请重新连接并核对原生历史。' }, native: event.native, nativeEnvelopeId: event.nativeEnvelopeId ?? envelope.id });
+            this.hooks.onEvent(failed);
+            this.updateSessionAndFeed(sessionId, { status: 'error' }, { status: 'error' });
+          } catch { /* Storage failure retains the fenced runtime and original native envelope. */ }
+        }
+        return;
+      }
+    }
     if ('native' in event && event.native !== null && typeof event.native === 'object') {
       const native = event.native as Record<string, unknown>;
       const params = native['params'] !== null && typeof native['params'] === 'object' ? native['params'] as Record<string, unknown> : {};
@@ -1433,10 +1475,16 @@ export class SessionManager {
           const data = completeData as EventData['file.change'] | EventData['turn.diff'];
           const changes = data.changes.map((change) => {
             if (change.diff === undefined || this.options.saveDiff === undefined) return change;
-            const fileId = this.options.saveDiff(`${change.path}.diff`, change.diff);
-            const { diff: _diff, ...rest } = change;
-            void _diff;
-            return { ...rest, diffFileId: fileId };
+            try {
+              const fileId = this.options.saveDiff(`${change.path}.diff`, change.diff);
+              const { diff: _diff, ...rest } = change;
+              void _diff;
+              return { ...rest, diffFileId: fileId };
+            } catch {
+              // Diff persistence is a platform projection step. Preserve the
+              // native result and source text without failing its SDK pump.
+              return { ...change, note: [change.note, 'WebDCC：差异文本未保存'].filter(Boolean).join('\n') };
+            }
           });
           completeData = { ...data, changes } as EventData[EventKind];
         }
@@ -1505,6 +1553,8 @@ export class SessionManager {
         runtime.nativeId = event.nativeId;
         this.store.nativeOwners.activate(sessionId, runtime.identity, event.nativeId);
         this.store.updateSession(sessionId, { nativeId: event.nativeId });
+        const patch = { nativeId: event.nativeId };
+        this.hooks.onFeed(sessionId, patch, this.store.appendFeed(sessionId, patch));
         break;
       }
     }

@@ -6,7 +6,18 @@ export function SlashControl({ sessionId, request, onAccepted, onClose, initialR
   const [result, setResult] = useState<SlashControlResult>();
   const [receipt, setReceipt] = useState<NativeActionReceipt>();
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [objective, setObjective] = useState('');
+  const [downloadStatus, setDownloadStatus] = useState('');
+  const startedDownloads = useRef(new Set<string>());
   const callback = useRef(onAccepted); callback.current = onAccepted;
+  const download = async (commandId: string): Promise<void> => {
+    setDownloadStatus('');
+    const { blob, filename } = await api.downloadDshSessionLog(sessionId, commandId);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename;
+    document.body.append(anchor); anchor.click(); anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    setDownloadStatus('文件已交给浏览器下载。');
+  };
   const readResult = async (response: NativeActionResponse): Promise<NativeActionResponse> => {
     const deadline = Date.now() + 10_000;
     while (response.receipt.state === 'dispatching' && Date.now() < deadline) {
@@ -24,6 +35,10 @@ export function SlashControl({ sessionId, request, onAccepted, onClose, initialR
       const value = response.result as SlashControlResult | undefined;
       setResult(value); setObjective(value?.objective ?? '');
       if (!value?.form && !value?.failed && ['completed', 'submitted'].includes(response.receipt.state)) callback.current();
+      if (value?.download?.kind === 'dsh-session-log' && !value.failed && response.receipt.state === 'completed') {
+        callback.current();
+        if (!startedDownloads.current.has(input.commandId)) { startedDownloads.current.add(input.commandId); await download(input.commandId); }
+      }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
       await api.nativeActionReceipt(sessionId, input.commandId).then(setReceipt).catch(() => undefined);
@@ -48,6 +63,13 @@ export function SlashControl({ sessionId, request, onAccepted, onClose, initialR
     {receipt ? <p role="status">{receipt.state === 'submitted' ? '已提交，等待原生完成' : receipt.state === 'uncertain' ? '结果未确认，请读取原生状态，勿重复执行' : receipt.state === 'completed' ? '原生调用已返回' : receipt.state === 'failed' ? '原生指令未成功' : '等待原生结果'}</p> : null}
     {error ? <p role="alert">{error}</p> : null}
     {result?.text ? <pre style={{ whiteSpace: 'pre-wrap' }}>{result.text}</pre> : null}
+    {result?.download?.kind === 'dsh-session-log' && !result.failed && receipt?.state === 'completed' ? <>
+      <button type="button" disabled={busy} onClick={() => {
+        setBusy(true); setError('');
+        void download(receipt.commandId).catch(failure => setError(failure instanceof Error ? failure.message : String(failure))).finally(() => setBusy(false));
+      }}>下载会话日志</button>
+      {downloadStatus ? <p role="status">{downloadStatus}</p> : null}
+    </> : null}
     {result?.form === 'goal-replace' ? <><pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(result.result, null, 2)}</pre><button type="button" disabled={busy} onClick={() => void next({ line: `/goal ${objective}`, replaceGoal: true }).catch(failure => setError(String(failure)))}>确认替换原生目标</button></> : null}
     {result?.form === 'goal-edit' || result?.form === 'rename' ? <form onSubmit={event => { event.preventDefault(); void next({ line: result.form === 'rename' ? `/rename ${objective}` : `/goal ${objective}`, editGoal: result.form === 'goal-edit' }).catch(failure => setError(String(failure))); }}>
       <label>{result.form === 'rename' ? '原生标题' : '原生目标'}<textarea aria-label={result.form === 'rename' ? '原生标题' : '原生目标'} value={objective} disabled={busy} onChange={event => setObjective(event.target.value)} /></label>

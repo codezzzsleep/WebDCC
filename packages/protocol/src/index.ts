@@ -16,6 +16,7 @@ export * from './trace.js';
 export * from './turn.js';
 export * from './invariants.js';
 export * from './watchdog.js';
+export * from './subagents.js';
 export * from './capabilities.js';
 export * from './build.js';
 export * from './native-evidence.js';
@@ -29,3 +30,4 @@ export * from './native-observation.js';
 export * from './native-controls.js';
 
 export const PROTOCOL_VERSION = 1;
+export { failedFileOperation, fileOperationError } from './file-operation.js';

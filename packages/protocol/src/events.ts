@@ -41,6 +41,22 @@ export interface UsageData {
   scope?: 'attempt' | 'turn';
 }
 
+/** A surface boundary declared by the native conversation_reset frame. */
+export interface ConversationReset {
+  id: string;
+  uuid: string;
+  trigger?: string;
+  userMessageUuid?: string;
+  timestamp?: string;
+}
+
+/** Durable receive sequence orders boundaries; native timestamps are display only. */
+export interface ConversationState extends ConversationReset {
+  resetSeq: number;
+  previousNativeId?: string;
+  previousTitle?: string;
+}
+
 export interface FileChangeEntry {
   path: string;
   kind: 'add' | 'modify' | 'delete';
@@ -105,10 +121,12 @@ export interface EventData {
     outputFileId?: string;
     status: 'running' | 'completed' | 'failed';
   };
-  'file.read': { path: string; label?: string };
+  'file.read': { path: string; label?: string; status?: 'running' | 'completed' | 'failed'; error?: string };
   'file.change': {
     changes: FileChangeEntry[];
     status: 'running' | 'completed' | 'failed';
+    path?: string;
+    error?: string;
     /** @deprecated Codex cumulative snapshots use turn.diff. */
     snapshot?: boolean;
   };
@@ -124,7 +142,7 @@ export interface EventData {
     blockedReason?: { code: string; message: string };
   };
   /** 原生提示（warning / configWarning / deprecationNotice），例如"使用兜底元数据，可能影响效果" */
-  notice: { level: 'info' | 'warning'; text: string; nativeType?: string; details?: string };
+  notice: { level: 'info' | 'warning'; text: string; nativeType?: string; details?: string; contextReset?: ConversationReset };
   'approval.request': {
     approvalId: string;
     title: string;

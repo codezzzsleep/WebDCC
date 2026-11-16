@@ -19,7 +19,9 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'command':
       return typeof data['command'] === 'string' && typeof data['status'] === 'string';
     case 'file.read':
-      return typeof data['path'] === 'string';
+      return typeof data['path'] === 'string'
+        && (data['status'] === undefined || ['running', 'completed', 'failed'].includes(String(data['status'])))
+        && (data['error'] === undefined || typeof data['error'] === 'string');
     case 'file.change':
       return Array.isArray(data['changes']) && typeof data['status'] === 'string';
     case 'turn.diff':
@@ -37,7 +39,10 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
       return typeof data['objective'] === 'string' && typeof data['status'] === 'string';
     case 'notice':
       return typeof data['text'] === 'string' && typeof data['level'] === 'string'
-        && (data['details'] === undefined || typeof data['details'] === 'string');
+        && (data['details'] === undefined || typeof data['details'] === 'string')
+        && (data['contextReset'] === undefined || isRecord(data['contextReset'])
+          && typeof data['contextReset']['id'] === 'string' && data['contextReset']['id'] !== ''
+          && typeof data['contextReset']['uuid'] === 'string' && data['contextReset']['uuid'] !== '');
     case 'approval.request':
       return typeof data['approvalId'] === 'string' && typeof data['title'] === 'string' && Array.isArray(data['options']);
     case 'approval.resolved':
