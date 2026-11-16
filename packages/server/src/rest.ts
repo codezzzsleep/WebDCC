@@ -390,6 +390,24 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return manager.slashControlResult(id, commandId);
   });
 
+  app.get('/api/sessions/:id/subagents', request => {
+    const { id } = request.params as { id: string };
+    return manager.listSubagents(id);
+  });
+
+  app.get('/api/sessions/:id/subagents/:childId/history', request => {
+    const { id, childId } = request.params as { id: string; childId: string };
+    const query = request.query as { limit?: string; throughSeq?: string; beforeSeq?: string };
+    const integer = (value: string | undefined, fallback?: number): number | undefined => {
+      if (value === undefined) return fallback;
+      if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) throw badRequest('子会话历史分页参数无效');
+      return Number(value);
+    };
+    return manager.readSubagentHistory(id, childId, { limit: integer(query.limit, 100)!,
+      ...(query.throughSeq === undefined ? {} : { throughSeq: integer(query.throughSeq) }),
+      ...(query.beforeSeq === undefined ? {} : { beforeSeq: integer(query.beforeSeq) }) });
+  });
+
   app.post('/api/sessions/:id/subagents/:childId/prompt', async (request) => {
     const { id, childId } = request.params as { id: string; childId: string };
     const body = request.body as { text?: string };

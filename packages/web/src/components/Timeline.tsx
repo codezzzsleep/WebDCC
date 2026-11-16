@@ -12,6 +12,7 @@ import { Icon, Spinner, type IconName } from './Icon.js';
 import { Markdown, MarkdownWorkspace } from './Markdown.js';
 import { ElicitationForm } from './ElicitationForm.js';
 import { InputAttachments } from './InputAttachments.js';
+import { DshSubagentPanel } from './DshSubagentPanel.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -75,6 +76,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   return (
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      {store.getSession(sessionId)?.agent === 'dsh' && !history ? <DshSubagentPanel key={`${sessionId}:${store.getSession(sessionId)?.nativeId ?? ''}`} sessionId={sessionId} nativeId={store.getSession(sessionId)?.nativeId} /> : null}
       {conversation !== undefined ? <div className="timeline-inner" role="status" data-testid="conversation-boundary">
         <span>{history ? `此前对话${conversation.previousTitle ? ` · ${conversation.previousTitle}` : ''}（只读）` : '当前对话'}</span>
         <button type="button" className="btn ghost" onClick={() => store.viewConversationHistory(sessionId, !history)}>

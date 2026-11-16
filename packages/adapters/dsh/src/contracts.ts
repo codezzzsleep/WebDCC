@@ -1,7 +1,8 @@
 import { Ajv, type ValidateFunction } from 'ajv';
 import catalog from '../../../../fixtures/dsh/host-api-catalog.json' with { type: 'json' };
 
-export interface DshSessionAddress { kind: 'session'; sessionId: string }
+export type DshSessionAddress = { kind: 'session'; sessionId: string }
+  | { kind: 'subagent'; parentSessionId: string; childSessionId: string; mode: 'one-shot' | 'continuable' | 'unknown' };
 export interface DshHistoryRecord {
   type: 'event';
   event: { type: string; seq: number; time: number; data: unknown; [key: string]: unknown };

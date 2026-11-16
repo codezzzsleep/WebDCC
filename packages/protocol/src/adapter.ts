@@ -9,6 +9,7 @@ import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } 
 import type { InputSkillPart, ResolvedInputContent } from './input.js';
 import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './slash.js';
 import type { CodexSubagentView } from './subagents.js';
+import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions } from './dsh-subagents.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -188,6 +189,9 @@ export interface AgentAdapter {
   inputModes?(sessionId?: string): Promise<CodexInputModeCatalog>;
   sendSubagent?(sessionId: string, childSessionId: string, text: string): Promise<void>;
   interruptSubagent?(sessionId: string, childSessionId: string): Promise<void>;
+  /** Passive direct-child discovery and reads; these never submit a prompt. */
+  listSubagents?(sessionId: string): Promise<DshSubagentCatalog>;
+  readSubagentHistory?(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions): Promise<DshSubagentHistory>;
   dispose(sessionId: string): Promise<void>;
   onEvent(cb: (sessionId: string, e: AdapterEvent) => void): void;
   /** Bind transport-free handlers and adapter lifecycle callbacks before activation. */

@@ -24,10 +24,14 @@ import type {
   SlashCommand,
   SlashControlResult,
   ResolvedInputContent,
+  DshSubagentCatalog,
+  DshSubagentHistory,
+  DshSubagentHistoryOptions,
+  DshSubagentState,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode, slashCommandFor, parseSlashInput } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
-import type { DshHistoryRecord, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
+import type { DshHistoryRecord, DshPage, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
 import { DshHistoryBridge, type DshOpening } from './history.js';
 import { DshAssistantBridge, failedDshAttemptDetails } from './assistant.js';
 import { DshRetryDisplay } from './retry.js';
@@ -37,6 +41,7 @@ import { dshCommandAliases, mapDshCommands, type DshCommandDescriptor } from './
 import { dshGoalChange, dshGoalProjection } from './goals.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
+import { dshSubagentCatalog, dshSubagentAddress, checkDshSubagentPage, dshSubagentSummary, dshSubagentDescriptorSeq } from './subagents.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
 import { dshInputParts, dshInputUnsupported, encodeDshInput, validateDshInputParts, type DshResolvableInput, type DshResolvedAttachment } from './input.js';
 
@@ -587,6 +592,80 @@ export class DshAdapter implements AgentAdapter {
     const page = await this.call<{ records: DshHistoryRecord[]; hasMore: boolean }>(client, 'session/page', { request: { address: { kind: 'session', sessionId: runtime.nativeId }, maxMessages: options.limit, ...(beforeSeq === undefined ? {} : { beforeSeq }) } }, sessionId);
     if (this.sessions.get(sessionId) !== runtime) throw dshNativeError('DSH runtime was replaced', 409);
     return { nativeId: runtime.nativeId, records: page.records, hasMore: page.hasMore, nextCursor: page.records[0]?.event.seq.toString() };
+  }
+
+  private async childReadContext(sessionId: string) {
+    const runtime = this.require(sessionId);
+    const client = await this.ensureSidecar();
+    const epoch = this.hostEpoch; const generation = this.muxGeneration;
+    const current = (): void => {
+      if (this.sessions.get(sessionId) !== runtime || this.client !== client || epoch !== this.hostEpoch || generation !== this.muxGeneration)
+        throw dshNativeError('DSH 子 Agent 读取属于旧连接，请刷新', 409);
+    };
+    current();
+    const baseline = await this.call<{ kind: string; asOfSeq: number; values: Record<string, unknown> } | null>(client, 'session/projections', { request: { sessionId: runtime.nativeId } }, sessionId);
+    current();
+    if (baseline?.kind !== 'sequenced' || !Number.isSafeInteger(baseline.asOfSeq) || baseline.asOfSeq < -1 || !baseline.values)
+      throw dshNativeError('DSH 父会话目录尚未恢复，无法确认子 Agent 身份', 409);
+    const children = dshSubagentCatalog(runtime.nativeId, baseline.values['subagentCatalog']);
+    const catalogKey = JSON.stringify(baseline.values['subagentCatalog']);
+    this.applyProjections(sessionId, runtime, baseline);
+    const guard = (): void => {
+      current();
+      if (JSON.stringify(runtime.projections?.values['subagentCatalog']) !== catalogKey)
+        throw dshNativeError('DSH 子 Agent 目录已变化，请刷新', 409);
+    };
+    guard();
+    return { client, runtime, children, baseline, guard };
+  }
+
+  async listSubagents(sessionId: string): Promise<DshSubagentCatalog> {
+    const context = await this.childReadContext(sessionId);
+    const items: DshSubagentCatalog['items'] = [];
+    // Bound concurrent passive reads without dropping catalog members.
+    let index = 0;
+    await Promise.all(Array.from({ length: Math.min(4, context.children.length) }, async () => {
+      for (;;) {
+        const position = index++; const child = context.children[position];
+        if (child === undefined) return;
+        if (child.mode === 'external') { items[position] = { ...child, status: 'unknown', error: '外部执行没有本地子会话，原生接口未提供其当前状态或历史' }; continue; }
+        try {
+          context.guard();
+          const projection = await this.call(context.client, 'session/projections', { request: { sessionId: child.childId } }, sessionId);
+          context.guard();
+          const state = await this.call<DshSubagentState>(context.client, 'session/state', { request: { sessionId: child.childId } }, sessionId);
+          context.guard();
+          const page = await this.call<DshPage>(context.client, 'session/page', { request: { address: dshSubagentAddress(child), throughSeq: state.cursor, maxMessages: 5 } }, sessionId);
+          context.guard();
+          checkDshSubagentPage(page, state.cursor);
+          items[position] = dshSubagentSummary(child, state, page, dshSubagentDescriptorSeq(projection, child));
+        } catch (error) { items[position] = { ...child, status: 'unknown', error: error instanceof Error ? error.message : '原生子会话状态无法读取' }; }
+      }
+    }));
+    context.guard();
+    return { nativeId: context.runtime.nativeId, asOfSeq: context.baseline.asOfSeq, items };
+  }
+
+  async readSubagentHistory(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions): Promise<DshSubagentHistory> {
+    if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 200
+      || options.throughSeq !== undefined && (!Number.isSafeInteger(options.throughSeq) || options.throughSeq < -1)
+      || options.beforeSeq !== undefined && (!Number.isSafeInteger(options.beforeSeq) || options.beforeSeq < 0)) throw dshNativeError('DSH 子会话历史分页参数无效', 400);
+    const context = await this.childReadContext(sessionId);
+    const child = context.children.find(entry => entry.childId === childSessionId);
+    if (child === undefined) throw dshNativeError('子 Agent 不属于当前父会话', 409);
+    const address = dshSubagentAddress(child);
+    const projection = await this.call(context.client, 'session/projections', { request: { sessionId: child.childId } }, sessionId);
+    context.guard();
+    const ownDescriptorSeq = dshSubagentDescriptorSeq(projection, child);
+    const throughSeq = options.throughSeq ?? (await this.call<DshSubagentState>(context.client, 'session/state', { request: { sessionId: child.childId } }, sessionId)).cursor;
+    context.guard();
+    const page = await this.call<DshPage>(context.client, 'session/page', { request: { address, maxMessages: options.limit, throughSeq,
+      ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }) } }, sessionId);
+    context.guard();
+    checkDshSubagentPage(page, throughSeq, options.beforeSeq);
+    return { address, cursor: page.cursor, records: page.records, hasMore: page.hasMore,
+      ...(ownDescriptorSeq === undefined ? {} : { ownDescriptorSeq }),
+      ...(page.records[0] === undefined ? {} : { nextCursor: page.records[0].event.seq }) };
   }
 
   onEvent(cb: (sessionId: string, event: AdapterEvent) => void): void {
@@ -1649,7 +1728,7 @@ export class DshAdapter implements AgentAdapter {
           name: 'subagent',
           label,
           input: { childId, parentSessionId: runtime.nativeId, ...(data['name'] === undefined ? {} : { name: String(data['name']) }), ...(data['mode'] === undefined ? {} : { mode: String(data['mode']) }), ...(data['status'] === undefined ? {} : { status: String(data['status']) }) },
-          status: terminal ? 'completed' : 'running',
+          status: type === 'subagent/catalog' ? 'unknown' : terminal ? 'completed' : 'running',
         });
         return;
       }

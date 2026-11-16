@@ -24,7 +24,7 @@ describe('DSH translator', () => {
       type: 'item.complete',
       kind: 'tool.call',
       itemKey: 'subagent-child-1',
-      data: { name: 'subagent', label: '只读审查', status: 'running', input: { childId: 'child-1', name: 'reviewer' } },
+      data: { name: 'subagent', label: '只读审查', status: 'unknown', input: { childId: 'child-1', name: 'reviewer' } },
     });
   });
 });
