@@ -3,6 +3,7 @@ import type { EventData, EventKind, StoredEvent } from './events.js';
 import type { SessionDto } from './api.js';
 import type { PermissionState } from './permissions.js';
 import type { InputContent, InputIntent } from './input.js';
+import type { DshApprovalRetry } from './dsh-interactions.js';
 
 export interface SubscribeItem {
   sessionId: string;
@@ -53,6 +54,8 @@ export interface ApproveCommand extends CommandBase {
   sessionId: string;
   approvalId: string;
   optionId: string;
+  /** Explicit DSH same-event recovery of an immutable prior choice. */
+  retryOf?: DshApprovalRetry;
 }
 
 export interface AnswerCommand extends CommandBase {
