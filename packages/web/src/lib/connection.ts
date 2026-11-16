@@ -1,5 +1,5 @@
 /** WebSocket 同步客户端：续传、心跳、退避重连、发件箱重放（SPEC 7.3、7.4） */
-import type { Command, ServerMessage } from '@webdcc/protocol';
+import type { Command, ServerMessage, DshQuestionWaitRequest } from '@webdcc/protocol';
 
 export type ConnectionState = 'connecting' | 'online' | 'reconnecting' | 'offline';
 
@@ -160,6 +160,8 @@ export class SyncConnection {
   sendCommand(command: Command): void {
     this.sendRaw({ op: 'command', command });
   }
+
+  sendDshQuestionWait(message: DshQuestionWaitRequest): void { this.sendRaw(message); }
 
   private sendRaw(message: unknown): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));

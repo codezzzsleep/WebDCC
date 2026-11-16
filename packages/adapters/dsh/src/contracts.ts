@@ -31,6 +31,10 @@ const eventsResult = {
     outcome: { oneOf: [
       { type: 'object', properties: { kind: { const: 'next' } }, required: ['kind'], additionalProperties: false },
       { type: 'object', properties: { kind: { const: 'result' }, value: {} }, required: ['kind', 'value'], additionalProperties: false },
+      { type: 'object', properties: { kind: { const: 'rejected' }, error: {
+        type: 'object', properties: { name: { type: 'string', minLength: 1 }, message: { type: 'string' }, code: { type: 'string' }, details: {} },
+        required: ['name', 'message'], additionalProperties: false,
+      } }, required: ['kind', 'error'], additionalProperties: false },
     ] },
   }, required: ['clientId', 'eventId', 'outcome'], additionalProperties: false,
 };

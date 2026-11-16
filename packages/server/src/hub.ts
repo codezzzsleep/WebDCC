@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
+import { randomUUID } from 'node:crypto';
 import type {
   ClientMessage,
   Command,
@@ -10,6 +11,7 @@ import type {
   ServerMessage,
   SnapshotMessage,
   StoredEvent,
+  DshQuestionWaitRequest,
   UpdateMessage,
 } from '@webdcc/protocol';
 import { isAuthenticated, requestAuthority } from './auth.js';
@@ -36,6 +38,7 @@ interface ClientState {
   commandQueue: Promise<void>;
   lastPong: number;
   authorized: boolean;
+  questionWaits: Map<string, { sessionId: string; questionId: string; requestId: string; controller: AbortController; timingOut?: boolean }>;
 }
 
 const PING_INTERVAL_MS = 15_000;
@@ -67,6 +70,7 @@ export class LiveHub {
         commandQueue: Promise.resolve(),
         lastPong: Date.now(),
         authorized,
+        questionWaits: new Map(),
       };
       this.clients.add(client);
       if (!authorized) {
@@ -78,9 +82,11 @@ export class LiveHub {
         void this.onMessage(client, raw.toString()).catch(() => socket.close(1011, 'message processing failed'));
       });
       socket.on('close', () => {
+        this.releaseQuestionWaits(client);
         this.clients.delete(client);
       });
       socket.on('error', () => {
+        this.releaseQuestionWaits(client);
         this.clients.delete(client);
       });
       client.lastPong = Date.now();
@@ -93,7 +99,7 @@ export class LiveHub {
     app.addHook('onClose', async () => {
       if (this.pingTimer !== null) clearInterval(this.pingTimer);
       if (this.flushTimer !== null) clearInterval(this.flushTimer);
-      for (const client of this.clients) client.socket.close(1001, 'server closing');
+      for (const client of this.clients) { this.releaseQuestionWaits(client); client.socket.close(1001, 'server closing'); }
       this.clients.clear();
     });
   }
@@ -124,7 +130,11 @@ export class LiveHub {
         break;
       }
       case 'unsubscribe': {
-        for (const sessionId of message.sessionIds) client.subs.delete(sessionId);
+        for (const sessionId of message.sessionIds) { client.subs.delete(sessionId); this.releaseQuestionWaits(client, sessionId); }
+        break;
+      }
+      case 'dsh-question-wait': {
+        await this.questionWait(client, message);
         break;
       }
       case 'pong': {
@@ -149,6 +159,50 @@ export class LiveHub {
       default:
         break;
     }
+  }
+
+  private releaseQuestionWaits(client: ClientState, sessionId?: string): void {
+    for (const [id, wait] of [...client.questionWaits]) if (sessionId === undefined || wait.sessionId === sessionId) {
+      client.questionWaits.delete(id); wait.controller.abort();
+    }
+  }
+
+  private async questionWait(client: ClientState, message: DshQuestionWaitRequest): Promise<void> {
+    const response = (result: Extract<ServerMessage, { op: 'dsh-question-wait' }>['result']): void => this.send(client, {
+      op: 'dsh-question-wait', requestId: message.requestId, sessionId: message.sessionId, questionId: message.questionId, result,
+    });
+    try {
+      if (!client.authorized || !client.subs.has(message.sessionId)) throw new Error('请先订阅此问题的会话');
+      if (message.action === 'claim') {
+        if ([...client.questionWaits.values()].some(wait => wait.sessionId === message.sessionId && wait.questionId === message.questionId)) throw new Error('此浏览器已在核对该问题的等待');
+        const claimId = randomUUID(); const controller = new AbortController();
+        const wait = { sessionId: message.sessionId, questionId: message.questionId, requestId: message.requestId, controller };
+        client.questionWaits.set(claimId, wait);
+        try {
+          const opening = await this.manager.claimDshQuestionWait(message.sessionId, message.questionId, controller.signal);
+          if (opening === undefined || controller.signal.aborted || !client.subs.has(message.sessionId)) throw new Error('原生前台等待已结束，请核对问题状态');
+          response({ kind: 'claim', claimId, callId: opening.callId, remainingMs: opening.remainingMs });
+          void opening.closed.then(() => {
+            if (client.questionWaits.get(claimId) !== wait) return;
+            client.questionWaits.delete(claimId); controller.abort();
+            response({ kind: 'ended', claimId });
+          });
+        } catch (error) { client.questionWaits.delete(claimId); controller.abort(); throw error; }
+      } else {
+        const wait = client.questionWaits.get(message.claimId);
+        if (wait?.sessionId !== message.sessionId || wait.questionId !== message.questionId || wait.controller.signal.aborted) throw new Error('前台等待不属于当前浏览器连接');
+        if (message.action === 'timeout') {
+          if (wait.timingOut) throw new Error('本次前台超时已提交，等待原生状态');
+          wait.timingOut = true;
+          try { await this.manager.timeoutDshQuestion(message.sessionId, message.questionId, wait.controller.signal); }
+          catch (error) { client.questionWaits.delete(message.claimId); wait.controller.abort(); throw error; }
+          response({ kind: 'submitted', claimId: message.claimId });
+        } else {
+          client.questionWaits.delete(message.claimId); wait.controller.abort();
+          response({ kind: 'submitted', claimId: message.claimId });
+        }
+      }
+    } catch (error) { response({ kind: 'error', error: error instanceof Error ? error.message : String(error) }); }
   }
 
   private toAckResultSafe = (result: DispatchResult): { ok: true; value?: unknown } | { ok: false; error: string; code?: string } =>

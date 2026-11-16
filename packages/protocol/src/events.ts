@@ -92,6 +92,7 @@ export interface QuestionItem {
   elicitation?: ElicitationForm;
   outcome?: ElicitationAction;
   toolCallId?: string;
+  dshQuestion?: DshQuestionIdentity;
   status?: 'pending' | 'answered' | 'skipped';
   resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';
   submission?: 'sent' | 'uncertain' | 'collected' | 'queued' | 'failed';
@@ -197,3 +198,4 @@ export const INTERNAL_KINDS: ReadonlySet<EventKind> = new Set<EventKind>(['inter
 
 /** 对话时间线里不显示的 kind（标题、内部簿记等） */
 export const NON_TIMELINE_KINDS: ReadonlySet<EventKind> = new Set<EventKind>(['internal']);
+import type { DshQuestionIdentity } from './dsh-questions.js';
