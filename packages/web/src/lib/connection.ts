@@ -45,8 +45,11 @@ export class SyncConnection {
     this.stopped = true;
     if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
     if (this.deadTimer !== null) clearInterval(this.deadTimer);
-    this.socket?.close();
+    this.reconnectTimer = null;
+    this.deadTimer = null;
+    const socket = this.socket;
     this.socket = null;
+    socket?.close();
   }
 
   get state(): ConnectionState {
@@ -56,12 +59,20 @@ export class SyncConnection {
 
   private connect(): void {
     if (this.stopped) return;
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    if (this.deadTimer !== null) clearInterval(this.deadTimer);
+    this.reconnectTimer = null;
+    this.deadTimer = null;
+    const previous = this.socket;
+    this.socket = null;
+    previous?.close();
     this.options.onState(this.state, this.attempt);
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
     this.socket = socket;
 
     socket.addEventListener('open', () => {
+      if (this.stopped || this.socket !== socket) return;
       this.attempt = 0;
       this.lastMessageAt = Date.now();
       this.options.onState('online', 0);
@@ -76,6 +87,7 @@ export class SyncConnection {
       this.options.onOpen?.();
       if (this.deadTimer !== null) clearInterval(this.deadTimer);
       this.deadTimer = setInterval(() => {
+        if (this.stopped || this.socket !== socket) return;
         if (Date.now() - this.lastMessageAt > DEAD_AFTER_MS) {
           socket.close();
         }
@@ -83,6 +95,7 @@ export class SyncConnection {
     });
 
     socket.addEventListener('message', (event) => {
+      if (this.stopped || this.socket !== socket) return;
       this.lastMessageAt = Date.now();
       let message: ServerMessage;
       try {
@@ -98,12 +111,15 @@ export class SyncConnection {
     });
 
     socket.addEventListener('close', () => {
-      if (this.socket === socket) this.socket = null;
+      if (this.stopped || this.socket !== socket) return;
+      this.socket = null;
       if (this.deadTimer !== null) clearInterval(this.deadTimer);
-      if (!this.stopped) this.scheduleReconnect();
+      this.deadTimer = null;
+      this.scheduleReconnect();
     });
 
     socket.addEventListener('error', () => {
+      if (this.stopped || this.socket !== socket) return;
       socket.close();
     });
   }
@@ -113,13 +129,19 @@ export class SyncConnection {
     const jitter = base * (0.8 + Math.random() * 0.4);
     this.attempt += 1;
     this.options.onState('reconnecting', this.attempt);
-    this.reconnectTimer = setTimeout(() => this.connect(), jitter * 1000);
+    const timer = setTimeout(() => {
+      if (this.stopped || this.reconnectTimer !== timer) return;
+      this.reconnectTimer = null;
+      this.connect();
+    }, jitter * 1000);
+    this.reconnectTimer = timer;
   }
 
   reconnectNow(): void {
     if (this.stopped) return;
     if (this.socket?.readyState === WebSocket.OPEN) return;
     if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     this.attempt = 0;
     this.connect();
   }
