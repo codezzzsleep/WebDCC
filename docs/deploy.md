@@ -47,6 +47,8 @@ pnpm install
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
 
+附件 CAS 写入（包括同步 diff 存储和上传最终落盘）需要 Linux `/proc/self/fd` 核验数据根、对象目录和前缀目录。异步 buffer 入口保留异步字节写入；同步 diff 入口保留同步调用。直接写入拒绝链接，已校验的显式上传修复只原子替换链接本身，不写链接目标。路径、字节或目录同步在落盘后无法确认时返回 409，错误标明原目录已写入；不会登记成功文件或盲目重试。平台核验不可用时写入返回 501，完整其他平台和原生 diff 验收仍须单列。
+
 
 ## 本机按生产方式运行（M7 已验收）
 

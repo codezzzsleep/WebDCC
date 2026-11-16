@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { constants, createReadStream, mkdirSync, writeFileSync } from 'node:fs';
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { constants, createReadStream } from 'node:fs';
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { FileDto, InputAttachmentPart, ResolvedInputAttachmentPart, UploadCompleteResponse, UploadInitResponse, UploadStatusResponse } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
+import { publishCasFile, writeCasBuffer, writeCasBufferSync } from './cas-write.js';
 
 export const CHUNK_SIZE = 1024 * 1024;
 /** 单个文件上限 100 MB（SPEC-M8 F7 / ATT-04） */
@@ -137,23 +138,20 @@ export class FileStore {
 
   /** 直接存一个 buffer（图片、diff、命令全文等） */
   async putBuffer(buffer: Buffer, name: string, mime: string): Promise<FileDto> {
-    const sha256 = createHash('sha256').update(buffer).digest('hex');
+    const payload = Buffer.from(buffer);
+    const sha256 = createHash('sha256').update(payload).digest('hex');
+    await writeCasBuffer(this.objectsDir, sha256, payload);
     const existing = this.store.getFileByMetadata(sha256, name, mime);
     if (existing !== undefined) return existing;
-    const target = this.objectPath(sha256);
-    await mkdir(join(this.objectsDir, sha256.slice(0, 2)), { recursive: true });
-    await writeFile(target, buffer);
-    return this.store.insertFile({ id: ulid(), sha256, name, mime, size: buffer.byteLength });
+    return this.store.insertFile({ id: ulid(), sha256, name, mime, size: payload.byteLength });
   }
 
   /** 同步版本：manager 在处理事件时同步写入 diff 文本（C2 / F10） */
   putBufferSync(buffer: Buffer, name: string, mime: string): FileDto {
     const sha256 = createHash('sha256').update(buffer).digest('hex');
+    writeCasBufferSync(this.objectsDir, sha256, buffer);
     const existing = this.store.getFileByMetadata(sha256, name, mime);
     if (existing !== undefined) return existing;
-    const dir = join(this.objectsDir, sha256.slice(0, 2));
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(this.objectPath(sha256), buffer);
     return this.store.insertFile({ id: ulid(), sha256, name, mime, size: buffer.byteLength });
   }
 
@@ -286,7 +284,7 @@ export class FileStore {
       } finally {
         await merged.close();
       }
-      try { const directory = await this.casDirectory(sha256, true); await rename(tmp, join(directory, sha256)); await syncDirectory(directory); await syncDirectory(dirname(directory)); }
+      try { await publishCasFile(this.objectsDir, sha256, tmp, upload.size); }
       finally { await rm(tmp, { force: true }); }
       fileId = this.store.getFileByMetadata(sha256, upload.name, upload.mime)?.id ?? this.store.insertFile({ id: ulid(), sha256, name: upload.name, mime: upload.mime, size: upload.size }).id;
     }
