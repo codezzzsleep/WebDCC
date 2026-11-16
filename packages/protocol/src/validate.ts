@@ -30,6 +30,8 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
       return typeof data['name'] === 'string' && typeof data['status'] === 'string';
     case 'plan':
       return (
+        (data['text'] === undefined || typeof data['text'] === 'string') &&
+        (data['incomplete'] === undefined || typeof data['incomplete'] === 'boolean') &&
         Array.isArray(data['items']) &&
         (data['items'] as unknown[]).every(
           (item) => isRecord(item) && typeof item['text'] === 'string' && typeof item['status'] === 'string',
