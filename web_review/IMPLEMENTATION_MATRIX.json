@@ -834,7 +834,10 @@
           "packages/protocol/src/permissions.ts",
           "packages/protocol/test/permissions.spec.ts",
           "packages/server/test/permission-migration.spec.ts",
-          "packages/server/test/permissions.spec.ts"
+          "packages/server/test/permissions.spec.ts",
+          "packages/web/src/lib/agents.ts",
+          "packages/web/src/lib/agents.spec.ts",
+          "browser-tests/access-preferences.spec.ts"
         ],
         "actualFiles": [
           "packages/adapters/codex/src/adapter.ts",
@@ -867,7 +870,10 @@
           "packages/protocol/src/permissions.ts",
           "packages/protocol/test/permissions.spec.ts",
           "packages/server/test/permission-migration.spec.ts",
-          "packages/server/test/permissions.spec.ts"
+          "packages/server/test/permissions.spec.ts",
+          "packages/web/src/lib/agents.ts",
+          "packages/web/src/lib/agents.spec.ts",
+          "browser-tests/access-preferences.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -878,7 +884,34 @@
           "workspace-write→read-only在下一native执行前可证实生效；失败不显示成功。",
           "换模型、resume、服务重启后权限一致；不可应用的profile和managed限制不可选。"
         ],
-        "remainingWork": "已建立 inherit/requested/pending/observed/failed/unknown 权限状态与 SQLite v4 迁移。新建原生会话不自动选第一档，不复用上次新建的选择；真实 UI 依据原生观察显示实际权限，禁止原生 disallowed/未接入 profile。Codex turn/start 后无覆盖 thread/resume 回读权限，不从请求参数生成 effective；回读失败保持未确认。DSH 使用原生 catalog、权限投影与命令业务结果，Claude 切换保持确认配置并隔离旧实例。仍需锁定版本真实执行、managed 限制、DSH catalog 变更通知及跨连接配置代际的完整验收。"
+        "remainingWork": "已建立 inherit/requested/pending/observed/failed/unknown 权限状态与 SQLite v4 迁移。新建原生会话不自动选第一档，不复用上次新建的选择；真实 UI 依据原生观察显示实际权限，禁止原生 disallowed/未接入 profile。Codex turn/start 后无覆盖 thread/resume 回读权限，不从请求参数生成 effective；回读失败保持未确认。DSH 使用原生 catalog、权限投影与命令业务结果，Claude 切换保持确认配置并隔离旧实例。仍需锁定版本真实执行、managed 限制、DSH catalog 变更通知及跨连接配置代际的完整验收。",
+        "behaviorDeliveries": [
+          {
+            "issue": 130,
+            "behavior": "New session restores only current selectable Harness access preference; current choice wins, invalid prefs fallback without storage mutation; inherit omits native override; menu and root selection predicates shared",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "fileChanges": {
+              "added": [
+                "browser-tests/access-preferences.spec.ts"
+              ],
+              "modified": [
+                "packages/web/src/lib/agents.ts",
+                "packages/web/src/pages/NewSession.tsx",
+                "packages/web/src/components/Composer.tsx",
+                "packages/web/src/lib/agents.spec.ts"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "verification": "8 unit and5 actual local browser creation/refresh tests passed; current native-permission fixture browser test passed separately; full types/changedlint passed. Original3 browser restoration failures and untriggered selector/envelope fixture attempts retained. HTTP/SQLite/WS real local, Adapter/catalog/native permission controlledfixtures; real native/provider/model0.",
+            "remainingAcceptance": [
+              "Actual native effective permissions with supplied Providers for all3 Harnesses",
+              "Target restart/multipleclients/native dynamic managed catalogue changes",
+              "Full NP07scope and merge/deploy separate and unperformed by developer"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-01",

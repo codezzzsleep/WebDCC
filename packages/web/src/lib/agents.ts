@@ -1,5 +1,5 @@
 /** 三个 Harness 的展示信息，以及"Provider + 模型"选择的共用逻辑 */
-import type { AgentMeta, MetaResponse, ProviderDto } from '@webdcc/protocol';
+import type { AccessModeOption, AgentMeta, MetaResponse, ProviderDto } from '@webdcc/protocol';
 
 export const AGENT_IDS = ['dsh', 'codex', 'claude-code'] as const;
 export type AgentKey = (typeof AGENT_IDS)[number];
@@ -108,6 +108,17 @@ export function rememberedAccessMode(agent: string): string | undefined {
 
 export function rememberAccessMode(agent: string, mode: string): void {
   writePreference(ACCESS_MODE_DEFAULT_PREFIX, agent, mode);
+}
+
+export function isAccessModeSelectable(agent: string, mode: AccessModeOption, runningAsRoot = false): boolean {
+  return mode.allowed !== false && mode.implemented !== false
+    && !(agent === 'claude-code' && mode.id === 'bypassPermissions' && runningAsRoot);
+}
+
+export function defaultAccessMode(agent: string, modes: AccessModeOption[], override?: string, runningAsRoot = false): string | undefined {
+  const preferred = override ?? rememberedAccessMode(agent);
+  const available = modes.filter(mode => isAccessModeSelectable(agent, mode, runningAsRoot));
+  return available.find(mode => mode.id === preferred)?.id ?? available[0]?.id;
 }
 
 interface ModelPreference {

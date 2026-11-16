@@ -4,7 +4,7 @@ import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
-import { AGENT_IDS, agentAvailable, agentText, rememberAccessMode, rememberModel, rememberReasoning, modelGroups, type ModelChoice } from '../lib/agents.js';
+import { AGENT_IDS, agentAvailable, agentText, isAccessModeSelectable, rememberAccessMode, rememberModel, rememberReasoning, modelGroups, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { shortNumber } from '../lib/format.js';
 import { AgentMark } from './AgentMark.js';
@@ -257,7 +257,8 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const accessModes = agentMeta?.accessModes ?? [];
   const rootBlocked = meta?.runningAsRoot === true && agent === 'claude-code';
   const accessModeId = mode.kind === 'session' ? session?.accessMode : mode.accessMode;
-  const currentMode = accessModes.find((item) => item.id === accessModeId) ?? accessModes[0];
+  const currentMode = accessModes.find((item) => item.id === accessModeId)
+    ?? (mode.kind === 'new' ? accessModes.find(item => isAccessModeSelectable(agent, item, meta?.runningAsRoot)) : accessModes[0]);
   const permissions = mode.kind === 'session' ? session?.permissions : undefined;
   const effectiveMode = accessModes.find(item => item.id === permissions?.effective || item.id.replace(/^:/, '') === permissions?.effective?.replace(/^:/, ''));
   const accessLabel = mode.kind === 'session' && session === undefined ? '正在读取权限' : permissions === undefined ? currentMode?.label ?? '沿用原生权限'
@@ -707,7 +708,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <div className="menu-group-title">{agentText(agent).name} 自己的访问模式</div>
                   {accessModes.map((item) => {
                     // 以 root 运行时 Claude Code 不允许 bypassPermissions（MODE-claude-01）
-                    const blocked = item.allowed === false || item.implemented === false || item.id === 'bypassPermissions' && rootBlocked;
+                    const blocked = !isAccessModeSelectable(agent, item, rootBlocked);
                     return (
                       <button
                         key={item.id}
