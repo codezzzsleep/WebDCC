@@ -1074,6 +1074,12 @@ export class AppStore {
     return this.interactionSubmissions.get(JSON.stringify([sessionId, op, id]));
   }
 
+  isDshApprovalRetry(sessionId: string, approvalId: string): boolean {
+    const submission = this.getInteractionSubmission(sessionId, 'approve', approvalId);
+    const command = submission === undefined ? undefined : this.outbox.get(submission.commandId)?.command;
+    return this.getSession(sessionId)?.agent === 'dsh' && command?.op === 'approve' && command.retryOf !== undefined;
+  }
+
   answer(sessionId: string, questionId: string, answer: unknown, delivery?: { intent?: 'send' | 'queue' | 'steer'; expectedTurnId?: string }): void {
     if (!this.isInteractionSynced(sessionId, 'answer', questionId) || this.interactionState({ op: 'answer', clientCommandId: '', sessionId, questionId, answer }) !== 'pending') return;
     if (['pending', 'sent', 'queued', 'uncertain'].includes(this.getInteractionSubmission(sessionId, 'answer', questionId)?.status ?? '')) return;

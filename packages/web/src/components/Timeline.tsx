@@ -667,18 +667,24 @@ function approvalWhat(data: EventData['approval.request']): string {
 
 function DshApprovalRecovery({ event, data }: { event: StoredEvent; data: EventData['approval.request'] }): React.ReactElement {
   const [view, setView] = useState<DshApprovalRecoveryView>();
-  const [error, setError] = useState(''); const [retrying, setRetrying] = useState(false); const [refresh, setRefresh] = useState(0);
+  const [error, setError] = useState(''); const [refresh, setRefresh] = useState(0);
+  const submission = store.getInteractionSubmission(event.sessionId, 'approve', data.approvalId);
+  const isRetry = store.isDshApprovalRetry(event.sessionId, data.approvalId);
+  const retrying = isRetry && submission?.status === 'pending';
   useEffect(() => {
-    let current = true; setView(undefined); setError(''); setRetrying(false);
+    let current = true; setView(undefined); setError('');
     void api.dshApprovalRecovery(event.sessionId, data.approvalId).then(value => { if (current) setView(value); })
       .catch(error => { if (current) setError(String(error)); });
     return () => { current = false; };
   }, [event.sessionId, event.seq, data.approvalId, refresh]);
+  useEffect(() => {
+    if (isRetry && submission !== undefined && ['failed', 'uncertain'].includes(submission.status)) {
+      setView(undefined); setError(submission.error ?? '原回应提交结果待核对，请重新核对审批');
+    }
+  }, [isRetry, submission]);
   if (view?.status === 'available') return <div className="approval-recovery">
     <p>原回应：{data.options.find(option => option.id === view.optionId)?.label ?? view.optionId}</p>
-    <button type="button" className="btn" disabled={retrying} onClick={() => {
-      if (store.retryDshApproval(event.sessionId, view)) setRetrying(true);
-    }}>{retrying ? '正在提交原回应…' : '重试原回应'}</button>
+    <button type="button" className="btn" disabled={retrying} onClick={() => store.retryDshApproval(event.sessionId, view)}>{retrying ? '正在提交原回应…' : '重试原回应'}</button>
   </div>;
   return <div className="approval-recovery">
     <p role={error ? 'alert' : 'status'}>{error || (view?.status === 'unavailable' ? view.reason : '正在核对原审批…')}</p>
@@ -692,7 +698,8 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
     ? { commandId: '', status: data.submission } : store.getInteractionSubmission(event.sessionId, 'approve', data.approvalId)
       ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission });
   const synchronized = store.isInteractionSynced(event.sessionId, 'approve', data.approvalId);
-  const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
+  const isRetry = store.isDshApprovalRetry(event.sessionId, data.approvalId);
+  const busy = !synchronized || isRetry || submission !== undefined && ['pending', 'sent', 'uncertain'].includes(submission.status);
   // 处理过的审批要显示结果、不再显示按钮（F11 / F17）；结果也可能来自其他界面
   const resolution = [...store.getEvents(event.sessionId)]
     .reverse()
@@ -747,7 +754,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
         <pre className="output">{data.detail}</pre>
       </details>
       {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="approve" id={data.approvalId} />}
-      {synchronized && submission?.status === 'uncertain' && store.getSession(event.sessionId)?.agent === 'dsh'
+      {synchronized && (submission?.status === 'uncertain' || isRetry) && store.getSession(event.sessionId)?.agent === 'dsh'
         ? <DshApprovalRecovery event={event} data={data} /> : null}
       <div className="approval-actions">
         {data.options.map((option, index) => {
