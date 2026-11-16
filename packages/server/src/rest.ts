@@ -94,8 +94,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
     if (deps.recorder === undefined) throw Object.assign(new Error('原始轨迹记录未启用'), { statusCode: 503 });
     if ((request.query as { format?: string }).format === 'jsonl') {
+      const trace = await deps.recorder.read(id, session.nativeId, session.workspaceId);
       reply.header('content-disposition', `attachment; filename="${id}-trace.jsonl"`);
-      return reply.type('application/x-ndjson').send(await deps.recorder.read(id, session.nativeId, session.workspaceId));
+      return reply.type('application/x-ndjson').send(trace);
     }
     return deps.recorder.summary(id, session.nativeId, session.workspaceId);
   });
