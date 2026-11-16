@@ -776,6 +776,14 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   const draft = () => identity === undefined || data.isSecret ? { selected: [], custom: '' } : store.dshQuestionWaits.drafts.read(event.sessionId, identity);
   const [selected, setSelected] = useState<string[]>(() => draft().selected);
   const [text, setText] = useState(() => draft().custom);
+  const draftIdentity = identity === undefined || data.isSecret ? undefined
+    : JSON.stringify([event.sessionId, identity.nativeId, identity.callId, identity.itemId]);
+  const restoredDraft = useRef(draftIdentity);
+  useEffect(() => {
+    if (draftIdentity === undefined || restoredDraft.current === draftIdentity) return;
+    restoredDraft.current = draftIdentity;
+    const saved = draft(); setSelected(saved.selected); setText(saved.custom);
+  }, [draftIdentity]);
   const [hidden, setHidden] = useState(false);
   useStoreVersion();
   const submission = data.submission === 'sent' || data.submission === 'queued' || data.submission === 'uncertain'
