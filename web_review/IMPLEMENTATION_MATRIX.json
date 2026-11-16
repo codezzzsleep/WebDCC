@@ -1774,7 +1774,9 @@
           "web_review/diagnostic-active-capture-budget-20261116.summary.json",
           "web_review/native-http-chunk-metadata-20261116.summary.json",
           "web_review/native-diagnostic-context-read-20261116.summary.json",
-          "web_review/diagnostic-read-file-boundary-20261116.summary.json"
+          "web_review/diagnostic-read-file-boundary-20261116.summary.json",
+          "web_review/diagnostic-summary-flush-20261116.summary.json",
+          "web_review/diagnostic-retention-lock-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
@@ -1807,7 +1809,9 @@
           "confidence": "中",
           "reason": "Shared FD/OS-lock directory accounting and process-wide capture lifecycle extend the initial observer/redactor work; new controlled process and HTTP fixtures are tracked separately. Full cross-process/secret-storage/export scope remains."
         },
-        "latestScope": "2026-11-16: process-wide retained raw capture pool (64MiB default), shared across imported/preload module copies; reserve before copy and release on overflow, failure, completion, cancellation or unread request abort. ModelProxy and Native HTTP observations preserve forwarding. 45 local source/controlled HTTP/process checks plus types/lint; full NP14/native/target scope remains incomplete. Combined209 validates/decode target URL credentials at setup and retains native-only recovery; valid native Basic Auth remains unchanged. 211 caps native response chunk emit jobs at the capture chunk limit while context waits, with exact observed/omitted terminal counts. 213 adds nonfollowing/nonblocking ordinary context FD reads, bounded UTF8/JSON decode and truthful contextError/incomplete summary; valid context values/Native bytes preserved. 216 bounds recording JSONL/Host andcoverageFDreads; unreadable/invalidcoverage and recording counters remainexplicit, faileddownload usesJSON503/noattachment."
+        "latestScope": "2026-11-16: process-wide retained raw capture pool (64MiB default), shared across imported/preload module copies; reserve before copy and release on overflow, failure, completion, cancellation or unread request abort. ModelProxy and Native HTTP observations preserve forwarding. 45 local source/controlled HTTP/process checks plus types/lint; full NP14/native/target scope remains incomplete. Combined209 validates/decode target URL credentials at setup and retains native-only recovery; valid native Basic Auth remains unchanged. 211 caps native response chunk emit jobs at the capture chunk limit while context waits, with exact observed/omitted terminal counts. 213 adds nonfollowing/nonblocking ordinary context FD reads, bounded UTF8/JSON decode and truthful contextError/incomplete summary; valid context values/Native bytes preserved. 216 bounds recording JSONL/Host andcoverageFDreads; unreadable/invalidcoverage and recording counters remainexplicit, faileddownload usesJSON503/noattachment.",
+        "latestSummaryFlushScope": "2026-11-16 Issue229: first diagnostic summary snapshots failure state after pending writes/read complete; unreadable recording also keeps current failure evidence. Controlled actual OS lock/HTTP/SQLite and source checks separate from official Native/target acceptance. Complete requirement still in progress.",
+        "latestRetentionLockScope": "2026-11-16 Issue227, depending on229/PR231: maintenance shares writer directory queue and OS lock; cutoff checked and old regular diagnostics removed while held.53 actual OS lock/controlled diagnostics checks plus fulltypes/lint passed. Original summary failures kept; complete NP14 and target Native acceptance remain open."
       },
       "dependencyIds": [
         "NP-02",
@@ -1910,14 +1914,16 @@
           "web_review/evidence/native-elicitation.json",
           "packages/server/test/interaction-lookup.spec.ts",
           "packages/web/src/lib/store-interaction-sync.spec.ts",
-          "browser-tests/interaction-sync.spec.ts"
+          "browser-tests/interaction-sync.spec.ts",
+          "web_review/diagnostic-summary-flush-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "旧SHA报告、空报告、缺场景、boolean旧基线、未触发approval各自使对应gate失败。",
           "S04/S05/S08必须实际发生请求并从浏览器允许/拒绝/回答，验证原生结果。",
           "失败套件也生成报告；M8 ratchet真正执行并比较相同ID，不以文件存在代替。"
         ],
-        "remainingWork": "新增真实 Chromium 原始源码 UI 问答失败/重试/刷新回归，临时页面实际由测试服务器提供，未关闭 Chromium 安全检查。L1 当前无 I1–I8 失败但 22 个旧 golden 与 16 个未触发谓词仍使门禁失败；原 golden 未修改，完整原生证据仍待采集。"
+        "remainingWork": "新增真实 Chromium 原始源码 UI 问答失败/重试/刷新回归，临时页面实际由测试服务器提供，未关闭 Chromium 安全检查。L1 当前无 I1–I8 失败但 22 个旧 golden 与 16 个未触发谓词仍使门禁失败；原 golden 未修改，完整原生证据仍待采集。",
+        "latestSummaryFlushScope": "2026-11-16 Issue229: first diagnostic summary snapshots failure state after pending writes/read complete; unreadable recording also keeps current failure evidence. Controlled actual OS lock/HTTP/SQLite and source checks separate from official Native/target acceptance. Complete requirement still in progress."
       },
       "dependencyIds": [
         "NP-01",

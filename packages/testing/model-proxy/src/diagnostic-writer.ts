@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 export interface DiagnosticWriteLimits { maxFileBytes?: number; maxQueuedBytes?: number; maxDirectoryBytes?: number }
-interface Lease { write(file: string, text: string, mode: string, limit: number, directoryLimit: number): Promise<void>; release(): Promise<void> }
+interface Lease { write(file: string, text: string, mode: string, limit: number, directoryLimit: number): Promise<void>; prune(cutoff: number): Promise<void>; release(): Promise<void> }
 interface DirectoryQueue { tail: Promise<void>; lease?: Lease; failure?: Error }
 const directories = new Map<string, DirectoryQueue>();
 
@@ -74,6 +74,16 @@ function recordQuotaFailure(file) {
   writeTarget(marker, JSON.stringify({ version: 1, incomplete: true, scope: 'directory',
     failures: Math.min(Number.MAX_SAFE_INTEGER, failures + 1), updatedAt: new Date().toISOString(), errors: [quotaMessage] }), 'replace', 4096);
 }
+function pruneExpired(directory, cutoff) {
+  for (const name of fs.readdirSync(directory)) {
+    if (name !== markerName && !name.endsWith('.jsonl') && !/^(context|coverage)-.*\\.json$/.test(name) && !/^model-.*\\.coverage\\.json$/.test(name)) continue;
+    const file = path.join(directory, name);
+    try {
+      const info = fs.lstatSync(file);
+      if (info.isFile() && info.mtimeMs < cutoff) fs.unlinkSync(file);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+}
 const lines = require('node:readline').createInterface({ input: process.stdin });
 process.stdout.write(JSON.stringify({ ready: true }) + '\\n');
 lines.on('line', line => {
@@ -81,7 +91,8 @@ lines.on('line', line => {
   try { command = JSON.parse(line); }
   catch { process.stdout.write(JSON.stringify({ error: 'Invalid diagnostic helper command' }) + '\\n'); return; }
   try {
-    writeTarget(command.file, command.text, command.mode, command.limit, command.directoryLimit);
+    if (command.op === 'prune') pruneExpired(command.directory, command.cutoff);
+    else writeTarget(command.file, command.text, command.mode, command.limit, command.directoryLimit);
     process.stdout.write(JSON.stringify({ ok: true }) + '\\n');
   } catch (error) {
     let message = error.message;
@@ -113,12 +124,14 @@ async function acquire(directory: string): Promise<Lease> {
       catch { failed(new Error('Invalid diagnostic helper acknowledgement')); return; }
       if (message.ready && !initialized) {
         initialized = true;
+        const send = (command: object) => new Promise<void>((resolveCommand, rejectCommand) => {
+          if (exitError !== undefined) { rejectCommand(exitError); return; }
+          pending = { resolve: resolveCommand, reject: rejectCommand };
+          child.stdin.write(`${JSON.stringify(command)}\n`);
+        });
         ready({
-          write: (file, text, mode, limit, directoryLimit) => new Promise<void>((resolveWrite, rejectWrite) => {
-            if (exitError !== undefined) { rejectWrite(exitError); return; }
-            pending = { resolve: resolveWrite, reject: rejectWrite };
-            child.stdin.write(`${JSON.stringify({ file, text, mode, limit, directoryLimit })}\n`);
-          }),
+          write: (file, text, mode, limit, directoryLimit) => send({ file, text, mode, limit, directoryLimit }),
+          prune: cutoff => send({ op: 'prune', directory, cutoff }),
           release: async () => { child.stdin.end(); await closed; lines.close(); },
         });
       } else {
@@ -129,10 +142,34 @@ async function acquire(directory: string): Promise<Lease> {
   });
 }
 
+function directoryOperation(directory: string, operation: (lease: Lease) => Promise<void>): Promise<void> {
+  directory = resolve(directory);
+  const queue = directories.get(directory) ?? { tail: Promise.resolve() };
+  directories.set(directory, queue);
+  let failure: Error | undefined;
+  const work = queue.tail.then(async () => {
+    if (queue.failure !== undefined) throw queue.failure;
+    if (queue.lease === undefined) {
+      try { queue.lease = await acquire(directory); }
+      catch (error) { queue.failure = error instanceof Error ? error : new Error('Diagnostic file lock unavailable'); throw queue.failure; }
+    }
+    await operation(queue.lease);
+  }).catch((error: unknown) => { failure = error instanceof Error ? error : new Error('Diagnostic directory operation failed'); }).finally(async () => {
+    if (queue.tail === work) {
+      const lease = queue.lease; queue.lease = undefined;
+      await lease?.release();
+      if (queue.tail === work) directories.delete(directory);
+    }
+  });
+  queue.tail = work;
+  return work.then(() => { if (failure !== undefined) throw failure; });
+}
+
 /** File and directory byte limits are shared by cooperating writers. Capture
  * memory and totals across directories remain separate. flock is required. */
 export class DiagnosticFileWriter {
   private readonly queues = new Map<string, Promise<void>>();
+  private readonly maintenance = new Set<Promise<void>>();
   private queuedBytes = 0;
   private readonly maxFileBytes: number;
   private readonly maxQueuedBytes: number;
@@ -153,6 +190,14 @@ export class DiagnosticFileWriter {
   writeCoverage(file: string, text: string, onError: (error: Error) => void = () => undefined): Promise<void> {
     return this.schedule(file, text, 'replace', 64 * 1024, onError);
   }
+  /** Expiration shares the write lease: stats are read only after preceding
+   * cooperating writers finish, and unlink cannot race their next write. */
+  pruneExpired(directory: string, cutoff: number): Promise<void> {
+    if (!Number.isSafeInteger(cutoff)) throw new Error('Invalid diagnostic retention cutoff');
+    const work = directoryOperation(directory, lease => lease.prune(cutoff)).finally(() => { this.maintenance.delete(work); });
+    this.maintenance.add(work);
+    return work;
+  }
   private schedule(file: string, text: string, mode: 'append' | 'replace', fileLimit: number, onError: (error: Error) => void): Promise<void> {
     const report = (message: string): void => { try { onError(new Error(message)); } catch { /* diagnostic error handler */ } };
     file = resolve(file);
@@ -160,30 +205,15 @@ export class DiagnosticFileWriter {
     const bytes = Buffer.byteLength(text);
     if (this.queuedBytes + bytes > this.maxQueuedBytes) { report('Diagnostic write queue limit reached'); return Promise.resolve(); }
     this.queuedBytes += bytes;
-    const directory = dirname(file);
-    const queue = directories.get(directory) ?? { tail: Promise.resolve() };
-    directories.set(directory, queue);
-    const work = queue.tail.then(async () => {
-      if (queue.failure !== undefined) throw queue.failure;
-      if (queue.lease === undefined) {
-        try { queue.lease = await acquire(directory); }
-        catch (error) { queue.failure = error instanceof Error ? error : new Error('Diagnostic file lock unavailable'); throw queue.failure; }
-      }
-      await queue.lease.write(file, text, mode, fileLimit, this.maxDirectoryBytes);
-    }).catch((error: unknown) => report(error instanceof Error ? error.message : 'Diagnostic write failed')).finally(async () => {
-      if (queue.tail === work) {
-        const lease = queue.lease; queue.lease = undefined;
-        await lease?.release();
-        if (queue.tail === work) directories.delete(directory);
-      }
+    const work = directoryOperation(dirname(file), lease => lease.write(file, text, mode, fileLimit, this.maxDirectoryBytes))
+      .catch((error: unknown) => report(error instanceof Error ? error.message : 'Diagnostic write failed')).finally(() => {
       this.queuedBytes -= bytes;
       if (this.queues.get(file) === work) this.queues.delete(file);
     });
-    queue.tail = work;
     this.queues.set(file, work);
     return work;
   }
-  async flush(): Promise<void> { while (this.queues.size > 0) await Promise.all([...this.queues.values()]); }
+  async flush(): Promise<void> { while (this.queues.size > 0 || this.maintenance.size > 0) await Promise.all([...this.queues.values(), ...this.maintenance]); }
 }
 
 /** A bounded metadata read cannot follow a link or wait on a FIFO. */

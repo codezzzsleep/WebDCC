@@ -1,4 +1,4 @@
-import { chmod, mkdir, readdir, lstat, rm } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { AdapterEvent, AgentId, TraceFrame, TraceSink } from '@webdcc/protocol';
@@ -46,12 +46,7 @@ export class InteractionRecorder {
   }
   private async pruneExpired(): Promise<void> {
     this.nextPruneAt = Date.now() + 60 * 60 * 1000;
-    const cutoff = Date.now() - this.retentionMs;
-    for (const name of await readdir(this.directory)) {
-      if (name !== '.wdcc-diagnostic-quota.json' && !name.endsWith('.jsonl') && !/^(context|coverage)-.*\.json$/.test(name) && !/^model-.*\.coverage\.json$/.test(name)) continue;
-      const file = join(this.directory, name); const info = await lstat(file);
-      if (info.isFile() && info.mtimeMs < cutoff) await rm(file);
-    }
+    await this.writer.pruneExpired(this.directory, Date.now() - this.retentionMs);
   }
   addSecret(value: string | undefined): void { if (value !== undefined && value.length > 0) this.secrets.add(value); }
   bind(context: InteractionContext): void { this.contexts.set(context.sessionId, { ...this.contexts.get(context.sessionId), ...context }); this.persistContext(context.sessionId); }
@@ -163,10 +158,13 @@ export class InteractionRecorder {
     return rows.sort((a, b) => a.record.at.localeCompare(b.record.at) || (a.record.runId === b.record.runId ? a.record.seq - b.record.seq : 0)).map(row => row.line + '\n').join('');
   }
   async summary(sessionId: string, nativeId?: string, workspaceId?: string): Promise<RecordingSummary> {
-    const summary = { ...this.summaryFor(sessionId), errors: [...this.summaryFor(sessionId).errors] };
     let rows: InteractionRecord[];
     try { rows = (await this.read(sessionId, nativeId, workspaceId)).split('\n').filter(Boolean).map(line => JSON.parse(line) as InteractionRecord); }
-    catch { return { records: 0, nativeFrames: 0, modelRequests: 0, fileOperations: 0, incomplete: true, errors: [...new Set([...summary.errors, 'Diagnostic recording read failed; counters are incomplete'])].slice(0, 16) }; }
+    catch { return { records: 0, nativeFrames: 0, modelRequests: 0, fileOperations: 0, incomplete: true, errors: [...new Set([...this.summaryFor(sessionId).errors, 'Diagnostic recording read failed; counters are incomplete'])].slice(0, 16) }; }
+    // read() waits for pending writes and their coverage callbacks. Snapshot
+    // after that wait so the first response includes failures just observed.
+    const latest = this.summaryFor(sessionId);
+    const summary = { ...latest, errors: [...latest.errors] };
     const directoryCoverage = await readDiagnosticDirectoryCoverage(this.directory);
     if (directoryCoverage !== undefined) { summary.incomplete = true; summary.errors = [...new Set([...summary.errors, ...directoryCoverage.errors])].slice(0, 16); }
     const coverageFiles = [join(this.directory, `coverage-${key(sessionId)}.json`), ...(nativeId === undefined ? [] : [join(this.directory, `model-${key(nativeId)}.coverage.json`)])];
