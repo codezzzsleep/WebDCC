@@ -1,0 +1,86 @@
+{
+  "formatVersion": 1,
+  "issue": 268,
+  "baseCommit": "726e8c18aac00c62607ea27eee6432e1cb78e880",
+  "relatedIssues": [
+    47,
+    46,
+    42
+  ],
+  "behavior": "History completion and echo suppression use nativeTurnId/itemKey/kind; preserve distinct unfinished items and external user messages",
+  "sourceFiles": {
+    "packages/server/src/native-history.ts": "3f8262ad5eadcd1011f6c98cf9906be2683f08963a334cde7b93363a2726d3a1",
+    "packages/server/test/history-item-identity.spec.ts": "952b0df6d57a246fdee3652d86c815688216d16c4ff0e46071a604e79525cf28",
+    "browser-tests/history-item-identity.spec.ts": "4fd544d505f9978582b943126279b382f0102dc954535c9114471b7e0c6133e8",
+    "docs/native-history-item-identity.md": "3f9bffd7359bfd8fdde77fb253a0b468810818b0e8a6311a2011c7f2beb073fb"
+  },
+  "verification": {
+    "before": {
+      "failed": 9,
+      "passed": 2,
+      "log": "history-identity-before.log"
+    },
+    "sourceRegression": {
+      "passed": 42,
+      "files": 5,
+      "log": "history-identity-regression.log"
+    },
+    "chromium": {
+      "passed": 1,
+      "files": 1,
+      "log": "history-identity-browser.log"
+    },
+    "workspaceTypes": "passed sequentially",
+    "scriptsTypes": "passed",
+    "changedFileLint": "passed",
+    "build": "exact-head packaging to be bound in PR after commit"
+  },
+  "logHashes": {
+    "history-identity-before.log": "99e846b3a071de72ce632af79af299dd870a4e46f2007b34a1220657cd048b11",
+    "history-identity-regression.log": "559cc8b957b1a2efb08b4805e56c8edbb7d9231290bc035d62c065987a3b8ef7",
+    "history-identity-browser.log": "e7e709aa1f6f758d51c14346717e03dcafc8a5cd46eab7c6d18075863908f3ae",
+    "history-identity-typecheck.log": "bfde5de559303021061e98f6514d8d575e2acbfe282f6fa4a309ea46a82cd99c",
+    "history-identity-scripts-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "history-identity-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "rawEvidenceHashes": {
+    "history-identity-before/claude-code-echo.json": "4881223f528df2b6e06d067dec21073241d53ed43a8016cd46e60f1fc6d54b00",
+    "history-identity-before/claude-code-kind.json": "a41ad7cb782e1df6cc8b34b9855b78c1c3e2fd0bcfbe979d11c98f1eb9d39eb4",
+    "history-identity-before/claude-code-turn.json": "3309b5359f3e33fade57226f0ca3eaf0966b6350e2f38264caf4d2dc56f883eb",
+    "history-identity-before/codex-echo.json": "e02f1756bf0f14c291e4a2b0ed77e678e262bf31149fb8d0911ffbef763e88e3",
+    "history-identity-before/codex-kind.json": "0c06f0ada86d209d9086dd92250e2e9b195c27d8d1df34ae5616848062f72c24",
+    "history-identity-before/codex-turn.json": "66eca31a02c55a436fa80c454f2db5d37439afc660402d238b0b025e61a8c404",
+    "history-identity-before/dsh-echo.json": "65c758f8197dfc42e24c83a356f7494d177c8682137086d377c5b6a61a533dd7",
+    "history-identity-before/dsh-kind.json": "c63c214016805407a9f61b55509e6ff6e4aee8c75689a55d95330b6f628a9ea2",
+    "history-identity-before/dsh-turn.json": "8e3dbd0552c911f60708253389e5fc68f2233decf972bb23ba3abacf50a4c261",
+    "history-identity-after/browser-history-identity.json": "7be83b2d073d3b042a1ca8c70667f46f7072a1db45eeb247f26844b7d4832bfc",
+    "history-identity-after/browser-history-identity.png": "b19001b6bebf8574fbdb508d4427a0c17d003bff588f2ffc849cba46e3fde306",
+    "history-identity-after/claude-code-echo.json": "fc5d2009d883a8419ed74199dc5f27dcf165eb6e30f0bc7b3a438a8906e9e984",
+    "history-identity-after/claude-code-kind.json": "9f9d4f5316baa490f35e3b86cc29071d60f158562ade97531b3499c70f855a93",
+    "history-identity-after/claude-code-turn.json": "6cd39a07f62da2f513a4850ae1ae06f659ab6b72b7a13da75d83312af4d312c5",
+    "history-identity-after/codex-echo.json": "01fbe54cff41f4abbd1248b6949803421ebf1a8bba79d86a2e6c23cbc2ec8036",
+    "history-identity-after/codex-kind.json": "0482622feee4c6fa9e6d4eda7d88a8b606a02e0f736fd184a974d9938c6d12d1",
+    "history-identity-after/codex-turn.json": "43bc4ca612126f6a23a8ff0df6b168baee6772959e0e44ac15da779a38adf70b",
+    "history-identity-after/dsh-echo.json": "b491b5a6f3d12e3ba2733cff4be2d35474e0840a51270f7e0597e030cfebc39b",
+    "history-identity-after/dsh-kind.json": "96fb2af38bc8ec0993bdf3e0e45e79c9879aa207b62910f17070689ed44bf1bf",
+    "history-identity-after/dsh-turn.json": "d542160cae1afaf1bea15dcd1fbe43bb9c24c56ff06d4588ac3ef83ca7fab1b1"
+  },
+  "scope": {
+    "controlledInput": "NativeHistoryRecord / FakeAdapter fake-1.0.0",
+    "actualLocal": [
+      "SQLite",
+      "manager",
+      "HTTP",
+      "Chromium UI"
+    ],
+    "newOfficialNativeCalls": 0,
+    "newProviderCalls": 0,
+    "newPaidModelCalls": 0,
+    "newProductionCalls": 0
+  },
+  "remaining": [
+    "Independent source acceptance, review/merge and deployment by existing owners",
+    "Full NP47 older gaps, actor identity and projection reconstruction",
+    "Later-batch terminal upgrade is a separate audit"
+  ]
+}
