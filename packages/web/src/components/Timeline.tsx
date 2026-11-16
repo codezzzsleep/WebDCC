@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, codexReviewItem } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, nativeReasoningContent, codexReviewItem } from '@webdcc/protocol';
+import { NativeReasoningContent } from './NativeReasoningContent.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -372,10 +373,13 @@ function HotRow({ item }: { item: LiveItem }): React.ReactElement {
   }
   if (item.kind === 'reasoning') {
     return (
+      <div>
       <div className="step-line">
         <Icon name="sparkle" size={15} />
         <span className="label shimmer">思考中…</span>
         {data.text === undefined || data.text === '' ? null : <span className="detail reasoning-live-text">{data.text}</span>}
+      </div>
+      <NativeReasoningContent item={item} />
       </div>
     );
   }
@@ -455,11 +459,11 @@ function StepRow({
     }
     case 'reasoning': {
       const data = event.data as EventData['reasoning'];
-      if (data.text.trim() === '') return null;
+      if (data.text.trim() === '' && nativeReasoningContent(event).length === 0) return null;
       return (
         <div className={className}>
           <StepLine icon="sparkle" label="思考" onClick={toggle} open={open} />
-          {open ? <div className="step-detail">{data.text}</div> : null}
+          {open ? <div className="step-detail">{data.text}<NativeReasoningContent item={event} /></div> : null}
         </div>
       );
     }

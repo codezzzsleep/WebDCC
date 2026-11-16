@@ -2,6 +2,7 @@
 import type { ElicitationForm, ElicitationAction } from './elicitation.js';
 import type { InputContent, InputIntent } from './input.js';
 import type { ClaudeOutputOrigin, ClaudeTaskRuntime } from './claude-tasks.js';
+import type { NativeReasoningPart } from './codex-reasoning.js';
 
 export type EventKind =
   | 'user.message'
@@ -113,7 +114,8 @@ export interface EventData {
   /** `phase` is retained for old rows. New translations preserve the native
    * phase in `nativePhase`; the turn reducer is the sole final-answer authority. */
   'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string; claudeActor?: ClaudeOutputOrigin; incomplete?: boolean };
-  reasoning: { text: string; summary?: boolean; claudeActor?: ClaudeOutputOrigin; incomplete?: boolean };
+  reasoning: { text: string; summary?: boolean; claudeActor?: ClaudeOutputOrigin; incomplete?: boolean;
+    nativeContent?: NativeReasoningPart[] };
   command: {
     command: string;
     label?: string;

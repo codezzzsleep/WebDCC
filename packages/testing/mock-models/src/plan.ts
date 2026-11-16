@@ -48,6 +48,8 @@ export interface PlanToolCall {
 
 export interface PlanStep {
   thinking?: string;
+  /** Controlled Responses reasoning body, separate from its summary. */
+  reasoningContent?: string[];
   text?: string;
   tool?: PlanToolCall;
   /** 缺省时：有 tool 用 tool_use，否则 end_turn */
