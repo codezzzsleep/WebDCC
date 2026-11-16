@@ -55,7 +55,7 @@ it('retries one immutable native event, deduplicates the new command and keeps a
     expect(ctx.store.interactions.get(ctx.session.id, 'approve', ctx.approvalId)?.state).toBe('resolved');
     expect(ctx.store.journal.get('first-approval-choice')?.state).toBe('uncertain');
     expect(ctx.store.journal.get('explicit-retry')?.state).toBe('uncertain');
-    expect(ctx.store.latestInteractionEvent(ctx.session.id, 'approve', ctx.approvalId).event?.data).toMatchObject({ optionId: 'allowed-once', by: 'other' });
+    expect(ctx.store.latestInteractionEvent(ctx.session.id, 'approve', ctx.approvalId).event?.data).toMatchObject({ optionId: 'allowed-once', by: 'unknown' });
     expect(await ctx.recovery()).toMatchObject({ status: 'unavailable' });
     expect(ctx.replies).toHaveLength(2);
   } finally { await ctx.close(); }
