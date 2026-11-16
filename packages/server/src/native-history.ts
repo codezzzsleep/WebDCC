@@ -2,13 +2,15 @@ import type { EventData, NativeHistoryRecord, StoredEvent } from '@webdcc/protoc
 import { findUserEcho, resolveAnswer, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import type { Store } from './store.js';
+import { NativeHistoryStages } from './native-history-stages.js';
 
 const itemIdentity = (nativeTurnId: string | undefined, itemKey: string, kind: string): string => JSON.stringify([nativeTurnId ?? null, itemKey, kind]);
 
 /** Durable identity and projection for recovered native records. Historical
  * turn ends never enter the live manager's turn-assignment heuristic. */
 export class NativeHistoryStore {
-  constructor(private readonly db: Db, private readonly store: Store) {}
+  private readonly stages: NativeHistoryStages;
+  constructor(private readonly db: Db, private readonly store: Store) { this.stages = new NativeHistoryStages(db); }
 
   turn(sessionId: string, nativeTurnId: string): string | undefined {
     return (this.db.prepare('SELECT turn_id FROM native_turns WHERE session_id = ? AND native_turn_id = ?').get(sessionId, nativeTurnId) as { turn_id: string } | undefined)?.turn_id;
@@ -62,7 +64,7 @@ export class NativeHistoryStore {
       }
       const emitted: StoredEvent[] = [];
       const completed = new Set(records.flatMap(record => record.events.flatMap(event => event.type === 'item.complete' ? [itemIdentity(record.nativeTurnId, event.itemKey, event.kind)] : [])));
-      const append = (input: Parameters<Store['appendEvent']>[0]): void => { const stored = this.store.appendEvent(input); emitted.push(stored); existing.push(stored); };
+      const append = (input: Parameters<Store['appendEvent']>[0]): StoredEvent => { const stored = this.store.appendEvent(input); emitted.push(stored); existing.push(stored); return stored; };
       for (const record of records) {
         if (!Number.isSafeInteger(record.nativeSeq) || record.nativeSeq < 0 || !Number.isFinite(Date.parse(record.at))) throw new Error('原生历史记录水位或时间无效');
         const native = JSON.stringify(record.native);
@@ -97,8 +99,12 @@ export class NativeHistoryStore {
             // CLI roundtrips also recover items already observed live. Their
             // identity is the native turn + item, independent of history seq.
             // The full recovered source remains in native_history_records.
-            if (existing.some(candidate => candidate.turnId === turnId && candidate.itemKey === event.itemKey && candidate.kind === event.kind)) continue;
-            append({ ...base, itemKey: event.itemKey, kind: event.kind, data: event.data as EventData[typeof event.kind] });
+            const scope = { sessionId, nativeId, nativeTurnId: record.nativeTurnId, itemKey: event.itemKey, kind: event.kind };
+            const current = existing.findLast(candidate => candidate.turnId === turnId && candidate.itemKey === event.itemKey && candidate.kind === event.kind);
+            if (current !== undefined && (event.type !== 'item.complete' || !this.stages.canComplete(scope, record.nativeSeq, current))) continue;
+            const stored = append({ ...base, itemKey: event.itemKey, kind: event.kind, data: event.data as EventData[typeof event.kind] });
+            if (event.type === 'item.start') this.stages.start(scope, record.nativeSeq, stored.seq);
+            else this.stages.complete(scope);
           }
         }
         if (record.events.length === 0) append({ ...base, itemKey: `native-record-${record.nativeSeq}`, kind: 'internal', data: { nativeType: String((record.native as { type?: unknown })?.type ?? 'native') } });

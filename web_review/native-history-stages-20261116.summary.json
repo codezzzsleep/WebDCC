@@ -1,0 +1,125 @@
+{
+  "formatVersion": 1,
+  "issue": 275,
+  "relatedIssues": [
+    47,
+    52,
+    89,
+    42
+  ],
+  "beforeMain": "40514823edbe502710d94711f21889321b9ebe52",
+  "deliveryBaseMain": "447dae07deda28ac6ec72411be389dbd9bedb635",
+  "behavior": "Persist partial history source/event identity; only an eligible later native completion appends final item data",
+  "database": {
+    "from": 14,
+    "to": 15,
+    "newTable": "native_history_partial_items",
+    "oldRowsPreserved": true,
+    "legacyDshStart": "requires exact retained tool/call/call-id/source/public-native-turn evidence",
+    "unclassifiedLegacy": "retained unconfirmed, not guessed",
+    "rollback": "existing database-range guard refuses artifacts supporting only14 for database15; production not migrated"
+  },
+  "sourceFiles": {
+    "packages/server/src/db.ts": "9717d38a544b79f86941db1d3127dac59505f60f152c60f0cfd44105ac937d09",
+    "packages/server/src/native-history.ts": "926be7d38f8ffd0758cd258f941b69fd0bf5e022ec4ad0d024eefeaff3a8f873",
+    "packages/server/src/native-history-stages.ts": "6bad8f6766cbb6d86f2580c7ad8599761e240497672dd0bbdc891b6b0faa6a2b",
+    "packages/server/test/history-stages.spec.ts": "ffb0c38843295d89ee768a293c3db401ffbe96152c4b509d3e061e4a3e0bda80",
+    "browser-tests/history-stages.spec.ts": "5e4c6b1c968b77d5083089db9eba7189700a2dc0e484c346f60e878dc74297d7",
+    "docs/native-history-stages.md": "a675f02518407b0d13a13aca44230b76c2502b28f46f0db22725bba8ce92125a"
+  },
+  "verification": {
+    "before": {
+      "failed": 12,
+      "files": 1,
+      "log": "history-stages-before.log"
+    },
+    "first": {
+      "passed": 27,
+      "files": 3,
+      "log": "history-stages-first.log"
+    },
+    "regression": {
+      "passed": 59,
+      "files": 7,
+      "log": "history-stages-regression.log"
+    },
+    "finalScoped": {
+      "passed": 20,
+      "files": 1,
+      "log": "history-stages-final-scoped.log"
+    },
+    "rebasedSource": {
+      "passed": 72,
+      "files": 8,
+      "log": "history-stages-rebased.log"
+    },
+    "browser": {
+      "passed": 2,
+      "files": 2,
+      "log": "history-stages-browser.log"
+    },
+    "workspaceTypes": "passed sequentially on rebased source",
+    "scriptsTypes": "passed",
+    "changedFileLint": "passed",
+    "exactHeadBuild": "bound in PR after final commit"
+  },
+  "rebase": {
+    "adjacentCompletedSetAppendConflict": "resolved with accepted scoped itemIdentity set and new StoredEvent return; only own worktree changed"
+  },
+  "logHashes": {
+    "history-stages-before.log": "478f97905b36a69781214fde20d5e376140450abaf46b4e2245bb97e633da153",
+    "history-stages-first.log": "77bc97aea2dd931da4f8bb4c5f30faf837449c55ff9d458c10e346c209cb0d8d",
+    "history-stages-regression.log": "09851019d316984a4923ee10578c6f684445c4afe48180220f65beb1ee84a0c2",
+    "history-stages-final-scoped.log": "51687129c87b4c0df660fbf82093c279003e73bbbd71d2c89feaaab5bb3f8dda",
+    "history-stages-rebased.log": "cef7f26f41f7b648ab49fcf0b4fe4e2b1a44417fcb07f25ecc0784f48a6d066b",
+    "history-stages-server-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "history-stages-rebased-types.log": "bfde5de559303021061e98f6514d8d575e2acbfe282f6fa4a309ea46a82cd99c",
+    "history-stages-script-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "history-stages-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "history-stages-browser.log": "1b4f66a5b0bdb261c0342989ba155b3fff2398596f369d5127b775c0ed50541e"
+  },
+  "rawEvidenceHashes": {
+    "history-stages-before/claude-code-completed-false.json": "49288060b5125cc4e07fae56af2c226a404d1b8b381f43a88bc7394027e31fe1",
+    "history-stages-before/claude-code-completed-true.json": "dabc5f6c15fe2a93e362c77abe2a03921da0c80839f7b413133bc9cc590fd46a",
+    "history-stages-before/claude-code-failed-false.json": "28900f2c424b5d3dc5b9b526de66e2d71ff36d708e609cbac8b9ef41007a0654",
+    "history-stages-before/claude-code-failed-true.json": "a2583dea1c9c1d3d959aacb573ece6459a5c414d726177986e68e1d349b5514f",
+    "history-stages-before/codex-completed-false.json": "2eef14e0d029d1d67728afc9452aba5f40671eb2187bf34032ed3511040fd4d1",
+    "history-stages-before/codex-completed-true.json": "29e1884cc864ad18a887868f68215062b3ab53098f53f6197baca6c89866ca15",
+    "history-stages-before/codex-failed-false.json": "ccb0da1ffbf3a76c9de9df3d85f9cd1a1a718c89cebefd0a7ab6304dcef04c1d",
+    "history-stages-before/codex-failed-true.json": "74530801db431801e6b50a051c8b76911866bb1c5bf122294ded819fb56169c7",
+    "history-stages-before/dsh-completed-false.json": "787ddbf461f758f37b318bc361923b3fc69ffee91785f09d9da0d59de40c4d08",
+    "history-stages-before/dsh-completed-true.json": "eb8b71a36d9b654268dc45379d38f5cf7b6856b3aec819538611ea6bb854ef6e",
+    "history-stages-before/dsh-failed-false.json": "926127754514d51fe700c606b61e4ead9aabac5ac7e4da6c8385aacb9702f96f",
+    "history-stages-before/dsh-failed-true.json": "bf1a61a4fd16a34c74bd176ced518ff26394197af9a99e7f3db6ba0f47fbf934",
+    "history-stages-after/browser-staged-history.json": "625ead6f1b9d841f296ff073c87ab8cc0bcd24661ff5de74d5b7e8ec1be83ac7",
+    "history-stages-after/browser-staged-history.png": "d3725c8f199ead99df7d13452d7be6457dd323d004c1dd3a707e9876d58f43c4",
+    "history-stages-after/claude-code-completed-false.json": "eab76e37dfdfc502da29e4701389780f80972a79b5fe51ca2bee952ad046dac5",
+    "history-stages-after/claude-code-completed-true.json": "ebbf4e6fff1a6ad79c2cd2f82d7a0536aafaa6da4c4a30d51f956ce447763435",
+    "history-stages-after/claude-code-failed-false.json": "8581ccd3d64f02939cd25486965a21617194a9719633c197c442e5296c8da13e",
+    "history-stages-after/claude-code-failed-true.json": "6fd90de0c9796ba53d9690e3c9d691532be62726957f0747e6efa702a1f5d3f2",
+    "history-stages-after/codex-completed-false.json": "39dcc2bad61d1736eeb34645b81fd3be762761c7f87d49a8f2314a32e5170747",
+    "history-stages-after/codex-completed-true.json": "2367a9ecb2982f7e90cff082b52fa283219e685418f0ed3d491de5127efd3eff",
+    "history-stages-after/codex-failed-false.json": "72f60c9e47aa5003eba110911dbf4c9767e12073ffa2d31fc1fc96dd6f3ffca7",
+    "history-stages-after/codex-failed-true.json": "f36f4a1fb442c7d8eb5714fc5a6ca2361d4472ca7f51a93fc2d31566254ffc4c",
+    "history-stages-after/dsh-completed-false.json": "25c2ef8ea3c93801b31829367667082648714fe9acb0541da6cdd80206d26564",
+    "history-stages-after/dsh-completed-true.json": "56c1d8267a8eee1fef7bad01e0513ecdfe84c1603a96ffdcae52dd0f063b27df",
+    "history-stages-after/dsh-failed-false.json": "3b6ec3a920ca15f9f7fecbde337434d47c02d7e33997a0c93dbed7f6d9c84f5e",
+    "history-stages-after/dsh-failed-true.json": "2dbcdab10597689f89d68955ea0e5d39ebea410bc82a615ab6e01299b0f1fc1f"
+  },
+  "evidenceScope": {
+    "controlled": "NativeHistoryRecord / FakeAdapter fake-1.0.0 / controlled v14 layout and release fixtures",
+    "existingReplay": "native-history regression reuses compatible retained DSH source identities; not current provider validation",
+    "actualLocal": [
+      "SQLite and reopen",
+      "manager",
+      "HTTP",
+      "Chromium UI",
+      "release range checks"
+    ],
+    "newOfficialNativeCalls": 0,
+    "newProviderCalls": 0,
+    "newPaidModelCalls": 0,
+    "newProductionCalls": 0
+  },
+  "remaining": "Independent source acceptance, merge/Issue closure and three-Agent target deployment; full NP47 durable gaps, complete actors and general versioned reconstruction remain."
+}
