@@ -1,0 +1,70 @@
+{
+  "formatVersion": 1,
+  "issue": 251,
+  "relatedIssues": [
+    45,
+    46,
+    42
+  ],
+  "baseCommit": "34d4b3f3f0bc27f8498f5d2d3c7370a2c01a7a4a",
+  "behavior": "Late successful native submission only advances a matching still-dispatching admission; uncertainty and terminal outcomes remain authoritative",
+  "sourceFiles": {
+    "packages/server/src/command-journal.ts": "6e4813886776b9ee03a801b83af828a5d70152d481cade63ca6d6611652d3027",
+    "packages/server/src/manager.ts": "ea63b932bdd6ee09398c409f2d307163337762c695526baa183dae1413149271",
+    "packages/server/test/native-admission-race.spec.ts": "b0fc2ed8788f023d3aa2f47fa2a22606f35b508b973c0ca9534c149bde9c5b87",
+    "docs/native-admission-state.md": "823ff5ac319d5affb83f36e54dd44de9088d6ca1d6077a367282c2cf413e9453"
+  },
+  "verification": {
+    "affectedRegression": {
+      "passed": 91,
+      "files": 9,
+      "log": "admission-regression-final.log"
+    },
+    "finalEditedRegression": {
+      "passed": 18,
+      "log": "admission-100-final.log",
+      "concurrency": "100 identical Fastify HTTP injections per each of 3 controlled Agent identities: 1 send call, identical receipts, changed payload409, uncertain retained"
+    },
+    "workspaceTypecheck": "passed sequentially",
+    "scriptsTypecheck": "passed",
+    "changedFileLint": "passed",
+    "independentSourceAcceptance": "pending",
+    "deployment": "not performed"
+  },
+  "preservedFailures": [
+    {
+      "log": "admission-before.log",
+      "failed": 6,
+      "reason": "Actual main native acceptance overwrites uncertain/failed/cancelled"
+    },
+    {
+      "log": "admission-regression.log",
+      "passed": 56,
+      "failed": 11,
+      "reason": "New SQLite fixture omitted required session row; fixed fixture without altering foreign-key enforcement"
+    }
+  ],
+  "unexecuted": [
+    "packages/server/test/native-async-answer.spec.ts absent; later correct codex-async-questions.spec.ts11tests passed",
+    "new whole repository/browser/build checks; independent acceptance window owns full gate",
+    "official native/real provider/target-platform business calls"
+  ],
+  "nativeEvidence": {
+    "controlledAdapterVersion": "fake-1.0.0",
+    "officialAgentCalls": 0,
+    "providerCalls": 0,
+    "nativeAdapterAndProtocolChanges": false,
+    "baselineInventory": "Codex0.167.0 (compatible0.168.0/0.169.0), Claude SDK0.3.322/CLI2.1.322, DSH0.2.2-rc.1; unchanged inventory, not new native executions"
+  },
+  "evidenceSha256": {
+    "admission-before.log": "5aa6d5186c4deedb283c43c4b79cf0b06ad18c5aa206f303dce292ab02661116",
+    "admission-first.log": "687083a596405128557ac57543553f67b09613a8e1ddf2110d4fcd259c6afc34",
+    "admission-regression.log": "7ed27f803f2e290073dd4bc88ae7495224a6ad2ad6be80821568a39ed0268cd4",
+    "admission-regression-final.log": "c196e45bfcd0ee8f49d6cbe420d0987c1526a837dca5f944760b9504a98f9b9d",
+    "admission-100-final.log": "6e471da8e5d3fb696da3f5178170877593a90bf621ba977a82070b87971465f3",
+    "admission-typecheck.log": "bfde5de559303021061e98f6514d8d575e2acbfe282f6fa4a309ea46a82cd99c",
+    "admission-scripts-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "admission-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "admission-lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
