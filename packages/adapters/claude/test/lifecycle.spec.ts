@@ -113,7 +113,8 @@ it('NP-04 keeps a live background task owned and ignores an older run notificati
     await adapter.create({ sessionId: 'local', cwd: '.', providerId: null });
     q.push({ type: 'system', subtype: 'task_started', task_id: 'task', run_id: '002', description: 'background', session_id: 'native' });
     q.push({ type: 'system', subtype: 'task_notification', task_id: 'task', run_id: '001', status: 'completed', summary: 'old', session_id: 'native' });
-    await vi.waitFor(() => expect(seen.filter(event => event.type === 'item.complete' && event.kind === 'tool.call')).toHaveLength(2));
+    await vi.waitFor(() => expect(seen.some(event => event.type === 'item.complete' && event.kind === 'internal' && event.data.nativeType === 'system/task_notification/stale-run')).toBe(true));
+    expect(seen.filter(event => event.type === 'item.complete' && event.kind === 'tool.call')).toHaveLength(1);
     await expect(adapter.setModel('local', 'next')).rejects.toMatchObject({ statusCode: 409 });
     expect(q.close).not.toHaveBeenCalled();
   } finally { await adapter.dispose('local'); }

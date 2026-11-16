@@ -1124,7 +1124,11 @@ export class ClaudeAdapter implements AgentAdapter {
         return;
       }
       case 'system': {
-        runtime.state.system(message);
+        if (!runtime.state.system(message)) {
+          this.emit(sessionId, { type: 'item.complete', itemKey: `claude-task-stale-${runtime.frameSeq}`, kind: 'internal',
+            data: { nativeType: `system/${message.subtype}/stale-run` }, native: message, scope: 'session' });
+          return;
+        }
         // Once the native level signal is available, edges are presentation
         // only: their ordering relative to snapshots is unspecified.
         if (message.subtype === 'background_tasks_changed') {
@@ -1148,7 +1152,7 @@ export class ClaudeAdapter implements AgentAdapter {
           runtime.capabilities = message.capabilities ?? [];
         }
         if ((message.subtype === 'init' || message.subtype === 'status') && typeof message.permissionMode === 'string') this.emit(sessionId, { type: 'permissions', observation: { effective: message.permissionMode, source: `system/${message.subtype}`, scope: 'query', policy: { permissionMode: message.permissionMode } } });
-        this.emit(sessionId, claudeSystemEvent(message, runtime.frameSeq));
+        this.emit(sessionId, claudeSystemEvent(message, runtime.frameSeq, 'task_id' in message ? runtime.state.tasks.get(message.task_id) : undefined));
         return;
       }
       case 'stream_event': {

@@ -1,22 +1,8 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { ClaudeTaskProjection } from '@webdcc/protocol';
 import { record } from './native.js';
 
-export interface ClaudeTask {
-  taskId: string;
-  runId?: string;
-  parentTaskId?: string;
-  toolUseId?: string;
-  description: string;
-  status: string;
-  taskType?: string;
-  background?: boolean;
-  ambient?: boolean;
-  usage?: unknown;
-  summary?: string;
-  outputFile?: string;
-  error?: string;
-  native: unknown;
-}
+export type { ClaudeTask } from '@webdcc/protocol';
 export interface ClaudePlanTask {
   id: string;
   text: string;
@@ -25,9 +11,9 @@ export interface ClaudePlanTask {
   owner?: string;
   blockedBy?: string[];
 }
-/** Native run IDs are ordered only by plain lexical comparison, never parsed as numbers. */
 export class ClaudeNativeState {
-  readonly tasks = new Map<string, ClaudeTask>();
+  readonly taskProjection = new ClaudeTaskProjection();
+  readonly tasks = this.taskProjection.tasks;
   readonly plans = new Map<string, ClaudePlanTask>();
   usage?: unknown;
   rateLimit?: unknown;
@@ -36,36 +22,7 @@ export class ClaudeNativeState {
   transport: 'live' | 'closed' | 'failed' = 'live';
 
   system(message: Extract<SDKMessage, { type: 'system' }>): boolean {
-    if (message.subtype === 'background_tasks_changed') {
-      // This snapshot owns liveness; preserve completed rows for inspection.
-      const alive = new Set(message.tasks.map(task => task.task_id));
-      for (const task of this.tasks.values()) if (task.background && !alive.has(task.taskId) && ['pending', 'running', 'paused'].includes(task.status)) task.status = 'not-in-background-snapshot';
-      for (const entry of message.tasks) {
-        const raw = record(entry);
-        const existing = this.tasks.get(entry.task_id);
-        if (existing?.runId !== undefined && entry.run_id !== undefined && entry.run_id < existing.runId) continue;
-        this.tasks.set(entry.task_id, { ...existing, taskId: entry.task_id, runId: entry.run_id, description: entry.description,
-          taskType: entry.task_type, background: true, status: 'running', ambient: raw['ambient'] === true, native: entry });
-      }
-      return true;
-    }
-    if (!['task_started', 'task_progress', 'task_notification', 'task_updated'].includes(message.subtype)) return true;
-    const raw = record(message);
-    const id = String(raw['task_id']);
-    const runId = typeof raw['run_id'] === 'string' ? raw['run_id'] : undefined;
-    const previous = this.tasks.get(id);
-    if (previous?.runId !== undefined && (runId === undefined || runId < previous.runId)) return false;
-    const sameRun = previous === undefined || previous.runId === runId;
-    const task: ClaudeTask = sameRun && previous !== undefined ? { ...previous, native: message } : { taskId: id, runId, description: '', status: 'running', native: message };
-    if (message.subtype === 'task_started') Object.assign(task, { description: message.description, taskType: message.task_type,
-      parentTaskId: message.parent_task_id, background: message.is_backgrounded, toolUseId: message.tool_use_id, ambient: message.ambient ?? message.skip_transcript });
-    if (message.subtype === 'task_progress') Object.assign(task, { description: message.description, summary: message.summary, usage: message.usage, toolUseId: message.tool_use_id });
-    if (message.subtype === 'task_updated') Object.assign(task, { ...(message.patch.description === undefined ? {} : { description: message.patch.description }),
-      ...(message.patch.status === undefined ? {} : { status: message.patch.status }), ...(message.patch.is_backgrounded === undefined ? {} : { background: message.patch.is_backgrounded }),
-      ...(message.patch.error === undefined ? {} : { error: message.patch.error }) });
-    if (message.subtype === 'task_notification') Object.assign(task, { status: message.status, summary: message.summary, usage: message.usage, outputFile: message.output_file });
-    this.tasks.set(id, task);
-    return true;
+    return this.taskProjection.system(message);
   }
   /** Only successful structured native results may create or update task identities. */
   toolResult(name: string, _input: Record<string, unknown>, output: unknown, failed: boolean): boolean {
