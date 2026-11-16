@@ -1,0 +1,49 @@
+{
+  "issue": 128,
+  "parents": [
+    42,
+    44,
+    65,
+    80
+  ],
+  "sourceBase": "6da691ff9d898f7e2c952e989795a33d09527a7a",
+  "evidenceKind": "controlled-fixture-and-local-source-browser-regression",
+  "native": {
+    "version": "0.2.2-rc.1",
+    "head": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+    "strictFold": "13 fixture events accepted; admitted-round and paused projections match",
+    "foldSha256": "8dc7086395f436c6af4a816e668ddfd89ba527f801a877bf74d131f08870ab6e"
+  },
+  "sourceHashes": {
+    "packages/adapters/dsh/src/goals.ts": "aabd2b7474f9e2a4898d4b07252a7b856854a6fa388d0557713259af43d0872b",
+    "packages/adapters/dsh/src/adapter.ts": "09d169d34cf7b6c49f6543683a149b68810bf6ce3ca3f2907684ea7e37dfd0f2",
+    "packages/adapters/dsh/test/goals.spec.ts": "4a78e406728273c65ed4b3ea3230fbd2048ade97228a83494c2992cea14932fe",
+    "packages/adapters/dsh/test/goal-fixture.ts": "ee2efea58c6e146e436ca1c3883e460869f5a24d8ef32be6b8f9cd0a0fd8c0e5",
+    "packages/protocol/src/events.ts": "1340a89148319d722ddd7609a38253d09800c5a415a9f4a4934ac65cb3a09dcd",
+    "packages/web/src/components/TaskPanel.tsx": "30f904a26e8c6c90661f526a6a5e9ef982c8290d00a94b9f067f847f610a610a",
+    "browser-tests/dsh-goals.spec.ts": "d71c3c08b1e8a37ee03bff54e99a5b617edee8c5a798a12df74b9d29eca1a19a"
+  },
+  "checks": {
+    "unit": 113,
+    "browser": 2,
+    "typecheck": "full workspace passed; repository tsconfigs exclude tests",
+    "lint": "changed source/test files passed"
+  },
+  "retainedFailures": [
+    "Initial mapping: 6 failed / 1 passed",
+    "Partial goal watermark: 1 failed / 7 unrun",
+    "Type guard TS7053, fixed",
+    "Earlier fixture passes limited to shape checks; legal native transitions corrected",
+    "Malformed projection: 1 failed / 8 unrun, fixed"
+  ],
+  "modelRequests": 0,
+  "liveProvider": false,
+  "liveHost": false,
+  "fullAcceptance": "incomplete",
+  "deployment": "not performed",
+  "remaining": [
+    "Actual Host lifecycle and external mutations",
+    "Host reconnect/restart and target-platform UI recovery",
+    "Process-local activation, automatic continuation and full NP-38 schedules/reminders"
+  ]
+}

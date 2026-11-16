@@ -7,7 +7,7 @@ import { Icon, Spinner } from './Icon.js';
 
 /**
  * 输入框上方的任务条（DSH 的"任务"位置）。三家用同一个位置，内容是各自原生的：
- * DSH 的任务清单、Claude 的任务、Codex 的计划（turn/plan/updated）显示为"任务"；Codex 的目标显示为"目标"。
+ * DSH 的任务清单、Claude 的任务、Codex 的计划显示为"任务"；原生会话目标显示为"目标"。
  */
 export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElement | null {
   useStoreVersion();
@@ -35,6 +35,8 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
               {goalData.objective} · {goalLabel(goalData)}
             </span>
             {goalData.tokensUsed === undefined ? null : <span className="origin">用量 {goalData.tokensUsed.toLocaleString()}{goalData.tokenBudget == null ? '' : ` / ${goalData.tokenBudget.toLocaleString()}`} tok</span>}
+            {goalData.roundsStarted === undefined ? null : <span className="origin" data-testid="goal-rounds">轮次 {goalData.roundsStarted}{goalData.maxGoalRounds === undefined ? '' : ` / ${goalData.maxGoalRounds}`}</span>}
+            {goalData.blockedReason === undefined ? null : <span className="summary" data-testid="goal-block-reason">{goalData.blockedReason.message}</span>}
             <span className="origin">{agentName} 的目标</span>
           </div>
         </div>
