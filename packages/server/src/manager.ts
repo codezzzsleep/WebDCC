@@ -1258,7 +1258,7 @@ export class SessionManager {
     } catch (error) {
       this.store.nativeOwners.release(sessionId, runtime.identity, false);
       this.setStatus(runtime, 'error');
-      if (taskObservationFailure !== undefined) throw new AggregateError([taskObservationFailure.error, error], 'Claude 任务运行状态保存与原生关闭失败');
+      if (taskObservationFailure !== undefined) throw new AggregateError([taskObservationFailure.error, error], 'Claude 任务运行状态保存与原生关闭失败', { cause: error });
       throw error;
     }
     if (this.runtimes.get(sessionId) === runtime) this.runtimes.delete(sessionId);
