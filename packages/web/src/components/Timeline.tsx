@@ -744,11 +744,12 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
   const blocking = data.isBlocking !== false;
   const nonblockingLabel = blocking ? null : <span className="what">非阻塞提问</span>;
+  const nativeDshCancelled = store.getSession(event.sessionId)?.agent === 'dsh' && data.status === 'skipped' && data.outcome === 'cancel';
   if (data.status === 'answered' || data.status === 'skipped') {
     return (
       <div className="approval-card resolved" data-testid="question-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-blocking={blocking}>
         <Icon name="check" size={15} strokeWidth={2.2} />
-        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : data.resolution === 'external' ? data.asyncReply ? '已在原生客户端回答' : '已由原生结束' : data.outcome === 'decline' ? '已拒绝' : data.status === 'skipped' ? '已取消' : data.asyncReply ? '原生已收到回答' : '已回答'}</span>
+        <span>{data.resolution === 'outcome-unknown' ? '原生轮次已结束，答案结果未确认' : nativeDshCancelled ? '已取消' : data.resolution === 'external' ? data.asyncReply ? '已在原生客户端回答' : '已由原生结束' : data.outcome === 'decline' ? '已拒绝' : data.status === 'skipped' ? '已取消' : data.asyncReply ? '原生已收到回答' : '已回答'}</span>
         <span className="what">· {data.prompt}</span>
         {nonblockingLabel}
         {synchronized ? null : <span>历史记录，当前状态尚未核对</span>}
