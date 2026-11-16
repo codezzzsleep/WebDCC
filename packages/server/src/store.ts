@@ -17,6 +17,7 @@ import type {
   ConversationState,
   ConversationReset,
   QueueSnapshot,
+  QueuedInput,
 } from '@webdcc/protocol';
 import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
@@ -711,6 +712,14 @@ export class Store {
       const feedSeq = this.appendFeed(sessionId, patch);
       return { snapshot: this.queueSnapshot(sessionId), patch, feedSeq };
     })();
+  }
+
+  retryQueuePreparation(expected: QueuedInput): { patch: FeedPatch; feedSeq: number } {
+    return this.db.transaction(() => {
+      this.journal.retryPreparation(expected);
+      const patch = { queueRevision: Date.now() };
+      return { patch, feedSeq: this.appendFeed(expected.sessionId, patch) };
+    }).immediate();
   }
 
   // ---------- commands ----------

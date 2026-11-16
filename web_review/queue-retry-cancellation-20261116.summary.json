@@ -1,0 +1,71 @@
+{
+  "issue": 220,
+  "parents": [
+    45,
+    46,
+    42
+  ],
+  "base": "9e73225495a869e733ee749feb6f9b3ef5943965",
+  "at": "2026-11-16T09:21:12.403656+00:00",
+  "scope": "paired persistent queued input preparation retry validates live queued input/optional matching queued command row; no cancellation/native dispatch resurrection, feed mutation rolls back with updates",
+  "before": {
+    "cancelStatus": 204,
+    "stateAfterCancel": "cancelled",
+    "retryStatus": 200,
+    "retryBody": {
+      "accepted": true
+    },
+    "stateAfterRetry": "queued",
+    "activeQueue": []
+  },
+  "after": {
+    "cancellation": "HTTP204 cancelled stayscancelled; concurrentretry409; no user.message/nativeinput created",
+    "dispatchStates": "dispatching/native-accepted/uncertain/failed/completed/cancelled cannot resetqueued",
+    "recovery": "valid retry preserves exacttext/command/turn/ordinal/NativeUUID; supports internal inputswithout publicjournal, survivesDBreopen",
+    "concurrency": "100actualHTTP retries -> success1/conflict99 andone originalNative-adapter input"
+  },
+  "verification": {
+    "before": "1 actualHTTP cancellation state/ACK regression failed; original response/journal contradiction preserved",
+    "initial": "17/17 then28/28 then33/33",
+    "broadened": "57 queue/order/attachment/journal/ownership/nativeaction/browserstore recovery tests passed plusfullworkspace/scripts types",
+    "latestBase": "after main219 rebase final17/17 retry checks +fulltypes/lint pass; productionqueuechanges remainonly220scope",
+    "lintFailure": "testsessionIdunusedinitialvalue lintfailure preserved, removed redundant initialization; no behavior assertions weakened"
+  },
+  "runtime": {
+    "node": "26.13.0",
+    "pnpm": "12.18.0",
+    "adapter": "controlledFakeAdapter fake1.0.0"
+  },
+  "officialNativeAgentRuns": 0,
+  "paidProviderCalls": 0,
+  "deployment": "not performed by mainline",
+  "remaining": [
+    "full100HTTP/WSsend acceptance",
+    "all crash windows andrealNative receipts/reconciliation/owner recovery",
+    "secret-aware fullqueue/outbox coverage",
+    "independent three-Agent target/config/native validation"
+  ],
+  "sourceSha256": {
+    "packages/server/src/command-journal.ts": "c9cecc9ab1b77c6ca25fd1f682aba23d27d8981f35ce3c95f87c66ffc48aad2a",
+    "packages/server/src/manager.ts": "b468dfd88bc6e11f8d012ef7533d2475662cd1daf5b179efa0c97e5c3ffb8a9c",
+    "packages/server/src/store.ts": "daf7f033ca7b0b05949ad99c5c69c23df487aaffadf90ea007c63bb87ec0fe79",
+    "packages/server/test/queue-retry-race.spec.ts": "c48a9b2f8ac3fa061bf41e7b2a832f58d1a0ba369b830d8b463d958e4f2544ca",
+    "web_review/IMPLEMENTATION_MATRIX.json": "d70e2b79b73a5696bc15af44ec3350fd5c1fde5e1f41118d8ab16629d0a053f3"
+  },
+  "sourceFingerprint": "2e45cfe2417d415b04c4b2f9b9e2769c892d726b23eff9ce8612c6d1bd2d0b9e",
+  "evidenceSha256": {
+    "regression-before.log": "bcab5bc5aed7ec67c455edbeed2dafa3bd79401591eb3150c117c46c20a86059",
+    "rebased-target-final.log": "1b7c6eb1b1d321b9cb33bb3242c8f7e316fba5691c57d1b0930476d78671c026",
+    "typecheck-first.log": "411b2caa28c267bbdc34824b6252bbc8a675398e743bdf3ddf010e58641c9516",
+    "rebased-lint.log": "1edb790063150b1717de66f074b859ad36a9b0cff8194bed02798975214d4adc",
+    "regression-first.log": "80d0d0b7bf46cce08fac6b5789154230adf7499d0eb389e412475bd4ff4de1ce",
+    "rebased-typecheck-final.log": "0231c5dac9959fddca7c5b71398e37283a271066af2ae9a102c6d29abd34aff8",
+    "reproduction-before.log": "67bc73e4b44f413cfff842814e722af8e425a508b634adbba0cc569cba98380b",
+    "rebased-regression.log": "1832ad468753d746e79014af1e6cb45c3de556873f6a647e582e7388abba1161",
+    "regression-second.log": "e160ac6cc7de092445251decc6866a8cb2fef2034b352a3b137ab4c69982a47c",
+    "regression-third.log": "f45edb570351fad86ba52c4a4e025d931fbbb45e3f49e0800565cc3f7cc94014",
+    "lint-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rebased-lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rebased-typecheck.log": "faec1d774b6da76ff6b6b1f6cd1525b9454c6507e5e9e9bf7c4b0644a8b56351"
+  }
+}
