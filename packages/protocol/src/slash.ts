@@ -41,7 +41,9 @@ export interface SlashControlRequest {
 export interface SlashControlResult {
   text?: string;
   result?: unknown;
-  form?: 'goal-edit' | 'goal-replace' | 'rename';
+  form?: 'goal-edit' | 'goal-replace' | 'rename' | 'dsh-export';
+  /** An acknowledged native action; credentials and arbitrary URLs never belong here. */
+  download?: { kind: 'dsh-session-log'; nativeId: string };
   objective?: string;
   attachments?: InputAttachmentPart[];
   confirmed?: boolean;

@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import type { SlashControlResult } from '@webdcc/protocol';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
@@ -135,6 +137,22 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     const session = manager.requireSession(body.sessionId);
     if (session.agent !== 'dsh' || !session.nativeId) throw Object.assign(new Error('此会话没有可读的 DSH 原生身份'), { statusCode: 409 });
     return dshSurface.issueTicket({ nativeId: session.nativeId });
+  });
+  app.get('/api/sessions/:id/dsh-export', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const query = request.query as { commandId?: unknown };
+    if (typeof query.commandId !== 'string' || !query.commandId || Object.keys(query).some(key => key !== 'commandId')) throw Object.assign(new Error('需要已确认的导出指令'), { statusCode: 400 });
+    const session = manager.requireSession(id);
+    const receipt = manager.slashControlResult(id, query.commandId);
+    const result = receipt.result as SlashControlResult | undefined;
+    const nativeId = result?.download?.nativeId;
+    if (session.agent !== 'dsh' || receipt.receipt.state !== 'completed' || result?.failed || result?.download?.kind !== 'dsh-session-log' || !nativeId || nativeId !== session.nativeId) throw Object.assign(new Error('原生导出未确认或会话身份已变化'), { statusCode: 409 });
+    const response = await dshSurface.sessionExport(nativeId);
+    if (manager.requireSession(id).nativeId !== nativeId) { await response.body?.cancel(); throw Object.assign(new Error('下载期间原生会话身份已变化'), { statusCode: 409 }); }
+    if (response.ok && response.headers.get('content-type')?.split(';')[0] !== 'application/zip') { await response.body?.cancel(); throw Object.assign(new Error('原生导出没有返回 ZIP 文件'), { statusCode: 502 }); }
+    reply.status(response.status).type(response.ok ? 'application/zip' : 'text/plain; charset=utf-8');
+    if (response.ok && response.headers.has('content-disposition')) reply.header('content-disposition', response.headers.get('content-disposition')!);
+    return response.body === null ? reply.send() : reply.send(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]));
   });
   hub.attach(app);
 

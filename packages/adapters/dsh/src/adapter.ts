@@ -22,6 +22,7 @@ import type {
   NativeInteractionSubmission,
   NativeDshRpcCaptureMetadata,
   SlashCommand,
+  SlashControlResult,
   ResolvedInputContent,
 } from '@webdcc/protocol';
 import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
@@ -947,7 +948,7 @@ export class DshAdapter implements AgentAdapter {
           ...(command.description === undefined ? {} : { description: command.description }) }));
   }
 
-  async executeSlashControl(sessionId: string, line: string, options: { contentParts?: ResolvedInputContent } = {}) {
+  async executeSlashControl(sessionId: string, line: string, options: { contentParts?: ResolvedInputContent } = {}): Promise<SlashControlResult> {
     const runtime = this.require(sessionId); const client = await this.ensureSidecar();
     const generation = this.muxGeneration;
     const input = { text: line, ...(options.contentParts === undefined ? {} : { contentParts: options.contentParts }) } as UserInput & DshResolvableInput;
@@ -955,7 +956,11 @@ export class DshAdapter implements AgentAdapter {
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令运行实例已变化'), { code: 'native-control-rejected', statusCode: 409 });
     const result = await this.call<{ commandId: string; result: { kind: 'success' | 'error'; text?: string } }>(client, 'commands/execute', { agentId: runtime.nativeId, line, submittedAttachments: encoded.submittedAttachments }, sessionId);
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令结果需要核对'), { code: 'uncertain' });
-    return { text: result.result.text ?? '', result, failed: result.result.kind === 'error' };
+    return { text: result.result.text ?? '', result, failed: result.result.kind === 'error',
+      ...(result.result.kind === 'success' && /^\/export(?:\s|$)/u.test(line) ? {
+        confirmed: true, form: 'dsh-export' as const, download: { kind: 'dsh-session-log' as const, nativeId: runtime.nativeId },
+      } : {}),
+    };
   }
 
   async sendSubagent(sessionId: string, childSessionId: string, text: string): Promise<void> {

@@ -68,6 +68,13 @@ export const api = {
   inputModes: (sessionId?: string): Promise<CodexInputModeCatalog> => request(`/api/agents/codex/input-modes${sessionId === undefined ? '' : `?sessionId=${encodeURIComponent(sessionId)}`}`),
   nativeDshSurface: () => request<{ status: string; writable: boolean }>('/api/dsh/native-surface'),
   openNativeDshSurface: (sessionId: string) => request<{ actionUrl: string; ticket: string; expiresAt: string }>('/api/dsh/native-surface/open', { method: 'POST', body: JSON.stringify({ sessionId }) }),
+  downloadDshSessionLog: async (sessionId: string, commandId: string): Promise<{ blob: Blob; filename: string }> => {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/dsh-export?commandId=${encodeURIComponent(commandId)}`, { credentials: 'same-origin' });
+    if (!response.ok) throw new Error(`会话下载失败：${response.status} ${(await response.text()).slice(0, 200)}`);
+    if (response.headers.get('content-type')?.split(';')[0] !== 'application/zip') throw new Error('原生导出没有返回 ZIP 文件');
+    const filename = /filename="([^"]+)"/u.exec(response.headers.get('content-disposition') ?? '')?.[1] ?? 'dsh-session.zip';
+    return { blob: await response.blob(), filename };
+  },
   nativeControls: (sessionId: string, catalog = false) => request<NativeControlSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/native${catalog ? '?catalog=1' : ''}`),
   connectNativeControls: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/connect`, { method: 'POST', body: JSON.stringify({ commandId, action: { type: 'connect' } }) }),
   nativeAction: (sessionId: string, value: NativeActionRequest) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions`, { method: 'POST', body: JSON.stringify(value) }),

@@ -214,6 +214,18 @@ export class DshNativeSurface {
     this.tickets.set(hash(ticket), { binding: binding.key, expiresAt, nativeId: options.nativeId });
     return { actionUrl: `${this.publicOrigin}/__webdcc/open`, ticket, expiresAt: new Date(expiresAt).toISOString() };
   }
+  /** Fixed binary read for an authenticated application export receipt.
+   * Native HTML remains confined to the separate surface origin. */
+  async sessionExport(nativeId: string): Promise<Response> {
+    if (!/^[A-Za-z0-9_:.-]{1,256}$/.test(nativeId)) throw fail('Invalid native Session identity', 400);
+    const binding = await this.currentBinding(true);
+    const response = await this.fetchNative(binding, {
+      path: '/api/session.export', query: new URLSearchParams({ sessionId: nativeId, includeDescendants: 'true' }).toString(),
+    }, { method: 'GET', headers: {}, body: undefined });
+    if (!this.stillCurrent(binding)) { await response.body?.cancel(); throw fail('Native Host changed during export', 401); }
+    if ([401, 403].includes(response.status)) this.revoke();
+    return response;
+  }
   revoke(): void {
     this.epoch++; this.binding = null; this.tickets.clear(); this.admissions.clear();
     for (const socket of this.sockets) socket.close(1008, 'Native surface authentication revoked');
@@ -263,7 +275,7 @@ export class DshNativeSurface {
     if (!this.httpWritable()) throw fail('Native surface is read-only until hosted writer fencing and durable dispatch are configured', 409);
     await this.options.authorizeWrite!(rpc);
   }
-  private fetchNative(binding: Binding, target: { path: string; query: string }, request: FastifyRequest): Promise<Response> {
+  private fetchNative(binding: Binding, target: { path: string; query: string }, request: Pick<FastifyRequest, 'method' | 'headers' | 'body'>): Promise<Response> {
     // DSH's combined plugin scripts use /plugins/??package,...&rev=... .
     // The second '?' is part of the query, not another URL delimiter.
     const url = new URL(target.path.slice(1), binding.url); url.search = target.query === '' ? '' : `?${target.query}`;
