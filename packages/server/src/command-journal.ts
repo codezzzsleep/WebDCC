@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Command, CommandRecord, CommandState, QueuedInput, UserInput } from '@webdcc/protocol';
 import { isQueueInputReorderable } from '@webdcc/protocol';
 import type { Db } from './db.js';
+import { commandDigest, compareCommandIdentity, type CommandIdentity } from './command-digest.js';
 
 export function payloadHash(value: unknown): string {
   const canonical = JSON.stringify(value, (_key, value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -27,14 +28,17 @@ export class CommandJournal {
     return row === undefined ? undefined : { commandId: row.command_id, payloadHash: row.payload_hash, payload: row.payload === null ? null : JSON.parse(row.payload) as Command, op: row.op, sessionId: row.session_id, state: row.state, turnId: row.turn_id, ...(row.result === null ? {} : { result: JSON.parse(row.result) as unknown }), updatedAt: row.updated_at };
   }
 
-  claim(command: Command): { record: CommandRecord; created: boolean; conflict: boolean } {
-    const digest = payloadHash(command);
+  compare(command: Command, record: CommandRecord): CommandIdentity { return compareCommandIdentity(command, record, payloadHash); }
+
+  claim(command: Command): { record: CommandRecord; created: boolean; conflict: boolean; identityUnverified: boolean } {
+    const digest = commandDigest(command);
     const stored = this.isSensitive(command) && command.op === 'answer' ? { ...command, answer: { omitted: 'sensitive-answer' } } : command;
     const result = this.db.prepare('INSERT OR IGNORE INTO command_journal (command_id, payload_hash, payload, op, session_id, state, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(command.clientCommandId, digest, JSON.stringify(stored), command.op, 'sessionId' in command ? command.sessionId : null, 'received', new Date().toISOString());
     const record = this.get(command.clientCommandId);
     if (record === undefined) throw new Error('Command claim did not persist');
-    return { record, created: result.changes === 1, conflict: record.payloadHash !== null && record.payloadHash !== digest };
+    const identity = this.compare(command, record);
+    return { record, created: result.changes === 1, conflict: identity === 'different', identityUnverified: identity === 'unverified' };
   }
 
   state(commandId: string, state: CommandState, result?: unknown): void {

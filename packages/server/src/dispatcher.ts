@@ -3,7 +3,6 @@ import type { FileStore } from './files.js';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
-import { payloadHash } from './command-journal.js';
 
 export interface DispatchResult {
   ok: boolean;
@@ -27,7 +26,11 @@ export class CommandDispatcher {
   async dispatch(command: Command): Promise<DispatchResult> {
     const owner = 'sessionId' in command ? command.sessionId : `command-${command.clientCommandId}`;
     const previous = this.store.journal.get(command.clientCommandId);
-    if (previous?.payloadHash !== null && previous?.payloadHash !== undefined && previous.payloadHash !== payloadHash(command)) return { ok: false, code: 'command-conflict', error: '相同命令 ID 的正文不一致' };
+    if (previous !== undefined) {
+      const identity = this.store.journal.compare(command, previous);
+      if (identity === 'different') return { ok: false, code: 'command-conflict', error: '相同命令 ID 的正文不一致' };
+      if (identity === 'unverified') return { ok: false, code: 'uncertain', error: '旧命令正文身份无法核实，保留原回执，禁止重新执行' };
+    }
     let prepared: UserInput | undefined;
     if (command.op === 'send' && previous === undefined) {
       try {
@@ -47,6 +50,7 @@ export class CommandDispatcher {
     this.recorder?.record(owner, 'web', 'command', diagnostic, 'out');
     const claimed = this.store.journal.claim(command);
     if (claimed.conflict) return { ok: false, code: 'command-conflict', error: '相同命令 ID 的正文不一致' };
+    if (claimed.identityUnverified) return { ok: false, code: 'uncertain', error: '旧命令正文身份无法核实，保留原回执，禁止重新执行' };
     const running = this.inFlight.get(command.clientCommandId);
     if (running !== undefined) return running;
     if (claimed.record.state === 'uncertain' || claimed.record.payloadHash === null) return { ok: false, code: 'uncertain', error: '原生执行结果待核对，禁止自动重发' };
