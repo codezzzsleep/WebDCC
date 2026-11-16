@@ -33,6 +33,7 @@ import { DshAssistantBridge, failedDshAttemptDetails } from './assistant.js';
 import { DshRetryDisplay } from './retry.js';
 import { readDshHostIdentity, requireDshBaseline, type DshHostIdentity } from './identity.js';
 import slashCatalog from './slash-catalog.json' with { type: 'json' };
+import { dshCommandAliases, mapDshCommands, type DshCommandDescriptor } from './commands.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
@@ -930,22 +931,18 @@ export class DshAdapter implements AgentAdapter {
   async previewSlashCommands() {
     await this.ensureSidecar();
     requireDshBaseline(await this.hostIdentity());
-    return { commands: slashCatalog.commands.map(command => ({ ...command, route: 'native-control' as const, source: `DSH ${slashCatalog.nativeVersion} 基线预览` })), complete: false,
+    return { commands: dshCommandAliases(slashCatalog.commands.map(command => ({ ...command, route: 'native-control' as const, source: `DSH ${slashCatalog.nativeVersion} 基线预览` }))), complete: false,
       reason: '创建前展示 DSH 原生基线指令；发送时创建会话，并按该会话的实际目录核对。' };
   }
 
   async slashCommands(sessionId: string): Promise<SlashCommand[]> {
     const runtime = this.sessions.get(sessionId);
     const client = await this.ensureSidecar();
-    const result = await this.call<{ commands?: { name?: string; description?: string; input?: { hint?: string; attachments?: boolean } }[] } | { name?: string; description?: string; input?: { hint?: string; attachments?: boolean } }[]>(client, 'commands/list', {
+    const result = await this.call<{ commands?: DshCommandDescriptor[] } | DshCommandDescriptor[]>(client, 'commands/list', {
         agentId: runtime?.nativeId ?? '',
       });
       const commands = Array.isArray(result) ? result : result.commands ?? [];
-      return commands
-        .filter((command) => typeof command.name === 'string')
-        .map((command) => ({ name: String(command.name).startsWith('/') ? String(command.name) : `/${String(command.name)}`, source: 'DSH commands/list', route: 'native-control' as const,
-          argumentHint: command.input?.hint, supportsAttachments: command.input?.attachments === true,
-          ...(command.description === undefined ? {} : { description: command.description }) }));
+      return mapDshCommands(commands);
   }
 
   async executeSlashControl(sessionId: string, line: string, options: { contentParts?: ResolvedInputContent } = {}): Promise<SlashControlResult> {

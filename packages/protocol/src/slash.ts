@@ -3,6 +3,8 @@ import type { InputContent, InputAttachmentPart } from './input.js';
 
 export interface SlashCommand {
   name: string;
+  /** Native plugin-owned identity, when supplied by the command catalog. */
+  definitionId?: string;
   description?: string;
   source?: string;
   route?: 'native-input' | 'native-control' | 'native-terminal' | 'web';
