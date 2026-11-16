@@ -1481,6 +1481,9 @@ export class CodexAdapter implements AgentAdapter {
           };
           summaries.set(key, summary);
           summary.started = true;
+          for (const [index, text] of (Array.isArray(item['summary']) ? item['summary'] : []).entries()) {
+            if (typeof text === 'string' && !summary.parts.has(index)) summary.parts.set(index, text);
+          }
           const content = summary.content ??= new Map();
           for (const [index, text] of (Array.isArray(item['content']) ? item['content'] : []).entries()) {
             if (typeof text === 'string' && !content.has(index)) content.set(index, text);
@@ -1579,7 +1582,7 @@ export class CodexAdapter implements AgentAdapter {
         if (runtime.completedReasoning?.has(key)) return;
         const body = route === 'reasoning/textDelta';
         const index = body ? params['contentIndex'] : params['summaryIndex'] ?? 0;
-        if (!Number.isSafeInteger(index) || Number(index) < 0 || body && Number(index) > 0xffff_ffff) {
+        if (!Number.isSafeInteger(index) || Number(index) < 0) {
           this.emit(sessionId, { type: 'item.complete', itemKey: `invalid-reasoning-index-${frameKey}`, kind: 'unknown',
             data: { nativeType: method }, native: params, nativeTurnId: nativeTurnId ?? undefined });
           return;

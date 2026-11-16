@@ -14,6 +14,13 @@ it('uses explicit projected native parts including a sparse index or an intentio
   expect(nativeReasoningContent({ kind: 'reasoning', data: { text: '', nativeContent: [] }, native: { type: 'reasoning', content: ['old'] } })).toEqual([]);
 });
 
+it('accepts exact int64 content indices above u32 and rejects indices JavaScript cannot preserve exactly', () => {
+  const parts = [{ index: 0x1_0000_0000, text: 'Sparse native body' }];
+  expect(isValidEventData('reasoning', { text: 'summary', nativeContent: parts })).toBe(true);
+  expect(nativeReasoningContent({ kind: 'reasoning', data: { text: 'summary', nativeContent: parts } })).toEqual(parts);
+  expect(validNativeReasoningParts([{ index: Number.MAX_SAFE_INTEGER + 1, text: 'Inexact' }])).toBe(false);
+});
+
 it.each([[{ index: -1, text: 'bad' }], [{ index: 1.2, text: 'bad' }], [{ index: 0, text: false }], [{ index: 1, text: 'a' }, { index: 1, text: 'b' }]])('rejects malformed native content parts without accepting ambiguous identity', parts => {
   expect(validNativeReasoningParts(parts)).toBe(false);
   expect(isValidEventData('reasoning', { text: 'summary', nativeContent: parts })).toBe(false);

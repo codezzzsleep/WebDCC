@@ -6,7 +6,7 @@ export function validNativeReasoningParts(value: unknown): value is NativeReason
   const indices = new Set<number>();
   return value.every(part => {
     if (part === null || typeof part !== 'object' || !Number.isSafeInteger(part.index) || part.index < 0
-      || part.index > 0xffff_ffff || typeof part.text !== 'string' || indices.has(part.index)) return false;
+      || typeof part.text !== 'string' || indices.has(part.index)) return false;
     indices.add(part.index); return true;
   });
 }

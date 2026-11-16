@@ -28,7 +28,7 @@ it('preserves early body deltas when the item start arrives later and isolates r
   const delta = (turnId: string, text: string) => feed('item/reasoning/textDelta', { turnId, itemId: 'same', contentIndex: 0, delta: text });
   const early = delta('a', 'A');
   expect(early).toMatchObject([{ type: 'item.start', nativeTurnId: 'a' }, { type: 'item.update', data: { text: '', nativeContent: [{ index: 0, text: 'A' }] } }]);
-  expect(feed('item/started', { turnId: 'a', item: { type: 'reasoning', id: 'same', summary: [], content: [] } })[0]).toMatchObject({ data: { nativeContent: [{ index: 0, text: 'A' }] } });
+  expect(feed('item/started', { turnId: 'a', item: { type: 'reasoning', id: 'same', summary: ['Native start summary'], content: [] } })[0]).toMatchObject({ data: { text: 'Native start summary', nativeContent: [{ index: 0, text: 'A' }] } });
   expect(delta('b', 'B').at(-1)).toMatchObject({ nativeTurnId: 'b', data: { nativeContent: [{ index: 0, text: 'B' }] } });
   feed('turn/completed', { turn: { id: 'a', status: 'interrupted' } });
   expect(delta('a', 'late').every(event => event.type === 'item.complete' && event.kind === 'internal')).toBe(true);
@@ -45,6 +45,14 @@ it('records unfinished native body before interruption and keeps missing complet
   ]);
   feed('item/reasoning/textDelta', { turnId: 'next', itemId: 'r', contentIndex: 0, delta: 'Another body' });
   expect(feed('item/completed', { turnId: 'next', item: { type: 'reasoning', id: 'r', summary: ['Final summary'], content: [] } })[0]).toMatchObject({ data: { text: 'Final summary', nativeContent: [{ index: 0, text: 'Another body' }], incomplete: true } });
+});
+
+it('preserves an int64 native body index above u32 without allocating intermediate parts', () => {
+  const feed = fixture();
+  const contentIndex = 0x1_0000_0000;
+  const delta = (text: string) => feed('item/reasoning/textDelta', { turnId: 'turn', itemId: 'r', contentIndex, delta: text });
+  expect(delta('Sparse').at(-1)).toMatchObject({ type: 'item.update', data: { nativeContent: [{ index: contentIndex, text: 'Sparse' }] } });
+  expect(delta(' body').at(-1)).toMatchObject({ data: { nativeContent: [{ index: contentIndex, text: 'Sparse body' }] } });
 });
 
 it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1, '1'])('keeps malformed body indices as unknown without changing valid content (%s)', contentIndex => {
