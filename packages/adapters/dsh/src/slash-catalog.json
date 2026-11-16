@@ -7,41 +7,47 @@
       "name": "/compact",
       "route": "native-control",
       "supportsAttachments": false,
-      "description": "Compact older conversation history"
+      "description": "Compact older conversation history",
+      "definitionId": "@deepseek-ai/dsh-command-compact"
     },
     {
       "name": "/export",
       "route": "native-control",
       "supportsAttachments": false,
-      "description": "Download this Session log as a ZIP archive"
+      "description": "Download this Session log as a ZIP archive",
+      "definitionId": "@deepseek-ai/dsh-session-log-export"
     },
     {
       "name": "/feedback",
       "route": "native-control",
       "argumentHint": "<text>",
       "supportsAttachments": false,
-      "description": "Record feedback about this session"
+      "description": "Record feedback about this session",
+      "definitionId": "@deepseek-ai/dsh-command-feedback"
     },
     {
       "name": "/goal",
       "route": "native-control",
       "argumentHint": "[<objective>|clear|edit <objective>|pause|resume]",
       "supportsAttachments": true,
-      "description": "Set or view the goal for a long-running task"
+      "description": "Set or view the goal for a long-running task",
+      "definitionId": "@deepseek-ai/dsh-command-goal"
     },
     {
       "name": "/permission",
       "route": "native-control",
       "argumentHint": "<preset>",
       "supportsAttachments": false,
-      "description": "Switch the permission preset (sandbox mode + approval policy)"
+      "description": "Switch the permission preset (sandbox mode + approval policy)",
+      "definitionId": "@deepseek-ai/dsh-permission-presets"
     },
     {
       "name": "/plan",
       "route": "native-control",
       "argumentHint": "[off|message]",
       "supportsAttachments": true,
-      "description": "Enter or leave plan mode"
+      "description": "Enter or leave plan mode",
+      "definitionId": "@deepseek-ai/dsh-plan-mode"
     }
   ]
 }
