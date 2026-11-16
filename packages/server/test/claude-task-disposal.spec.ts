@@ -140,6 +140,7 @@ it('preserves both observation and native close failures and can retry owned cle
     ctx.failClose(true);
     const error = await ctx.manager.dispose(ctx.sessionId).catch((error: unknown) => error);
     expect(error).toBeInstanceOf(AggregateError);
+    expect((error as Error).cause).toBe((error as AggregateError).errors[1]);
     expect((error as AggregateError).errors.map((error: Error) => error.message)).toEqual(['controlled observation persistence failure', 'controlled native close failure']);
     expect(ctx.store.getSession(ctx.sessionId)?.status).toBe('error');
     vi.restoreAllMocks(); ctx.failClose(false);
