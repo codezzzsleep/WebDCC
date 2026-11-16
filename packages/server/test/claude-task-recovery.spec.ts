@@ -66,3 +66,31 @@ it('keeps legacy task observations unknown and lets a new query confirm a new ru
     await manager.disposeAll();
   } finally { db.close(); }
 });
+
+it('recovers the current query when an older unavailable observation arrived last', async () => {
+  const db = openDb(':memory:'); const store = new Store(db);
+  let manager: SessionManager | undefined;
+  let second: SessionManager | undefined;
+  try {
+    const workspace = store.createWorkspace('late old query observation', '/tmp');
+    const session = store.createSession({ workspaceId: workspace.id, agent: 'claude-code' });
+    seedTaskRecoveryHistory(store, session.id);
+    store.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'new-query', kind: 'internal',
+      data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: { id: 'new-query', state: 'started' } } });
+    store.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'new-run', kind: 'internal', data: { nativeType: 'task_started' },
+      native: { type: 'system', subtype: 'task_started', session_id: 'controlled-native', task_id: 'background', run_id: '002', description: 'current task' } });
+    store.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'late-old-unavailable', kind: 'internal',
+      data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: { id: 'controlled-query', state: 'unavailable' } } });
+    const before = store.allEvents(session.id);
+    expect(currentClaudeTasks(before).find(task => task.taskId === 'background')).toMatchObject({ status: 'running', runId: '002' });
+    manager = new SessionManager(store, { idleDisposeMin: 0 });
+    const recovered = store.allEvents(session.id);
+    expect(recovered.slice(0, before.length)).toEqual(before);
+    expect(recovered.slice(before.length)).toEqual([expect.objectContaining({ kind: 'internal',
+      data: { nativeType: 'claude-server-recovery', claudeTaskRuntime: { id: 'new-query', state: 'unavailable' } } })]);
+    expect(currentClaudeTasks(recovered).find(task => task.taskId === 'background')).toMatchObject({ status: 'unknown', nativeStatus: 'running', runId: '002' });
+    for (const status of ['completed', 'failed', 'stopped']) expect(currentClaudeTasks(recovered).find(task => task.taskId === status)?.status).toBe(status);
+    second = new SessionManager(store, { idleDisposeMin: 0 });
+    expect(store.allEvents(session.id)).toEqual(recovered);
+  } finally { await second?.disposeAll(); await manager?.disposeAll(); db.close(); }
+});

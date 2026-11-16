@@ -132,11 +132,15 @@ export class SessionManager {
       }
       const events = this.store.allEvents(session.id);
       if (session.agent === 'claude-code' && currentClaudeTasks(events).some(task => !['completed', 'failed', 'stopped'].includes(task.status))) {
-        const observed = events.findLast(event => event.kind === 'internal'
-          && typeof (event.data as EventData['internal']).claudeTaskRuntime?.id === 'string'
-          && (event.data as EventData['internal']).claudeTaskRuntime!.id !== ''
-          && ['started', 'unavailable'].includes((event.data as EventData['internal']).claudeTaskRuntime!.state));
-        const signal = (observed?.data as EventData['internal'] | undefined)?.claudeTaskRuntime;
+        let signal: EventData['internal']['claudeTaskRuntime'];
+        // Preserve late old-query observations without letting them replace
+        // the current query's lifetime, as in the live task projection.
+        for (const event of events) {
+          if (event.kind !== 'internal') continue;
+          const candidate = (event.data as EventData['internal']).claudeTaskRuntime;
+          if (candidate === undefined || typeof candidate.id !== 'string' || candidate.id === '') continue;
+          if (candidate.state === 'started' || candidate.state === 'unavailable' && (signal === undefined || candidate.id === signal.id)) signal = candidate;
+        }
         if (signal?.state !== 'unavailable') {
           const id = signal?.id ?? `legacy:${session.id}`;
           this.store.appendEvent({ sessionId: session.id, turnId: null, itemKey: `claude-server-recovery:${id}`, kind: 'internal',
