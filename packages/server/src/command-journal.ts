@@ -106,6 +106,25 @@ export class CommandJournal {
     this.db.prepare("UPDATE input_queue SET preparation_error = ? WHERE turn_id = ? AND state = 'queued'").run(error, turnId);
   }
 
+  retryPreparation(expected: QueuedInput): void {
+    this.db.transaction(() => {
+      const row = this.db.prepare("SELECT * FROM input_queue WHERE command_id = ? AND session_id = ? AND state = 'queued'")
+        .get(expected.commandId, expected.sessionId) as InputRow | undefined;
+      const conflict = () => Object.assign(new Error('队列输入在核对期间已变化，请刷新后重试'), { statusCode: 409 });
+      if (row === undefined || row.turn_id !== expected.turnId || payloadHash(JSON.parse(row.input)) !== payloadHash(expected.input)
+        || (JSON.parse(row.input) as UserInput).delivery === 'steer') throw conflict();
+      const command = this.get(expected.commandId);
+      // Internal queued work may have no public command row. An existing row
+      // must still refer to this queued admission, never a cancelled or sent one.
+      if (command !== undefined && (command.sessionId !== expected.sessionId || command.turnId !== expected.turnId
+        || command.state !== 'queued' || command.payloadHash === null)) throw conflict();
+      if (this.db.prepare("UPDATE input_queue SET preparation_error = NULL WHERE command_id = ? AND session_id = ? AND turn_id = ? AND state = 'queued'")
+        .run(expected.commandId, expected.sessionId, expected.turnId).changes !== 1) throw conflict();
+      if (command !== undefined && this.db.prepare("UPDATE command_journal SET state = 'queued', result = ?, updated_at = ? WHERE command_id = ? AND session_id = ? AND turn_id = ? AND state = 'queued'")
+        .run(JSON.stringify({ ok: true, value: { turnId: row.turn_id, queued: true } }), new Date().toISOString(), expected.commandId, expected.sessionId, expected.turnId).changes !== 1) throw conflict();
+    }).immediate();
+  }
+
   inputState(turnId: string, state: CommandState): void {
     this.db.transaction(() => {
       if (state === 'completed') {

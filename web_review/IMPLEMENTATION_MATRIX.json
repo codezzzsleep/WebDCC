@@ -266,7 +266,9 @@
           "packages/server/test/queue-order.spec.ts",
           "browser-tests/queue-order.spec.ts",
           "browser-tests/helpers.ts",
-          "web_review/queue-order-source-20261116.summary.json"
+          "web_review/queue-order-source-20261116.summary.json",
+          "packages/server/test/queue-retry-race.spec.ts",
+          "web_review/queue-retry-cancellation-20261116.summary.json"
         ],
         "actualFiles": [
           "packages/server/src/command-journal.ts",
@@ -297,7 +299,9 @@
           "packages/server/test/queue-order.spec.ts",
           "browser-tests/queue-order.spec.ts",
           "browser-tests/helpers.ts",
-          "web_review/queue-order-source-20261116.summary.json"
+          "web_review/queue-order-source-20261116.summary.json",
+          "packages/server/test/queue-retry-race.spec.ts",
+          "web_review/queue-retry-cancellation-20261116.summary.json"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -306,16 +310,18 @@
           "web_review/evidence/native-live-codex-revalidated.json",
           "web_review/evidence/native-claude-stdio.json",
           "web_review/queue-order-source-20261116.summary.json",
+          "web_review/queue-retry-cancellation-20261116.summary.json",
           "web_review/send-cancellation-result-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "同一命令100个并发HTTP/WS请求只进入一次执行；同ID异内容被拒。",
           "在received/queued/dispatching/native-accepted各边界kill进程后恢复，消息仍可见，原生已执行的不会自动重复。",
           "accepted队列可查看、取消、按版本调整；失败与uncertain都有可操作恢复路径。",
-          "队列换序的三家真实原生发送顺序、目标平台恢复未独立验收；本次100并发换序不代替100并发send和全部崩溃窗口。"
+          "队列换序的三家真实原生发送顺序、目标平台恢复未独立验收；本次100并发换序不代替100并发send和全部崩溃窗口。",
+          "220 atomically retries only still-queued preparation under matching input/command identity, preserving concurrentcancel/native admission. Controlled100HTTP retry success1/conflicts99 is separate from full100HTTP/WSsend/crash/realNative acceptance."
         ],
         "remainingWork": "Native reconciliation/ownership, all crash windows, queue auto-recovery under verified ownership, secret-aware commands and complete attachments/outbox coverage remain incomplete.",
-        "latestScope": "2026-11-16 source CAS queue reorder: immutable command/turn/content/native IDs; queued slots and feed committed atomically, old order-cycle revisions rejected, preparation window guarded, source UI order/refresh/conflict recovery. 38 local checks and one Chromium scenario with controlled adapters; no actual native/provider/target acceptance.",
+        "latestScope": "2026-11-16 #220 adds atomic state/identity verification and paired retry/preparation/receipt/feed updates; cancel/sent/uncertain/stale input cannot be reset queued. Ordinary/internal input IDs and text retained; local57 plusfinal17/types/lint, realNative/target scope separate.",
         "latestSendCancellationScope": "2026-11-16 Issue224: ordinary send result settlement atomically rechecks current SQLite state; cancellation and terminal receipts survive late execution results. Source51 checks/full types/changed lint passed; official Native/provider/target validation separate. Complete NP implementation/acceptance remains in progress."
       },
       "dependencyIds": [
