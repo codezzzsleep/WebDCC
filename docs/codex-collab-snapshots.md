@@ -38,7 +38,7 @@ overlapping child turns, restored call identities and unknown targets.
 
 Actual unchanged Codex 0.169 with an isolated local model fixture also emitted
 two native `spawnAgent` pending-init snapshots and completed two child tasks.
-The capture contains 183 transport frames, including 105 RPC frames, and retains
+The capture contains 183 envelopes: 105 original RPC frames and 78 mappings. It retains
 the original child IDs, turns, result messages and failed parent. Its overall
 verification failed: the fixture used the wrong wait argument and mishandled
 internal child notifications. A native wait observation was **NOT_TRIGGERED**.
