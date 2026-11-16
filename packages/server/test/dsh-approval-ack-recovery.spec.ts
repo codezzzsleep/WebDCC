@@ -80,3 +80,28 @@ it('a native asked audit arriving after its waterfall binds the same call to its
     expect(ctx.store.latestInteractionEvent(session.id, 'approve', 'late-audit-waterfall').event?.data).toMatchObject({ optionId: 'rejected' });
   } finally { await ctx.close(); }
 });
+
+for (const askedFirst of [false, true]) it(`an unidentified older audit cannot end a same-tool current approval (askedFirst=${askedFirst})`, async () => {
+  const ctx = await createTestApp(); const { session, feed } = bindDshQuestionFixture(ctx);
+  const asked = { type: 'event', event: { type: 'approval/asked', seq: 1, time: 1, data: { id: 'older-unrelated-durable', toolName: 'write' } } };
+  const current = { type: 'waterfall', event: 'approval/request', agentId: 'native-question-root', eventId: 'current-new-waterfall', request: { toolName: 'write' } };
+  try {
+    if (askedFirst) feed(asked);
+    feed(current);
+    if (!askedFirst) feed(asked);
+    feed({ type: 'event', event: { type: 'approval/decided', seq: 2, time: 2, data: { id: 'older-unrelated-durable', outcome: 'rejected' } } });
+    expect(ctx.store.hasApprovalResolved(session.id, 'current-new-waterfall')).toBe(false);
+    expect(ctx.store.allEvents(session.id).some(event => (event.native as { type?: string } | null)?.type === 'approval/decided')).toBe(true);
+  } finally { await ctx.close(); }
+});
+
+it('a proven same-event approval association survives a redelivery without its optional callId', async () => {
+  const ctx = await createTestApp(); const { session, feed } = bindDshQuestionFixture(ctx);
+  try {
+    feed({ type: 'event', event: { type: 'approval/asked', seq: 1, time: 1, data: { id: 'known-durable', callId: 'known-call', toolName: 'write' } } });
+    feed({ type: 'waterfall', event: 'approval/request', agentId: 'native-question-root', eventId: 'known-event', request: { callId: 'known-call', toolName: 'write' } });
+    feed({ type: 'waterfall', event: 'approval/request', agentId: 'native-question-root', eventId: 'known-event', request: { toolName: 'write' } });
+    feed({ type: 'event', event: { type: 'approval/decided', seq: 2, time: 2, data: { id: 'known-durable', outcome: 'rejected' } } });
+    expect(ctx.store.latestInteractionEvent(session.id, 'approve', 'known-event').event?.data).toMatchObject({ optionId: 'rejected' });
+  } finally { await ctx.close(); }
+});

@@ -2126,7 +2126,7 @@ export class DshAdapter implements AgentAdapter {
         if (id !== '') {
           const approval = { toolName: String(data['toolName'] ?? ''), ...(typeof data['callId'] === 'string' ? { callId: data['callId'] } : {}), eventId: undefined as string | undefined };
           const matches = [...runtime.pending.values()].filter(pending => pending.kind === 'approval' && pending.durableId === undefined
-            && (approval.callId !== undefined ? pending.callId === approval.callId : pending.callId === '' && pending.approvalTool === approval.toolName));
+            && approval.callId !== undefined && approval.callId !== '' && pending.callId === approval.callId);
           if (matches.length === 1) { matches[0]!.durableId = id; approval.eventId = matches[0]!.eventId; }
           runtime.approvals.set(id, approval);
         }
@@ -2345,8 +2345,9 @@ export class DshAdapter implements AgentAdapter {
       if (process.env['WDCC_DEBUG_DSH'] === '1') console.error('[dsh] approval/request', JSON.stringify(value).slice(0, 1200));
       const toolName = String(request['toolName'] ?? '工具');
       const callId = String(request['callId'] ?? '');
-      const matches = [...runtime.approvals].filter(([, approval]) => (approval.eventId === undefined || approval.eventId === eventId)
-        && (callId !== '' ? approval.callId === callId : approval.toolName === toolName));
+      const matches = [...runtime.approvals].filter(([, approval]) =>
+        approval.eventId === eventId && (callId === '' || approval.callId === callId)
+        || approval.eventId === undefined && callId !== '' && approval.callId === callId);
       const durableId = matches.length === 1 ? matches[0]?.[0] : undefined;
       if (durableId !== undefined) { const approval = runtime.approvals.get(durableId); if (approval !== undefined) approval.eventId = eventId; }
       const pending: PendingInteraction = { kind: 'approval', eventId, callId, durableId, approvalTool: toolName, generation: this.muxGeneration };
