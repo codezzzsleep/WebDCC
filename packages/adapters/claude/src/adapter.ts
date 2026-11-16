@@ -285,6 +285,7 @@ export class ClaudeAdapter implements AgentAdapter {
   private readonly sessions = new Map<string, SessionRuntime>();
   private readonly options: ClaudeAdapterOptions;
   private readonly generations = new Map<string, number>();
+  private readonly closeRevisions = new Map<string, number>();
   readonly nativeHistory: ClaudeNativeHistory;
 
   constructor(options: ClaudeAdapterOptions = {}) {
@@ -674,7 +675,9 @@ export class ClaudeAdapter implements AgentAdapter {
   private async replaceIdleQuery(sessionId: string, patch: Partial<CreateOpts>, nativePatch: Partial<ClaudeNativeOptions> = {}): Promise<void> {
     const previous = this.require(sessionId);
     if (previous.turnActive || previous.pending.size > 0 || [...previous.nativePending.values()].some(pending => pending.status === 'pending') || previous.backgroundTasks.size > 0) throw Object.assign(new Error('请等待当前 Claude 轮次、交互和后台任务结束后更改启动选项'), { statusCode: 409 });
+    const closeRevision = this.closeRevisions.get(sessionId) ?? 0;
     const owns = (query: SessionRuntime): boolean => this.generations.get(sessionId) === query.generation
+      && (this.closeRevisions.get(sessionId) ?? 0) === closeRevision
       && (this.sessions.get(sessionId) === undefined || this.sessions.get(sessionId) === query);
     const superseded = (cause?: unknown): Error => Object.assign(nativeError(`Claude 配置操作已被后续 query 或关闭操作接替，旧结果未应用${cause === undefined ? '' : `：${String(cause)}`}`, 409), { code: 'uncertain', cause });
     const launchOpts = { ...previous.launchOpts, ...patch };
@@ -697,7 +700,7 @@ export class ClaudeAdapter implements AgentAdapter {
       // Native stream failure may already have removed this query. Restore
       // only if no newer query or explicit close has taken over its generation.
       if (replacement?.retiring || !owns(owner)) throw superseded(error);
-      if (replacement !== undefined && this.sessions.get(sessionId) === replacement) await this.dispose(sessionId);
+      if (replacement !== undefined && this.sessions.get(sessionId) === replacement) await this.disposeQuery(sessionId, replacement);
       if (!owns(owner)) throw superseded(error);
       // The failed model/default-permission change must leave the previously
       // accepted launch configuration resumable, with only one native writer.
@@ -710,7 +713,7 @@ export class ClaudeAdapter implements AgentAdapter {
         const rollbackOwner = rollback ?? owner;
         const failure = new Error(`Claude 切换失败且原配置恢复失败：${String(error)}；${String(rollbackError)}`, { cause: rollbackError });
         if (rollback?.retiring || !owns(rollbackOwner)) throw superseded(failure);
-        if (rollback !== undefined && this.sessions.get(sessionId) === rollback) await this.dispose(sessionId);
+        if (rollback !== undefined && this.sessions.get(sessionId) === rollback) await this.disposeQuery(sessionId, rollback);
         if (!owns(rollbackOwner)) throw superseded(failure);
         throw Object.assign(failure, { code: 'native-runtime-unavailable', statusCode: 503 });
       }
@@ -796,8 +799,15 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   async dispose(sessionId: string): Promise<void> {
+    // A public close also cancels a replacement during the gap between queries.
+    this.closeRevisions.set(sessionId, (this.closeRevisions.get(sessionId) ?? 0) + 1);
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
+    await this.disposeQuery(sessionId, runtime);
+  }
+
+  /** Owned failure cleanup may still roll back unless a public close supersedes it. */
+  private async disposeQuery(sessionId: string, runtime: SessionRuntime): Promise<void> {
     runtime.retiring = true;
     if (runtime.state.transport === 'live') runtime.state.transport = 'closed';
     this.emitTaskRuntime(sessionId, runtime, 'unavailable');
