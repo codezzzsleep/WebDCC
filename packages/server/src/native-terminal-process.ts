@@ -91,11 +91,14 @@ export class NativeProcessSupervisor {
     record.completed = Promise.resolve().then(() => this.bridge.start(sessionId, id, { command: [...command], size }, delta => {
       if (!this.current(record)) return;
       if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(delta.deltaBase64)) { this.uncertain(record, '原生输出编码无效'); return; }
-      if (record.view.state === 'starting') { record.view.state = 'running'; record.view.confirmed = true; this.state(record); }
+      const started = record.view.state === 'starting';
+      if (started) { record.view.state = 'running'; record.view.confirmed = true; }
+      const capChanged = delta.capReached && !record.view.outputTruncated;
+      record.view.outputTruncated ||= delta.capReached;
+      if (started || capChanged) this.state(record);
       // Native bytes may split UTF-8. Buffer them per stream using StringDecoder.
       const decoder = delta.stream === 'stdout' ? stdout : stderr;
       this.append(record, decoder.write(Buffer.from(delta.deltaBase64, 'base64')));
-      record.view.outputTruncated ||= delta.capReached;
     })).then(result => {
       if (!this.current(record)) { this.uncertain(record, '原生运行代际已变化，进程结果需核对'); return; }
       this.append(record, stdout.end()); this.append(record, stderr.end());
