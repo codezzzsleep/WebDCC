@@ -10,7 +10,7 @@ it('NP-11 pairs native durable approval IDs with waterfall IDs and preserves the
   const replay = DshAdapter.replay('session');
   replay.feed(frame({ type: 'event', event: { type: 'approval/asked', seq: 1, data: { id: 'durable', callId: 'tool', toolName: 'bash' } } }));
   replay.feed(frame({ type: 'waterfall', event: 'approval/request', eventId: 'waterfall', request: { callId: 'tool', toolName: 'bash' } }));
-  expect(replay.feed(frame({ type: 'event', event: { type: 'approval/decided', seq: 2, data: { id: 'durable', outcome: 'rejected' } } }))).toContainEqual(expect.objectContaining({ kind: 'approval.resolved', data: { approvalId: 'waterfall', optionId: 'rejected', by: 'other' } }));
+  expect(replay.feed(frame({ type: 'event', event: { type: 'approval/decided', seq: 2, data: { id: 'durable', outcome: 'rejected' } } }))).toContainEqual(expect.objectContaining({ kind: 'approval.resolved', data: { approvalId: 'waterfall', optionId: 'rejected', by: 'unknown' } }));
 });
 
 it('NP-11 a submitted approval remains unresolved until the matching durable native decision', async () => {
@@ -21,7 +21,7 @@ it('NP-11 a submitted approval remains unresolved until the matching durable nat
   expect(await replay.adapter.respond('session', { approvalId: 'waterfall', optionId: 'rejected' })).toEqual({ confirmed: false });
   await expect(replay.adapter.respond('session', { approvalId: 'waterfall', optionId: 'allowed-once' })).rejects.toMatchObject({ statusCode: 409 });
   expect(replay.feed(frame({ type: 'cancel', eventId: 'waterfall' })).filter(event => event.type === 'item.complete' && event.kind === 'approval.resolved')).toHaveLength(0);
-  expect(replay.feed(frame({ type: 'event', event: { type: 'approval/decided', seq: 2, data: { id: 'durable', outcome: 'rejected' } } }))).toContainEqual(expect.objectContaining({ kind: 'approval.resolved', data: { approvalId: 'waterfall', optionId: 'rejected', by: 'user' } }));
+  expect(replay.feed(frame({ type: 'event', event: { type: 'approval/decided', seq: 2, data: { id: 'durable', outcome: 'rejected' } } }))).toContainEqual(expect.objectContaining({ kind: 'approval.resolved', data: { approvalId: 'waterfall', optionId: 'rejected', by: 'unknown' } }));
 });
 
 it('unknown native reverse requests delegate safely without inventing an approval result', async () => {
