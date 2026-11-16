@@ -893,9 +893,13 @@ export class SessionManager {
     try { result = await runtime.adapter.answer(sessionId, questionId, answer); this.assertOwner(runtime); } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
     if (result?.submitted === false) { if (this.store.interactions.finish(claim, true)) this.persistInteractionSubmission(claim, 'collected'); return result; }
     if (result?.confirmed === false) { if (this.store.interactions.finish(claim, false, false)) for (const row of this.store.interactions.group(claim)) this.persistInteractionSubmission(row, 'sent'); this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result; }
-    if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result ?? { submitted: true, questionIds: [questionId] }; }
+    if (!this.store.interactions.finish(claim) && !(runtime.adapter.id === 'dsh' && result?.confirmed === true && this.store.interactions.confirmDshQuestionReceipt(claim))) {
+      this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result ?? { submitted: true, questionIds: [questionId] };
+    }
     for (const id of result?.questionIds ?? [questionId]) {
-      const question = this.store.allEvents(sessionId).find((event) => event.kind === 'question' && (event.data as EventData['question']).questionId === id);
+      const events = this.store.allEvents(sessionId);
+      const matches = (event: StoredEvent) => event.kind === 'question' && (event.data as EventData['question']).questionId === id;
+      const question = runtime.adapter.id === 'dsh' ? events.findLast(matches) : events.find(matches);
       if (question === undefined) continue;
       const data = question.data as EventData['question'];
       const resolved = this.store.appendEvent({
@@ -903,7 +907,8 @@ export class SessionManager {
         turnId: question.turnId,
         itemKey: `question-resolved-${id}`,
         kind: 'question',
-        data: { ...data, status: 'answered' },
+        data: { ...data, status: 'answered', ...(runtime.adapter.id === 'dsh' ? { resolution: 'native-acknowledged' as const } : {}) },
+        ...(runtime.adapter.id !== 'dsh' || question.nativeSeq === undefined ? {} : { nativeSeq: question.nativeSeq }),
       });
       this.hooks.onEvent(resolved);
     }

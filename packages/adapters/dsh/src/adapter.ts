@@ -245,6 +245,7 @@ interface PendingInteraction {
   sent?: boolean;
   sending?: boolean;
   answerAttempt?: object;
+  acceptedReply?: boolean;
   approvalTool?: string;
   approvalItem?: EventData['approval.request'];
   transportClosed?: boolean;
@@ -1054,7 +1055,7 @@ export class DshAdapter implements AgentAdapter {
       if (!pending.timed || pending.continued) return;
       const submitted = pending.sent || pending.sending;
       pending.continued = true; pending.transportClosed = true;
-      pending.sent = false; pending.sending = false; pending.answerAttempt = undefined;
+      pending.sent = false; pending.sending = false; pending.answerAttempt = undefined; pending.acceptedReply = false;
       this.releaseQuestionWaits(pending);
       pending.questionItems = pending.questionItems?.map(question => ({ ...question, isBlocking: false,
         ...(pending.callId === undefined ? {} : { dshQuestion: { nativeId: runtime.nativeId, callId: pending.callId, itemId: question.dshQuestion?.itemId ?? question.questionId.slice(pending.eventId.length + 1), timed: true, phase: 'continued' as const } }),
@@ -1065,14 +1066,14 @@ export class DshAdapter implements AgentAdapter {
     }
     const complete = result.kind === 'answered' && result.answers.length === pending.questionIds?.length
       && result.answers.every(answer => pending.questionIds?.includes(answer.id));
-    const local = complete && (pending.sent || pending.sending) && sameDshQuestionAnswers(result.answers, pending.answers);
+    const local = complete && pending.continued === true && pending.acceptedReply === true && sameDshQuestionAnswers(result.answers, pending.answers);
     pending.settlement = result;
     runtime.pending.delete(pending.eventId);
     this.releaseQuestionWaits(pending);
     for (const question of pending.questionItems ?? []) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: {
       ...question, status: complete ? 'answered' : 'skipped',
       ...(result.kind === 'cancelled' ? { outcome: 'cancel' as const } : {}),
-      resolution: complete ? local ? 'native-acknowledged' : 'external' : result.kind === 'cancelled' ? 'external' : 'outcome-unknown',
+      resolution: complete ? local ? 'native-acknowledged' : 'native-resolved' : result.kind === 'cancelled' ? 'external' : 'outcome-unknown',
     }, native, nativeSeq });
   }
 
@@ -1696,27 +1697,30 @@ export class DshAdapter implements AgentAdapter {
     pending.answers ??= new Map();
     pending.answers.set(id, { id, selected, ...(custom === undefined || custom === '' ? {} : { custom }) });
     if (pending.answers.size < (pending.questionIds?.length ?? 1)) return { submitted: false };
-    const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch;
-    const continuedAtDispatch = pending.continued === true;
+    const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch; const nativeId = runtime.nativeId;
+    const continuedAtDispatch = pending.continued === true; let continuedAccepted = false;
     const answers = new Map(pending.answers); const attempt = {};
-    pending.sending = true; pending.answerAttempt = attempt;
+    pending.sending = true; pending.answerAttempt = attempt; pending.acceptedReply = false;
     const reply = (confirmed: boolean): AnswerSubmission => ({ submitted: true, confirmed,
       questionIds: (pending.questionIds ?? [id]).map(question => `${eventId}:${question}`) });
-    const nativeConfirmed = (): boolean => this.sessions.get(sessionId) === runtime && (continuedAtDispatch || !pending.continued)
+    const currentIdentity = (): boolean => this.sessions.get(sessionId) === runtime && runtime.nativeId === nativeId
+      && this.client === client && (continuedAtDispatch || this.clientId === clientId) && this.muxGeneration === generation && this.hostEpoch === epoch
+      && pending.answerAttempt === attempt && (runtime.pending.get(eventId) === pending || runtime.pending.get(eventId) === undefined && pending.settlement !== undefined);
+    const nativeConfirmed = (): boolean => continuedAtDispatch && continuedAccepted && currentIdentity()
       && pending.settlement?.kind === 'answered' && sameDshQuestionAnswers(pending.settlement.answers, answers);
     try {
       if (continuedAtDispatch && pending.callId !== undefined) {
-        const accepted = await this.call<boolean>(client, 'userQuestions/answer', { agentId: runtime.nativeId, callId: pending.callId, answer: { answers: [...answers.values()] } }, sessionId);
+        const accepted = await this.call<boolean>(client, 'userQuestions/answer', { agentId: nativeId, callId: pending.callId, answer: { answers: [...answers.values()] } }, sessionId);
         if (accepted !== true) throw dshNativeError('The native continued question has ended', 409);
+        if (!currentIdentity()) throw Object.assign(dshNativeError('继续回答的接收回执属于旧原生连接，本次结果待核对', 503), { code: 'uncertain' });
+        continuedAccepted = true; pending.acceptedReply = true;
       } else await this.call(client, '$events/result', { clientId, eventId, outcome: { kind: 'result', value: { answers: [...answers.values()] } } }, sessionId);
       // The business result may arrive before the HTTP reply. It belongs to
       // this original call; returning its receipt never mutates a new pending.
       if (nativeConfirmed()) return reply(true);
       if (!continuedAtDispatch && pending.continued) throw Object.assign(dshNativeError('前台等待已结束，请使用稍后回答入口', 409), { nativeAdmission: 'not-submitted' });
       if (pending.settlement !== undefined) throw Object.assign(dshNativeError('原生问题已由其他结果结束，本次回答未确认', 503), { code: 'uncertain' });
-      const current = runtime.pending.get(eventId);
-      if (this.sessions.get(sessionId) !== runtime || this.client !== client || !pending.continued && this.clientId !== clientId || this.muxGeneration !== generation || this.hostEpoch !== epoch
-        || current !== pending && (current !== undefined || pending.settlement === undefined))
+      if (!currentIdentity())
         throw Object.assign(dshNativeError('问题回执属于旧连接，原生回答结果待核对', 503), { code: 'uncertain' });
       pending.sent = true;
       return reply(false);

@@ -14,7 +14,7 @@ it('source question claims and current HTTP lookup stay sent until the matching 
     result(['Continue']);
     expect(ctx.store.interactions.get(session.id, 'answer', id)?.state).toBe('resolved');
     expect(ctx.store.getSession(session.id)?.status).toBe('idle');
-    expect((await lookup()).json().event.data).toMatchObject({ questionId: id, toolCallId: 'native-question-call', status: 'answered', resolution: 'native-acknowledged' });
+    expect((await lookup()).json().event.data).toMatchObject({ questionId: id, toolCallId: 'native-question-call', status: 'answered', resolution: 'native-resolved' });
   } finally { await ctx.close(); }
 });
 
@@ -24,7 +24,7 @@ it('another native UI answer retires only its exact foreground question, includi
     feed({ type: 'cancel', eventId: 'native-question-waterfall' });
     result(['Stop']);
     expect(ctx.store.interactions.get(session.id, 'answer', id)?.state).toBe('resolved');
-    expect(ctx.store.latestInteractionEvent(session.id, 'answer', id).event?.data).toMatchObject({ status: 'answered', resolution: 'external' });
+    expect(ctx.store.latestInteractionEvent(session.id, 'answer', id).event?.data).toMatchObject({ status: 'answered', resolution: 'native-resolved' });
     expect(ctx.store.interactions.get(session.id, 'answer', other)?.state).toBe('pending');
   } finally { await ctx.close(); }
 });
@@ -49,12 +49,7 @@ for (const outcome of ['external-answer', 'native-cancel', 'matching-answer-lost
       else result(outcome === 'external-answer' ? ['Stop'] : ['Continue']);
       release();
       const response = (await sending).json();
-      if (outcome === 'matching-answer-lost-ack') {
-        expect(response).toMatchObject({ ok: true, value: { confirmed: true } });
-        expect(ctx.store.journal.get(commandId)?.state).toBe('completed');
-      } else {
-        expect(response).toMatchObject({ ok: false, code: 'uncertain' });
-        expect(ctx.store.journal.get(commandId)?.state).toBe('uncertain');
-      }
+      expect(response).toMatchObject({ ok: false, code: 'uncertain' });
+      expect(ctx.store.journal.get(commandId)?.state).toBe('uncertain');
     } finally { release?.(); await ctx.close(); }
   });

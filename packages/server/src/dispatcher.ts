@@ -64,7 +64,9 @@ export class CommandDispatcher {
         : command.op === 'approve' ? this.store.interactions.get(command.sessionId, 'approve', command.approvalId) : undefined;
       const externalAsync = interaction?.kind === 'answer' && (JSON.parse(interaction.request) as { asyncReply?: unknown; resolution?: string }).asyncReply !== undefined
         && interaction.state === 'resolved' && (JSON.parse(interaction.request) as { resolution?: string }).resolution !== 'native-acknowledged';
-      const acceptedState = externalAsync ? state === 'cancelled' ? 'cancelled' : 'uncertain'
+      const observedDsh = command.op === 'answer' && this.store.getSession(command.sessionId)?.agent === 'dsh'
+        && interaction?.state === 'resolved' && (JSON.parse(interaction.request) as { resolution?: string }).resolution === 'native-resolved';
+      const acceptedState = externalAsync || observedDsh ? state === 'cancelled' ? 'cancelled' : 'uncertain'
         : interaction === undefined ? 'completed' : interaction.state === 'collected' || interaction.state === 'queued' ? 'queued'
         : interaction.state === 'resolved' || interaction.state === 'cancelled' ? 'completed' : interaction.state === 'uncertain' ? 'uncertain' : 'dispatching';
       const nextState = blockedInput !== undefined ? 'queued' : result.ok ? command.op === 'send' && state !== undefined ? state : acceptedState : result.code === 'uncertain' ? 'uncertain' : 'failed';

@@ -53,7 +53,7 @@ export class InteractionStore {
     }
     if (previous !== undefined && (state === 'resolved' || state === 'cancelled')) {
       const cancelled = previous.command_id !== null && (this.db.prepare('SELECT state FROM command_journal WHERE command_id = ?').get(previous.command_id) as { state: string } | undefined)?.state === 'cancelled';
-      if (!cancelled) this.commandState(previous, question.resolution === 'external' || question.resolution === 'outcome-unknown' ? 'uncertain' : 'completed');
+      if (!cancelled) this.commandState(previous, question.resolution === 'external' || question.resolution === 'outcome-unknown' || question.resolution === 'native-resolved' ? 'uncertain' : 'completed');
     }
     this.db.prepare('INSERT OR IGNORE INTO interactions (session_id, kind, id, group_id, state, revision, request) VALUES (?, ?, ?, ?, ?, 1, ?)').run(event.sessionId, kind, id, groupId, state, JSON.stringify(request));
     if (state === 'resolved' || state === 'cancelled') this.db.prepare('UPDATE interactions SET state = ?, request = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?').run(state, JSON.stringify(request), event.sessionId, kind, id);
@@ -73,6 +73,23 @@ export class InteractionStore {
       if (row.state === 'resolved' || row.state === 'cancelled') throw conflict('原生交互已经结束');
       this.db.prepare("UPDATE interactions SET state = 'sending', command_id = ?, error = NULL, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?").run(commandId, sessionId, kind, id);
       return this.get(sessionId, kind, id)!;
+    })();
+  }
+  /** A current continued-question boolean receipt can arrive after its
+   * business result; a void Gateway ACK cannot invoke this confirmation. */
+  confirmDshQuestionReceipt(row: InteractionRow): boolean {
+    return this.db.transaction(() => {
+      const current = this.get(row.session_id, row.kind, row.id);
+      const original = (JSON.parse(row.request) as { dshQuestion?: EventData['question']['dshQuestion'] }).dshQuestion;
+      if (row.kind !== 'answer' || current?.state !== 'resolved' || current.command_id !== row.command_id || original?.phase !== 'continued') return false;
+      const group = this.group(current);
+      if (!group.every(item => {
+        const request = JSON.parse(item.request) as { dshQuestion?: EventData['question']['dshQuestion']; resolution?: string };
+        return item.state === 'resolved' && request.resolution === 'native-resolved' && request.dshQuestion?.phase === 'continued'
+          && request.dshQuestion.nativeId === original.nativeId && request.dshQuestion.callId === original.callId;
+      })) return false;
+      for (const item of group) this.commandState(item, 'completed');
+      return true;
     })();
   }
   finish(row: InteractionRow, collected = false, confirmed = true): boolean {
