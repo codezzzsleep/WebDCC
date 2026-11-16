@@ -32,7 +32,7 @@ it.each([false, true])('retains native reasoning summary strings on completion (
   const completed = feed('item/completed', { threadId: 'thread', turnId: 'turn', item });
   expect(completed).toEqual([{
     type: 'item.complete', itemKey: item.id, kind: 'reasoning',
-    data: { text: '先检查输入。\nThen verify the result.' },
+    data: { text: '先检查输入。\nThen verify the result.', nativeContent: [{ index: 0, text: 'Private body is separate from the visible summary.' }] },
     nativeTurnId: 'turn', native: item,
   }]);
 });

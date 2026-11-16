@@ -1,6 +1,7 @@
 /** 每种事件 kind 的数据校验（SPEC-M8 F2）：adapter 发送前、前端渲染前各校验一次 */
 import type { EventData, EventKind } from './events.js';
 import { isInputContent } from './input.js';
+import { validNativeReasoningParts } from './codex-reasoning.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -21,7 +22,7 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'assistant.message':
       return typeof data['text'] === 'string';
     case 'reasoning':
-      return typeof data['text'] === 'string';
+      return typeof data['text'] === 'string' && (data['nativeContent'] === undefined || validNativeReasoningParts(data['nativeContent']));
     case 'command':
       return typeof data['command'] === 'string' && typeof data['status'] === 'string';
     case 'file.read':
