@@ -1,4 +1,4 @@
-import { chmod, mkdir, readdir, lstat, rm } from 'node:fs/promises';
+import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { AdapterEvent, AgentId, TraceFrame, TraceSink } from '@webdcc/protocol';
@@ -46,12 +46,7 @@ export class InteractionRecorder {
   }
   private async pruneExpired(): Promise<void> {
     this.nextPruneAt = Date.now() + 60 * 60 * 1000;
-    const cutoff = Date.now() - this.retentionMs;
-    for (const name of await readdir(this.directory)) {
-      if (name !== '.wdcc-diagnostic-quota.json' && !name.endsWith('.jsonl') && !/^(context|coverage)-.*\.json$/.test(name) && !/^model-.*\.coverage\.json$/.test(name)) continue;
-      const file = join(this.directory, name); const info = await lstat(file);
-      if (info.isFile() && info.mtimeMs < cutoff) await rm(file);
-    }
+    await this.writer.pruneExpired(this.directory, Date.now() - this.retentionMs);
   }
   addSecret(value: string | undefined): void { if (value !== undefined && value.length > 0) this.secrets.add(value); }
   bind(context: InteractionContext): void { this.contexts.set(context.sessionId, { ...this.contexts.get(context.sessionId), ...context }); this.persistContext(context.sessionId); }
