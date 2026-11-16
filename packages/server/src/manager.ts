@@ -27,7 +27,7 @@ import type {
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
-import { findUserEcho, resolveAnswer } from '@webdcc/protocol';
+import { findUserEcho, resolveAnswer, currentCodexSubagents } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -181,6 +181,7 @@ export class SessionManager {
   }
 
   private async prepareLaunch<T extends CreateOpts>(session: SessionDto, opts: T): Promise<T> {
+    if (session.agent === 'codex') opts = { ...opts, restoreCodexSubagents: currentCodexSubagents(this.store.allEvents(session.id)) };
     const runtime = this.runtimes.get(session.id);
     if (runtime === undefined) throw new Error('原生实例尚未绑定运行身份');
     this.store.nativeEvents.addSecret(opts.provider?.apiKey);

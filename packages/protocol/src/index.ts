@@ -16,6 +16,7 @@ export * from './trace.js';
 export * from './turn.js';
 export * from './invariants.js';
 export * from './watchdog.js';
+export * from './subagents.js';
 export * from './capabilities.js';
 export * from './build.js';
 export * from './native-evidence.js';
