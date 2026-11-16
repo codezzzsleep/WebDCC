@@ -76,9 +76,14 @@ try {
           .filter(element => element.getAttribute('data-native-item-key') === key)
           .map(element => element.getAttribute('data-raw-text')), item.item.id);
         if (shown.length === 1) break;
+        // Initial history may contain only the latest turns. Scroll through
+        // the source UI so its normal paging loads the original older item.
+        await page.getByTestId('timeline').hover(); await page.mouse.wheel(0, -20_000);
         await new Promise(resolve => setTimeout(resolve, 30));
       } while (Date.now() < deadline);
-      assert.deepEqual(shown, [item.item.review], 'Original Review item identity/text missing in browser');
+      if (shown.length !== 1) evidence['browserReviewElements'] = await page.getByTestId('codex-review-result')
+        .evaluateAll(elements => elements.map(element => ({ key: element.getAttribute('data-native-item-key'), text: element.getAttribute('data-raw-text') })));
+      assert.deepEqual(shown, [item.item.review], 'Original Review item identity/text missing in browser: ' + item.item.id);
     }
   };
   await verify(); await page.reload(); await verify(); assert.deepEqual(errors, []);
