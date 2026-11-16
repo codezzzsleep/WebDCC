@@ -52,6 +52,6 @@ Native HTTP attribution contexts use ordinary file descriptors opened without fo
 
 An unavailable diagnostic directory disables optional recording while the server continues. A failed model observer route setup preserves the original Provider and launch inputs; coverage reports the failure. Malformed percent encoding in a target URL username or password is rejected at this setup boundary, before a request handler can fail. Valid encoded credentials keep the native Basic Auth value; password echoes are masked using both encoded and decoded values. Recording failures never authorize blind retries of uncertain model execution.
 
-The recording summary remains incomplete for omitted payloads, failed writes and missing terminal records. A green source test does not establish complete native coverage.
+The recording summary waits for pending writes before copying their incomplete state and errors. The first response includes failures observed during that wait even if coverage could not be saved; a recording read failure also preserves those errors. The summary remains incomplete for omitted payloads, failed writes and missing terminal records. A green source test does not establish complete native coverage.
 
 SQLite events, command/queue payloads, IndexedDB outbox, secret user-dialog fields, cross-frame native protocol fragments and old recording exports still need the full NP-06/14 sensitive-data policy. The HTTP and observer fixes do not claim that every persisted input is scrubbed.
