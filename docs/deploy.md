@@ -98,6 +98,11 @@ WDCC_IDLE_DISPOSE_MIN=30
 在临时检出中安装依赖并构建，写入 `/opt/webdcc/releases/<commit>`，切换
 `/opt/webdcc/current` 后只重启 `webdcc.service`，失败会恢复上一个版本。
 
+同一发布目录使用 `.release.lock` 排他锁，从构建开始保持到复核、回滚和清理结束。
+已有锁时另一发布会明确失败；正常完成或失败收尾后可重试。
+异常终止可能留下锁，脚本不会按时间或猜测 PID 自动移除。
+处理残留锁前应核对 owner.json 记录的发布进程和实际服务状态，再恢复发布。
+
 ## 运行注意事项
 
 - **不要同时运行 DSH 自带的 `dsh web`**：两边共享全局注册表会互相覆盖（SPEC 5.4.9）。WebDCC 自己会在 127.0.0.1:${WDCC_DSH_PORT} 拉起侧车。

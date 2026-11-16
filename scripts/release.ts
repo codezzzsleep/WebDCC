@@ -34,8 +34,13 @@ function activeTurnCount(): number {
       db.close();
     }
 }
-await mkdir(staging, { recursive: true });
+const releaseLock = join(releaseRoot, '.release.lock');
+await mkdir(releaseRoot, { recursive: true });
+try { await mkdir(releaseLock); }
+catch (error) { throw new Error('无法取得发布锁；核对同目录的发布任务及 .release.lock，未执行构建或切换', { cause: error }); }
 try {
+  await writeFile(join(releaseLock, 'owner.json'), JSON.stringify({ pid: process.pid, commit, startedAt: new Date().toISOString() }) + '\n', { mode: 0o600 });
+  await mkdir(staging, { recursive: true });
   execFileSync('git', ['clone', '--quiet', '--no-local', '.', checkout], { stdio: 'inherit' });
   execFileSync('git', ['checkout', '--quiet', commit], { cwd: checkout, stdio: 'inherit' });
   execFileSync('pnpm', ['install', '--frozen-lockfile'], { cwd: checkout, stdio: 'inherit' });
@@ -133,7 +138,8 @@ try {
   for (const old of entries.sort((a, b) => b.modified - a.modified).filter(entry => entry.name !== commit && join(releasesDir, entry.name) !== previous).slice(5)) await rm(join(releasesDir, old.name), { recursive: true, force: true });
   process.stdout.write(`released ${commit} -> ${target}\n`);
 } finally {
-  await rm(staging, { recursive: true, force: true });
+  try { await rm(staging, { recursive: true, force: true }); }
+  finally { await rm(releaseLock, { recursive: true, force: true }); }
 }
 
 async function readlinkSafe(path: string): Promise<string | undefined> {
