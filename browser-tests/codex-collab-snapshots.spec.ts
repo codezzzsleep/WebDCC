@@ -1,6 +1,7 @@
 import { chromium, type Browser } from '@playwright/test';
 import { expect, it } from 'vitest';
-import { currentCodexSubagents, type AdapterEvent, type CreateOpts } from '@webdcc/protocol';
+import type { AdapterEvent, CreateOpts } from '@webdcc/protocol';
+import { currentCodexSubagents } from '../packages/protocol/src/index.js';
 import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.js';
 import type { ThreadItem } from '../packages/adapters/codex/src/schema/v2/ThreadItem.js';
