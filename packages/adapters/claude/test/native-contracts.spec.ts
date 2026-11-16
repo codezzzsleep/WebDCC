@@ -136,3 +136,21 @@ it('uses an explicit null for a native task whose run identity is absent instead
   expect(() => parseClaudeNativeAction({ type: 'stop-task', taskId: 'legacy-task' })).toThrow('runId');
   expect(() => parseClaudeNativeAction({ type: 'stop-task', taskId: 'legacy-task', runId: {} })).toThrow('runId');
 });
+
+it('stops a current snapshot-only task without inventing its lifecycle and rejects it after membership is lost', async () => {
+  const h = harness();
+  try {
+    await h.adapter.create({ sessionId: 's', cwd: '/tmp', providerId: null });
+    h.push({ type: 'system', subtype: 'background_tasks_changed', session_id: 'native', tasks: [
+      { task_id: 'snapshot-only', run_id: '002', task_type: 'local_agent', description: 'native member' },
+    ] });
+    await vi.waitFor(() => expect(h.adapter.nativeState('s').tasks[0]).toMatchObject({ status: 'unknown', backgroundPresence: 'present' }));
+    expect(await h.adapter.executeNativeControl('s', { type: 'stop-task', taskId: 'snapshot-only', runId: '002' })).toMatchObject({ submitted: true, confirmed: false });
+    expect(h.q.stopTask).toHaveBeenCalledExactlyOnceWith('snapshot-only');
+    expect(h.adapter.nativeState('s').tasks[0]?.status).toBe('unknown');
+    h.push({ type: 'system', subtype: 'background_tasks_changed', session_id: 'native', tasks: [] });
+    await vi.waitFor(() => expect(h.adapter.nativeState('s').tasks[0]?.backgroundPresence).toBe('absent'));
+    await expect(h.adapter.executeNativeControl('s', { type: 'stop-task', taskId: 'snapshot-only', runId: '002' })).rejects.toMatchObject({ code: 'native-control-rejected' });
+    expect(h.q.stopTask).toHaveBeenCalledTimes(1);
+  } finally { await h.adapter.dispose('s'); }
+});

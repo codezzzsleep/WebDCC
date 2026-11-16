@@ -55,6 +55,20 @@ export class NativeActionStore {
     this.db.prepare('UPDATE native_actions SET runtime_key = ?, native_id = ? WHERE command_id = ?')
       .run(payloadHash(identity), nativeId, commandId);
   }
+  /** A returned SDK stop call is evidence about the old command, even when
+   * the operation subsequently loses its owner. It never settles the task. */
+  recordStopReturn(commandId: string, result: unknown): void {
+    const value = result !== null && typeof result === 'object' ? result as { id?: unknown; runId?: unknown; callReturnedAt?: unknown } : {};
+    if (typeof value.id !== 'string' || value.id === '' || value.id.length > 4096
+      || value.runId !== null && value.runId !== undefined && typeof value.runId !== 'string') return;
+    const row = this.db.prepare("SELECT reference, target_key FROM native_actions WHERE command_id = ? AND type = 'stop-task'").get(commandId) as { reference: string | null; target_key: string } | undefined;
+    const runId = value.runId ?? null;
+    if (row === undefined || row.target_key !== targetKey({ type: 'stop-task', taskId: value.id, runId })) return;
+    const previous = row.reference === null ? {} : JSON.parse(row.reference) as { callReturnedAt?: string };
+    const returnedAt = typeof value.callReturnedAt === 'string' && Number.isFinite(Date.parse(value.callReturnedAt)) ? value.callReturnedAt : new Date().toISOString();
+    this.db.prepare('UPDATE native_actions SET reference = ? WHERE command_id = ?')
+      .run(JSON.stringify({ id: value.id, runId, callReturnedAt: previous.callReturnedAt ?? returnedAt }), commandId);
+  }
   /** Only an identified native terminal notification may close a submission. */
   confirm(sessionId: string, identity: RuntimeIdentity, nativeId: string, action: { type: string; [key: string]: unknown }): void {
     this.db.prepare("UPDATE native_actions SET state = 'completed', error = NULL, updated_at = ? WHERE session_id = ? AND runtime_key = ? AND native_id = ? AND target_key = ? AND state IN ('dispatching','submitted')")
@@ -97,10 +111,9 @@ export class NativeActionStore {
     try {
       const result = await run();
       const response = result !== null && typeof result === 'object' ? result as { id?: unknown; generation?: unknown; runId?: unknown } : {};
-      if (typeof response.id === 'string' && response.id.length <= (value.action.type === 'stop-task' ? 4096 : 128)) {
-        const reference = { id: response.id, ...(Number.isSafeInteger(response.generation) ? { generation: response.generation } : {}),
-          ...(value.action.type !== 'stop-task' ? {} : { callReturnedAt: new Date().toISOString(),
-            ...(response.runId === null || typeof response.runId === 'string' ? { runId: response.runId } : {}) }) };
+      if (value.action.type === 'stop-task') this.recordStopReturn(value.commandId, result);
+      else if (typeof response.id === 'string' && response.id.length <= 128) {
+        const reference = { id: response.id, ...(Number.isSafeInteger(response.generation) ? { generation: response.generation } : {}) };
         this.db.prepare('UPDATE native_actions SET reference = ? WHERE command_id = ?').run(JSON.stringify(reference), value.commandId);
       }
       const submitted = result !== null && typeof result === 'object' && (result as { confirmed?: boolean }).confirmed === false;
@@ -108,6 +121,7 @@ export class NativeActionStore {
       this.finish(value.commandId, failed ? 'failed' : submitted ? 'submitted' : 'completed', failed ? 'native-command-failed' : undefined);
       return { receipt: this.get(value.commandId, sessionId)!, result };
     } catch (failure) {
+      if (value.action.type === 'stop-task') this.recordStopReturn(value.commandId, (failure as { nativeCallReturn?: unknown } | null)?.nativeCallReturn);
       // Only our explicit pre-dispatch validation can prove there was no side effect.
       const rejected = (failure as { code?: string } | null)?.code === 'native-control-rejected';
       this.finish(value.commandId, rejected ? 'failed' : 'uncertain', rejected ? 'rejected-before-dispatch' : 'native-outcome-unconfirmed');

@@ -16,8 +16,8 @@ export function readClaudeTaskControls(sessionId: string): Promise<NativeControl
 export function useClaudeTaskControls(sessionId: string | null, enabled = true): NativeControlSnapshot | undefined {
   useStoreVersion();
   const [value, setValue] = useState<{ sessionId: string; init: number; snapshot: NativeControlSnapshot }>();
-  const init = sessionId === null ? 0 : store.getEvents(sessionId).findLast(event => object(event.native)['type'] === 'system'
-    && ['init', 'task_started', 'background_tasks_changed'].includes(String(object(event.native)['subtype'])))?.seq ?? 0;
+  const init = sessionId === null ? 0 : store.getEvents(sessionId).findLast(event => object(event.data)['claudeTaskRuntime'] !== undefined
+    || object(event.native)['type'] === 'system' && ['init', 'task_started', 'background_tasks_changed'].includes(String(object(event.native)['subtype'])))?.seq ?? 0;
   useEffect(() => {
     let live = true;
     if (!enabled || sessionId === null) return;

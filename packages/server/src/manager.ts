@@ -370,6 +370,7 @@ export class SessionManager {
         secrets(action['content'] ?? action['result']);
       }
       const result = await runtime.adapter.executeNativeControl(sessionId, action);
+      if (action.type === 'stop-task' && runtime.adapter.id === 'claude-code') this.store.nativeActions.recordStopReturn(request.commandId, result);
       // Native delete may intentionally dispose the runtime. Other operations
       // must still belong to the same writer after the awaited native result.
       if (action.type !== 'delete' && action.type !== 'archive') this.assertOwner(runtime);

@@ -5,5 +5,7 @@
   "os": "linux",
   "arch": "x64",
   "nativeBinarySha256": "",
+  "sdkModuleSha256": "",
+  "sdkSchemaSha256": "",
   "evidence": null
 }

@@ -38,7 +38,7 @@ import {
   type UserDialogRequest,
   type UserDialogResult,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, claudeOutputOrigin, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
+import { buildFileChanges, canStopClaudeTask, claudeOutputOrigin, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 
 import { ClaudeContentReducer } from './content.js';
 import { encodeClaudeInput, type ClaudeUserContent } from './input.js';
@@ -938,10 +938,14 @@ export class ClaudeAdapter implements AgentAdapter {
       case 'background': result = await runtime.q.backgroundTasks(action.toolUseId); break;
       case 'stop-task': {
         const task = runtime.state.tasks.get(action.taskId);
-        if (task === undefined || !['pending', 'running', 'paused'].includes(task.status) || (task.runId ?? null) !== action.runId) throw nativeValidationError('后台任务已结束、状态未知或 runId 已改变', 409);
+        if (task === undefined || !canStopClaudeTask(task) || (task.runId ?? null) !== action.runId
+          || runtime.nativeId !== '' && task.nativeSessionId !== undefined && task.nativeSessionId !== runtime.nativeId) throw nativeValidationError('任务已结束、身份待确认或 runId 已改变', 409);
         const runId = task.runId ?? null;
         await runtime.q.stopTask(action.taskId);
-        result = { id: task.taskId, submitted: true, confirmed: false, taskId: task.taskId, runId }; break;
+        const returned = { id: task.taskId, submitted: true, confirmed: false, taskId: task.taskId, runId, callReturnedAt: new Date().toISOString() };
+        try { current(true); }
+        catch (error) { throw Object.assign(error as Error, { nativeCallReturn: returned }); }
+        return returned;
       }
       case 'refresh': {
         // The native usage control is explicitly experimental in this pinned SDK; preserve its label.
