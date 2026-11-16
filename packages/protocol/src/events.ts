@@ -132,7 +132,7 @@ export interface EventData {
   };
   /** A cumulative diff emitted by an Agent for the current turn. */
   'turn.diff': { changes: FileChangeEntry[]; status?: 'running' | 'completed' | 'failed' };
-  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' };
+  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown' };
   plan: { items: PlanItem[] };
   /** Native session goal, including Codex notifications and DSH durable projections. */
   goal: {

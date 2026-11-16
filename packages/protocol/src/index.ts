@@ -17,6 +17,7 @@ export * from './turn.js';
 export * from './invariants.js';
 export * from './watchdog.js';
 export * from './subagents.js';
+export * from './claude-tasks.js';
 export * from './capabilities.js';
 export * from './build.js';
 export * from './native-evidence.js';
