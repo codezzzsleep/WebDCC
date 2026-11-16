@@ -1,0 +1,153 @@
+{
+  "kind": "captured-official-codex-protocol-with-controlled-local-model",
+  "nativeVersion": "codex-cli 0.169.0",
+  "binarySha256": "b452ca20f838a8855a88a41050ee4a694033fff4ea3ecdad5633e6e0e8d13f2b",
+  "sourceRunId": "10898b52-83f9-4be1-abbc-9e002236ee79",
+  "sourceCaptureSha256": "4d99a7776746db3619f378b45bb9fc4dd1e40efca7d2f3d60fbd3eb68aaa7a59",
+  "originalCapturePassed": false,
+  "remaining": "Original parent failed; native wait NOT_TRIGGERED. This subset proves started/completed call shapes only.",
+  "nativeId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+  "frames": [
+    {
+      "originalRpcEnvelopeId": 47,
+      "payload": {
+        "method": "turn/started",
+        "params": {
+          "threadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+          "turn": {
+            "id": "01a1e677-840a-7b20-8a0b-37ff1a530c74",
+            "rootTurnId": "01a1e677-840a-7b20-8a0b-37ff1a530c74",
+            "items": [],
+            "itemsView": "notLoaded",
+            "status": "inProgress",
+            "error": null,
+            "startedAt": 1794867954,
+            "completedAt": null,
+            "durationMs": null
+          }
+        },
+        "emittedAtMs": 1794867954736
+      }
+    },
+    {
+      "originalRpcEnvelopeId": 58,
+      "payload": {
+        "method": "item/started",
+        "params": {
+          "item": {
+            "type": "collabAgentToolCall",
+            "id": "spawn-alpha-10898b52-83f9-4be1-abbc-9e002236ee79",
+            "tool": "spawnAgent",
+            "status": "inProgress",
+            "senderThreadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+            "receiverThreadIds": [],
+            "prompt": "WDCC_CHILD_ALPHA_10898b52-83f9-4be1-abbc-9e002236ee79\nReply with the assigned short result.",
+            "model": "",
+            "reasoningEffort": "medium",
+            "agentsStates": {},
+            "startedAtMs": 1794867954917,
+            "completedAtMs": null
+          },
+          "threadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+          "turnId": "01a1e677-840a-7b20-8a0b-37ff1a530c74",
+          "startedAtMs": 1794867954917
+        },
+        "emittedAtMs": 1794867954919
+      }
+    },
+    {
+      "originalRpcEnvelopeId": 64,
+      "payload": {
+        "method": "item/completed",
+        "params": {
+          "item": {
+            "type": "collabAgentToolCall",
+            "id": "spawn-alpha-10898b52-83f9-4be1-abbc-9e002236ee79",
+            "tool": "spawnAgent",
+            "status": "completed",
+            "senderThreadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+            "receiverThreadIds": [
+              "01a1e677-84e7-7ef2-b570-4f2b1ebfeb9d"
+            ],
+            "prompt": "WDCC_CHILD_ALPHA_10898b52-83f9-4be1-abbc-9e002236ee79\nReply with the assigned short result.",
+            "model": "mock-responses-1",
+            "reasoningEffort": "medium",
+            "agentsStates": {
+              "01a1e677-84e7-7ef2-b570-4f2b1ebfeb9d": {
+                "status": "pendingInit",
+                "message": null
+              }
+            },
+            "startedAtMs": 1794867954917,
+            "completedAtMs": 1794867954929
+          },
+          "threadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+          "turnId": "01a1e677-840a-7b20-8a0b-37ff1a530c74",
+          "contentTokenCount": null,
+          "completedAtMs": 1794867954929
+        },
+        "emittedAtMs": 1794867954933
+      }
+    },
+    {
+      "originalRpcEnvelopeId": 82,
+      "payload": {
+        "method": "item/started",
+        "params": {
+          "item": {
+            "type": "collabAgentToolCall",
+            "id": "spawn-beta-10898b52-83f9-4be1-abbc-9e002236ee79",
+            "tool": "spawnAgent",
+            "status": "inProgress",
+            "senderThreadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+            "receiverThreadIds": [],
+            "prompt": "WDCC_CHILD_BETA_10898b52-83f9-4be1-abbc-9e002236ee79\nReply with the assigned short result.",
+            "model": "",
+            "reasoningEffort": "medium",
+            "agentsStates": {},
+            "startedAtMs": 1794867954975,
+            "completedAtMs": null
+          },
+          "threadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+          "turnId": "01a1e677-840a-7b20-8a0b-37ff1a530c74",
+          "startedAtMs": 1794867954975
+        },
+        "emittedAtMs": 1794867954977
+      }
+    },
+    {
+      "originalRpcEnvelopeId": 102,
+      "payload": {
+        "method": "item/completed",
+        "params": {
+          "item": {
+            "type": "collabAgentToolCall",
+            "id": "spawn-beta-10898b52-83f9-4be1-abbc-9e002236ee79",
+            "tool": "spawnAgent",
+            "status": "completed",
+            "senderThreadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+            "receiverThreadIds": [
+              "01a1e677-8521-7ac1-85c1-564b4b2a9092"
+            ],
+            "prompt": "WDCC_CHILD_BETA_10898b52-83f9-4be1-abbc-9e002236ee79\nReply with the assigned short result.",
+            "model": "mock-responses-1",
+            "reasoningEffort": "medium",
+            "agentsStates": {
+              "01a1e677-8521-7ac1-85c1-564b4b2a9092": {
+                "status": "pendingInit",
+                "message": null
+              }
+            },
+            "startedAtMs": 1794867954975,
+            "completedAtMs": 1794867954989
+          },
+          "threadId": "01a1e677-7fa2-7390-853f-0998c2977cf0",
+          "turnId": "01a1e677-840a-7b20-8a0b-37ff1a530c74",
+          "contentTokenCount": null,
+          "completedAtMs": 1794867954989
+        },
+        "emittedAtMs": 1794867954998
+      }
+    }
+  ]
+}
