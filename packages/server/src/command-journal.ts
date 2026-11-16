@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Command, CommandRecord, CommandState, QueuedInput, UserInput } from '@webdcc/protocol';
+import { isQueueInputReorderable } from '@webdcc/protocol';
 import type { Db } from './db.js';
 
 export function payloadHash(value: unknown): string {
@@ -56,6 +57,29 @@ export class CommandJournal {
 
   queue(sessionId: string): QueuedInput[] {
     return (this.db.prepare("SELECT * FROM input_queue WHERE session_id = ? AND state NOT IN ('completed', 'failed', 'cancelled') ORDER BY ordinal").all(sessionId) as InputRow[]).map(input);
+  }
+
+  orderRevision(sessionId: string): string {
+    const change = this.db.prepare("SELECT MAX(feed_seq) AS revision FROM feed WHERE session_id = ? AND json_type(patch, '$.queueRevision') IS NOT NULL")
+      .get(sessionId) as { revision: number | null };
+    return payloadHash({ inputs: this.queue(sessionId), changeRevision: change.revision ?? 0 });
+  }
+
+  reorder(sessionId: string, commandIds: readonly string[], expectedRevision: string): void {
+    this.db.transaction(() => {
+      const queue = this.queue(sessionId);
+      if (this.orderRevision(sessionId) !== expectedRevision) throw Object.assign(new Error('队列已变化，请刷新后调整顺序'), { statusCode: 409 });
+      const movable = queue.filter(isQueueInputReorderable);
+      const byId = new Map(movable.map(row => [row.commandId, row]));
+      if (commandIds.length !== movable.length || new Set(commandIds).size !== commandIds.length || commandIds.some(id => !byId.has(id))) {
+        throw Object.assign(new Error('需要当前所有未发送队列输入的完整顺序'), { statusCode: 409 });
+      }
+      // Reuse this session's existing slots. IDs, input bytes and native
+      // admission references stay unchanged; temporary slots never commit.
+      const update = this.db.prepare("UPDATE input_queue SET ordinal = ? WHERE command_id = ? AND session_id = ? AND state = 'queued'");
+      for (const row of movable) update.run(-row.ordinal, row.commandId, sessionId);
+      for (const [index, id] of commandIds.entries()) update.run(movable[index]!.ordinal, id, sessionId);
+    })();
   }
 
   next(sessionId: string): QueuedInput | undefined {

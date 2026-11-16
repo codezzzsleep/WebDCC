@@ -489,7 +489,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/sessions/:id/queue', async request => {
     const { id } = request.params as { id: string };
     if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
-    return { inputs: store.journal.queue(id), revision: store.maxFeedSeq() };
+    return store.queueSnapshot(id);
+  });
+
+  app.patch('/api/sessions/:id/queue', async request => {
+    const body = request.body as { commandIds?: unknown; expectedRevision?: unknown } | null;
+    if (!Array.isArray(body?.commandIds) || body.commandIds.some(id => typeof id !== 'string' || id === '')
+      || typeof body.expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(body.expectedRevision)) throw badRequest('需要已读取的队列版本与命令顺序');
+    return manager.reorderQueuedInputs((request.params as { id: string }).id, body.commandIds as string[], body.expectedRevision);
   });
 
   app.delete('/api/sessions/:id/queue/:commandId', async (request, reply) => {

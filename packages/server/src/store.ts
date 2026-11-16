@@ -14,6 +14,7 @@ import type {
   InputContent,
   InteractionKind,
   InteractionEventResponse,
+  QueueSnapshot,
 } from '@webdcc/protocol';
 import { initialPermissions, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
@@ -597,6 +598,19 @@ export class Store {
   maxFeedSeq(): number {
     const row = this.db.prepare('SELECT MAX(feed_seq) AS max FROM feed').get() as { max: number | null };
     return row.max ?? 0;
+  }
+
+  queueSnapshot(sessionId: string): QueueSnapshot {
+    return this.db.transaction(() => ({ inputs: this.journal.queue(sessionId), revision: this.maxFeedSeq(), orderRevision: this.journal.orderRevision(sessionId) }))();
+  }
+
+  reorderQueue(sessionId: string, commandIds: readonly string[], expectedRevision: string): { snapshot: QueueSnapshot; patch: FeedPatch; feedSeq: number } {
+    return this.db.transaction(() => {
+      this.journal.reorder(sessionId, commandIds, expectedRevision);
+      const patch = { queueRevision: Date.now() };
+      const feedSeq = this.appendFeed(sessionId, patch);
+      return { snapshot: this.queueSnapshot(sessionId), patch, feedSeq };
+    })();
   }
 
   // ---------- commands ----------

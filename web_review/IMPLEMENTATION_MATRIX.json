@@ -262,7 +262,11 @@
           "packages/server/src/native-actions.ts",
           "packages/server/test/native-actions.spec.ts",
           "packages/server/test/native-controls.spec.ts",
-          "browser-tests/native-controls.spec.ts"
+          "browser-tests/native-controls.spec.ts",
+          "packages/server/test/queue-order.spec.ts",
+          "browser-tests/queue-order.spec.ts",
+          "browser-tests/helpers.ts",
+          "web_review/queue-order-source-20261116.summary.json"
         ],
         "actualFiles": [
           "packages/server/src/command-journal.ts",
@@ -289,22 +293,28 @@
           "packages/server/src/native-history.ts",
           "packages/server/src/native-reconciliation.ts",
           "packages/adapters/claude/src/stdio-capture.ts",
-          "packages/adapters/dsh/src/host.ts"
+          "packages/adapters/dsh/src/host.ts",
+          "packages/server/test/queue-order.spec.ts",
+          "browser-tests/queue-order.spec.ts",
+          "browser-tests/helpers.ts",
+          "web_review/queue-order-source-20261116.summary.json"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
           "web_review/evidence/l1-e493ec4.json",
           "web_review/evidence/native-live-dsh.json",
           "web_review/evidence/native-live-codex-revalidated.json",
-          "web_review/evidence/native-claude-stdio.json"
+          "web_review/evidence/native-claude-stdio.json",
+          "web_review/queue-order-source-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "同一命令100个并发HTTP/WS请求只进入一次执行；同ID异内容被拒。",
           "在received/queued/dispatching/native-accepted各边界kill进程后恢复，消息仍可见，原生已执行的不会自动重复。",
-          "accepted队列可查看、取消、按版本调整；失败与uncertain都有可操作恢复路径。"
+          "accepted队列可查看、取消、按版本调整；失败与uncertain都有可操作恢复路径。",
+          "队列换序的三家真实原生发送顺序、目标平台恢复未独立验收；本次100并发换序不代替100并发send和全部崩溃窗口。"
         ],
         "remainingWork": "Native reconciliation/ownership, all crash windows, queue auto-recovery under verified ownership, secret-aware commands and complete attachments/outbox coverage remain incomplete.",
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-16 source CAS queue reorder: immutable command/turn/content/native IDs; queued slots and feed committed atomically, old order-cycle revisions rejected, preparation window guarded, source UI order/refresh/conflict recovery. 38 local checks and one Chromium scenario with controlled adapters; no actual native/provider/target acceptance."
       },
       "dependencyIds": [
         "NP-02"

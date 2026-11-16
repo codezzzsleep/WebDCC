@@ -157,6 +157,11 @@ function TurnView({
           <div className="user-meta">
             {turn.pending !== undefined || turn.commandState !== undefined ? <span className="outbox-status">{outboxLabel(turn.pending?.status ?? turn.commandState ?? 'pending')}</span> : null}
             {turn.pending?.status === 'queued' ? <button type="button" className="btn" onClick={() => { void store.cancelQueued(sessionId, turn.pending?.clientCommandId ?? '').catch(error => setCancelError(String(error))); }}>取消排队</button> : null}
+            {turn.pending?.status === 'queued' ? ([-1, 1] as const).map(direction => <button type="button" className="btn" key={direction}
+              disabled={!store.canMoveQueuedInput(sessionId, turn.pending!.clientCommandId, direction)}
+              onClick={() => void store.moveQueuedInput(sessionId, turn.pending!.clientCommandId, direction).then(() => setCancelError('')).catch(error => setCancelError(String(error)))}>
+              {direction === -1 ? '提前一位' : '延后一位'}
+            </button>) : null}
             {turn.pending?.status === 'queued' && turn.pending.error !== undefined ? <button type="button" className="btn" onClick={() => void api.retryQueuedInput(sessionId, turn.pending!.clientCommandId).then(() => store.refreshQueue(sessionId)).catch(error => setCancelError(String(error)))}>重新核对附件并发送</button> : null}
             {turn.pending?.status === 'uncertain' || turn.commandState === 'uncertain' ? <Link to="/settings/native-events" search={{ sessionId }} className="btn">核对原生执行</Link> : null}
             <span>{new Date(user.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>

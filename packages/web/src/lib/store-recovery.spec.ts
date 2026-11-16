@@ -17,6 +17,20 @@ beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks(); mocks.options.length 
 afterEach(() => { vi.useRealTimers(); });
 
 describe('NP-03 browser queue recovery', () => {
+  it('uses authoritative queue order after refresh even when restored outbox entries retain the original order', async () => {
+    const B = { ...queued, commandId: 'B', turnId: 'B-turn', input: { text: 'B' } };
+    const C = { ...queued, commandId: 'C', turnId: 'C-turn', ordinal: 2, input: { text: 'C' } };
+    mocks.getOutbox.mockResolvedValue([B, C].map(row => ({ clientCommandId: row.commandId, status: 'queued',
+      command: { op: 'send', clientCommandId: row.commandId, sessionId: 's', text: row.input.text }, createdAt: Date.parse(row.createdAt) })));
+    const store = new AppStore();
+    await store.restoreOutbox();
+    mocks.queue.mockResolvedValueOnce({ inputs: [B, C], revision: 1 });
+    await store.refreshQueue('s');
+    mocks.queue.mockResolvedValueOnce({ inputs: [{ ...C, ordinal: 1 }, { ...B, ordinal: 2 }], revision: 2 });
+    await store.refreshQueue('s');
+    expect(store.getPending('s').map(row => row.text)).toEqual(['C', 'B']);
+    expect(store.getTurns('s').map(turn => turn.user.text)).toEqual(['C', 'B']);
+  });
   it('NP-06 distinguishes collected answers, failed submissions and newer retries', async () => {
     const store = new AppStore();
     store.applyEvent({ sessionId: 's', seq: 1, turnId: null, itemKey: 'question-q', kind: 'question', data: { questionId: 'q', prompt: 'Question' }, at: '2026-01-01T00:00:00Z' });

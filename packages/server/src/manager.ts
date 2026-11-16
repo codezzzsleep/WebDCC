@@ -23,6 +23,7 @@ import type {
   SlashCommand,
   SlashCommandCatalog,
   SlashControlRequest,
+  QueueSnapshot,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, isBlockingQuestion, isInputContent, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
@@ -90,6 +91,7 @@ export class SessionManager {
   private readonly activations = new Map<string, Promise<Runtime>>();
   private readonly activationStops = new Set<string>();
   private readonly controls = new Map<string, Promise<unknown>>();
+  private readonly queuePreparations = new Map<string, number>();
   private readonly uncertainSessions = new Set<string>();
   private readonly ownerId = randomUUID();
   private files?: FileStore;
@@ -653,12 +655,16 @@ export class SessionManager {
     if (session === undefined) throw new Error('会话不存在');
     if (session.permissions?.phase === 'failed') throw Object.assign(new Error('权限切换失败，已接受的队列保留但暂停执行'), { statusCode: 409 });
     if (runtime.disposing) throw new Error('会话正在回收');
+    this.queuePreparations.set(sessionId, (this.queuePreparations.get(sessionId) ?? 0) + 1);
     try { input = await this.prepareInput(sessionId, input, false); }
     catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.store.journal.preparationError(turnId, message); this.queueChanged(sessionId);
       const notice = this.store.appendEvent({ sessionId, turnId: null, itemKey: `queue-preparation-${turnId}`, kind: 'notice', data: { level: 'warning', text: `队列输入未发送：${message}。请核对附件后重试此输入。`, nativeType: 'input-preparation-failed' } });
       this.hooks.onEvent(notice); throw error;
+    } finally {
+      const count = this.queuePreparations.get(sessionId)! - 1;
+      if (count === 0) this.queuePreparations.delete(sessionId); else this.queuePreparations.set(sessionId, count);
     }
     this.assertOwner(runtime);
     if (runtime.turnId !== null) throw Object.assign(new Error('原生轮次已开始，已接受的输入继续排队'), { statusCode: 409 });
@@ -751,6 +757,20 @@ export class SessionManager {
       this.store.journal.state(commandId, 'queued', { ok: true, value: { turnId: row.turnId, queued: true } });
       const session = this.requireSession(sessionId); const workspace = this.requireWorkspace(session.workspaceId); const runtime = await this.ensureReady(session, workspace.path);
       await this.drainQueue(runtime);
+    });
+  }
+
+  async reorderQueuedInputs(sessionId: string, commandIds: readonly string[], expectedRevision: string): Promise<QueueSnapshot> {
+    this.requireSession(sessionId);
+    // A preparation can itself be awaiting the current control operation.
+    // Reject before waiting behind it, then check again when we acquire control.
+    if (this.queuePreparations.has(sessionId)) throw Object.assign(new Error('队列输入正在准备发送，请刷新后调整顺序'), { statusCode: 409 });
+    return this.control(sessionId, async () => {
+      this.requireSession(sessionId);
+      if (this.queuePreparations.has(sessionId)) throw Object.assign(new Error('队列输入正在准备发送，请刷新后调整顺序'), { statusCode: 409 });
+      const { snapshot, patch, feedSeq } = this.store.reorderQueue(sessionId, commandIds, expectedRevision);
+      this.hooks.onFeed(sessionId, patch, feedSeq);
+      return snapshot;
     });
   }
 
