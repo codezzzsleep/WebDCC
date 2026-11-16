@@ -300,7 +300,15 @@ try {
     catch (error) { (report['pending'] as unknown[]).push({ kind: 'side-effect-capture-missing', file: name, error: String(error) }); }
   }
   report['sideEffectHashes'] = sideEffectHashes; save();
-  await browser?.close(); await manager.disposeAll().catch(() => undefined); await app.close().catch(() => undefined); await proxy.close().catch(error => { report['recordingError'] = String(error); });
+  const cleanupErrors: { step: string; error: string }[] = [];
+  const cleanup = async (step: string, run: () => Promise<unknown>): Promise<void> => {
+    try { await run(); } catch (error) { cleanupErrors.push({ step, error: String(error) }); report['cleanupErrors'] = cleanupErrors; save(); }
+  };
+  await cleanup('browser', async () => browser?.close());
+  await cleanup('owned-native-sessions', async () => manager.disposeAll());
+  await cleanup('private-source-server', async () => app.close());
+  await cleanup('model-observer', async () => proxy.close());
+  report['cleanupErrors'] = cleanupErrors;
   if (replayServer !== undefined) { replayServer.closeAllConnections(); await new Promise<void>(resolveClose => replayServer!.close(() => resolveClose())); }
   await providers.update(provider.id, { apiKey: '' }).catch(() => undefined);
   const envelopes = db.prepare('SELECT * FROM native_event_envelopes WHERE session_id = ? ORDER BY id').all(sessionId)
