@@ -3,6 +3,8 @@ import { findUserEcho, resolveAnswer, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import type { Store } from './store.js';
 
+const itemIdentity = (nativeTurnId: string | undefined, itemKey: string, kind: string): string => JSON.stringify([nativeTurnId ?? null, itemKey, kind]);
+
 /** Durable identity and projection for recovered native records. Historical
  * turn ends never enter the live manager's turn-assignment heuristic. */
 export class NativeHistoryStore {
@@ -56,10 +58,10 @@ export class NativeHistoryStore {
         if (local === undefined || local.turnId === null) continue;
         this.store.journal.confirmNativeInput(sessionId, data.clientCommandId, data.text, record.nativeTurnId);
         if (record.nativeTurnId !== undefined) this.bind(sessionId, record.nativeTurnId, identity?.turnId ?? local.turnId);
-        echoes.add(event.itemKey);
+        echoes.add(itemIdentity(record.nativeTurnId, event.itemKey, event.kind));
       }
       const emitted: StoredEvent[] = [];
-      const completed = new Set(records.flatMap(record => record.events.flatMap(event => event.type === 'item.complete' ? [event.itemKey] : [])));
+      const completed = new Set(records.flatMap(record => record.events.flatMap(event => event.type === 'item.complete' ? [itemIdentity(record.nativeTurnId, event.itemKey, event.kind)] : [])));
       const append = (input: Parameters<Store['appendEvent']>[0]): void => { const stored = this.store.appendEvent(input); emitted.push(stored); existing.push(stored); };
       for (const record of records) {
         if (!Number.isSafeInteger(record.nativeSeq) || record.nativeSeq < 0 || !Number.isFinite(Date.parse(record.at))) throw new Error('原生历史记录水位或时间无效');
@@ -85,7 +87,8 @@ export class NativeHistoryStore {
             const start = turnEvents.find(candidate => candidate.kind === 'turn.started');
             append({ ...base, itemKey: `native-turn-end-${record.nativeSeq}`, kind: 'turn.completed', data: { status: event.status, durationMs: start === undefined ? 0 : Math.max(0, Date.parse(record.at) - Date.parse(start.at)), answerItemKeys: resolveAnswer(turnEvents).map(item => item.itemKey), ...(event.usage === undefined ? {} : { usage: event.usage }) } });
           } else if (event.type === 'item.complete' || event.type === 'item.start') {
-            if (echoes.has(event.itemKey) || event.type === 'item.start' && completed.has(event.itemKey)) continue;
+            const identity = itemIdentity(record.nativeTurnId, event.itemKey, event.kind);
+            if (echoes.has(identity) || event.type === 'item.start' && completed.has(identity)) continue;
             if (event.kind === 'question') {
               const question = event.data as EventData['question'];
               const state = this.store.interactions.get(sessionId, 'answer', question.questionId)?.state;
