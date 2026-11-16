@@ -679,7 +679,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       const models = adapter === undefined ? [] : await adapter.listModels(null).catch(() => []);
       return { models: models.map((model) => model.id), options: models };
     }
-    return { models: deps.providers.modelsFor(agent, providerId) };
+    const models = deps.providers.modelsFor(agent, providerId);
+    const details = deps.providers.get(providerId)?.modelDetails ?? [];
+    return { models, options: models.map(id => {
+      const detail = details.find(model => model.id === id);
+      return { id, label: detail?.name ?? id, ...(detail?.reasoningEfforts === undefined ? {} : { reasoningEfforts: detail.reasoningEfforts }), source: 'provider-config' };
+    }) };
   });
 
   // ---------- uploads ----------

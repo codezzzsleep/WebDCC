@@ -48,7 +48,6 @@ interface MentionState {
 }
 
 type MenuName = 'harness' | 'mode' | 'model' | 'reasoning' | 'attach' | 'skill' | null;
-const CODEX_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 function matchesDshRoute(id: string, provider: string, model: string): boolean {
@@ -68,6 +67,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const session = sessionId === null ? undefined : store.getSession(sessionId);
   const agent = mode.kind === 'session' ? (session?.agent ?? 'dsh') : mode.agent;
   const agentMeta = meta?.agents[agent];
+  const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
 
   const [text, setText] = useState('');
   const capabilitiesRef = useRef<ComposerInputCapabilities>({ contentTypes: ['text', 'image', 'file'], intents: ['send'], running: false });
@@ -86,7 +86,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [sessionModels, setSessionModels] = useState<string[]>([]);
   const [skills, setSkills] = useState<{ skillId: string; name: string; description: string; enabled: boolean }[]>([]);
   const [skillStatus, setSkillStatus] = useState('');
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelCatalog, setModelCatalog] = useState<{ agent: string; providerId: string | null; options: ModelOption[] }>();
+  const catalogReady = modelCatalog?.agent === agent && modelCatalog.providerId === currentProviderId;
+  const modelOptions = catalogReady ? modelCatalog.options : [];
   const [inputModes, setInputModes] = useState<CodexInputModeCatalog>({ modes: [], observedMode: null });
   const [modeCatalogRevision, setModeCatalogRevision] = useState(0);
   const [slashOpen, setSlashOpen] = useState(false);
@@ -100,7 +102,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [freeModel, setFreeModel] = useState('');
-  const [sessionReasoning, setSessionReasoning] = useState('medium');
+  const [sessionReasoning, setSessionReasoning] = useState<string>();
   const [dshReasoningObservation, setDshReasoningObservation] = useState<{ effort?: string; provider?: string; model?: string; confirmed: boolean }>({ confirmed: false });
   const [reasoningBusy, setReasoningBusy] = useState(false);
   const activeReasoningSession = useRef(sessionId); activeReasoningSession.current = sessionId;
@@ -176,7 +178,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   }, [sessionId, controls]);
 
   useEffect(() => {
-    if (session?.agent === 'codex' || session?.agent === 'claude-code') setSessionReasoning(session.reasoningEffort ?? 'medium');
+    if (session?.agent === 'codex' || session?.agent === 'claude-code') setSessionReasoning(session.reasoningEffort ?? (session.agent === 'claude-code' ? 'medium' : undefined));
   }, [sessionId, session?.agent, session?.reasoningEffort]);
 
   useEffect(() => {
@@ -192,14 +194,15 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   // 会话里：同一 Provider 下可以换模型
   useEffect(() => {
     let active = true;
-    setModelOptions([]);
+    setModelCatalog(undefined);
+    setSessionModels([]);
     void api
-      .modelOptions(agent, mode.kind === 'session' ? session?.providerId ?? null : mode.choice.providerId)
-      .then(options => { if (active) setModelOptions(options); })
-      .catch(() => undefined);
+      .modelOptions(agent, currentProviderId)
+      .then(options => { if (active) setModelCatalog({ agent, providerId: currentProviderId, options }); })
+      .catch(() => { if (active) setModelCatalog({ agent, providerId: currentProviderId, options: [] }); });
     if (session !== undefined) void api.models(session.agent, session.providerId ?? null).then(models => { if (active) setSessionModels(models); }).catch(() => { if (active) setSessionModels([]); });
     return () => { active = false; };
-  }, [agent, session?.providerId, mode.kind, mode.kind === 'new' ? mode.choice.providerId : null, sessionId]);
+  }, [agent, currentProviderId, sessionId]);
 
   useEffect(() => {
     if (!slashOpen) return;
@@ -261,9 +264,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     : `${effectiveMode?.label ?? permissions.effective ?? '实际权限待确认'}${permissions.phase === 'pending' ? ' · 待生效' : permissions.phase === 'failed' ? ' · 切换失败' : permissions.phase === 'unknown' ? ' · 待确认' : ''}`;
 
   const providerOf = (id: string | null | undefined): ProviderDto | undefined => providers.find((provider) => provider.id === id);
-  const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
   const currentModel = mode.kind === 'session' ? (session?.model ?? '') : mode.choice.model;
   const selectedModel = modelOptions.find(option => option.id === currentModel) ?? (currentModel === '' ? modelOptions.find(option => option.isDefault) : undefined);
+  useEffect(() => {
+    if (agent !== 'codex' || mode.kind !== 'new' || !catalogReady || mode.choice.reasoningEffort === undefined) return;
+    if (selectedModel?.reasoningEfforts?.includes(mode.choice.reasoningEffort) === true) return;
+    const { reasoningEffort: _effort, ...choice } = mode.choice;
+    mode.onChoice(choice);
+  }, [agent, mode, catalogReady, selectedModel]);
   capabilitiesRef.current = { contentTypes: agent === 'codex' ? ['text', 'image', 'audio', 'skill'] : ['text', 'image', 'file'], inputModalities: selectedModel?.inputModalities,
     collaborationModes: agent === 'codex' ? inputModes.modes.map(mode => mode.id) : [],
     intents: running ? agent === 'codex' || agent === 'dsh' ? ['queue', 'steer'] : ['queue'] : ['send'], running,
@@ -273,11 +281,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const uploading = selecting || attachmentParts.some(part => part.uploadTaskId !== undefined && ['queued', 'uploading', 'completing'].includes(controls.uploads.get(part.uploadTaskId)?.state ?? 'queued'));
   const currentReasoning = agent === 'dsh' && mode.kind === 'session'
     ? dshReasoningObservation.confirmed ? dshReasoningObservation.effort! : session?.reasoningEffort === undefined ? '待确认' : `${session.reasoningEffort} · 待确认`
-    : agent === 'dsh' && mode.kind === 'new' ? mode.choice.reasoningEffort ?? `沿用原生${selectedModel?.defaultReasoningEffort === undefined ? '' : `（默认 ${selectedModel.defaultReasoningEffort}）`}`
-    : mode.kind === 'session' ? sessionReasoning : (mode.choice.reasoningEffort ?? 'medium');
+    : (agent === 'dsh' || agent === 'codex') && mode.kind === 'new' ? mode.choice.reasoningEffort ?? `沿用原生${selectedModel?.defaultReasoningEffort === undefined ? '' : `（默认 ${selectedModel.defaultReasoningEffort}）`}`
+    : mode.kind === 'session' ? sessionReasoning ?? '待确认' : (mode.choice.reasoningEffort ?? 'medium');
   const dshReasoningModel = mode.kind === 'session' && dshReasoningObservation.provider !== undefined && dshReasoningObservation.model !== undefined
     ? modelOptions.find(option => matchesDshRoute(option.id, dshReasoningObservation.provider!, dshReasoningObservation.model!)) : selectedModel;
-  const reasoningEfforts = agent === 'dsh' ? dshReasoningModel?.reasoningEfforts ?? [] : agent === 'claude-code' ? CLAUDE_REASONING_EFFORTS : CODEX_REASONING_EFFORTS;
+  const reasoningEfforts: readonly string[] = agent === 'dsh' ? dshReasoningModel?.reasoningEfforts ?? [] : agent === 'claude-code' ? CLAUDE_REASONING_EFFORTS : selectedModel?.reasoningEfforts ?? [];
+  const reasoningNote = agent !== 'codex' ? undefined : !catalogReady ? '正在读取当前模型目录'
+    : reasoningEfforts.length === 0 ? '当前模型目录不可得或未声明可调整的思考等级'
+    : mode.kind === 'session' && sessionReasoning !== undefined && !reasoningEfforts.includes(sessionReasoning) ? '当前请求档位未在当前模型目录中声明，请核对原生实际值或重新选择' : undefined;
   const currentProvider = providerOf(currentProviderId);
   const providerLabel = currentProvider?.name ?? agentText(agent).nativeLabel;
 
@@ -439,7 +450,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     if (model !== '') rememberModel(agent, providerId, model);
     if (mode.kind === 'new') {
       const { reasoningEffort, ...choice } = mode.choice;
-      const supportsPreviousEffort = agent !== 'dsh' || modelOptions.find(option => option.id === model)?.reasoningEfforts?.includes(reasoningEffort ?? '') === true;
+      const supportsPreviousEffort = agent !== 'dsh' && agent !== 'codex' || providerId === currentProviderId && modelOptions.find(option => option.id === model)?.reasoningEfforts?.includes(reasoningEffort ?? '') === true;
       mode.onChoice({ ...choice, providerId, model, ...(reasoningEffort === undefined || !supportsPreviousEffort ? {} : { reasoningEffort }) });
     } else if (sessionId !== null && model !== '' && model !== session?.model) {
       store.setModel(sessionId, model);
@@ -447,6 +458,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   };
 
   const pickReasoning = (effort: string): void => {
+    if (agent === 'codex' && !reasoningEfforts.includes(effort)) return;
     setMenu(null);
     if (agent !== 'dsh') rememberReasoning(agent, effort);
     if (mode.kind === 'new') mode.onChoice({ ...mode.choice, reasoningEffort: effort });
@@ -814,13 +826,15 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           {agent === 'codex' || agent === 'claude-code' || agent === 'dsh' ? (
             <span className="menu-anchor">
               <button type="button" className="pill" aria-haspopup="menu" aria-expanded={menu === 'reasoning'} onClick={() => setMenu(menu === 'reasoning' ? null : 'reasoning')} data-testid="reasoning-menu"
-                disabled={reasoningBusy || agent === 'dsh' && reasoningEfforts.length === 0} title={agent === 'dsh' ? reasoningEfforts.length === 0 ? '此原生模型未声明可调整的思考等级' : '等级由当前 DSH Provider 和模型声明，已有会话以原生确认值显示' : '控制模型的思考强度'}>
+                disabled={reasoningBusy || agent === 'dsh' && reasoningEfforts.length === 0} title={agent === 'codex' ? reasoningNote ?? '档位来自当前模型目录；此处为请求值，原生实际值需核对' : agent === 'dsh' ? reasoningEfforts.length === 0 ? '此原生模型未声明可调整的思考等级' : '等级由当前 DSH Provider 和模型声明，已有会话以原生确认值显示' : '控制模型的思考强度'}>
                 <span className="pill-text">思考 {currentReasoning}</span><Icon name="chevronDown" size={12} strokeWidth={2} className="caret" />
               </button>
               {menu === 'reasoning' ? (
                 <div className="menu up right" role="menu" style={{ width: 220 }}>
                   <div className="menu-group-title">{agentText(agent).name} 思考强度</div>
-                  {agent === 'dsh' && mode.kind === 'new' ? <button type="button" role="menuitemradio" aria-checked={mode.choice.reasoningEffort === undefined} className="menu-item" onClick={() => { const { reasoningEffort: _effort, ...choice } = mode.choice; mode.onChoice(choice); setMenu(null); }}>沿用原生</button> : null}
+                  {reasoningNote === undefined ? null : <div className="menu-note" data-testid="reasoning-catalog-note">{reasoningNote}</div>}
+                  {agent === 'codex' && selectedModel?.source === 'provider-config' ? <div className="menu-note">档位来自此 Provider 的配置声明，实际支持以原生结果为准。</div> : null}
+                  {(agent === 'dsh' || agent === 'codex') && mode.kind === 'new' ? <button type="button" role="menuitemradio" aria-checked={mode.choice.reasoningEffort === undefined} className="menu-item" onClick={() => { const { reasoningEffort: _effort, ...choice } = mode.choice; mode.onChoice(choice); setMenu(null); }}>沿用原生</button> : null}
                   {reasoningEfforts.map((effort) => <button key={effort} type="button" role="menuitemradio" aria-checked={effort === currentReasoning} className="menu-item" onClick={() => pickReasoning(effort)}>{effort}{effort === currentReasoning ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}</button>)}
                 </div>
               ) : null}
@@ -951,7 +965,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           </label> : null}
           {agent === 'codex' && inputModes.reason !== undefined ? <span className="muted" role="status">{inputModes.reason} <button type="button" onClick={() => setModeCatalogRevision(value => value + 1)}>重新读取模式</button></span> : null}
           {agent === 'codex' ? <span className="muted" data-testid="codex-work-mode-state">原生实际：{inputModes.observedMode === 'plan' ? '先做计划' : inputModes.observedMode === 'default' ? '默认执行' : '待确认'}；选择随下条消息生效</span> : null}
-          <details className="muted" data-testid="composer-settings-help"><summary>设置说明</summary><p>权限决定可执行的操作；Provider 提供模型连接；模型决定处理能力；思考强度控制推理投入。{agent === 'codex' ? '默认执行和先做计划是工作方式，两种方式都可提问。沿用原生会保留原生设置，待确认表示尚未读到实际值。' : agent === 'dsh' ? 'DSH 思考等级来自当前 Provider 和模型，已有会话确认成功后才更新显示。' : '沿用原生会保留原生设置。'}</p></details>
+          <details className="muted" data-testid="composer-settings-help"><summary>设置说明</summary><p>权限决定可执行的操作；Provider 提供模型连接；模型决定处理能力；思考强度控制推理投入。{agent === 'codex' ? '默认执行和先做计划是工作方式，两种方式都可提问。沿用原生会保留原生设置，待确认表示尚未读到实际值。思考档位来自当前模型目录，此处显示请求值；原生接受的档位与发往上游模型的实际值可能不同，需以原生记录核对。' : agent === 'dsh' ? 'DSH 思考等级来自当前 Provider 和模型，已有会话确认成功后才更新显示。' : '沿用原生会保留原生设置。'}</p></details>
         </div>
       </div>
       {error !== null ? (
