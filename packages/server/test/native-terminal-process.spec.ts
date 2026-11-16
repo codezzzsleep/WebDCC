@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { NativeProcessSupervisor, type NativeProcessBridge, type NativeProcessCompletion, type NativeProcessDelta } from '../src/native-terminal-process.js';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { NativeProcessSupervisor, type NativeProcessBridge, type NativeProcessCompletion, type NativeProcessDelta, type NativeProcessFrame } from '../src/native-terminal-process.js';
 import { terminalEventually } from './native-terminal-fixture.js';
 
 function processBridgeFixture() {
@@ -16,7 +19,7 @@ function processBridgeFixture() {
     resize: async (_session, params) => { calls.push({ method: 'resize', params }); },
     terminate: async (_session, params) => { calls.push({ method: 'terminate', params }); },
   };
-  return { bridge, calls, emit: (bytes: Buffer) => output({ stream: 'stdout', deltaBase64: bytes.toString('base64'), capReached: false }), complete: () => complete({ exitCode: 7, stdout: '', stderr: '' }), fence: () => { generation++; }, mismatch: () => { match = false; } };
+  return { bridge, calls, emit: (bytes: Buffer, capReached = false) => output({ stream: 'stdout', deltaBase64: bytes.toString('base64'), capReached }), complete: () => complete({ exitCode: 7, stdout: '', stderr: '' }), fence: () => { generation++; }, mismatch: () => { match = false; } };
 }
 
 describe('native execution bridge contract (fixture, not native acceptance)', () => {
@@ -45,6 +48,52 @@ describe('native execution bridge contract (fixture, not native acceptance)', ()
     await expect(supervisor.stop(process.id, process.generation)).rejects.toThrow('exit'); expect(supervisor.get(process.id).state).toBe('uncertain');
     fixture.complete(); await terminalEventually(() => supervisor.get(process.id).state === 'exited'); await supervisor.dispose();
   });
+  it('broadcasts a native cap while the process is running and keeps reconnect/log status consistent', async () => {
+    const fixture = processBridgeFixture();
+    const logRoot = await mkdtemp(join(tmpdir(), 'wdcc-process-cap-'));
+    const states: { state: string; truncated: boolean }[] = [];
+    const supervisor = new NativeProcessSupervisor(fixture.bridge, { logRoot, onState: view => states.push({ state: view.state, truncated: view.outputTruncated }) });
+    const process = await supervisor.start('web-1', ['cat'], { rows: 30, cols: 100 }, true);
+    const frames: NativeProcessFrame[] = [];
+    try {
+      const detach = supervisor.attach(process.id, process.generation, { send: frame => frames.push(frame), close: () => undefined });
+      fixture.emit(Buffer.from('Retained native output 😀\n'));
+      fixture.emit(Buffer.alloc(0), true);
+      const capped = frames.filter(frame => frame.type === 'state').at(-1);
+      expect(capped).toMatchObject({ type: 'state', process: { id: process.id, generation: process.generation, state: 'running', exitCode: null, confirmed: true, outputTruncated: true } });
+      expect(states).toEqual([{ state: 'running', truncated: false }, { state: 'running', truncated: true }]);
+      for (let index = 0; index < 10; index++) fixture.emit(Buffer.alloc(0), true);
+      expect(states).toHaveLength(2);
+      expect(fixture.calls.filter(call => call.method === 'terminate')).toHaveLength(0);
+      const log = supervisor.log(process.id);
+      expect(log.truncated).toBe(true);
+      expect(await readFile(log.path, 'utf8')).toBe('Retained native output 😀\n');
+      detach();
+      const reconnect = supervisor.attach(process.id, process.generation, { send: frame => frames.push(frame), close: () => undefined });
+      expect(frames.at(-1)).toMatchObject({ type: 'snapshot', process: { id: process.id, outputTruncated: true, state: 'running' } });
+      reconnect();
+    } finally {
+      fixture.complete();
+      await terminalEventually(() => supervisor.get(process.id).state === 'exited');
+      await supervisor.dispose();
+      await rm(logRoot, { recursive: true, force: true });
+    }
+    expect(supervisor.metrics()).toEqual({ processes: 0, clients: 0, replayBytes: 0, logFiles: 0 });
+  });
+  it('includes a cap reported by the first delta in the initial running state', async () => {
+    const fixture = processBridgeFixture();
+    const states: { state: string; truncated: boolean }[] = [];
+    const supervisor = new NativeProcessSupervisor(fixture.bridge, { onState: view => states.push({ state: view.state, truncated: view.outputTruncated }) });
+    const process = await supervisor.start('web-1', ['cat'], { rows: 30, cols: 100 });
+    try {
+      fixture.emit(Buffer.from('First partial output'), true);
+      expect(states).toEqual([{ state: 'running', truncated: true }]);
+    } finally {
+      fixture.complete();
+      await terminalEventually(() => supervisor.get(process.id).state === 'exited');
+      await supervisor.dispose();
+    }
+  });
   it('blocks sandbox mismatch and fences old output and stdin', async () => {
     const fixture = processBridgeFixture(); const supervisor = new NativeProcessSupervisor(fixture.bridge);
     fixture.mismatch(); await expect(supervisor.start('web-1', ['cat'], { rows: 30, cols: 100 })).rejects.toThrow('权限'); expect(fixture.calls).toHaveLength(0);
@@ -52,7 +101,8 @@ describe('native execution bridge contract (fixture, not native acceptance)', ()
   it('never writes through an owner after its generation changes', async () => {
     const fixture = processBridgeFixture(); const supervisor = new NativeProcessSupervisor(fixture.bridge);
     const process = await supervisor.start('web-1', ['cat'], { rows: 30, cols: 100 }); fixture.fence();
-    await expect(supervisor.write(process.id, process.generation, 'bad')).rejects.toThrow('stale'); fixture.emit(Buffer.from('late old output')); fixture.complete();
+    await expect(supervisor.write(process.id, process.generation, 'bad')).rejects.toThrow('stale'); fixture.emit(Buffer.from('late old output'), true);
+    expect(supervisor.get(process.id).outputTruncated).toBe(false); fixture.complete();
     await terminalEventually(() => supervisor.get(process.id).state === 'uncertain'); expect(supervisor.get(process.id).exitCode).toBeNull();
   });
 });
