@@ -52,6 +52,13 @@ const text = (value: unknown): string | undefined => typeof value === 'string' &
 const terminal = (status: string | undefined): boolean => status !== undefined && ['completed', 'failed', 'stopped', 'killed'].includes(status);
 const taskSubtypes = new Set(['task_started', 'task_progress', 'task_updated', 'task_notification', 'background_tasks_changed']);
 
+/** Current snapshot membership permits a targeted stop without inferring a
+ * lifecycle phase. Known terminal or unconfirmed/absent tasks stay fenced. */
+export function canStopClaudeTask(task: { status?: unknown; nativeStatus?: unknown; backgroundPresence?: unknown }): boolean {
+  if (terminal(text(task.status)) || terminal(text(task.nativeStatus))) return false;
+  return ['pending', 'running', 'paused'].includes(String(task.status)) || task.status === 'unknown' && task.backgroundPresence === 'present';
+}
+
 export function isClaudeTaskMessage(value: unknown): boolean {
   const message = object(value);
   return message['type'] === 'system' && taskSubtypes.has(String(message['subtype']));

@@ -38,7 +38,7 @@ import {
   type UserDialogRequest,
   type UserDialogResult,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, claudeOutputOrigin, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
+import { buildFileChanges, canStopClaudeTask, claudeOutputOrigin, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 
 import { ClaudeContentReducer } from './content.js';
 import { encodeClaudeInput, type ClaudeUserContent } from './input.js';
@@ -49,6 +49,7 @@ import { ClaudeNativeHistory, claudeNativeActionCatalog, elicitationResult, nati
 import { ClaudeNativeState } from './native-state.js';
 import { claudeSlashCommands } from './slash.js';
 import { permissionProposal, permissionSuggestions, type ClaudePermissionOptions } from './permission-proposal.js';
+import { taskStopAffordance } from './task-stop-affordance.js';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -212,6 +213,7 @@ interface SessionRuntime {
   turnActive: boolean;
   backgroundTasks: Map<string, string | undefined>;
   hasBackgroundSnapshot: boolean;
+  taskStopAffordance: boolean;
   nativeId: string;
   /** 当前 query 使用的模型；setModel 会立即更新 SDK query 和此缓存。 */
   model?: string;
@@ -300,7 +302,7 @@ export class ClaudeAdapter implements AgentAdapter {
       stdio: { enabled: false, failed: false },
       nativeOptions: {}, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
-      pump: Promise.resolve(), turnActive: false, backgroundTasks: new Map(), hasBackgroundSnapshot: false, turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
+      pump: Promise.resolve(), turnActive: false, backgroundTasks: new Map(), hasBackgroundSnapshot: false, taskStopAffordance: false, turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
       pending: new Map(), toolItems: new Map(), outputOrigins: new Map(),
       slashCommands: [], terminalSlashCommands: [], content: new ClaudeContentReducer(1), ready: Promise.resolve(), frameSeq: 0,
     };
@@ -466,6 +468,7 @@ export class ClaudeAdapter implements AgentAdapter {
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
         includePartialMessages: true,
+        perTaskStopAffordance: taskStopAffordance(nativeCli, PINNED_SDK_VERSION),
         ...(nativeCli === undefined ? {} : { pathToClaudeCodeExecutable: nativeCli }),
         // settings.json 的 env 会覆盖 options.env；用 flag 级 settings 注入 Provider 才能生效（F16 实测）
         ...(Object.keys(providerEnv).length === 0 ? {} : { settings: { env: providerEnv } }),
@@ -515,11 +518,12 @@ export class ClaudeAdapter implements AgentAdapter {
       return result;
     };
 
-    const q = query({ prompt: input.iterable, options: { ...this.buildOptions(opts, canUseTool, resume, stdio), ...nativeOptions,
+    const sdkOptions: Options = { ...this.buildOptions(opts, canUseTool, resume, stdio), ...nativeOptions,
       onElicitation: (request, callbackOptions) => this.nativeCallback(sessionId, ownerRef.current, 'elicitation', request, callbackOptions) as Promise<ElicitationResult>,
       onUserDialog: (request, callbackOptions) => this.nativeCallback(sessionId, ownerRef.current, 'dialog', request, callbackOptions) as Promise<UserDialogResult>,
       ...(this.options.dialogSpecs === undefined ? {} : { supportedDialogKinds: Object.keys(this.options.dialogSpecs) }),
-    } });
+    };
+    const q = query({ prompt: input.iterable, options: sdkOptions });
     const generation = (this.generations.get(sessionId) ?? 0) + 1;
     this.generations.set(sessionId, generation);
     const runtime: SessionRuntime = {
@@ -531,6 +535,7 @@ export class ClaudeAdapter implements AgentAdapter {
       turnActive: false,
       backgroundTasks: new Map(),
       hasBackgroundSnapshot: false,
+      taskStopAffordance: sdkOptions.perTaskStopAffordance === true,
       ...(opts.model === undefined ? {} : { model: opts.model }),
       launchOpts: opts,
       input,
@@ -815,7 +820,9 @@ export class ClaudeAdapter implements AgentAdapter {
       rateLimit: runtime.state.rateLimit, auth: runtime.state.auth, structuredOutput: runtime.state.structuredOutput,
       interactions: [...runtime.nativePending.values()].map(({ requestId, kind, payload, status }) => ({ requestId, kind, payload, status })),
       teams: { mode: 'native-surface', reason: '锁定 SDK 没有公开 Teams 成员管理/发送接口；任务 actor 来自原生事件' },
-      controls: { perTaskStopAffordance: false, taskStop: 'public-sdk-unverified', interruptAffectsBackground: 'native-defined' },
+      controls: { perTaskStopAffordance: runtime.taskStopAffordance,
+        taskStop: runtime.taskStopAffordance ? 'verified-public-sdk' : 'public-sdk-unverified',
+        interruptAffectsBackground: runtime.taskStopAffordance ? 'foreground-only-open-input' : 'sdk-default-includes-background' },
     };
   }
   nativeTerminalEnvironment(): Record<string, string | undefined> { return { ...process.env, ...this.options.env }; }
@@ -833,8 +840,8 @@ export class ClaudeAdapter implements AgentAdapter {
       mcp: mcp.map(({ config: _config, ...status }) => status),
       outputStyles: initialization.available_output_styles, outputStyle: initialization.output_style,
       actions: claudeNativeActionCatalog(models).map(action => ({ ...action,
-        supported: action.type === 'stop-task' ? false : action.type === 'mcp-resource' ? runtime.capabilities.includes('mcp_read_resource_v1') : action.type === 'dialog' ? Object.keys(this.options.dialogSpecs ?? {}).length > 0 : true,
-        ...(action.type === 'stop-task' ? { reason: '公开 stopTask 控制已接入；真实单任务停止闭环尚未验收，perTaskStopAffordance 未开启' } : {}),
+        supported: action.type === 'stop-task' ? runtime.taskStopAffordance && initialization.claude_code_version === PINNED_CLI_VERSION : action.type === 'mcp-resource' ? runtime.capabilities.includes('mcp_read_resource_v1') : action.type === 'dialog' ? Object.keys(this.options.dialogSpecs ?? {}).length > 0 : true,
+        ...(action.type === 'stop-task' && !runtime.taskStopAffordance ? { reason: '当前 SDK/原生二进制的单任务停止声明未通过验证' } : {}),
       })),
       selected: { model: runtime.model ?? runtime.launchOpts.model, effort: runtime.launchOpts.reasoningEffort,
         ...runtime.nativeOptions }, capabilities: runtime.capabilities, supportedDialogKinds: Object.keys(this.options.dialogSpecs ?? {}),
@@ -931,8 +938,14 @@ export class ClaudeAdapter implements AgentAdapter {
       case 'background': result = await runtime.q.backgroundTasks(action.toolUseId); break;
       case 'stop-task': {
         const task = runtime.state.tasks.get(action.taskId);
-        if (task === undefined || !['pending', 'running', 'paused'].includes(task.status) || (action.runId !== undefined && task.runId !== action.runId)) throw nativeValidationError('后台任务已结束或 runId 已改变', 409);
-        await runtime.q.stopTask(action.taskId); result = { submitted: true, confirmed: false, taskId: action.taskId, runId: task.runId }; break;
+        if (task === undefined || !canStopClaudeTask(task) || (task.runId ?? null) !== action.runId
+          || runtime.nativeId !== '' && task.nativeSessionId !== undefined && task.nativeSessionId !== runtime.nativeId) throw nativeValidationError('任务已结束、身份待确认或 runId 已改变', 409);
+        const runId = task.runId ?? null;
+        await runtime.q.stopTask(action.taskId);
+        const returned = { id: task.taskId, submitted: true, confirmed: false, taskId: task.taskId, runId, callReturnedAt: new Date().toISOString() };
+        try { current(true); }
+        catch (error) { throw Object.assign(error as Error, { nativeCallReturn: returned }); }
+        return returned;
       }
       case 'refresh': {
         // The native usage control is explicitly experimental in this pinned SDK; preserve its label.

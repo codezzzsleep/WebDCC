@@ -101,7 +101,9 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
       {snapshot === undefined ? <button className="btn primary" type="button" disabled={busy} onClick={() => { void submit({ type: 'connect' }, true); }}>连接原生控制</button> : null}
     </div>
     {error ? <p role="alert">{error}</p> : null}
-    {receipt ? <p role="status" data-testid="native-action-receipt">{labels[receipt.state]} · {receipt.type}</p> : null}
+    {receipt ? <p role="status" data-testid="native-action-receipt">{receipt.type === 'stop-task'
+      ? `${receipt.callReturnedAt === undefined ? '调用返回尚未确认' : '调用已返回'} · ${receipt.state === 'completed' ? '原生停止已确认' : labels[receipt.state]}`
+      : labels[receipt.state]} · {receipt.type}</p> : null}
     {snapshot ? <>
       <p style={{ margin: 0 }}>{snapshot.agent} · 原生会话 {snapshot.nativeId ?? '尚未建立'}</p>
       <label>原生操作<select className="text-input" value={selected} disabled={busy} onChange={event => { setSelected(event.target.value); setValues({}); setResult(undefined); }}>

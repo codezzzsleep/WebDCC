@@ -30,7 +30,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
 
   return (
     <>
-      <ClaudeTaskPanel view={claudeView} />
+      <ClaudeTaskPanel sessionId={sessionId} view={claudeView} />
       {subagents.length > 0 ? <div className="task-bar" data-testid="codex-subagents-panel">
         <div className="task-bar-head"><Icon name="tool" size={15} /><strong>子任务</strong>
           <span className="summary">{subagents.filter(child => child.nativeStatus === 'completed').length} 已完成 · {subagents.length} 总计</span>

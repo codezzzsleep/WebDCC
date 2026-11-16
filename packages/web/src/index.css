@@ -2256,3 +2256,6 @@ button.step-line:hover {
 .claude-task-children { margin-left: 10px; border-left: 1px solid var(--border-l2); }
 .claude-task-output .output { white-space: pre-wrap; overflow-wrap: anywhere; }
 .claude-task-history { margin-top: 8px; }
+.claude-task-stop { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.claude-task-stop p { font-size: 12px; margin: 6px 0; }
+.send-btn.stop-btn:has(span) { width: auto; border-radius: 12px; padding: 0 8px; gap: 4px; font-size: 12px; }

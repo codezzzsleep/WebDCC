@@ -1,15 +1,15 @@
 import { expect, it } from 'vitest';
-import type { AgentAdapter, NativeActionRequest } from '@webdcc/protocol';
+import type { AgentAdapter, AgentId, NativeActionRequest } from '@webdcc/protocol';
 import { FakeAdapter } from '@webdcc/fake-adapter';
 import { createTestApp } from './helpers.js';
 
-async function setup() {
+async function setup(agent: AgentId = 'codex') {
   const ctx = await createTestApp();
   const workspace = ctx.store.createWorkspace('native', ctx.dataDir);
-  const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+  const session = ctx.store.createSession({ workspaceId: workspace.id, agent });
   ctx.store.updateSession(session.id, { nativeId: 'native' });
   let revision = 1; let catalogue = 1; let sends = 0; let controls = 0;
-  const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' });
+  const adapter: AgentAdapter = new FakeAdapter({ id: agent });
   adapter.nativeState = () => ({ revision, nativeId: 'native', turnActive: false });
   adapter.nativeCatalog = async () => ({ revision: catalogue, actions: [{ type: 'rename', label: '修改原生标题', supported: true, schema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] } }] });
   adapter.send = async () => { sends++; };
@@ -31,6 +31,26 @@ it('native reads require auth and explicit connection; connection never sends qu
     expect(connect.statusCode).toBe(200); expect(connect.json().receipt.state).toBe('completed');
     expect((await ctx.app.inject({ url: `${base}?catalog=1`, headers })).statusCode).toBe(200);
     expect(stats()).toEqual({ sends: 0, controls: 0 }); expect(ctx.store.journal.queue(session.id)[0]?.state).toBe('queued');
+  } finally { await ctx.close(); }
+});
+
+it('keeps the observed Claude stop return and target when the owner changes before the operation returns', async () => {
+  const { ctx, session, base, headers, setControl } = await setup('claude-code');
+  try {
+    await ctx.manager.connectNativeControls(session.id, { commandId: 'connect-stop-return', action: { type: 'connect' } });
+    const snapshot = await ctx.manager.nativeControls(session.id, true);
+    const returnedAt = new Date().toISOString();
+    setControl(async () => {
+      ctx.store.nativeOwners.close(session.id, snapshot.runtime);
+      return { id: 'task', runId: '002', submitted: true, confirmed: false, callReturnedAt: returnedAt };
+    });
+    const response = await ctx.app.inject({ method: 'POST', url: `${base}/actions`, headers,
+      payload: { commandId: 'stop-return-owner-lost', revision: snapshot.revision, action: { type: 'stop-task', taskId: 'task', runId: '002' } } });
+    expect(response.statusCode).toBe(409);
+    expect(ctx.store.nativeActions.get('stop-return-owner-lost', session.id)).toMatchObject({ state: 'uncertain',
+      callReturnedAt: returnedAt, reference: { id: 'task', runId: '002' } });
+    ctx.store.nativeActions.taskEnded(session.id, snapshot.runtime, 'native', 'task', '002', 'stopped');
+    expect(ctx.store.nativeActions.get('stop-return-owner-lost', session.id)?.state).toBe('uncertain');
   } finally { await ctx.close(); }
 });
 

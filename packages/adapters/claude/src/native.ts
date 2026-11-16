@@ -26,7 +26,7 @@ export type ClaudeNativeAction =
   | { type: 'reload-plugins'; holdOnCacheImpact: boolean }
   | { type: 'reload-output-styles' }
   | { type: 'background'; toolUseId?: string }
-  | { type: 'stop-task'; taskId: string; runId?: string }
+  | { type: 'stop-task'; taskId: string; runId: string | null }
   | { type: 'refresh' }
   | { type: 'elicitation'; requestId: string; action: 'accept' | 'decline' | 'cancel'; content?: unknown }
   | { type: 'dialog'; requestId: string; behavior: 'completed' | 'cancelled'; result?: unknown };
@@ -63,7 +63,7 @@ export function claudeNativeActionCatalog(models: ModelInfo[]) {
     ['reload-plugins', '刷新原生 plugins', { holdOnCacheImpact: boolean }, ['holdOnCacheImpact']],
     ['reload-output-styles', '刷新原生输出样式', {}, []],
     ['background', '将前台任务放入后台', { toolUseId: text }, []],
-    ['stop-task', '停止指定原生任务', { taskId: text, runId: text }, ['taskId']],
+    ['stop-task', '停止指定原生任务', { taskId: text, runId: { type: ['string', 'null'] } }, ['taskId', 'runId']],
     ['refresh', '读取原生用量与上下文', {}, []],
     ['elicitation', '回答原生 MCP 请求', { requestId: text, action: { enum: ['accept', 'decline', 'cancel'] }, content: {} }, ['requestId', 'action']],
     ['dialog', '回答已注册原生对话', { requestId: text, behavior: { enum: ['completed', 'cancelled'] }, result: {} }, ['requestId', 'behavior']],
@@ -117,9 +117,10 @@ export function parseClaudeNativeAction(value: unknown): ClaudeNativeAction {
     case 'elicitation': if (!['accept', 'decline', 'cancel'].includes(String(action['action']))) throw nativeValidationError('elicitation.action 无效'); break;
     case 'dialog': if (!['completed', 'cancelled'].includes(String(action['behavior']))) throw nativeValidationError('dialog.behavior 无效'); break;
     case 'background': if (action['toolUseId'] !== undefined) nonempty(action['toolUseId'], 'toolUseId'); break;
+    case 'stop-task': if (action['runId'] !== null) nonempty(action['runId'], 'runId'); break;
     case 'model': case 'effort': case 'checkpoints': case 'resume-at': case 'rewind': case 'rename': case 'delete':
     case 'mcp-reconnect': case 'mcp-toggle': case 'mcp-resource': case 'reload-skills': case 'reload-plugins':
-    case 'reload-output-styles': case 'stop-task': case 'refresh': break;
+    case 'reload-output-styles': case 'refresh': break;
     default: throw nativeValidationError(`未知 Claude action: ${action['type']}`);
   }
   const fields: Record<string, string[]> = {

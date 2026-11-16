@@ -24,7 +24,9 @@ export interface NativeActionReceipt {
   state: NativeActionState;
   updatedAt: string;
   error?: string;
-  reference?: { id: string; generation?: number };
+  reference?: { id: string; generation?: number; runId?: string | null };
+  /** The SDK call returned; this does not establish a task's terminal outcome. */
+  callReturnedAt?: string;
 }
 export interface NativeActionResponse {
   receipt: NativeActionReceipt;

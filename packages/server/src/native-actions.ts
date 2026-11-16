@@ -10,9 +10,14 @@ interface Row {
 }
 const error = (message: string, statusCode = 409): Error => Object.assign(new Error(message), { statusCode, code: 'native-control-rejected' });
 const targetKey = (action: Record<string, unknown>): string => payloadHash({ type: action['type'], id: action['requestId'] ?? action['taskId'] ?? action['cardId'] ?? action['childSessionId'] ?? action['terminalId'] ?? action['processId'] ?? null, runId: action['runId'] ?? null });
-const receipt = (row: Row): NativeActionReceipt => ({ commandId: row.command_id, sessionId: row.session_id,
-  type: row.type, state: row.state, updatedAt: row.updated_at, ...(row.error === null ? {} : { error: row.error }),
-  ...(row.reference === null ? {} : { reference: JSON.parse(row.reference) as NonNullable<NativeActionReceipt['reference']> }) });
+const receipt = (row: Row): NativeActionReceipt => {
+  const reference = row.reference === null ? undefined : JSON.parse(row.reference) as NonNullable<NativeActionReceipt['reference']> & { callReturnedAt?: string };
+  return { commandId: row.command_id, sessionId: row.session_id, type: row.type, state: row.state, updatedAt: row.updated_at,
+    ...(row.error === null ? {} : { error: row.error }), ...(reference === undefined ? {} : {
+      reference: { id: reference.id, ...(reference.generation === undefined ? {} : { generation: reference.generation }), ...(reference.runId === undefined ? {} : { runId: reference.runId }) },
+      ...(reference.callReturnedAt === undefined ? {} : { callReturnedAt: reference.callReturnedAt }),
+    }) };
+};
 
 /** Claim before any native side effect. Neither replies nor results are stored.
  * A dead dispatcher is uncertain; a retry can never resubmit its operation. */
@@ -50,10 +55,33 @@ export class NativeActionStore {
     this.db.prepare('UPDATE native_actions SET runtime_key = ?, native_id = ? WHERE command_id = ?')
       .run(payloadHash(identity), nativeId, commandId);
   }
+  /** A returned SDK stop call is evidence about the old command, even when
+   * the operation subsequently loses its owner. It never settles the task. */
+  recordStopReturn(commandId: string, result: unknown): void {
+    const value = result !== null && typeof result === 'object' ? result as { id?: unknown; runId?: unknown; callReturnedAt?: unknown } : {};
+    if (typeof value.id !== 'string' || value.id === '' || value.id.length > 4096
+      || value.runId !== null && value.runId !== undefined && typeof value.runId !== 'string') return;
+    const row = this.db.prepare("SELECT reference, target_key FROM native_actions WHERE command_id = ? AND type = 'stop-task'").get(commandId) as { reference: string | null; target_key: string } | undefined;
+    const runId = value.runId ?? null;
+    if (row === undefined || row.target_key !== targetKey({ type: 'stop-task', taskId: value.id, runId })) return;
+    const previous = row.reference === null ? {} : JSON.parse(row.reference) as { callReturnedAt?: string };
+    const returnedAt = typeof value.callReturnedAt === 'string' && Number.isFinite(Date.parse(value.callReturnedAt)) ? value.callReturnedAt : new Date().toISOString();
+    this.db.prepare('UPDATE native_actions SET reference = ? WHERE command_id = ?')
+      .run(JSON.stringify({ id: value.id, runId, callReturnedAt: previous.callReturnedAt ?? returnedAt }), commandId);
+  }
   /** Only an identified native terminal notification may close a submission. */
   confirm(sessionId: string, identity: RuntimeIdentity, nativeId: string, action: { type: string; [key: string]: unknown }): void {
     this.db.prepare("UPDATE native_actions SET state = 'completed', error = NULL, updated_at = ? WHERE session_id = ? AND runtime_key = ? AND native_id = ? AND target_key = ? AND state IN ('dispatching','submitted')")
       .run(new Date().toISOString(), sessionId, payloadHash(identity), nativeId, targetKey(action));
+  }
+  taskEnded(sessionId: string, identity: RuntimeIdentity, nativeId: string, taskId: string, runId: string | null, status: string): void {
+    const action = { type: 'stop-task', taskId, runId };
+    if (status === 'stopped') { this.confirm(sessionId, identity, nativeId, action); return; }
+    if (status !== 'completed' && status !== 'failed') return;
+    // A natural/error terminal event settles the wait without claiming that
+    // this request stopped the task. The call return remains independent.
+    this.db.prepare("UPDATE native_actions SET state = 'uncertain', error = ?, updated_at = ? WHERE session_id = ? AND runtime_key = ? AND native_id = ? AND target_key = ? AND state IN ('dispatching','submitted')")
+      .run(`task-ended-without-stop-confirmation:${status}`, new Date().toISOString(), sessionId, payloadHash(identity), nativeId, targetKey(action));
   }
   disconnect(sessionId: string, identity: RuntimeIdentity): void {
     this.db.prepare("UPDATE native_actions SET state = 'uncertain', error = 'native-connection-closed', updated_at = ? WHERE session_id = ? AND runtime_key = ? AND state IN ('dispatching','submitted')")
@@ -82,8 +110,9 @@ export class NativeActionStore {
     if (!created) return { receipt: receipt(row) };
     try {
       const result = await run();
-      const response = result !== null && typeof result === 'object' ? result as { id?: unknown; generation?: unknown } : {};
-      if (typeof response.id === 'string' && response.id.length <= 128) {
+      const response = result !== null && typeof result === 'object' ? result as { id?: unknown; generation?: unknown; runId?: unknown } : {};
+      if (value.action.type === 'stop-task') this.recordStopReturn(value.commandId, result);
+      else if (typeof response.id === 'string' && response.id.length <= 128) {
         const reference = { id: response.id, ...(Number.isSafeInteger(response.generation) ? { generation: response.generation } : {}) };
         this.db.prepare('UPDATE native_actions SET reference = ? WHERE command_id = ?').run(JSON.stringify(reference), value.commandId);
       }
@@ -92,6 +121,7 @@ export class NativeActionStore {
       this.finish(value.commandId, failed ? 'failed' : submitted ? 'submitted' : 'completed', failed ? 'native-command-failed' : undefined);
       return { receipt: this.get(value.commandId, sessionId)!, result };
     } catch (failure) {
+      if (value.action.type === 'stop-task') this.recordStopReturn(value.commandId, (failure as { nativeCallReturn?: unknown } | null)?.nativeCallReturn);
       // Only our explicit pre-dispatch validation can prove there was no side effect.
       const rejected = (failure as { code?: string } | null)?.code === 'native-control-rejected';
       this.finish(value.commandId, rejected ? 'failed' : 'uncertain', rejected ? 'rejected-before-dispatch' : 'native-outcome-unconfirmed');

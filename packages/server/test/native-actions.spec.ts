@@ -73,3 +73,47 @@ await store.nativeActions.execute(process.argv[2], {commandId:'killed-command',a
     expect((await readFile(file)).includes(Buffer.from('never-store-this-secret'))).toBe(false);
   } finally { child.kill('SIGKILL'); if (child.connected) child.disconnect(); await rm(directory, { recursive: true, force: true }); }
 }, 20_000);
+
+it('stores the stop call return independently when the native stopped notification arrives first', async () => {
+  const db = openDb(':memory:'); const store = new Store(db);
+  const workspace = store.createWorkspace('stop', '/tmp'); const session = store.createSession({ workspaceId: workspace.id, agent: 'claude-code' });
+  const identity = { ownerId: 'owner', generation: 1, hostId: 'host' };
+  const action = { type: 'stop-task', taskId: 'task', runId: '002' };
+  let release: ((value: unknown) => void) | undefined;
+  try {
+    const request = { commandId: 'stop-before-ack', action };
+    const pending = store.nativeActions.execute(session.id, request, async () => {
+      store.nativeActions.bind(request.commandId, identity, 'native');
+      return new Promise(resolve => { release = resolve; });
+    });
+    store.nativeActions.confirm(session.id, identity, 'native', action);
+    expect(store.nativeActions.get(request.commandId, session.id)).toMatchObject({ state: 'completed' });
+    expect(store.nativeActions.get(request.commandId, session.id)).not.toHaveProperty('callReturnedAt');
+    release!({ id: 'task', runId: '002', confirmed: false });
+    const response = await pending;
+    expect(response.receipt).toMatchObject({ state: 'completed', callReturnedAt: expect.any(String), reference: { id: 'task', runId: '002' } });
+    const restored = new Store(db).nativeActions.get(request.commandId, session.id);
+    expect(restored).toEqual(response.receipt);
+    let repeated = 0;
+    await store.nativeActions.execute(session.id, request, async () => { repeated++; });
+    expect(repeated).toBe(0);
+  } finally { db.close(); }
+});
+
+it('matches a stop notification to its native run and preserves a natural task end without claiming stop success', async () => {
+  const db = openDb(':memory:'); const store = new Store(db);
+  const workspace = store.createWorkspace('stop-runs', '/tmp'); const session = store.createSession({ workspaceId: workspace.id, agent: 'claude-code' });
+  const identity = { ownerId: 'owner', generation: 1, hostId: 'host' };
+  try {
+    const action = { type: 'stop-task', taskId: 'task', runId: '002' };
+    await store.nativeActions.execute(session.id, { commandId: 'stop-run-two', action }, async () => {
+      store.nativeActions.bind('stop-run-two', identity, 'native'); return { id: 'task', runId: '002', confirmed: false };
+    });
+    store.nativeActions.taskEnded(session.id, identity, 'native', 'task', '001', 'stopped');
+    expect(store.nativeActions.get('stop-run-two', session.id)?.state).toBe('submitted');
+    store.nativeActions.taskEnded(session.id, identity, 'native', 'task', '002', 'completed');
+    expect(store.nativeActions.get('stop-run-two', session.id)).toMatchObject({ state: 'uncertain', callReturnedAt: expect.any(String), error: 'task-ended-without-stop-confirmation:completed' });
+    store.nativeActions.taskEnded(session.id, identity, 'native', 'task', '002', 'stopped');
+    expect(store.nativeActions.get('stop-run-two', session.id)?.state).toBe('uncertain');
+  } finally { db.close(); }
+});
