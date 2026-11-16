@@ -11,6 +11,7 @@ import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './sl
 import type { CodexSubagentView } from './subagents.js';
 import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions, DshSubagentReadTarget, DshSubagentControlTarget, DshSubagentInterruptReceipt,
   DshSubagentPromptOptions, DshSubagentPromptReceipt, DshSubagentInputReference, DshSubagentInputObservation } from './dsh-subagents.js';
+import type { DshQuestionWaitOpening } from './dsh-questions.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -177,6 +178,8 @@ export interface AgentAdapter {
   /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
   cancelPending?(sessionId: string): Promise<void | NativeInteractionSubmission>;
   answer?(sessionId: string, questionId: string, answer: unknown): Promise<void | AnswerSubmission>;
+  claimDshQuestionWait?(sessionId: string, questionId: string, signal: AbortSignal): Promise<DshQuestionWaitOpening | undefined>;
+  timeoutDshQuestion?(sessionId: string, questionId: string, signal: AbortSignal, guard?: () => void): Promise<void>;
   setModel?(sessionId: string, model: string): Promise<void>;
   setReasoningEffort?(sessionId: string, effort: string): Promise<void>;
   /** 切换访问模式（F6）；Codex 在下一次 turn/start 生效，返回值是实际生效的模式 */

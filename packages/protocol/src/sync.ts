@@ -139,7 +139,7 @@ export interface CommandMessage {
   command: Command;
 }
 
-export type ClientMessage = HelloMessage | SubscribeMessage | UnsubscribeMessage | CommandMessage | PongMessage;
+export type ClientMessage = HelloMessage | SubscribeMessage | UnsubscribeMessage | CommandMessage | PongMessage | DshQuestionWaitRequest;
 
 export interface FeedPatch {
   permissions?: PermissionState;
@@ -226,4 +226,5 @@ export interface PingMessage {
   op: 'ping';
 }
 
-export type ServerMessage = FeedMessage | EventMessage | SnapshotMessage | DeltaMessage | UpdateMessage | AckMessage | PingMessage;
+export type ServerMessage = FeedMessage | EventMessage | SnapshotMessage | DeltaMessage | UpdateMessage | AckMessage | PingMessage | DshQuestionWaitMessage;
+import type { DshQuestionWaitRequest, DshQuestionWaitMessage } from './dsh-questions.js';

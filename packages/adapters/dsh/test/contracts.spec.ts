@@ -20,3 +20,10 @@ it('the captured actual native Stop request and receipt pass the contract while 
   expect(() => validateDshResult('subagents/interruptByUser', { accepted: false })).toThrow();
   expect(stopEvidence.capture['subagents/interruptByParent'].httpStatus).toBe(404);
 });
+
+it('the official waterfall rejection retains its exact error fields at the native HTTP boundary', () => {
+  const args = { clientId: 'native-client', eventId: 'native-waterfall', outcome: { kind: 'rejected', error: {
+    name: 'UserQuestionError', message: 'ask_user_question timed out before the user answered', code: 'ASK_TIMED_OUT',
+  } } };
+  expect(() => validateDshArgs('$events/result', args)).not.toThrow();
+});

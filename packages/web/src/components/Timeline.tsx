@@ -14,6 +14,7 @@ import { ElicitationForm } from './ElicitationForm.js';
 import { InputAttachments } from './InputAttachments.js';
 import { DshSubagentPanel } from './DshSubagentPanel.js';
 import { openDshSubagent } from '../lib/dsh-subagent-navigation.js';
+import { DshQuestionWait, useDshQuestionWait } from './DshQuestionWait.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -760,14 +761,24 @@ function InteractionSyncStatus({ sessionId, kind, id }: { sessionId: string; kin
 }
 
 function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['question'] }): React.ReactElement {
-  const [selected, setSelected] = useState<string[]>([]);
-  const [text, setText] = useState('');
+  const identity = store.getSession(event.sessionId)?.agent === 'dsh' ? data.dshQuestion : undefined;
+  const draft = () => identity === undefined || data.isSecret ? { selected: [], custom: '' } : store.dshQuestionWaits.drafts.read(event.sessionId, identity);
+  const [selected, setSelected] = useState<string[]>(() => draft().selected);
+  const [text, setText] = useState(() => draft().custom);
+  const [hidden, setHidden] = useState(false);
   useStoreVersion();
   const submission = data.submission === 'sent' || data.submission === 'queued' || data.submission === 'uncertain'
     ? { commandId: '', status: data.submission, error: data.submissionError } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
       ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission, error: data.submissionError });
   const synchronized = store.isInteractionSynced(event.sessionId, 'answer', data.questionId);
-  const busy = !synchronized || submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
+  const submitting = submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
+  const wait = useDshQuestionWait(event.sessionId, data.questionId, identity, data.status !== 'answered' && data.status !== 'skipped', synchronized && !submitting && store.connectionState === 'online');
+  const collapsed = wait?.hidden ?? hidden;
+  const busy = !synchronized || submitting || identity?.timed === true && identity.phase === 'open' && wait?.card.snapshot().channel !== 'waterfall';
+  const edit = (nextSelected: string[], nextText: string): void => {
+    setSelected(nextSelected); setText(nextText); wait?.card.engage();
+    if (identity !== undefined && !data.isSecret) store.dshQuestionWaits.drafts.save(event.sessionId, identity, 'editing', { selected: nextSelected, custom: nextText });
+  };
   const blocking = data.isBlocking !== false;
   const nonblockingLabel = blocking ? null : <span className="what">非阻塞提问</span>;
   const nativeDshCancelled = store.getSession(event.sessionId)?.agent === 'dsh' && data.status === 'skipped' && data.outcome === 'cancel';
@@ -795,8 +806,13 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         <Icon name="help" size={16} />
         {data.header ?? (blocking ? '需要你回答' : '非阻塞提问')}
       </div>
-      {blocking ? null : <p>{data.asyncReply ? 'Codex 会继续执行。提交回答会送入当前对话；也可以排队等本轮结束。' : '原生标记为非阻塞，你仍可以回答。'}</p>}
+      {blocking || identity?.phase === 'continued' ? null : <p>{data.asyncReply ? 'Codex 会继续执行。提交回答会送入当前对话；也可以排队等本轮结束。' : '原生标记为非阻塞，你仍可以回答。'}</p>}
       <div style={{ fontSize: 14 }}>{data.prompt}</div>
+      {wait !== undefined && identity?.timed ? <DshQuestionWait entry={wait} /> : null}
+      {identity === undefined ? null : <button type="button" className="btn ghost" onClick={() => { if (wait === undefined) setHidden(!hidden); else store.dshQuestionWaits.toggleSurface(wait); }}>{collapsed ? '展开回答' : '收起回答'}</button>}
+      {collapsed ? null : <div onFocusCapture={() => wait?.card.holdFocus()} onBlurCapture={event_ => {
+        if (!event_.currentTarget.contains(event_.relatedTarget as Node | null)) wait?.card.releaseFocus();
+      }}>
       <div className="question-options" role={data.multiSelect === true ? 'group' : 'radiogroup'} aria-label={data.prompt}>
         {(data.options ?? []).map((option) => (
           <label key={option.id} className="question-option">
@@ -805,9 +821,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
               name={data.questionId}
               disabled={busy}
               checked={selected.includes(option.id)}
-              onChange={() =>
-                setSelected((prev) => (data.multiSelect === true ? (prev.includes(option.id) ? prev.filter((id) => id !== option.id) : [...prev, option.id]) : [option.id]))
-              }
+              onChange={() => edit(data.multiSelect === true ? selected.includes(option.id) ? selected.filter(id => id !== option.id) : [...selected, option.id] : [option.id], text)}
             />
             <span>
               {option.label}
@@ -817,8 +831,8 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         ))}
       </div>
       {data.allowsFreeText !== false ? (
-        data.asyncReply ? <textarea className="text-input" rows={3} disabled={busy} placeholder={data.options?.length ? '或输入回答' : '输入回答'} aria-label="其他回答" value={text} onChange={event_ => setText(event_.target.value)} />
-          : <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => setText(event_.target.value)} />
+        data.asyncReply || identity !== undefined && !data.isSecret ? <textarea className="text-input" rows={3} disabled={busy} placeholder={data.options?.length ? '或输入回答' : '输入回答'} aria-label="其他回答" value={text} onChange={event_ => edit(selected, event_.target.value)} />
+          : <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => edit(selected, event_.target.value)} />
       ) : null}
       {data.isSecret ? <p>敏感回答只在本页面保留，刷新后需要重新输入。</p> : null}
       {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
@@ -837,6 +851,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
         {data.asyncReply && ['running', 'waiting'].includes(store.getSession(event.sessionId)?.status ?? '') ? <button type="button" className="btn" data-testid="question-queue-answer" disabled={busy || selected.length === 0 && text.trim() === ''}
           onClick={() => store.answer(event.sessionId, data.questionId, { selected, custom: text }, { intent: 'queue' })}>排队回答</button> : null}
       </div>
+      </div>}
     </div>
   );
 }

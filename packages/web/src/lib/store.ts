@@ -7,6 +7,7 @@ import { SyncConnection, type ConnectionState } from './connection.js';
 import { InputPreparationStore } from './input-preparation-store.js';
 import { UploadController } from './upload-controller.js';
 import { SyncedInputDraftStore } from './synced-input-draft-store.js';
+import { DshQuestionWaits } from './dsh-question-waits.js';
 import type { PreparedPart } from './composer-input-controller.js';
 import { CachedEventCoverage } from './event-coverage.js';
 
@@ -130,6 +131,7 @@ export class AppStore {
   private readonly draftRecovery = new Map<string, (input: Extract<Command, { op: 'send' }>) => boolean>();
 
   readonly connection: SyncConnection;
+  readonly dshQuestionWaits: DshQuestionWaits;
   /** 非当前查看的会话完成/等待审批时的未读数（A13） */
   unread = new Map<string, number>();
   currentSessionId: string | null = null;
@@ -156,12 +158,14 @@ export class AppStore {
           this.dispatchedInteractions.clear();
         }
         this.connectionState = state;
+        if (state !== 'online') this.dshQuestionWaits.disconnect();
         this.connectionAttempt = attempt;
         if (state === 'online') this.lastReconnectAt = Date.now();
         this.notify();
       },
       onOpen: () => this.replayOutbox(),
     });
+    this.dshQuestionWaits = new DshQuestionWaits(message => this.connection.sendDshQuestionWait(message), () => this.notify());
   }
 
   async init(): Promise<void> {
@@ -259,6 +263,10 @@ export class AppStore {
 
   private handleMessage(message: ServerMessage): void {
     switch (message.op) {
+      case 'dsh-question-wait': {
+        this.dshQuestionWaits.message(message);
+        break;
+      }
       case 'feed': {
         if (message.patch.queueRevision !== undefined) void this.refreshQueue(message.sessionId);
         this.feedSeq = Math.max(this.feedSeq, message.feedSeq);
@@ -408,7 +416,7 @@ export class AppStore {
     this.currentSessionId = sessionId;
     this.visibleSessionIds = new Set([sessionId, dockSessionId].filter((id): id is string => typeof id === 'string'));
     for (const id of this.interests) if (!this.visibleSessionIds.has(id)) {
-      this.interests.delete(id); this.subscribed.delete(id); this.connection.unsubscribe(id);
+      this.interests.delete(id); this.subscribed.delete(id); this.connection.unsubscribe(id); this.dshQuestionWaits.disconnect(id);
     }
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     let changed = false;
@@ -477,6 +485,10 @@ export class AppStore {
     if (event.kind === 'question') {
       const data = event.data as EventData['question'];
       const latest = this.latestInteractionEvent(event.sessionId, 'answer', data.questionId);
+      if (latest?.seq === event.seq && data.dshQuestion !== undefined) {
+        if (data.status === 'answered' || data.status === 'skipped') this.dshQuestionWaits.finish(event.sessionId, data.dshQuestion);
+        else this.dshQuestionWaits.ensure(event.sessionId, data.questionId, data.dshQuestion, false);
+      }
       if (latest?.seq === event.seq && data.submission !== undefined) {
         const key = JSON.stringify([event.sessionId, 'answer', data.questionId]);
         const previous = this.interactionSubmissions.get(key);
