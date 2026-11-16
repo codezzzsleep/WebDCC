@@ -242,4 +242,3 @@ it.each([false, true])('still publishes a healthy compatible release (first=%s)'
   expect(result.schema).toBe(14);
   expect(result.stderr).toBe('');
 });
-
