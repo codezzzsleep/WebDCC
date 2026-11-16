@@ -1,0 +1,37 @@
+{
+  "issue": 229,
+  "parents": [
+    56,
+    57,
+    42
+  ],
+  "relatedIssue": 227,
+  "base": "9e73225495a869e733ee749feb6f9b3ef5943965",
+  "sourceFingerprint": "87317adaf120513783a823b488f2e3f1795f9df6a50bb94e9d0a06a650be61f5",
+  "verification": {
+    "testsPassed": 48,
+    "typecheck": "full workspace+scripts passed",
+    "lint": "changed files passed",
+    "actualFirstHTTP": "incomplete true and pending helper lock failure retained; read failure retains the same error; later recovered record count1 does not erase omission",
+    "scope": "actual HTTP/SQLite/FS/flock/Node helper and controlled diagnostic transports; no official Native",
+    "before": "2 semantic first-HTTP failures; initial nonexistent route404 retained as fixture failure"
+  },
+  "evidenceSha256": {
+    "reproduction-before.log": "3298b73c9b5ed718aa817e8a50edd02c8bc8f80aef0d603033d69a5c839e1740",
+    "regression-before.log": "c177a03384ab93ec06d48c30c5324021ac77465d8e13fd5d2f9513f5c184a813",
+    "regression-before-route-mismatch.log": "b6d0012d2af234da4be664af6b05e1516c98f31858d0beb607506b89ad75df62",
+    "regression-first.log": "d03b710152d38393d525fc78b1288b1c0ebd36dc4f663f6f8f2e2884325b3398",
+    "regression-final.log": "9c669f99039af2c7712605f37c7470da21c8e1e3e1805227a0f73e16759b8fee",
+    "typecheck.log": "7b829409a575bdbcd74a40192e20598cb2d75ea8b8bcb6578da2bf04292eab69",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "officialNativeCalls": 0,
+  "providerCalls": 0,
+  "deployment": "not performed",
+  "remainingAcceptance": [
+    "Independent exact-head source acceptance",
+    "Three actual target Agents and diagnostic failure/launch configuration",
+    "Full NP14/15 remaining work"
+  ],
+  "dataMigration": "none"
+}
