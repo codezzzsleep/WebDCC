@@ -269,10 +269,20 @@ export class CodexWatchdog {
       if (!valid()) return;
       const current = this.store.watchdogJob(sessionId) as WatchdogJob;
       const failure = classifyCodexFailure(error instanceof Error ? error.message : error);
+      const destination = target?.id ?? sessionId;
+      const active = this.host.isActive(destination);
+      const admission = this.store.journal.queue(destination).find(input => input.commandId === commandId);
       if (target !== undefined) {
         const child = this.store.watchdogJob(target.id);
-        if (child?.status === 'recovering') this.save({ ...child, status: 'exhausted', detail: '接续会话未能启动，请检查后手动继续' });
+        if (child?.status === 'recovering') this.save({ ...child,
+          status: active ? 'recovering' : 'exhausted', nextAttemptAt: null,
+          detail: active ? '接续输入回执未确认，继续观察原生轮次'
+            : admission === undefined ? '接续会话未能启动，请检查后手动继续' : '接续输入结果待核对，不会自动重发',
+        });
         this.save({ ...current, status: 'handed-off', targetSessionId: target.id, detail: '已建立接续会话，恢复状态见新会话' });
+      } else if (active || admission !== undefined) {
+        this.save({ ...current, status: active ? 'recovering' : 'exhausted', nextAttemptAt: null,
+          detail: active ? '恢复输入回执未确认，继续观察原生轮次' : '恢复输入结果待核对，不会自动重发' });
       } else if (failure === undefined) {
         this.save({ ...current, status: 'exhausted', detail: '自动恢复未能启动，请检查后手动继续' });
       } else this.schedule({ ...current, action: failure.action }, failure.retryAfterMs);
