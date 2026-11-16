@@ -51,6 +51,37 @@ it('marks a process restart as unknown and preserves completed evidence through 
   expect(restored.find(task => task.taskId === 'done')).toMatchObject({ status: 'completed', outputFile: '/tmp/done' });
 });
 
+it('waits for current-runtime lifecycle evidence after a new query, even when the task is in its snapshot', () => {
+  const runtime = (seq: number, id: string, state: 'started' | 'unavailable'): StoredEvent => ({ ...event(seq, undefined),
+    data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: { id, state } } });
+  const events = [
+    runtime(1, 'first-query', 'started'),
+    event(2, message('task_started', { task_id: 'task', run_id: '002', description: 'work', is_backgrounded: true })),
+    runtime(3, 'new-query', 'started'),
+    event(4, message('background_tasks_changed', { tasks: [{ task_id: 'task', run_id: '002', task_type: 'local_agent', description: 'work' }] })),
+    event(5, message('task_updated', { task_id: 'task', run_id: '002', patch: { description: 'metadata only' } })),
+  ];
+  expect(currentClaudeTasks(events)[0]).toMatchObject({ status: 'unknown', nativeStatus: 'running', backgroundPresence: 'present' });
+  events.push(event(6, message('task_updated', { task_id: 'task', run_id: '002', patch: { status: 'paused' } })));
+  expect(currentClaudeTasks(events)[0]).toMatchObject({ status: 'paused', nativeStatus: 'paused' });
+  events.push(runtime(7, 'first-query', 'unavailable'));
+  expect(currentClaudeTasks(events)[0]?.status).toBe('paused');
+  events.push(event(8, message('task_started', { task_id: 'task', run_id: '003', description: 'new run' })));
+  events.push(event(9, message('task_notification', { task_id: 'task', run_id: '002', status: 'stopped', summary: 'late old run' })));
+  expect(currentClaudeTasks(events)[0]).toMatchObject({ runId: '003', status: 'running' });
+});
+
+it('does not let a legacy init and a membership-only snapshot revive an unconfirmed old lifecycle', () => {
+  const events = [
+    message('task_started', { task_id: 'task', run_id: '002', description: 'work', is_backgrounded: true }),
+    message('init'),
+    message('background_tasks_changed', { tasks: [{ task_id: 'task', run_id: '002', task_type: 'local_agent', description: 'work' }] }),
+  ].map((native, seq) => event(seq, native));
+  expect(currentClaudeTasks(events)[0]).toMatchObject({ status: 'unknown', nativeStatus: 'running', backgroundPresence: 'present' });
+  events.push(event(4, message('task_progress', { task_id: 'task', run_id: '002', summary: 'confirmed now' })));
+  expect(currentClaudeTasks(events)[0]).toMatchObject({ status: 'running', summary: 'confirmed now' });
+});
+
 it('preserves unknown patch statuses and rejects malformed snapshots without deleting prior evidence', () => {
   const projection = new ClaudeTaskProjection();
   projection.system(message('task_updated', { task_id: 'task', run_id: 'run', patch: { status: 'future-status' } }));
