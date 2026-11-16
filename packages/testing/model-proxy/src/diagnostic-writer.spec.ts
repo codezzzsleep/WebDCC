@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, rm, stat, symlink, writeFile, lstat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, symlink, writeFile, lstat, readdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { fork, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { DiagnosticFileWriter } from './diagnostic-writer.js';
+import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage } from './diagnostic-writer.js';
 
 async function terminateOwnedFixture(child: ChildProcess): Promise<void> {
   const descendants: { pid: number; start: string | undefined }[] = [];
@@ -61,6 +61,91 @@ it('independent writers enforce one file limit across concurrent appends', async
     expect(writers.every(writer => writer.pendingBytes === 0)).toBe(true);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+it('multiple files share a directory budget with a bounded persistent incomplete marker', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-directory-quota-'));
+  const errors: string[] = [];
+  try {
+    const writers = Array.from({ length: 4 }, () => new DiagnosticFileWriter({ maxFileBytes: 64, maxDirectoryBytes: 128 }));
+    await Promise.all(writers.map((writer, index) => writer.write(join(directory, `${index}.jsonl`), 'x'.repeat(64), 'append', error => errors.push(error.message))));
+    const files = (await readdir(directory)).filter(name => name.endsWith('.jsonl'));
+    expect(files).toHaveLength(2);
+    expect(errors).toEqual(['Diagnostic directory size limit reached', 'Diagnostic directory size limit reached']);
+    const marker = join(directory, '.wdcc-diagnostic-quota.json');
+    expect(JSON.parse(await readFile(marker, 'utf8'))).toMatchObject({ incomplete: true, scope: 'directory', failures: 2 });
+    expect((await stat(marker)).size).toBeLessThanOrEqual(4096);
+    const restarted = new DiagnosticFileWriter({ maxFileBytes: 64, maxDirectoryBytes: 128 });
+    await restarted.write(join(directory, 'after-restart.jsonl'), 'x', 'append', error => errors.push(error.message));
+    expect((await readdir(directory)).filter(name => name.endsWith('.jsonl'))).toHaveLength(2);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('ordinary records cannot use the reserved directory coverage path', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-directory-reserved-'));
+  try {
+    const writer = new DiagnosticFileWriter({ maxDirectoryBytes: 128 }); const errors: string[] = [];
+    await writer.write(join(directory, '.wdcc-diagnostic-quota.json'), 'x'.repeat(512), 'append', error => errors.push(error.message));
+    await writer.write(`${directory}/./.wdcc-diagnostic-quota.json`, 'x'.repeat(512), 'append', error => errors.push(error.message));
+    expect(errors).toEqual(['Reserved diagnostic coverage path', 'Reserved diagnostic coverage path']);
+    expect(writer.pendingBytes).toBe(0);
+    expect(await readdir(directory)).toEqual([]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('directory budgets include old files and reclaim only successful replacement growth', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-directory-existing-'));
+  const errors: string[] = [];
+  try {
+    await writeFile(join(directory, 'unrelated.bin'), 'u'.repeat(96));
+    const writer = new DiagnosticFileWriter({ maxDirectoryBytes: 128 });
+    const file = join(directory, 'trace.jsonl');
+    await writer.write(file, 'x'.repeat(32));
+    await writer.write(join(directory, 'blocked.jsonl'), 'x', 'append', error => errors.push(error.message));
+    await writer.write(file, 'x'.repeat(16), 'replace');
+    const restarted = new DiagnosticFileWriter({ maxDirectoryBytes: 128 });
+    await restarted.write(join(directory, 'next.jsonl'), 'x'.repeat(16), 'append', error => errors.push(error.message));
+    expect(errors).toEqual(['Diagnostic directory size limit reached']);
+    expect(await readFile(join(directory, 'unrelated.bin'), 'utf8')).toBe('u'.repeat(96));
+    expect((await readdir(directory)).includes('blocked.jsonl')).toBe(false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('zero budget does not create empty records and special coverage paths stay explicit', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-directory-zero-'));
+  try {
+    const writer = new DiagnosticFileWriter({ maxDirectoryBytes: 0 });
+    const errors: string[] = [];
+    await writer.write(join(directory, 'blocked.jsonl'), 'x', 'append', error => errors.push(error.message));
+    await writer.writeCoverage(join(directory, 'coverage.json'), JSON.stringify({ incomplete: true }), error => errors.push(error.message));
+    expect((await readdir(directory)).filter(name => !name.startsWith('.'))).toEqual([]);
+    const marker = join(directory, '.wdcc-diagnostic-quota.json');
+    expect((await stat(marker)).size).toBeLessThanOrEqual(4096);
+    expect(await readDiagnosticDirectoryCoverage(directory)).toMatchObject({ incomplete: true });
+    await rm(marker); expect(spawnSync('mkfifo', [marker]).status).toBe(0);
+    expect(await readDiagnosticDirectoryCoverage(directory)).toEqual({ incomplete: true, errors: ['Diagnostic directory coverage unavailable'] });
+    await writer.write(join(directory, 'second.jsonl'), 'x', 'append', error => errors.push(error.message));
+    expect(errors.at(-1)).toContain('coverage marker unavailable');
+    expect(writer.pendingBytes).toBe(0);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('different-file writers in separate processes cannot reuse the directory capacity', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-directory-processes-'));
+  const children = Array.from({ length: 4 }, (_, index) => fork(join(import.meta.dirname, 'fixtures/diagnostic-writer-child.ts'),
+    [join(directory, `${index}.jsonl`), 'single', '128'], { execArgv: ['--import', 'tsx'], stdio: ['ignore', 'ignore', 'inherit', 'ipc'] }));
+  try {
+    await Promise.all(children.map(child => once(child, 'message')));
+    const done = children.map(child => once(child, 'message')); const exited = children.map(child => once(child, 'exit'));
+    children.forEach(child => child.send('go'));
+    const results = await Promise.all(done); await Promise.all(exited);
+    expect((await readdir(directory)).filter(name => name.endsWith('.jsonl'))).toHaveLength(2);
+    expect(results.flatMap(([value]) => (value as { errors: string[] }).errors)).toEqual([
+      'Diagnostic directory size limit reached', 'Diagnostic directory size limit reached',
+    ]);
+    expect(JSON.parse(await readFile(join(directory, '.wdcc-diagnostic-quota.json'), 'utf8')),
+      JSON.stringify(results.map(([value]) => value))).toMatchObject({ incomplete: true, failures: 2 });
+  } finally { for (const child of children) await terminateOwnedFixture(child); await rm(directory, { recursive: true, force: true }); }
+}, 20000);
 
 it('FIFO diagnostic targets fail and flush instead of retaining an owned writer indefinitely', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-writer-fifo-'));

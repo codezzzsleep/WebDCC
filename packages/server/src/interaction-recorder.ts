@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile, readdir, lstat, rm } from 'node:fs/promises';
+import { chmod, mkdir, readFile, readdir, lstat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { AdapterEvent, AgentId, TraceFrame, TraceSink } from '@webdcc/protocol';
@@ -6,7 +6,7 @@ import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'nod
 import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve } from 'node:path';
 import type { FileOperation } from './workspace-files.js';
-import { DiagnosticFileWriter, redactDiagnosticValue, type DiagnosticWriteLimits, type ModelProxyEvent } from '@webdcc/model-proxy';
+import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, redactDiagnosticValue, type DiagnosticWriteLimits, type ModelProxyEvent } from '@webdcc/model-proxy';
 
 export interface InteractionContext { sessionId: string; agent: AgentId; workspaceId: string; cwd: string; nativeId?: string; turnId?: string | null; model?: string; providerId?: string | null; }
 export interface InteractionRecord { version: 1; runId: string; seq: number; at: string; elapsedMs: number; source: string; channel: string; direction?: 'in' | 'out'; context?: InteractionContext; value: unknown; }
@@ -46,7 +46,7 @@ export class InteractionRecorder {
     this.nextPruneAt = Date.now() + 60 * 60 * 1000;
     const cutoff = Date.now() - this.retentionMs;
     for (const name of await readdir(this.directory)) {
-      if (!name.endsWith('.jsonl') && !/^(context|coverage)-.*\.json$/.test(name) && !/^model-.*\.coverage\.json$/.test(name)) continue;
+      if (name !== '.wdcc-diagnostic-quota.json' && !name.endsWith('.jsonl') && !/^(context|coverage)-.*\.json$/.test(name) && !/^model-.*\.coverage\.json$/.test(name)) continue;
       const file = join(this.directory, name); const info = await lstat(file);
       if (info.isFile() && info.mtimeMs < cutoff) await rm(file);
     }
@@ -131,7 +131,7 @@ export class InteractionRecorder {
   async flush(): Promise<void> {
     await this.pruning;
     await this.writer.flush();
-    for (const [sessionId, summary] of this.summaries) if (summary.incomplete) await writeFile(join(this.directory, `coverage-${key(sessionId)}.json`), JSON.stringify({ incomplete: true, errors: summary.errors.slice(0, 16) }), { mode: 0o600 }).catch(() => undefined);
+    for (const [sessionId, summary] of this.summaries) if (summary.incomplete) await this.writer.writeCoverage(join(this.directory, `coverage-${key(sessionId)}.json`), JSON.stringify({ incomplete: true, errors: summary.errors.slice(0, 16) }));
   }
   async read(sessionId: string, nativeId?: string, workspaceId?: string): Promise<string> {
     await this.flush();
@@ -163,6 +163,8 @@ export class InteractionRecorder {
   async summary(sessionId: string, nativeId?: string, workspaceId?: string): Promise<RecordingSummary> {
     const summary = { ...this.summaryFor(sessionId), errors: [...this.summaryFor(sessionId).errors] };
     const rows = (await this.read(sessionId, nativeId, workspaceId)).split('\n').filter(Boolean).map(line => JSON.parse(line) as InteractionRecord);
+    const directoryCoverage = await readDiagnosticDirectoryCoverage(this.directory);
+    if (directoryCoverage !== undefined) { summary.incomplete = true; summary.errors = [...new Set([...summary.errors, ...directoryCoverage.errors])].slice(0, 16); }
     const coverageFiles = [join(this.directory, `coverage-${key(sessionId)}.json`), ...(nativeId === undefined ? [] : [join(this.directory, `model-${key(nativeId)}.coverage.json`)])];
     for (const file of coverageFiles) {
       const persisted = await readFile(file, 'utf8').then(text => JSON.parse(text) as { incomplete: boolean; errors: string[] }).catch(() => undefined);

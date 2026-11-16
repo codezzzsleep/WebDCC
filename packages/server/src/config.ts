@@ -58,6 +58,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       maxCaptureChunks: limit('WDCC_TRACE_MAX_CAPTURE_CHUNKS', 4096, 1),
       maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024),
       maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024),
+      maxDirectoryBytes: limit('WDCC_TRACE_MAX_DIRECTORY_BYTES', 512 * 1024 * 1024),
       retentionMs: limit('WDCC_TRACE_RETENTION_MS', 7 * 24 * 60 * 60 * 1000, 1),
     } } : {}),
   };

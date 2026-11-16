@@ -1,7 +1,7 @@
 /** Native DSH preload/plugin. Uses the official header hook for attribution,
  * removes its private marker before fetch, and observes actual provider bytes.
  * It never changes model messages, tool declarations or permission decisions. */
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { DiagnosticCapture, DiagnosticFileWriter, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from '@webdcc/model-proxy';
@@ -26,7 +26,8 @@ const state = globalThis as unknown as Record<symbol, boolean>;
 const directory = process.env['WDCC_TRACE_DIR'];
 const limit = (name: string, fallback: number, minimum = 0): number => { if (process.env[name]?.trim() === '' || process.env[name] === undefined) return fallback; const value = Number(process.env[name]); return Number.isSafeInteger(value) && value >= minimum ? value : fallback; };
 const captureLimits = [limit('WDCC_TRACE_MAX_CAPTURE_BYTES', 8 * 1024 * 1024), limit('WDCC_TRACE_MAX_CAPTURE_CHUNKS', 4096, 1)] as const;
-const writer = new DiagnosticFileWriter({ maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024), maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024) });
+const writer = new DiagnosticFileWriter({ maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024),
+  maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024), maxDirectoryBytes: limit('WDCC_TRACE_MAX_DIRECTORY_BYTES', 512 * 1024 * 1024) });
 const reportedFiles = new Set<string>();
 let reportedOverflow = false;
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
@@ -56,7 +57,7 @@ function publish(file: string, row: unknown): void {
     if (reportedFiles.size >= 256) { if (!reportedOverflow) { reportedOverflow = true; process.stderr.write('webdcc: additional native recording failures omitted\n'); } return; }
     reportedFiles.add(file);
     process.stderr.write('webdcc: native model recording write failed\n');
-    void writeFile(file.replace(/\.jsonl$/, '.coverage.json'), JSON.stringify({ incomplete: true, errors: ['Native diagnostic file could not be written'] }), { mode: 0o600 }).catch(() => undefined);
+    void writer.writeCoverage(file.replace(/\.jsonl$/, '.coverage.json'), JSON.stringify({ incomplete: true, errors: ['Native diagnostic file could not be written'] }));
   });
 }
 

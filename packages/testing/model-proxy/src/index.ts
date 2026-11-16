@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DiagnosticCapture, diagnosticSecretsFromHeaders, redactDiagnosticBytes, sensitiveDiagnosticField } from './redaction.js';
 export { DiagnosticCapture, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from './redaction.js';
 import { DiagnosticFileWriter } from './diagnostic-writer.js';
-export { DiagnosticFileWriter, type DiagnosticWriteLimits } from './diagnostic-writer.js';
+export { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, type DiagnosticWriteLimits } from './diagnostic-writer.js';
 
 export interface ModelProxyChunk { t: number; data: string; bytes?: number; sha256?: string; }
 export interface ModelProxyRecord {
@@ -35,6 +35,7 @@ export interface ModelProxyOptions {
   maxCaptureChunks?: number;
   maxRecordFileBytes?: number;
   maxPendingRecordBytes?: number;
+  maxRecordDirectoryBytes?: number;
 }
 
 function safeHeaders(headers: IncomingHttpHeaders, secrets: readonly string[] = []): IncomingHttpHeaders {
@@ -64,7 +65,8 @@ export class ModelProxy {
   constructor(private readonly options: ModelProxyOptions) {
     this.target = new URL(options.target);
     new DiagnosticCapture(options.maxCaptureBytes, options.maxCaptureChunks);
-    this.writer = new DiagnosticFileWriter({ maxFileBytes: options.maxRecordFileBytes, maxQueuedBytes: options.maxPendingRecordBytes });
+    this.writer = new DiagnosticFileWriter({ maxFileBytes: options.maxRecordFileBytes, maxQueuedBytes: options.maxPendingRecordBytes,
+      maxDirectoryBytes: options.maxRecordDirectoryBytes });
   }
 
   async listen(): Promise<{ host: string; port: number; url: string }> {
