@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readdir, readFile, readlink, rename, rm, symlink, lstat, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 
@@ -21,6 +22,7 @@ const staging = join(tmpdir(), `wdcc-release-${commit}-${process.pid}`);
 const checkout = join(staging, 'src');
 let restartAttempted = false;
 let maximumSchema = 0;
+let unpublishedTarget: string | undefined;
 
 function activeTurnCount(): number {
     if (!existsSync(join(dataDir, 'webdcc.db'))) return 0;
@@ -44,8 +46,13 @@ try {
   if (manifest.commit !== commit || !/^[a-f0-9]{64}$/.test(manifest.sourceFingerprint) || !/^[a-f0-9]{64}$/.test(manifest.schemaFingerprint) || !Number.isSafeInteger(manifest.database.maximum)) throw new Error('构建清单不完整或提交不匹配');
   maximumSchema = manifest.database.maximum;
   const builtAt = new Date().toISOString();
-  const target = join(releaseRoot, 'releases', commit);
-  await mkdir(target, { recursive: true });
+  // A commit can be rebuilt or redeployed. Never materialize over an
+  // existing release, which may still serve current or be needed to roll back.
+  const releasesDir = join(releaseRoot, 'releases');
+  await mkdir(releasesDir, { recursive: true });
+  const target = join(releasesDir, `${commit}-${randomUUID()}`);
+  await mkdir(target);
+  unpublishedTarget = target;
   await cp(join(checkout, 'packages/server/dist'), join(target, 'packages/server/dist'), { recursive: true });
   await cp(join(checkout, 'packages/web/dist'), join(target, 'packages/web/dist'), { recursive: true });
   await cp(join(checkout, 'node_modules'), join(target, 'node_modules'), { recursive: true, dereference: true });
@@ -92,6 +99,7 @@ try {
   const activeBeforeRestart = activeTurnCount();
   if (activeBeforeRestart > 0) throw new Error(`当前有 ${activeBeforeRestart} 个活动会话，发布已取消以避免中断执行`);
   await switchCurrent(current, target);
+  unpublishedTarget = undefined;
   try {
     const activeAtRestart = activeTurnCount();
     if (activeAtRestart > 0) throw new Error(`当前有 ${activeAtRestart} 个活动会话，发布已取消以避免中断执行`);
@@ -126,13 +134,16 @@ try {
     if (restartAttempted) execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
     throw error;
   }
-  const releasesDir = join(releaseRoot, 'releases');
   const entries = await Promise.all((await readdir(releasesDir)).map(async name => ({ name, modified: (await stat(join(releasesDir, name))).mtimeMs })));
   // Keep the release just activated even when commit hashes do not sort by
   // deployment time (the current commit may lexically precede older hashes).
-  for (const old of entries.sort((a, b) => b.modified - a.modified).filter(entry => entry.name !== commit && join(releasesDir, entry.name) !== previous).slice(5)) await rm(join(releasesDir, old.name), { recursive: true, force: true });
+  const previousPath = previous === undefined ? undefined : resolve(dirname(current), previous);
+  for (const old of entries.sort((a, b) => b.modified - a.modified).filter(entry => join(releasesDir, entry.name) !== target && join(releasesDir, entry.name) !== previousPath).slice(5)) await rm(join(releasesDir, old.name), { recursive: true, force: true });
   process.stdout.write(`released ${commit} -> ${target}\n`);
 } finally {
+  // Only our exclusively created, never activated directory can be removed.
+  // An activated candidate remains available as failure/recovery evidence.
+  if (unpublishedTarget !== undefined) await rm(unpublishedTarget, { recursive: true, force: true });
   await rm(staging, { recursive: true, force: true });
 }
 
