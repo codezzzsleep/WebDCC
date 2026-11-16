@@ -2,7 +2,7 @@ import { chromium, type Browser } from '@playwright/test';
 import type { AdapterEvent, EventData } from '@webdcc/protocol';
 import { expect, it } from 'vitest';
 import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.js';
-import { createSourceTestApp } from './helpers.js';
+import { createSourceTestApp, observeSessionSnapshots } from './helpers.js';
 import { seedWorkspaceAndSession } from '../packages/server/test/helpers.js';
 
 it('successful native task deletion clears the current plan and stays deleted after refresh while failures and original results remain', async () => {
@@ -30,6 +30,7 @@ it('successful native task deletion clears the current plan and stays deleted af
     const base = `http://127.0.0.1:${address.port}`;
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    const throughSeq = observeSessionSnapshots(page, sessionId);
     await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
     await page.goto(`${base}/s/${sessionId}`);
     const panel = page.getByTestId('plan-panel');
@@ -45,6 +46,10 @@ it('successful native task deletion clears the current plan and stays deleted af
     emitter.emit(sessionId, { type: 'turn.end', nativeTurnId: 'task-results-turn', status: 'completed' });
     await page.reload();
     await panel.waitFor();
+    const cachedPanel = await panel.textContent();
+    const expectedSeq = ctx.store.lastSeq(sessionId);
+    await expect.poll(() => throughSeq()).toBe(expectedSeq);
+    console.log('task deletion refresh boundary', JSON.stringify({ cachedPanel, throughSeq: throughSeq(), expectedSeq, currentPanel: await panel.textContent() }));
     expect(await panel.textContent()).toContain('0 待处理');
     expect(await panel.textContent()).not.toContain(subject);
     const stored = ctx.store.allEvents(sessionId);
