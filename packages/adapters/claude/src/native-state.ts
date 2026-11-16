@@ -80,6 +80,7 @@ export class ClaudeNativeState {
       const existing = this.plans.get(result['taskId']);
       if (existing === undefined) return false;
       const to = record(result['statusChange'])['to'];
+      if (to === 'deleted') return this.plans.delete(result['taskId']);
       if (to === 'pending' || to === 'in_progress' || to === 'completed') existing.status = to;
       // updatedFields names changes but does not echo their stored values. A PreToolUse hook
       // can change them, so subject/owner wait for the authoritative TaskGet/TaskList output.
