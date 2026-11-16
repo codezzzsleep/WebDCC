@@ -134,10 +134,12 @@ export interface EventData {
   'turn.diff': { changes: FileChangeEntry[]; status?: 'running' | 'completed' | 'failed' };
   'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' };
   plan: { items: PlanItem[] };
-  /** Codex 的"目标"（thread/goal/updated）：原生界面会显示，WebDCC 也必须显示 */
+  /** Native session goal, including Codex notifications and DSH durable projections. */
   goal: {
     objective: string; status: 'active' | 'completed' | 'paused' | 'cleared' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'unknown';
     goalId?: string; nativeStatus?: string; tokensUsed?: number; tokenBudget?: number | null; timeUsedSeconds?: number;
+    nativeRevision?: number; roundsStarted?: number; maxGoalRounds?: number;
+    blockedReason?: { code: string; message: string };
   };
   /** 原生提示（warning / configWarning / deprecationNotice），例如"使用兜底元数据，可能影响效果" */
   notice: { level: 'info' | 'warning'; text: string; nativeType?: string; details?: string; contextReset?: ConversationReset };
