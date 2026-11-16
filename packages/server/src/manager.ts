@@ -31,6 +31,7 @@ import type {
   DshSubagentInputRequest,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents } from '@webdcc/protocol';
@@ -97,6 +98,7 @@ export class SessionManager {
   private readonly activations = new Map<string, Promise<Runtime>>();
   private readonly activationStops = new Set<string>();
   private readonly controls = new Map<string, Promise<unknown>>();
+  private readonly controlRuntime = new AsyncLocalStorage<{ sessionId: string; runtime?: Runtime }>();
   private readonly queuePreparations = new Map<string, number>();
   private readonly uncertainSessions = new Set<string>();
   private readonly ownerId = randomUUID();
@@ -567,6 +569,7 @@ export class SessionManager {
       ownershipTimer: null,
     };
     this.runtimes.set(session.id, runtime);
+    this.bindControlRuntime(runtime);
     runtime.ownershipTimer = setInterval(() => {
       try { if (this.runtimes.get(session.id) === runtime && !this.store.nativeOwners.renew(session.id, identity)) this.fenceRuntime(runtime); }
       catch { this.fenceRuntime(runtime); }
@@ -1055,13 +1058,21 @@ export class SessionManager {
 
   private async control<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
     const previous = this.controls.get(sessionId) ?? Promise.resolve();
-    const pending = previous.catch(() => undefined).then(run);
+    const scope: { sessionId: string; runtime?: Runtime } = { sessionId };
+    // Bind when this operation actually uses a runtime, after earlier queued
+    // controls finish. A concurrent read/recovery must not inherit its failure.
+    const pending = previous.catch(() => undefined).then(() => this.controlRuntime.run(scope, async () => {
+      try { return await run(); }
+      catch (error) {
+        const runtime = scope.runtime;
+        if ((error as { code?: string } | null)?.code === 'native-runtime-unavailable' && runtime !== undefined
+          && this.runtimes.get(sessionId) === runtime && !runtime.disposing && this.store.nativeOwners.current(sessionId, runtime.identity)) await this.dispose(sessionId);
+        throw error;
+      }
+    }));
     this.controls.set(sessionId, pending);
     try { return await pending; }
-    catch (error) {
-      if ((error as { code?: string } | null)?.code === 'native-runtime-unavailable') await this.dispose(sessionId);
-      throw error;
-    } finally { if (this.controls.get(sessionId) === pending) this.controls.delete(sessionId); }
+    finally { if (this.controls.get(sessionId) === pending) this.controls.delete(sessionId); }
   }
 
   private async applyModel(sessionId: string, model: string): Promise<void> {
@@ -1851,6 +1862,12 @@ export class SessionManager {
   private assertOwner(runtime: Runtime): void {
     if (runtime.disposing || this.runtimes.get(runtime.sessionId) !== runtime) throw Object.assign(new Error('原生运行实例正在关闭或已替换'), { statusCode: 409, code: 'uncertain' });
     this.store.nativeOwners.assert(runtime.sessionId, runtime.identity);
+    this.bindControlRuntime(runtime);
+  }
+
+  private bindControlRuntime(runtime: Runtime): void {
+    const scope = this.controlRuntime.getStore();
+    if (scope?.sessionId === runtime.sessionId && scope.runtime === undefined) scope.runtime = runtime;
   }
 
   private fenceRuntime(runtime: Runtime): void {
