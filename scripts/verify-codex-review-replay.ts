@@ -69,9 +69,16 @@ try {
   await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
   await page.goto(base + '/s/' + session.id);
   const verify = async () => {
-    for (let index = 0; index < expected.length; index++) {
-      const result = page.getByTestId('codex-review-result').nth(index); await result.waitFor({ timeout: 10_000 });
-      assert.equal(await result.getAttribute('data-raw-text'), expected[index]!.item.review);
+    for (const item of expected) {
+      const deadline = Date.now() + 10_000; let shown: (string | null)[] = [];
+      do {
+        shown = await page.getByTestId('codex-review-result').evaluateAll((elements, key) => elements
+          .filter(element => element.getAttribute('data-native-item-key') === key)
+          .map(element => element.getAttribute('data-raw-text')), item.item.id);
+        if (shown.length === 1) break;
+        await new Promise(resolve => setTimeout(resolve, 30));
+      } while (Date.now() < deadline);
+      assert.deepEqual(shown, [item.item.review], 'Original Review item identity/text missing in browser');
     }
   };
   await verify(); await page.reload(); await verify(); assert.deepEqual(errors, []);

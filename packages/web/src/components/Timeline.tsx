@@ -504,7 +504,7 @@ function StepRow({
       const review = codexReviewItem(event);
       if (review !== undefined) return <div className={className}>
         <StepLine icon="listChecks" label={review.phase === 'started' ? '开始原生 Review' : '原生 Review 结果'} detail={review.phase === 'started' ? review.text : undefined} />
-        {review.phase === 'finished' ? <div data-testid="codex-review-result" data-raw-text={review.text}><Markdown text={review.text} /></div> : null}
+        {review.phase === 'finished' ? <div data-testid="codex-review-result" data-native-item-key={event.itemKey} data-raw-text={review.text}><Markdown text={review.text} /></div> : null}
       </div>;
       const data = event.data as EventData['tool.call'];
       const toolInput = data.input as Record<string, unknown>;
