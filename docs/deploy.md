@@ -47,6 +47,8 @@ pnpm install
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
 
+工作区目录浏览通过 Linux `/proc/self/fd` 读取已核验目录，返回列表前再次核对根和目录身份。目录变化返回 409；其他平台或无法核验描述符时返回 501，不退回未核验的字符串目录读取。内部目录链接、排序、筛选和相对路径仍按实际规范目录展示。
+
 
 ## 本机按生产方式运行（M7 已验收）
 
