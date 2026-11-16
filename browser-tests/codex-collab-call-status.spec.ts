@@ -65,3 +65,34 @@ it('the source Codex timeline retains native call interruption and old native st
     expect(errors).toEqual([]);
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
+
+it.each(['claude-code', 'dsh'] as const)('keeps %s ordinary tool display unchanged even when its input resembles a Codex native call', async agent => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    let receive!: (id: string, event: AdapterEvent) => void; let opts!: CreateOpts;
+    const adapter = new FakeAdapter({ id: agent }); adapter.onEvent = callback => { receive = callback; };
+    const create = adapter.create.bind(adapter); adapter.create = async value => { opts = value; return create(value); };
+    adapter.send = async () => undefined; ctx.manager.registerAdapter(adapter);
+    const workspace = ctx.store.createWorkspace('Ordinary tool source control', ctx.dataDir);
+    const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent });
+    await ctx.manager.send(session.id, { text: 'Controlled ordinary tool display' }, 'ordinary-tool-' + agent);
+    receive(session.id, { type: 'turn.start', nativeTurnId: 'ordinary-root', native: {}, runtime: opts.runtime });
+    receive(session.id, { type: 'item.complete', itemKey: 'ordinary-native-shape', nativeTurnId: 'ordinary-root', kind: 'tool.call',
+      data: { name: 'collabAgentToolCall', status: 'completed', input: { type: 'collabAgentToolCall', id: 'ordinary-native-shape', tool: 'wait', status: 'interrupted' } },
+      native: {}, runtime: opts.runtime });
+    receive(session.id, { type: 'turn.end', nativeTurnId: 'ordinary-root', status: 'completed', native: {}, runtime: opts.runtime });
+    await expect.poll(() => ctx.store.allEvents(session.id).some(value => value.itemKey === 'ordinary-native-shape')).toBe(true);
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    const address = ctx.app.server.address(); if (!address || typeof address === 'string') throw new Error('Missing source listener');
+    const base = 'http://127.0.0.1:' + address.port;
+    browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    const check = async () => {
+      const summary = page.locator('.turn-summary').first(); await summary.waitFor(); await summary.click();
+      expect(await page.getByTestId('codex-collab-call-status').count()).toBe(0);
+      expect(await page.getByTestId('timeline').getByText('collabAgentToolCall', { exact: true }).count()).toBe(1);
+    };
+    await page.goto(base + '/s/' + session.id); await check(); await page.reload(); await check();
+    expect(ctx.store.allEvents(session.id).find(value => value.itemKey === 'ordinary-native-shape')?.data).toMatchObject({ status: 'completed' });
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
