@@ -77,9 +77,16 @@ try {
     const event = events.find(row => {
       if (row.kind !== 'reasoning' || row.itemKey !== value.item.id || row.nativeEnvelopeId === undefined) return false;
       const envelope = ctx!.store.nativeEvents.get(row.nativeEnvelopeId);
-      return (envelope?.payload as { params?: { turnId?: string } } | undefined)?.params?.turnId === value.nativeTurnId;
+      return envelope?.nativeTurnId === value.nativeTurnId;
     });
     assert.ok(event, 'Native reasoning item/turn identity missing');
+    const mapping = ctx!.store.nativeEvents.get(event.nativeEnvelopeId!);
+    assert.equal(mapping?.source, 'mapping');
+    assert.ok(mapping.rawEnvelopeId !== null, 'Original RPC link missing');
+    const raw = ctx!.store.nativeEvents.get(mapping.rawEnvelopeId);
+    assert.equal(raw?.source, 'transport');
+    assert.equal(raw.nativeTurnId, value.nativeTurnId);
+    assert.deepEqual((raw.payload as { params: { item: Reasoning } }).params.item, value.item);
     assert.deepEqual(event.native, value.item);
     const data = event.data as EventData['reasoning'];
     assert.equal(data.text, value.item.summary.join('\n'));
@@ -89,7 +96,8 @@ try {
     assert.ok(nativeEnd, 'Native terminal missing');
     const end = events.find(row => row.turnId === event.turnId && row.kind === 'turn.completed');
     assert.equal((end?.data as EventData['turn.completed'])?.status, (nativeEnd.payload['params'] as { turn: { status: string } }).turn.status);
-    return { itemKey: event.itemKey, nativeTurnId: value.nativeTurnId, publicTurnId: event.turnId, data, native: event.native };
+    return { itemKey: event.itemKey, nativeTurnId: value.nativeTurnId, publicTurnId: event.turnId,
+      mappingEnvelopeId: mapping.id, rawEnvelopeId: raw.id, data, native: event.native };
   });
   await ctx.app.listen({ host: '127.0.0.1', port: 0 });
   const address = ctx.app.server.address();
