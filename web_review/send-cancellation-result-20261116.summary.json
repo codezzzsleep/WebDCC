@@ -1,0 +1,44 @@
+{
+  "issue": 224,
+  "parents": [
+    45,
+    46,
+    42
+  ],
+  "relatedIssue": 220,
+  "base": "9e73225495a869e733ee749feb6f9b3ef5943965",
+  "sourceFingerprint": "9f021a88a391f69ba42388d2b3080668aa99c3bf59c416d6a50b88f463e1e9fa",
+  "runtime": {
+    "node": "v26.13.0",
+    "pnpm": "12.18.0",
+    "os": "Linux",
+    "adapter": "isolated FakeAdapter fake1.0.0"
+  },
+  "verification": {
+    "testsPassed": 51,
+    "testFilesPassed": 6,
+    "typecheck": "all workspace plus scripts passed",
+    "lint": "changed files passed",
+    "before": "3 HTTP cancellation tests failed; cancelled overwritten with failed",
+    "after": "cancel204, send409, both SQLite states cancelled; no user or native input",
+    "scope": "actual HTTP/SQLite/files/controlled Adapter; six cancellation/preparation variants, second connection admission/terminal updates, original receipts, transaction failure, reopen/idempotency, existing queue/attachment/SIGKILL/async answer tests",
+    "unmatchedTestPath": "packages/server/test/recovery.spec.ts does not exist, not executed; existing journal SIGKILL test ran"
+  },
+  "evidenceSha256": {
+    "reproduction-before.log": "99eb5e88e7198aabfbe5acd9914e5e4f6b65820052c2c1e36592858e813bac89",
+    "reproduction-after.log": "af1f2d93706b09888cfc9be5501d8d0c9cae16728fd6c6157621046d5361098d",
+    "regression-before.log": "87425fb3ee8072c889f0e57e835d9bd93dedd3144edef2baade216aded96c9cd",
+    "regression-first.log": "de58bb0827e21d0aaae7f23921f4a8ef45d1756ea60311e32650b5faa1f9181a",
+    "regression-expanded.log": "edf3b8e73de3e6eff776bf5bad7604400133361b793526de3e002eaf65a4d500",
+    "typecheck-first.log": "d6e7b038ab322f1f663743b2b9e36cc71ddd0fc84a4ccc58b50d1b8287bc9d4f",
+    "lint-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "officialNativeCalls": 0,
+  "providerCalls": 0,
+  "deployment": "not performed",
+  "remainingAcceptance": [
+    "Independent exact-head source review",
+    "Three actual target Agents and native cancellation/recovery paths",
+    "NP03/04 remaining implementation, native receipts and all crash windows"
+  ]
+}

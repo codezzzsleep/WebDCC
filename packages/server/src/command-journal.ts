@@ -41,6 +41,20 @@ export class CommandJournal {
     this.db.prepare('UPDATE command_journal SET state = ?, result = COALESCE(?, result), updated_at = ? WHERE command_id = ?').run(state, result === undefined ? null : JSON.stringify(result), new Date().toISOString(), commandId);
   }
 
+  settleSendResult<T>(commandId: string, observedState: CommandState | undefined, proposedState: CommandState, result: T): T {
+    return this.db.transaction(() => {
+      const record = this.get(commandId);
+      if (record === undefined || record.op !== 'send') throw new Error('发送命令账本不存在或类型不匹配');
+      // Input admission, cancellation and native reconciliation own these
+      // states. A late execution callback only supplies its missing receipt.
+      const terminal = ['completed', 'failed', 'cancelled', 'uncertain'].includes(record.state);
+      const state = terminal || record.state !== observedState ? record.state : proposedState;
+      const receipt = terminal && record.result !== undefined ? record.result as T : result;
+      this.state(commandId, state, receipt);
+      return receipt;
+    }).immediate();
+  }
+
   acquire(commandId: string): boolean {
     return this.db.prepare("UPDATE command_journal SET state = 'dispatching' WHERE command_id = ? AND state = 'received'").run(commandId).changes === 1;
   }
