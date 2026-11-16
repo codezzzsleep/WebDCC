@@ -114,3 +114,25 @@ it('the production listener updates real TaskCreate output and does not sum cumu
     expect(h.adapter.nativeState('s').usage).toMatchObject({ scope: 'session', totalCostUsd: 3 });
   } finally { await h.adapter.dispose('s'); }
 });
+
+it('rejects omitted, malformed and older stop run identities before calling the SDK', async () => {
+  const h = harness();
+  try {
+    await h.adapter.create({ sessionId: 's', cwd: '/tmp', providerId: null });
+    h.push({ type: 'system', subtype: 'task_started', session_id: 'native', task_id: 'task', run_id: '002', description: 'running', is_backgrounded: true });
+    await vi.waitFor(() => expect(h.adapter.nativeState('s').tasks[0]?.runId).toBe('002'));
+    await expect(h.adapter.executeNativeControl('s', { type: 'stop-task', taskId: 'task' })).rejects.toMatchObject({ code: 'native-control-rejected' });
+    await expect(h.adapter.executeNativeControl('s', { type: 'stop-task', taskId: 'task', runId: 2 })).rejects.toMatchObject({ code: 'native-control-rejected' });
+    await expect(h.adapter.executeNativeControl('s', { type: 'stop-task', taskId: 'task', runId: '001' })).rejects.toMatchObject({ code: 'native-control-rejected' });
+    expect(h.q.stopTask).not.toHaveBeenCalled();
+    expect(await h.adapter.executeNativeControl('s', { type: 'stop-task', taskId: 'task', runId: '002' })).toMatchObject({ id: 'task', taskId: 'task', runId: '002', submitted: true, confirmed: false });
+    expect(h.q.stopTask).toHaveBeenCalledExactlyOnceWith('task');
+    expect(h.adapter.nativeState('s').tasks[0]?.status).toBe('running');
+  } finally { await h.adapter.dispose('s'); }
+});
+
+it('uses an explicit null for a native task whose run identity is absent instead of inventing a run', () => {
+  expect(parseClaudeNativeAction({ type: 'stop-task', taskId: 'legacy-task', runId: null })).toEqual({ type: 'stop-task', taskId: 'legacy-task', runId: null });
+  expect(() => parseClaudeNativeAction({ type: 'stop-task', taskId: 'legacy-task' })).toThrow('runId');
+  expect(() => parseClaudeNativeAction({ type: 'stop-task', taskId: 'legacy-task', runId: {} })).toThrow('runId');
+});

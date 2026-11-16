@@ -10,9 +10,14 @@ interface Row {
 }
 const error = (message: string, statusCode = 409): Error => Object.assign(new Error(message), { statusCode, code: 'native-control-rejected' });
 const targetKey = (action: Record<string, unknown>): string => payloadHash({ type: action['type'], id: action['requestId'] ?? action['taskId'] ?? action['cardId'] ?? action['childSessionId'] ?? action['terminalId'] ?? action['processId'] ?? null, runId: action['runId'] ?? null });
-const receipt = (row: Row): NativeActionReceipt => ({ commandId: row.command_id, sessionId: row.session_id,
-  type: row.type, state: row.state, updatedAt: row.updated_at, ...(row.error === null ? {} : { error: row.error }),
-  ...(row.reference === null ? {} : { reference: JSON.parse(row.reference) as NonNullable<NativeActionReceipt['reference']> }) });
+const receipt = (row: Row): NativeActionReceipt => {
+  const reference = row.reference === null ? undefined : JSON.parse(row.reference) as NonNullable<NativeActionReceipt['reference']> & { callReturnedAt?: string };
+  return { commandId: row.command_id, sessionId: row.session_id, type: row.type, state: row.state, updatedAt: row.updated_at,
+    ...(row.error === null ? {} : { error: row.error }), ...(reference === undefined ? {} : {
+      reference: { id: reference.id, ...(reference.generation === undefined ? {} : { generation: reference.generation }), ...(reference.runId === undefined ? {} : { runId: reference.runId }) },
+      ...(reference.callReturnedAt === undefined ? {} : { callReturnedAt: reference.callReturnedAt }),
+    }) };
+};
 
 /** Claim before any native side effect. Neither replies nor results are stored.
  * A dead dispatcher is uncertain; a retry can never resubmit its operation. */
@@ -55,6 +60,15 @@ export class NativeActionStore {
     this.db.prepare("UPDATE native_actions SET state = 'completed', error = NULL, updated_at = ? WHERE session_id = ? AND runtime_key = ? AND native_id = ? AND target_key = ? AND state IN ('dispatching','submitted')")
       .run(new Date().toISOString(), sessionId, payloadHash(identity), nativeId, targetKey(action));
   }
+  taskEnded(sessionId: string, identity: RuntimeIdentity, nativeId: string, taskId: string, runId: string | null, status: string): void {
+    const action = { type: 'stop-task', taskId, runId };
+    if (status === 'stopped') { this.confirm(sessionId, identity, nativeId, action); return; }
+    if (status !== 'completed' && status !== 'failed') return;
+    // A natural/error terminal event settles the wait without claiming that
+    // this request stopped the task. The call return remains independent.
+    this.db.prepare("UPDATE native_actions SET state = 'uncertain', error = ?, updated_at = ? WHERE session_id = ? AND runtime_key = ? AND native_id = ? AND target_key = ? AND state IN ('dispatching','submitted')")
+      .run(`task-ended-without-stop-confirmation:${status}`, new Date().toISOString(), sessionId, payloadHash(identity), nativeId, targetKey(action));
+  }
   disconnect(sessionId: string, identity: RuntimeIdentity): void {
     this.db.prepare("UPDATE native_actions SET state = 'uncertain', error = 'native-connection-closed', updated_at = ? WHERE session_id = ? AND runtime_key = ? AND state IN ('dispatching','submitted')")
       .run(new Date().toISOString(), sessionId, payloadHash(identity));
@@ -82,9 +96,11 @@ export class NativeActionStore {
     if (!created) return { receipt: receipt(row) };
     try {
       const result = await run();
-      const response = result !== null && typeof result === 'object' ? result as { id?: unknown; generation?: unknown } : {};
-      if (typeof response.id === 'string' && response.id.length <= 128) {
-        const reference = { id: response.id, ...(Number.isSafeInteger(response.generation) ? { generation: response.generation } : {}) };
+      const response = result !== null && typeof result === 'object' ? result as { id?: unknown; generation?: unknown; runId?: unknown } : {};
+      if (typeof response.id === 'string' && response.id.length <= (value.action.type === 'stop-task' ? 4096 : 128)) {
+        const reference = { id: response.id, ...(Number.isSafeInteger(response.generation) ? { generation: response.generation } : {}),
+          ...(value.action.type !== 'stop-task' ? {} : { callReturnedAt: new Date().toISOString(),
+            ...(response.runId === null || typeof response.runId === 'string' ? { runId: response.runId } : {}) }) };
         this.db.prepare('UPDATE native_actions SET reference = ? WHERE command_id = ?').run(JSON.stringify(reference), value.commandId);
       }
       const submitted = result !== null && typeof result === 'object' && (result as { confirmed?: boolean }).confirmed === false;

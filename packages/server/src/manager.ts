@@ -350,7 +350,9 @@ export class SessionManager {
     return this.store.nativeActions.execute(sessionId, request, () => this.control(sessionId, async () => {
       if (!request.revision) throw this.nativeControlRejected('缺少已读取的原生状态版本', 400);
       const snapshot = await this.nativeControls(sessionId);
-      if (snapshot.revision !== request.revision) throw this.nativeControlRejected('原生状态已变化，请刷新核对后重新操作');
+      const taskQueryRevision = snapshot.agent === 'claude-code' && request.action.type === 'stop-task'
+        ? (snapshot.state as { revision?: string }).revision : undefined;
+      if (snapshot.revision !== request.revision && taskQueryRevision !== request.revision) throw this.nativeControlRejected('原生状态已变化，请刷新核对后重新操作');
       const runtime = this.runtimes.get(sessionId)!;
       if (runtime.adapter.executeNativeControl === undefined) throw this.nativeControlRejected('此 Agent 未公开该控制', 501);
       const state = snapshot.state as { revision?: string };
@@ -1343,8 +1345,8 @@ export class SessionManager {
         this.store.nativeActions.confirm(sessionId, runtime.identity, runtime.nativeId, { type: 'compact' });
       }
       if (runtime.adapter.id === 'claude-code' && native['type'] === 'system' && native['subtype'] === 'task_notification'
-        && native['status'] === 'stopped' && typeof native['task_id'] === 'string') {
-        this.store.nativeActions.confirm(sessionId, runtime.identity, runtime.nativeId, { type: 'stop-task', taskId: native['task_id'], runId: native['run_id'] ?? null });
+        && typeof native['status'] === 'string' && typeof native['task_id'] === 'string') {
+        this.store.nativeActions.taskEnded(sessionId, runtime.identity, runtime.nativeId, native['task_id'], typeof native['run_id'] === 'string' ? native['run_id'] : null, native['status']);
       }
     }
     if (envelope.duplicate) {

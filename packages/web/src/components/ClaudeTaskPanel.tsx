@@ -1,5 +1,7 @@
-import { claudeTaskKey, claudeTaskStatusLabel, claudeTaskTree, type ClaudeTaskNode, type ClaudeTaskRun, type ClaudeTaskViews } from '@webdcc/protocol';
+import { claudeTaskKey, claudeTaskStatusLabel, claudeTaskTree, type ClaudeTaskNode, type ClaudeTaskRun, type ClaudeTaskViews, type NativeControlSnapshot } from '@webdcc/protocol';
 import { Icon } from './Icon.js';
+import { ClaudeTaskStop } from './ClaudeTaskStop.js';
+import { useClaudeTaskControls } from '../lib/claude-task-controls.js';
 
 function TaskOutput({ run }: { run: ClaudeTaskRun }): React.ReactElement {
   return <>
@@ -18,7 +20,7 @@ function TaskOutput({ run }: { run: ClaudeTaskRun }): React.ReactElement {
   </>;
 }
 
-function TaskNode({ node }: { node: ClaudeTaskNode }): React.ReactElement {
+function TaskNode({ node, sessionId, snapshot }: { node: ClaudeTaskNode; sessionId: string; snapshot: NativeControlSnapshot | undefined }): React.ReactElement {
   const task = node.task;
   return <li className="claude-task-node" data-testid="claude-task" data-task-id={task.taskId} data-run-id={task.runId ?? ''}>
     <details open>
@@ -31,17 +33,19 @@ function TaskNode({ node }: { node: ClaudeTaskNode }): React.ReactElement {
       {task.status !== 'unknown' ? null : <p role="status">{task.backgroundPresence === 'present' ? '任务在后台，当前状态待确认。'
         : task.backgroundPresence === 'absent' ? '当前后台列表未列出此任务，结果待确认。' : '尚未收到当前任务状态。'}</p>}
       <TaskOutput run={task} />
+      <ClaudeTaskStop sessionId={sessionId} task={task} snapshot={snapshot} />
       {task.previousRuns.length === 0 ? null : <details className="claude-task-history"><summary>先前运行（{task.previousRuns.length}）</summary>
         {task.previousRuns.map(run => <div key={claudeTaskKey(run)} data-testid="claude-task-prior-run">
           <p>运行：<code>{run.runId ?? '待确认'}</code> · {claudeTaskStatusLabel(run.status)}</p><TaskOutput run={run} />
         </div>)}
       </details>}
     </details>
-    {node.children.length === 0 ? null : <ul className="claude-task-children">{node.children.map(child => <TaskNode key={claudeTaskKey(child.task)} node={child} />)}</ul>}
+    {node.children.length === 0 ? null : <ul className="claude-task-children">{node.children.map(child => <TaskNode key={claudeTaskKey(child.task)} node={child} sessionId={sessionId} snapshot={snapshot} />)}</ul>}
   </li>;
 }
 
-export function ClaudeTaskPanel({ view }: { view: ClaudeTaskViews }): React.ReactElement | null {
+export function ClaudeTaskPanel({ sessionId, view }: { sessionId: string; view: ClaudeTaskViews }): React.ReactElement | null {
+  const snapshot = useClaudeTaskControls(sessionId, view.tasks.length > 0);
   if (view.tasks.length === 0 && view.unassignedOutputs.length === 0) return null;
   const active = view.tasks.filter(task => !task.ambient && task.status === 'running').length;
   const completed = view.tasks.filter(task => task.status === 'completed').length;
@@ -49,7 +53,7 @@ export function ClaudeTaskPanel({ view }: { view: ClaudeTaskViews }): React.Reac
     <details><summary className="task-bar-head"><Icon name="tool" size={15} /><strong>Claude 任务</strong>
       <span className="summary">{active} 运行中 · {completed} 已完成 · {view.tasks.length} 总计</span>
     </summary><div className="claude-task-body">
-    <ul className="claude-task-list">{claudeTaskTree(view.tasks).map(node => <TaskNode key={claudeTaskKey(node.task)} node={node} />)}</ul>
+    <ul className="claude-task-list">{claudeTaskTree(view.tasks).map(node => <TaskNode key={claudeTaskKey(node.task)} node={node} sessionId={sessionId} snapshot={snapshot} />)}</ul>
     {view.unassignedOutputs.length === 0 ? null : <details open data-testid="claude-task-unassigned"><summary>子任务输出（任务身份待确认）</summary>
       {view.unassignedOutputs.map(output => <div key={output.itemKey}><p className="claude-task-source">来源工具：<code>{output.origin.parentToolUseId}</code></p>
         <pre className="output">{output.text}</pre></div>)}

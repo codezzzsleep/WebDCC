@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto, SlashCommand, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
 import { claudeOutputOrigin, parseSlashInput, slashCommandFor } from '@webdcc/protocol';
+import { object as nativeObject, useClaudeTaskControls } from '../lib/claude-task-controls.js';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
@@ -66,6 +67,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const sessionId = mode.kind === 'session' ? mode.sessionId : null;
   const session = sessionId === null ? undefined : store.getSession(sessionId);
   const agent = mode.kind === 'session' ? (session?.agent ?? 'dsh') : mode.agent;
+  const claudeSnapshot = useClaudeTaskControls(sessionId, agent === 'claude-code');
+  const perTaskStop = nativeObject(nativeObject(claudeSnapshot?.state)['controls'])['perTaskStopAffordance'];
+  const stopTitle = agent !== 'claude-code' ? '强制打断' : perTaskStop === true ? '停止当前轮次；后台任务请在任务条中单独停止'
+    : perTaskStop === false ? '停止当前轮次和此会话的后台任务' : '停止当前轮次；后台任务影响范围待确认';
   const agentMeta = meta?.agents[agent];
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
 
@@ -859,8 +864,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                 <Icon name="arrowUp" size={17} strokeWidth={2.2} />
               </button>
               {capabilitiesRef.current.intents.includes('steer') ? <button type="button" className="btn" onClick={() => void submit('steer')} disabled={viewingHistory || busy || controls.input.reason('steer') !== undefined} title={controls.input.reason('steer')} data-testid="steer-send-button">介入当前轮</button> : null}
-              <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label="强制打断" title="强制打断" data-testid="stop-button">
+              <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label={stopTitle} title={stopTitle} data-testid="stop-button">
                 <Icon name="stop" size={16} />
+                {agent === 'claude-code' ? <span>{perTaskStop === true ? '本轮' : perTaskStop === false ? '全部' : '停止'}</span> : null}
               </button>
             </>
           ) : (
