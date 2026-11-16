@@ -11,6 +11,10 @@ controls finish. It is never inferred from the runtime found when an error
 returns, and a runtime-free observation cannot acquire the identity of a
 concurrent activation.
 
+When a control waits for an activation started by another request, it binds
+the concrete ready runtime in its own asynchronous scope after that shared
+Promise resolves. The original activation result and owner checks are preserved.
+
 `native-runtime-unavailable` keeps its existing error and receipt semantics.
 Cleanup runs only if the bound runtime is still the manager's current object,
 is not already disposing, and still holds its durable owner/generation fence.
@@ -33,6 +37,12 @@ current-runtime cleanup, execution-time activation, a changed durable owner,
 runtime-free reconciliation, unchanged uncertain receipts, SQLite reopen and
 continued native output. Actual source HTTP/WebSocket/Chromium checks verify
 streaming after the old error and reload before the current native terminal.
+
+Independent merge review also reproduced three shared-activation failures:
+waiting controls did not bind the runtime created in the other request's scope,
+so an unavailable current runtime remained active. Those failures are retained;
+the added regressions check cleanup and the next generation for each controlled
+Agent identity without altering the original unavailable error.
 
 The errors and native frames come from `FakeAdapter` (`fake-1.0.0`). SQLite,
 HTTP/WebSocket, manager, browser and rendered application are actual local

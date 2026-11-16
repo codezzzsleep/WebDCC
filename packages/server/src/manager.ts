@@ -581,7 +581,11 @@ export class SessionManager {
   /** 确保会话运行时就绪（服务重启后按需 resume） */
   private async ensureReady(session: SessionDto, workspacePath: string): Promise<Runtime> {
     const existing = this.activations.get(session.id);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+      const ready = await existing;
+      this.bindControlRuntime(ready);
+      return ready;
+    }
     const pending = this.activate(session, workspacePath);
     this.activations.set(session.id, pending);
     try { const ready = await pending; this.assertOwner(ready); return ready; } finally { if (this.activations.get(session.id) === pending) this.activations.delete(session.id); this.activationStops.delete(session.id); }

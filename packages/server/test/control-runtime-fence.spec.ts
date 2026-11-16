@@ -77,6 +77,35 @@ it.each([false, true])('current unavailable failure still closes its own runtime
   } finally { await ctx.close(); }
 });
 
+it.each(['codex', 'claude-code', 'dsh'] as AgentId[])('%s binds a control waiting for another request to activate its runtime', async agent => {
+  const ctx = await createTestApp(); const adapter = new FakeAdapter({ id: agent });
+  let finishResume!: () => void; const resumeGate = new Promise<void>(resolve => { finishResume = resolve; });
+  let entered = false; let closes = 0;
+  adapter.dispose = async () => { closes++; };
+  ctx.manager.registerAdapter(adapter);
+  try {
+    const { sessionId } = await seedWorkspaceAndSession(ctx, agent);
+    await ctx.manager.dispose(sessionId);
+    const priorGeneration = ctx.store.nativeOwners.get(sessionId)!.generation;
+    adapter.resume = async () => { entered = true; await resumeGate; };
+    const failure = Object.assign(new Error('shared activation query unavailable'), { code: 'native-runtime-unavailable', statusCode: 503 });
+    adapter.setModel = async () => { throw failure; };
+    const reading = ctx.manager.slashCommands(sessionId);
+    await expect.poll(() => entered).toBe(true);
+    const changing = ctx.manager.setModel(sessionId, 'broken-current').catch(error => error);
+    await new Promise(resolve => setImmediate(resolve));
+    finishResume(); await reading;
+    expect(await changing).toBe(failure);
+    expect(closes).toBe(2);
+    expect(ctx.manager.getRuntime(sessionId)).toBeUndefined();
+    expect(ctx.store.nativeOwners.get(sessionId)).toMatchObject({ generation: priorGeneration + 1, state: 'released' });
+    adapter.setModel = async () => undefined;
+    await ctx.manager.setModel(sessionId, 'valid-next');
+    expect(ctx.manager.getRuntime(sessionId)!.identity.generation).toBe(priorGeneration + 2);
+    expect(ctx.store.getSession(sessionId)?.model).toBe('valid-next');
+  } finally { finishResume(); await ctx.close(); }
+});
+
 it('a runtime-free reconciliation failure cannot inherit a concurrently activated owner', async () => {
   const ctx = await createTestApp(); const adapter = new FakeAdapter({ id: 'codex' });
   let entered = false; let closes = 0; let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
