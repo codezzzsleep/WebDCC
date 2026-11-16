@@ -5,6 +5,7 @@ import type { InputContent } from './input.js';
 import { claudeOutputOrigin } from './claude-tasks.js';
 import { codexReviewItem } from './codex-review.js';
 import { nativePlanText } from './plans.js';
+import { claudeStructuredOutputs, type ClaudeStructuredOutputView } from './claude-output.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -38,6 +39,7 @@ export interface TurnView {
   steps: Step[];
   live: LiveItem[];
   answer: { itemKey: string; text: string }[];
+  structuredOutputs?: ClaudeStructuredOutputView[];
   changes: { path: string; kind: 'add' | 'modify' | 'delete'; added: number; removed: number; diffFileId?: string; note?: string }[];
   summary: { commands: number; reads: number; edits: number; tools: number };
   plan?: EventData['plan']['items'];
@@ -230,6 +232,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
       ? resolveAnswer(events)
       : [];
   const latestPlan = [...events].reverse().find((event) => event.kind === 'plan' && nativePlanText(event) === undefined);
+  const structuredOutputs = claudeStructuredOutputs(events);
   const latestGoal = [...events].reverse().find((event) => event.kind === 'goal');
   const summary = {
     commands: steps.filter((event) => event.kind === 'command' && !nativeOperationDeclined(event)).length,
@@ -259,6 +262,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     steps,
     live: TERMINAL.has(state) ? [] : live,
     answer,
+    ...(structuredOutputs.length === 0 ? {} : { structuredOutputs }),
     changes: changesFor(events),
     summary,
     ...(latestPlan === undefined ? {} : { plan: (latestPlan.data as EventData['plan']).items }),

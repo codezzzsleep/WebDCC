@@ -1,6 +1,7 @@
 /** 每种事件 kind 的数据校验（SPEC-M8 F2）：adapter 发送前、前端渲染前各校验一次 */
 import type { EventData, EventKind } from './events.js';
 import { isInputContent } from './input.js';
+import { isClaudeStructuredOutput } from './claude-output.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -20,6 +21,8 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
         && (data['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(data['intent'])));
     case 'assistant.message':
       return typeof data['text'] === 'string';
+    case 'structured.output':
+      return isClaudeStructuredOutput(data);
     case 'reasoning':
       return typeof data['text'] === 'string';
     case 'command':

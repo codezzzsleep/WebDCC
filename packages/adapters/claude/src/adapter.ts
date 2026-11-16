@@ -38,7 +38,7 @@ import {
   type UserDialogRequest,
   type UserDialogResult,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, canStopClaudeTask, claudeOutputOrigin, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
+import { buildFileChanges, canStopClaudeTask, claudeOutputOrigin, claudeResultOutput, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 
 import { ClaudeContentReducer } from './content.js';
 import { encodeClaudeInput, type ClaudeUserContent } from './input.js';
@@ -1292,7 +1292,13 @@ export class ClaudeAdapter implements AgentAdapter {
         for (const event of runtime.content.flush(message.session_id)) this.emit(sessionId, event);
         const result = message as unknown as { subtype?: string; is_error?: boolean; duration_ms?: number; total_cost_usd?: number; modelUsage?: Record<string, unknown>; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
         runtime.state.usage = { scope: 'session', source: 'Claude result cumulative modelUsage', totalCostUsd: result.total_cost_usd, modelUsage: result.modelUsage, mainLoopTurnUsage: result.usage };
-        runtime.state.structuredOutput = 'structured_output' in message ? message.structured_output : undefined;
+        const structured = claudeResultOutput(message, runtime.instanceId, runtime.nativeOptions.outputFormat !== undefined);
+        if (structured !== undefined) {
+          if (Object.hasOwn(structured, 'value')) runtime.state.structuredOutput = structured.value;
+          const resultId = structured.nativeResultId ?? `frame-${runtime.frameSeq}`;
+          this.emit(sessionId, { type: 'item.complete', itemKey: `claude-output:${runtime.instanceId}:${resultId}`,
+            kind: 'structured.output', data: structured, native: message });
+        }
         this.finishGeneration(runtime);
         const generationMs = runtime.generationMs > 0 ? runtime.generationMs : undefined;
         runtime.generationMs = 0;
