@@ -36,6 +36,7 @@ import { isCommand, isInputContent } from '@webdcc/protocol';
 import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
 import { listWorkspaceDirectory } from './workspace-list.js';
+import { copyWorkspaceAttachment } from './workspace-attach.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
 import { createWorkspaceEntry } from './workspace-create.js';
@@ -704,15 +705,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const workspace = store.getWorkspace(id);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     if (typeof body?.fileId !== 'string') throw badRequest('需要 fileId');
+    if (body.name !== undefined && typeof body.name !== 'string') throw badRequest('附件文件名必须为文本');
     const found = await files.readAll(body.fileId);
     if (found === undefined) throw Object.assign(new Error('文件不存在'), { statusCode: 404 });
     if (found.buffer.byteLength > 100 * 1024 * 1024) throw Object.assign(new Error('文件超过 100 MB 上限'), { statusCode: 413 });
     const original = body.name ?? found.file.name;
     const safeName = original.replace(/[/\\]/g, '_');
-    const dir = join(workspace.path, '.webdcc', 'uploads');
-    await mkdir(dir, { recursive: true });
-    const target = join(dir, `${body.fileId}-${safeName}`);
-    await writeFile(target, found.buffer);
+    const copied = await copyWorkspaceAttachment(workspace.path, `${body.fileId}-${safeName}`, found.buffer);
     // 工作区是 git 仓库时把 .webdcc/ 写进 .git/info/exclude（不改用户的 .gitignore）
     const gitDir = join(workspace.path, '.git');
     if (existsSync(gitDir)) {
@@ -724,7 +723,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       }
     }
     return {
-      path: relative(workspace.path, target),
+      path: copied.path,
       name: safeName,
       fileId: body.fileId,
       size: found.buffer.byteLength,
