@@ -2293,7 +2293,9 @@
           "packages/adapters/claude/src/native-state.ts",
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
-          "packages/web/src/components/NativeControls.tsx"
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/claude/test/task-deletion.spec.ts",
+          "browser-tests/claude-task-deletion.spec.ts"
         ],
         "actualFiles": [
           "packages/protocol/src/goals.ts",
@@ -2309,7 +2311,9 @@
           "packages/adapters/claude/src/native-state.ts",
           "packages/adapters/dsh/src/native.ts",
           "packages/server/src/native-control-routes.ts",
-          "packages/web/src/components/NativeControls.tsx"
+          "packages/web/src/components/NativeControls.tsx",
+          "packages/adapters/claude/test/task-deletion.spec.ts",
+          "browser-tests/claude-task-deletion.spec.ts"
         ],
         "evidence": [
           "web_review/evidence/native-live-claude.json",
@@ -2320,7 +2324,37 @@
           "刷新后owner、依赖、计划正文、目标状态与原生一致。",
           "主Agent与子Agent任务隔离；UI空状态不把缺数据当已完成。"
         ],
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "behaviorDeliveries": [
+          {
+            "issue": 125,
+            "behavior": "Successful authoritative TaskUpdate statusChange.to=deleted removes its known plan task; last task publishes durable empty plan and refresh stays empty; failed and non-deleted actual results preserved",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "nativeContract": "Claude SDK0.3.322 TaskUpdateInput.status includes deleted; TaskUpdateOutput success/taskId/statusChange authoritative; requested input alone cannot imply deletion",
+            "changedLines": {
+              "source": 1,
+              "tests": 104
+            },
+            "fileChanges": {
+              "added": [
+                "packages/adapters/claude/test/task-deletion.spec.ts",
+                "browser-tests/claude-task-deletion.spec.ts"
+              ],
+              "modified": [
+                "packages/adapters/claude/src/native-state.ts"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "verification": "13 adapter/reducer/handler local tests and1 real localChromium/SQLite/HTTP/WS refresh passed; full types/changedlint passed; original2failed/2passed retained. Native SDK result fixtures; real native tools/provider/model0.",
+            "remainingAcceptance": [
+              "Actual pinned native tool deletion with supplied Provider",
+              "Target server restart/multipleclients/current task entity reconciliation",
+              "Full NP23/NP37 scope and merge/deploy remain separate and unperformed by developer"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-05",
