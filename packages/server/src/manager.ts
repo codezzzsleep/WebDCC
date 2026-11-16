@@ -748,7 +748,27 @@ export class SessionManager {
       this.queueChanged(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing && runtime.turnId === turnId && this.store.nativeOwners.current(sessionId, runtime.identity)) this.finishTurn(runtime, 'failed', `${knownUnsubmittedInput(error) ? 'native-input-not-submitted' : 'native-outcome-uncertain'}: ${message}`);
+      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing && runtime.turnId === turnId && this.store.nativeOwners.current(sessionId, runtime.identity)) {
+        if (knownUnsubmittedInput(error)) this.finishTurn(runtime, 'failed', `native-input-not-submitted: ${message}`);
+        else {
+          this.store.journal.settleInputFailure(turnId, 'uncertain');
+          this.queueChanged(sessionId);
+          const notice = this.store.appendEvent({ sessionId, turnId, itemKey: `input-outcome-uncertain-${turnId}`, kind: 'notice',
+            data: { level: 'warning', text: `原生调用结果待核对，输入已保留，不会自动重发：${message}`, nativeType: 'native-outcome-uncertain' } });
+          this.hooks.onEvent(notice);
+          // Keep observing a known native turn, including a confirmed end in
+          // its settle window. Without an identity, use the existing unobserved
+          // recovery contract rather than assign a later unrelated native end.
+          if (this.turns.nativeTurn(turnId) === undefined && runtime.finishAction === null) {
+            try { await this.dispose(sessionId); }
+            catch (closeError) {
+              const failed = this.store.appendEvent({ sessionId, turnId, itemKey: `uncertain-input-close-failed-${turnId}`, kind: 'notice',
+                data: { level: 'warning', text: `原生通道关闭未确认，输入结果仍待核对：${closeError instanceof Error ? closeError.message : String(closeError)}`, nativeType: 'uncertain-input-close-failed' } });
+              this.hooks.onEvent(failed);
+            }
+          }
+        }
+      }
       else this.store.journal.settleInputFailure(turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain');
       throw error;
     }

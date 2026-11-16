@@ -1,0 +1,115 @@
+{
+  "formatVersion": 1,
+  "issue": 271,
+  "mainBaseline": "726e8c18aac00c62607ea27eee6432e1cb78e880",
+  "dependency": {
+    "PR": 265,
+    "exactHead": "5e1a1555dd8b8f8ba2f44ccfc94be2d91939febd",
+    "baseRef": "fix/late-input-failure-turn-fence",
+    "integration": "control lifecycle/shared activation acceptance in PR270 remains separate"
+  },
+  "behavior": "Unknown current send is not a native terminal; preserve bound native observation, use existing unobserved recovery when identity is absent",
+  "sourceFiles": {
+    "packages/server/src/manager.ts": "9343e43ee000d2217de5bdc1378abd86bef7d328127d42ff69a0b9a79355ba84",
+    "packages/server/test/uncertain-turn.spec.ts": "34b6f04bad013d2e9c76d8911b607a5a47f34f364389e54247292d6dff5fdefe",
+    "packages/server/test/fixtures/uncertain-send-crash.ts": "b3e318b7b88f22006e8c5e8dac215aacdba51c7d0941231407f4d0c37d1803d5",
+    "browser-tests/uncertain-turn.spec.ts": "ce1647defa1d9a47a013088e345f9d9d45cfb3d90f6150cda27edf620c6869cb",
+    "docs/current-input-uncertainty.md": "262580d11ff9068943323b06f93edd01e420a8da59c572a31e90cf48d5b01edd"
+  },
+  "verification": {
+    "finalSource": {
+      "passed": 55,
+      "files": 6,
+      "log": "uncertain-turn-final.log"
+    },
+    "finalBrowser": {
+      "passed": 2,
+      "files": 2,
+      "log": "uncertain-turn-final-browser.log"
+    },
+    "crashEvidenceCapture": {
+      "passed": 1,
+      "skippedByFilter": 7,
+      "log": "uncertain-turn-crash-record.log",
+      "actualWebProcessSignal": "SIGKILL",
+      "nativeProcessExit": "not established; NativeIdentity controlled"
+    },
+    "workspaceTypes": "passed sequentially",
+    "finalServerTypes": "passed after adding crash evidence capture",
+    "scriptsTypes": "passed",
+    "changedFileLint": "passed",
+    "build": "exact-head packaging bound in PR after commit"
+  },
+  "preservedFailures": [
+    {
+      "log": "uncertain-turn-before.log",
+      "failed": 5,
+      "scope": "original synthetic terminal cases"
+    },
+    {
+      "log": "uncertain-turn-regression.log",
+      "passed": 35,
+      "failed": 1,
+      "scope": "test used steer-only confirmation for ordinary input; no actual native proof"
+    },
+    {
+      "log": "uncertain-turn-final-regression.log",
+      "passed": 53,
+      "failed": 1,
+      "scope": "test queried completed row from active-only queue; corrected assertion"
+    },
+    {
+      "log": "uncertain-turn-close-before.log",
+      "failed": 1,
+      "skippedByFilter": 7,
+      "scope": "cleanup error replaced original unknown send error"
+    }
+  ],
+  "unexecutedEvidence": [
+    "first and intermediate requested native-admission.spec.ts did not exist; no tests credited; final native-admission-race.spec.ts 18 tests ran and passed"
+  ],
+  "logHashes": {
+    "uncertain-turn-before.log": "3f2ed5a7b863029f7e9766d13d5a42dd2d705658e12bf61c698681b45ff09511",
+    "uncertain-turn-first.log": "5643f261d0e37c2ae1e4604ab2c3f9ff5d085218c7172f31c85426204d701a20",
+    "uncertain-turn-regression.log": "e8d16d8f019a4b8f22f6f373adbf12594dba257167e6f3818df248c252e4f8ed",
+    "uncertain-turn-final-regression.log": "8c415302ed0ecc4c37411fc600368d69a00891988e5774155cd9ba70efb624c8",
+    "uncertain-turn-corrected.log": "7ec4d35fbf13f3f0ab490a9c1a8351c89fbf3dba7ab5df419911f7256849dbff",
+    "uncertain-turn-close-before.log": "61f2e1925bccfbd8227fa508ff2ae5fb2c45bd55a4bed2687638833a4477072b",
+    "uncertain-turn-final.log": "c45c494b8e7c4d0ea460c2482f45c7e81035a5dfac5df7ec441a736cb66571fc",
+    "uncertain-turn-browser.log": "37646f7ab3988b79be8180b7fdf70724d937e0caa292f6734675028973b50bbc",
+    "uncertain-turn-final-browser.log": "5e6f484e2498fd6fc7d45f303b22ae1ac0373757be56f5d2b070dac49b22a8c7",
+    "uncertain-turn-crash-record.log": "989e2aac689406ac0a7ac13e404d8db09b7d166881d2eaa0fcb1d1aab0e5bfba",
+    "uncertain-turn-typecheck.log": "bfde5de559303021061e98f6514d8d575e2acbfe282f6fa4a309ea46a82cd99c",
+    "uncertain-turn-scripts-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "uncertain-turn-final-server-typecheck.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "uncertain-turn-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "uncertain-turn-final-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "rawEvidenceHashes": {
+    "uncertain-turn-before/claude-code.json": "22ad77dc840cd9dcbfaf46f87dfde2a64af96f58d5c1259c6b4cd30bb35c1d0a",
+    "uncertain-turn-before/codex.json": "234b38a155ea63e2a5de97c032f42c4c45434b6d00677126adeaad325b72a7b4",
+    "uncertain-turn-before/dsh.json": "481093da9370ab2e2fd662ffd1a54c623d8049990e691f7cf54eb0496d6f204c",
+    "uncertain-turn-after/browser-uncertain-turn.json": "b8e0667468db19958f24765ed79e5bf3eaee09ef8b7874356ff3dac288415ea1",
+    "uncertain-turn-after/browser-uncertain-turn.png": "825a4b4fe6e04a38d44ccca2932ad6be754ec4c664de1dc7b035a1d446229b41",
+    "uncertain-turn-after/claude-code.json": "b9ae813e0215ed4ea7033083d1e2c7f2e08f6c9bad81e417a97dbf5862d53129",
+    "uncertain-turn-after/codex.json": "54bcd4dedf22332101afeb02916e3b1cd74c74541b7c07059b6b8e0f23e83a77",
+    "uncertain-turn-after/crash-reopen.json": "82ca31b0a9c5745e7b5142a354fe87ebc61066559751724ba0996b4b51048b66",
+    "uncertain-turn-after/dsh.json": "99da35d5780a1c7da9ac048cb320ce2c260c653ae672e603dc60951bb70c15f7"
+  },
+  "evidenceScope": {
+    "controlledNative": "FakeAdapter fake-1.0.0; direct completed-row fixture is controlled, not a native receipt",
+    "actualLocal": [
+      "manager",
+      "SQLite",
+      "HTTP",
+      "WebSocket",
+      "Chromium",
+      "Web process SIGKILL"
+    ],
+    "newOfficialNativeCalls": 0,
+    "newProviderCalls": 0,
+    "newPaidModelCalls": 0,
+    "newProductionCalls": 0
+  },
+  "remaining": "Independent source acceptance, parent PR265/control PR270 merge integration and full target-platform verification/deployment by existing owners; full NP45/46/47 and later NP30/54 remain."
+}
