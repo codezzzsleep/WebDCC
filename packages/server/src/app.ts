@@ -147,7 +147,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
       try { decoded = decodeURIComponent(path); } catch { return reply.status(400).send({ error: 'invalid path' }); }
       for (const workspace of store.listWorkspaces()) {
         const target = await workspaceAsset(workspace.path, decoded).catch(() => undefined);
-        if (target !== undefined) return sendWorkspaceAsset(reply, target);
+        if (target !== undefined) return sendWorkspaceAsset(reply, target, workspace.path);
       }
       return reply.status(404).send({ error: '工作区内没有这张图片' });
     }

@@ -335,7 +335,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     const target = await workspaceAsset(workspace.path, query.path ?? '').catch(() => undefined);
     if (target === undefined) throw badRequest('路径必须在工作区内');
-    return sendWorkspaceAsset(reply, target);
+    return sendWorkspaceAsset(reply, target, workspace.path);
   });
 
   // ---------- feed / sessions ----------

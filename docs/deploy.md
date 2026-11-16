@@ -43,6 +43,8 @@ pnpm install
 
 ## 服务端发布形态（M7 定稿）
 
+工作区文件读取使用 Linux 文件描述符核验路径，运行环境需提供可读取的 `/proc/self/fd`。raw 下载、图片资源和文本预览从核验后的同一描述符读取；无法提供该核验的平台返回 501，不退回可能受目录替换影响的路径读取。该限制也适用于保存前后的文本读取。文件内容仍可被原生工具原地修改，描述符核验不提供文件快照。其它平台的等价文件边界仍需实现和验收。
+
 - 构建：`pnpm build`；启动：`node packages/server/dist/main.js`
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
