@@ -243,6 +243,9 @@ interface PendingInteraction {
   timed?: boolean;
   sent?: boolean;
   sending?: boolean;
+  approvalOption?: string;
+  approvalTool?: string;
+  approvalItem?: EventData['approval.request'];
   transportClosed?: boolean;
   settlement?: DshQuestionResult;
   waitStream?: string;
@@ -1572,13 +1575,19 @@ export class DshAdapter implements AgentAdapter {
     const runtime = this.require(sessionId);
     const pending = runtime.pending.get(decision.approvalId);
     if (pending?.kind !== 'approval' || pending.generation !== this.muxGeneration || this.clientId === '') throw Object.assign(new Error('DSH 审批已结束或需要重新同步'), { statusCode: 409 });
+    if (pending.transportClosed) throw Object.assign(dshNativeError('审批转发已结束，原生决定待核对', 503), { code: 'uncertain' });
     if (pending.sent) throw dshNativeError('DSH approval was submitted; wait for its durable decision', 409);
     if (!['allowed-once', 'rejected'].includes(decision.optionId)) throw Object.assign(new Error('DSH 审批选项无效'), { statusCode: 400 });
+    const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch;
+    pending.approvalOption = decision.optionId;
     await this.call(client, '$events/result', {
-      clientId: this.clientId,
+      clientId,
       eventId: decision.approvalId,
       outcome: { kind: 'result', value: decision.optionId },
-    });
+    }, sessionId);
+    if (this.sessions.get(sessionId) !== runtime || this.client !== client || this.clientId !== clientId
+      || this.muxGeneration !== generation || this.hostEpoch !== epoch || pending.transportClosed || runtime.pending.get(decision.approvalId) !== pending)
+      throw Object.assign(dshNativeError('审批回执属于已结束的原生交互或旧连接，本次回应结果待核对', 503), { code: 'uncertain' });
     pending.sent = true;
     return { confirmed: false };
   }
@@ -1756,7 +1765,12 @@ export class DshAdapter implements AgentAdapter {
         if (pending === undefined) continue;
         // Cancellation of a forwarding waiter does not establish a sent
         // approval's outcome; its durable decided event remains authoritative.
-        if (pending.kind === 'approval' && pending.sent) continue;
+        if (pending.kind === 'approval') {
+          pending.transportClosed = true;
+          if (pending.approvalItem !== undefined) this.emit(id, { type: 'item.complete', itemKey: `approval-${eventId}`, kind: 'approval.request',
+            data: { ...pending.approvalItem, submission: pending.sent ? 'sent' : 'uncertain' }, native: value });
+          continue;
+        }
         if (pending.kind === 'question' && pending.callId !== undefined) {
           // Another Client's answer and a source abort both retire this
           // delivery. Only the call's durable business result tells them apart.
@@ -1768,8 +1782,7 @@ export class DshAdapter implements AgentAdapter {
         }
         runtime.pending.delete(eventId);
         if (pending.waitStream !== undefined) this.client?.closeStream(pending.waitStream);
-        if (pending.kind === 'approval') this.emit(id, { type: 'item.complete', itemKey: `approval-cancelled-${eventId}`, kind: 'approval.resolved', data: { approvalId: eventId, optionId: 'cancelled', by: 'other' }, native: value });
-        else for (const question of pending.questionItems ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-cancelled-${question.questionId}`, kind: 'question', data: { ...question, status: 'skipped', outcome: 'cancel', resolution: 'outcome-unknown' }, native: value });
+        for (const question of pending.questionItems ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-cancelled-${question.questionId}`, kind: 'question', data: { ...question, status: 'skipped', outcome: 'cancel', resolution: 'outcome-unknown' }, native: value });
       }
       return;
     }
@@ -2033,7 +2046,13 @@ export class DshAdapter implements AgentAdapter {
       }
       case 'approval/asked': {
         const id = String(data['id'] ?? '');
-        if (id !== '') runtime.approvals.set(id, { toolName: String(data['toolName'] ?? ''), ...(typeof data['callId'] === 'string' ? { callId: data['callId'] } : {}) });
+        if (id !== '') {
+          const approval = { toolName: String(data['toolName'] ?? ''), ...(typeof data['callId'] === 'string' ? { callId: data['callId'] } : {}), eventId: undefined as string | undefined };
+          const matches = [...runtime.pending.values()].filter(pending => pending.kind === 'approval' && pending.durableId === undefined
+            && (approval.callId !== undefined ? pending.callId === approval.callId : pending.callId === '' && pending.approvalTool === approval.toolName));
+          if (matches.length === 1) { matches[0]!.durableId = id; approval.eventId = matches[0]!.eventId; }
+          runtime.approvals.set(id, approval);
+        }
         complete(`internal-asked-${nativeSeq}`, 'internal', { nativeType: type });
         return;
       }
@@ -2050,7 +2069,7 @@ export class DshAdapter implements AgentAdapter {
         runtime.approvals.delete(durableId);
         const raw = String(data['outcome'] ?? data['decision'] ?? data['optionId'] ?? 'unavailable');
         const optionId = ['allowed-once', 'rejected', 'cancelled', 'unavailable'].includes(raw) ? raw : 'unavailable';
-        complete(`approval-resolved-${nativeSeq}`, 'approval.resolved', { approvalId, optionId, by: pending.sent ? 'user' : 'other' });
+        complete(`approval-resolved-${nativeSeq}`, 'approval.resolved', { approvalId, optionId, by: pending.sent && pending.approvalOption === optionId ? 'user' : 'other' });
         return;
       }
       case 'user-questions/answered': {
@@ -2249,21 +2268,19 @@ export class DshAdapter implements AgentAdapter {
       if (process.env['WDCC_DEBUG_DSH'] === '1') console.error('[dsh] approval/request', JSON.stringify(value).slice(0, 1200));
       const toolName = String(request['toolName'] ?? '工具');
       const callId = String(request['callId'] ?? '');
-      const matches = [...runtime.approvals].filter(([, approval]) => approval.eventId === undefined && (callId !== '' ? approval.callId === callId : approval.toolName === toolName));
+      const matches = [...runtime.approvals].filter(([, approval]) => (approval.eventId === undefined || approval.eventId === eventId)
+        && (callId !== '' ? approval.callId === callId : approval.toolName === toolName));
       const durableId = matches.length === 1 ? matches[0]?.[0] : undefined;
       if (durableId !== undefined) { const approval = runtime.approvals.get(durableId); if (approval !== undefined) approval.eventId = eventId; }
-      runtime.pending.set(eventId, { kind: 'approval', eventId, callId, durableId, generation: this.muxGeneration });
+      const pending: PendingInteraction = { kind: 'approval', eventId, callId, durableId, approvalTool: toolName, generation: this.muxGeneration };
+      runtime.pending.set(eventId, pending);
       const args = {
         ...(runtime.toolInputs.get(callId) ?? {}),
         ...((request['args'] ?? request['input'] ?? request['arguments'] ?? {}) as Record<string, unknown>),
       };
       const subject = String(args['command'] ?? args['file_path'] ?? args['path'] ?? '');
       const displayReason = ((request['displayReason'] ?? {}) as { zh?: string }).zh ?? '';
-      this.emit(target, {
-        type: 'item.complete',
-        itemKey: `approval-${eventId}`,
-        kind: 'approval.request',
-        data: {
+      pending.approvalItem = {
           approvalId: eventId,
           // F11：标题是工具名 + 命令原文（等宽显示）或文件路径
           title: subject === '' ? toolName : `${toolName} · ${subject}`,
@@ -2278,8 +2295,8 @@ export class DshAdapter implements AgentAdapter {
             { id: 'allowed-once', label: '允许一次' },
             { id: 'rejected', label: '拒绝' },
           ],
-        },
-      });
+      };
+      this.emit(target, { type: 'item.complete', itemKey: `approval-${eventId}`, kind: 'approval.request', data: pending.approvalItem });
       return;
     }
 
