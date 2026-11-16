@@ -4,10 +4,19 @@ function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+/** Codex's explicit refusal means no command or proposed patch was applied.
+ * Read the original item so older successful-looking rows remain recoverable. */
+export function nativeOperationDeclined(event: Pick<StoredEvent, 'kind' | 'native'>): boolean {
+  const native = record(event.native);
+  return native['status'] === 'declined' && (event.kind === 'command' && native['type'] === 'commandExecution'
+    || event.kind === 'file.change' && native['type'] === 'fileChange');
+}
+
 /** Read older events from their own native tool result; never use a sibling
  * failed result in the same SDK message as evidence for this operation. */
 export function failedFileOperation(event: StoredEvent): boolean {
   if (event.kind !== 'file.read' && event.kind !== 'file.change' && event.kind !== 'turn.diff') return false;
+  if (nativeOperationDeclined(event)) return true;
   if (record(event.data)['status'] === 'failed') return true;
   const native = record(event.native);
   if (native['type'] === 'tool/result' && record(record(native['data'])['message'])['isError'] === true) return true;
