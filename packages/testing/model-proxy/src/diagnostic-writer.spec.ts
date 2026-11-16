@@ -5,7 +5,102 @@ import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage } from './diagnostic-writer.js';
+import { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, configureDiagnosticWriteQueueBudget, diagnosticWriteQueueBytes } from './diagnostic-writer.js';
+
+it('shares a UTF-8 queue budget across writers, persists an omission and releases every reservation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-diagnostic-shared-queue-'));
+  const a = new DiagnosticFileWriter({ maxQueuedBytes: 16, maxActiveQueuedBytes: 8 });
+  const b = new DiagnosticFileWriter({ maxQueuedBytes: 16 });
+  const c = new DiagnosticFileWriter({ maxQueuedBytes: 16 });
+  const errors: string[] = [];
+  try {
+    const first = a.write(join(root, 'a.jsonl'), '汉字');
+    const second = b.write(join(root, 'b.jsonl'), 'bb');
+    expect(diagnosticWriteQueueBytes().queued).toBe(8);
+    const rejected = c.write(join(root, 'c.jsonl'), 'c', 'append', error => errors.push(error.message));
+    expect(diagnosticWriteQueueBytes().queued).toBe(8);
+    expect(() => configureDiagnosticWriteQueueBudget(7)).toThrow('Pending diagnostic writes exceed the requested budget');
+    await Promise.all([first, second, rejected]);
+    await Promise.all([a.flush(), b.flush(), c.flush()]);
+    expect(await readFile(join(root, 'a.jsonl'), 'utf8')).toBe('汉字');
+    expect(await readFile(join(root, 'b.jsonl'), 'utf8')).toBe('bb');
+    await expect(lstat(join(root, 'c.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(errors).toEqual(['Diagnostic active write queue limit reached']);
+    expect(await readDiagnosticDirectoryCoverage(root)).toMatchObject({ incomplete: true, errors: ['Diagnostic active write queue limit reached'] });
+    expect(diagnosticWriteQueueBytes()).toEqual({ queued: 0, coverage: 0 });
+    await c.write(join(root, 'c.jsonl'), 'recovered');
+    // A too-large request is omitted, rather than creating an empty file.
+    await expect(lstat(join(root, 'c.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await c.write(join(root, 'c.jsonl'), 'ok');
+    expect(await readFile(join(root, 'c.jsonl'), 'utf8')).toBe('ok');
+  } finally {
+    await Promise.all([a.flush(), b.flush(), c.flush()]);
+    configureDiagnosticWriteQueueBudget(64 * 1024 * 1024);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('bounds zero-budget omission messages separately and recovers after marker and body write failures', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-diagnostic-zero-queue-'));
+  const writer = new DiagnosticFileWriter({ maxActiveQueuedBytes: 0 });
+  const errors: string[] = [];
+  try {
+    const writes = Array.from({ length: 150 }, () => writer.write(join(root, 'body.jsonl'), 'omitted', 'append', error => errors.push(error.message)));
+    expect(diagnosticWriteQueueBytes().queued).toBe(0);
+    expect(diagnosticWriteQueueBytes().coverage).toBeLessThanOrEqual(4096);
+    expect(errors.some(error => error.includes('coverage queue limit reached'))).toBe(true);
+    await Promise.all(writes); await writer.flush();
+    expect(diagnosticWriteQueueBytes()).toEqual({ queued: 0, coverage: 0 });
+    await expect(lstat(join(root, 'body.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readDiagnosticDirectoryCoverage(root)).toMatchObject({ incomplete: true });
+    expect((await stat(join(root, '.wdcc-diagnostic-quota.json'))).size).toBeLessThanOrEqual(4096);
+    await rm(join(root, '.wdcc-diagnostic-quota.json'));
+    expect(spawnSync('mkfifo', [join(root, '.wdcc-diagnostic-quota.json')]).status).toBe(0);
+    await writer.write(join(root, 'body.jsonl'), 'omitted', 'append', error => errors.push(error.message));
+    expect(errors).toContain('Diagnostic active write queue limit reached; coverage marker unavailable');
+    expect(diagnosticWriteQueueBytes()).toEqual({ queued: 0, coverage: 0 });
+    await rm(join(root, '.wdcc-diagnostic-quota.json'));
+    configureDiagnosticWriteQueueBudget(16);
+    const failed = new DiagnosticFileWriter({ maxFileBytes: 0 });
+    await failed.write(join(root, 'body.jsonl'), 'fail', 'append', error => errors.push(error.message));
+    expect(errors).toContain('Diagnostic file size limit reached');
+    expect(diagnosticWriteQueueBytes().queued).toBe(0);
+    await writer.write(join(root, 'body.jsonl'), 'recovered');
+    expect(await readFile(join(root, 'body.jsonl'), 'utf8')).toBe('recovered');
+  } finally {
+    await writer.flush(); configureDiagnosticWriteQueueBudget(64 * 1024 * 1024);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('independent module copies in an actual Node process share queue reservations and recovery', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-write-queue-copy-'));
+  const child = fork(join(import.meta.dirname, 'fixtures/diagnostic-write-budget.ts'), [root], { execArgv: ['--import', 'tsx'], stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let output = ''; child.stderr?.on('data', data => { output += String(data); });
+  const exited = once(child, 'exit');
+  try {
+    const [message] = await Promise.race([once(child, 'message'), exited.then(() => { throw new Error(output); })]);
+    expect(message).toMatchObject({ independent: true, pending: [{ queued: 6 }, { queued: 6 }], released: [{ queued: 0, coverage: 0 }, { queued: 0, coverage: 0 }], errors: ['Diagnostic active write queue limit reached'], contents: ['汉字', 'recovered'] });
+    await exited; expect(child.exitCode).toBe(0);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) await terminateOwnedFixture(child);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('a shared queue omission retains previous directory quota evidence', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'wdcc-write-queue-coverage-'));
+  const writer = new DiagnosticFileWriter({ maxDirectoryBytes: 0 });
+  try {
+    await writer.write(join(root, 'body.jsonl'), 'first');
+    configureDiagnosticWriteQueueBudget(0);
+    await writer.write(join(root, 'body.jsonl'), 'second');
+    expect(await readDiagnosticDirectoryCoverage(root)).toMatchObject({ incomplete: true, errors: ['Diagnostic directory size limit reached', 'Diagnostic active write queue limit reached'] });
+  } finally {
+    await writer.flush(); configureDiagnosticWriteQueueBudget(64 * 1024 * 1024);
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 it('expiration removes only old regular diagnostic files and keeps boundary, fresh and operator files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'wdcc-diagnostic-expiration-'));
