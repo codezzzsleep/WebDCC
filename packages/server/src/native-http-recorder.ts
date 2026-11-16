@@ -108,6 +108,7 @@ if (directory !== undefined && !state[STATE]) {
     }).catch(() => { requestCapture.discard('capture-failed'); requestCapture.release(); recordingFailure(file); });
     const emit = (channel: string, value: unknown): void => { void pendingRequest.then(async () => publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date().toISOString(), elapsedMs: Date.now() - started, source: 'model-http', channel, direction: 'in', context: redactDiagnosticValue(await context, secrets), value: { requestId, value } })).catch(() => recordingFailure(file)); };
     let terminal = false;
+    let omittedChunkEvents = 0;
     let capture: DiagnosticCapture | undefined;
     const abortObserver = (): void => finish('cancelled', undefined, request.signal.reason);
     const finish = (outcome: string, status?: number, error?: unknown): void => {
@@ -125,6 +126,7 @@ if (directory !== undefined && !state[STATE]) {
         emit('complete', { outcome, status, chunks: recordedChunks, coverage: {
           truncated: (capture?.truncated ?? false) || requestCapture.truncated,
           requestBytes: requestCapture.bytes, responseBytes: capture?.bytes ?? 0, responseChunks: capture?.count ?? 0, digestScope: 'redacted',
+          omittedChunkEvents,
           ...(requestCapture.limitReason === undefined ? {} : { requestLimitReason: requestCapture.limitReason }),
           ...(capture?.limitReason === undefined ? {} : { responseLimitReason: capture.limitReason }),
         }, ...(error === undefined ? {} : { error: redactDiagnosticValue(error instanceof Error ? error.message : String(error), secrets) }) });
@@ -145,8 +147,13 @@ if (directory !== undefined && !state[STATE]) {
             const next = await reader.read();
             if (next.done) { finish('completed', response.status); controller.close(); return; }
             const bytes = Buffer.from(next.value.buffer, next.value.byteOffset, next.value.byteLength);
-            if (!terminal) capture!.push(bytes, Date.now() - started);
-            emit('chunk', { bytes: bytes.length, capture: capture!.truncated ? 'omitted' : 'pending-redaction' });
+            if (!terminal) {
+              capture!.push(bytes, Date.now() - started);
+              // emit waits for request/context I/O. Bound those queued jobs as
+              // well as raw chunks, without buffering or pausing native bytes.
+              if (capture!.count <= captureLimits[1]) emit('chunk', { bytes: bytes.length, capture: capture!.truncated ? 'omitted' : 'pending-redaction' });
+              else omittedChunkEvents++;
+            }
             controller.enqueue(next.value);
           } catch (error) { finish('failed', response.status, error); controller.error(error); }
         },
