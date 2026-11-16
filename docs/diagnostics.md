@@ -41,7 +41,7 @@ Capture and pending-write limits still apply per observer/writer. A global activ
 
 ## Failures and remaining scope
 
-An unavailable diagnostic directory disables optional recording while the server continues. A failed model observer route setup preserves the original Provider and launch inputs; coverage reports the failure. Recording failures never authorize blind retries of uncertain model execution.
+An unavailable diagnostic directory disables optional recording while the server continues. A failed model observer route setup preserves the original Provider and launch inputs; coverage reports the failure. Malformed percent encoding in a target URL username or password is rejected at this setup boundary, before a request handler can fail. Valid encoded credentials keep the native Basic Auth value; password echoes are masked using both encoded and decoded values. Recording failures never authorize blind retries of uncertain model execution.
 
 The recording summary remains incomplete for omitted payloads, failed writes and missing terminal records. A green source test does not establish complete native coverage.
 

@@ -55,6 +55,7 @@ function safePath(path: string): string {
 export class ModelProxy {
   private server: Server | null = null;
   private readonly target: URL;
+  private readonly targetPassword: string;
   private seq = 0;
   private readonly started = Date.now();
   private readonly pending = new Set<Promise<void>>();
@@ -64,6 +65,10 @@ export class ModelProxy {
   private pendingBytes = 0;
   constructor(private readonly options: ModelProxyOptions) {
     this.target = new URL(options.target);
+    // Decode at setup, inside ModelRecording's optional observer recovery
+    // boundary. A bad credential must not reject an unawaited request handler.
+    try { decodeURIComponent(this.target.username); this.targetPassword = decodeURIComponent(this.target.password); }
+    catch { throw new Error('Invalid model recording target credentials'); }
     new DiagnosticCapture(options.maxCaptureBytes, options.maxCaptureChunks);
     this.writer = new DiagnosticFileWriter({ maxFileBytes: options.maxRecordFileBytes, maxQueuedBytes: options.maxPendingRecordBytes,
       maxDirectoryBytes: options.maxRecordDirectoryBytes });
@@ -130,7 +135,7 @@ export class ModelProxy {
     let settled = false;
     let upstreamRequest: ClientRequest | undefined;
     let abort = (): void => undefined;
-    const secrets = [...(this.options.secrets ?? []), ...diagnosticSecretsFromHeaders(req.headers), this.target.password, decodeURIComponent(this.target.password)].filter(Boolean);
+    const secrets = [...(this.options.secrets ?? []), ...diagnosticSecretsFromHeaders(req.headers), this.target.password, this.targetPassword].filter(Boolean);
     const finish = (outcome: 'completed' | 'failed' | 'cancelled', error?: Error): void => {
       if (settled) return;
       settled = true;
