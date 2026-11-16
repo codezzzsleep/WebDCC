@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
 import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError } from '@webdcc/protocol';
+import { codexReviewItem } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -147,6 +148,14 @@ function TurnView({
   const user = turn.user;
   const running = turn.state === 'starting' || turn.state === 'running' || turn.state === 'waiting';
   const steps = turn.steps;
+  const reviewTexts = new Set(steps.flatMap(event => {
+    const review = codexReviewItem(event); return review?.phase === 'finished' ? [review.text] : [];
+  }));
+  // Codex emits both the formatted mode result and the same agent message.
+  // Retain both source events and display that exact native text once.
+  const reviewCopy = (data: EventData['assistant.message']) =>
+    (data.nativePhase === undefined || data.nativePhase === 'final_answer') && reviewTexts.has(data.text);
+  const visibleSteps = steps.filter(event => event.kind !== 'assistant.message' || !reviewCopy(event.data as EventData['assistant.message']));
   const answerKeys = new Set(turn.answer.map((answer) => answer.itemKey));
   const changes = turn.changes.map((change) => ({ ...change, ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }) }));
   // 运行中、或用户展开时显示全部步骤；完成后默认只显示摘要和最终回答（DSH 的做法）
@@ -226,21 +235,21 @@ function TurnView({
         ) : null}
 
         {showAll
-          ? steps.map((event) => (
+          ? visibleSteps.map((event) => (
               <ErrorBoundary key={`${event.itemKey}-${event.seq}`} label="timeline-item">
                 <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
               </ErrorBoundary>
             ))
-          : steps
+          : visibleSteps
               .filter((event) => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey)
-                || failedFileOperation(event))
+                || failedFileOperation(event) || codexReviewItem(event)?.phase === 'finished')
               .map((event) => (
                 <ErrorBoundary key={`always-${event.itemKey}-${event.seq}`} label="timeline-item">
                   <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
                 </ErrorBoundary>
               ))}
 
-        {turn.live.map((item) => <HotRow key={item.itemKey} item={item} />)}
+        {turn.live.filter(item => item.kind !== 'assistant.message' || !reviewCopy(item.data as EventData['assistant.message'])).map((item) => <HotRow key={item.itemKey} item={item} />)}
 
         {!running && changes.length > 0 ? <ChangesCard changes={changes} onOpenDiff={onOpenDiff} /> : null}
 
@@ -274,6 +283,7 @@ function TurnView({
 function summaryLabel(turn: ProtocolTurnView): string {
   const { commands, reads, edits, tools } = turn.summary;
   const parts: string[] = [];
+  if (turn.steps.some(step => codexReviewItem(step) !== undefined)) parts.push('原生 Review');
   if (turn.plan !== undefined) parts.push('更新了计划');
   if (turn.goal !== undefined) parts.push(goalLabel(turn.goal));
   if (commands > 0) parts.push(`执行了 ${commands} 条命令`);
@@ -489,6 +499,11 @@ function StepRow({
       );
     }
     case 'tool.call': {
+      const review = codexReviewItem(event);
+      if (review !== undefined) return <div className={className}>
+        <StepLine icon="listChecks" label={review.phase === 'started' ? '开始原生 Review' : '原生 Review 结果'} detail={review.phase === 'started' ? review.text : undefined} />
+        {review.phase === 'finished' ? <div data-testid="codex-review-result" data-raw-text={review.text}><Markdown text={review.text} /></div> : null}
+      </div>;
       const data = event.data as EventData['tool.call'];
       const toolInput = data.input as Record<string, unknown>;
       const childId = data.name === 'subagent' && typeof toolInput?.['childId'] === 'string' ? toolInput['childId'] : undefined;

@@ -3,6 +3,7 @@ import { isBlockingQuestion } from './events.js';
 import { failedFileOperation } from './file-operation.js';
 import type { InputContent } from './input.js';
 import { claudeOutputOrigin } from './claude-tasks.js';
+import { codexReviewItem } from './codex-review.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -233,7 +234,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     commands: steps.filter((event) => event.kind === 'command').length,
     reads: steps.filter((event) => event.kind === 'file.read' && !failedFileOperation(event)).length,
     edits: steps.filter((event) => (event.kind === 'file.change' || event.kind === 'turn.diff') && !failedFileOperation(event)).length,
-    tools: steps.filter((event) => event.kind === 'tool.call').length,
+    tools: steps.filter((event) => event.kind === 'tool.call' && codexReviewItem(event) === undefined).length,
   };
   const startedAt = started?.at ?? userEvent?.at ?? first?.at ?? new Date(0).toISOString();
   return {

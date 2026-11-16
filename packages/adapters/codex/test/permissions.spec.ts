@@ -103,3 +103,51 @@ it('NP-08 autonomous starts update the stop target and a delayed response cannot
     expect(ctx.request.mock.calls).toHaveLength(calls);
   } finally { await ctx.adapter.dispose('local'); }
 });
+
+it('uses the native Review execution id for interrupt while projecting its items onto the accepted root operation', async () => {
+  const ctx = nativeFixture();
+  try {
+    await ctx.adapter.create({ sessionId: 'local', cwd: '/tmp/fixture', providerId: null });
+    const root = { id: 'review-root', rootTurnId: null, items: [], itemsView: 'notLoaded', status: 'inProgress', error: null, startedAt: null, completedAt: null, durationMs: null };
+    ctx.request.mockImplementationOnce(async () => ({ thread: ctx.policy.thread }));
+    ctx.request.mockImplementationOnce(async () => {
+      ctx.notify({ method: 'item/started', params: { threadId: 'native', turnId: root.id, item: { type: 'enteredReviewMode', id: 'enter', review: 'current changes' } } });
+      ctx.notify({ method: 'turn/started', params: { threadId: 'native', turn: { ...root, id: 'review-execution', rootTurnId: root.id } } });
+      return { reviewThreadId: 'native', turn: root };
+    });
+    await ctx.adapter.executeNativeControl('local', { type: 'review', target: { type: 'uncommittedChanges' } });
+    expect(ctx.events.filter(event => event.type === 'turn.start').every(event => event.nativeTurnId === root.id)).toBe(true);
+    ctx.request.mockImplementationOnce(async () => ({}));
+    await ctx.adapter.interrupt('local');
+    expect(ctx.request.mock.calls.at(-1)).toEqual(['turn/interrupt', { threadId: 'native', turnId: 'review-execution' }]);
+    ctx.notify({ method: 'turn/completed', params: { threadId: 'native', turn: { ...root, status: 'interrupted' } } });
+    const calls = ctx.request.mock.calls.length;
+    await ctx.adapter.interrupt('local');
+    expect(ctx.request.mock.calls).toHaveLength(calls);
+  } finally { await ctx.adapter.dispose('local'); }
+});
+
+it('binds an accepted Review root before its marker and ignores a delayed accepted result after a newer autonomous turn starts', async () => {
+  const ctx = nativeFixture();
+  try {
+    await ctx.adapter.create({ sessionId: 'local', cwd: '/tmp/fixture', providerId: null });
+    const root = { id: 'review-root', rootTurnId: null, items: [], itemsView: 'notLoaded', status: 'inProgress', error: null, startedAt: null, completedAt: null, durationMs: null };
+    ctx.request.mockImplementationOnce(async () => ({ thread: ctx.policy.thread }));
+    ctx.request.mockImplementationOnce(async () => ({ reviewThreadId: 'native', turn: root }));
+    await ctx.adapter.executeNativeControl('local', { type: 'review', target: { type: 'uncommittedChanges' } });
+    expect(ctx.events.filter(event => event.type === 'turn.start')).toMatchObject([{ nativeTurnId: root.id, native: { reviewThreadId: 'native', turn: root } }]);
+    ctx.notify({ method: 'turn/completed', params: { threadId: 'native', turn: { ...root, status: 'completed' } } });
+    const nextRoot = { ...root, id: 'next-review' };
+    ctx.request.mockImplementationOnce(async () => ({ thread: ctx.policy.thread }));
+    ctx.request.mockImplementationOnce(async () => {
+      ctx.notify({ method: 'item/started', params: { threadId: 'native', turnId: nextRoot.id, item: { type: 'enteredReviewMode', id: 'next-enter', review: 'current changes' } } });
+      ctx.notify({ method: 'turn/completed', params: { threadId: 'native', turn: { ...nextRoot, status: 'completed' } } });
+      ctx.notify({ method: 'turn/started', params: { threadId: 'native', turn: { ...root, id: 'autonomous' } } });
+      return { reviewThreadId: 'native', turn: nextRoot };
+    });
+    await ctx.adapter.executeNativeControl('local', { type: 'review', target: { type: 'uncommittedChanges' } });
+    ctx.request.mockImplementationOnce(async () => ({}));
+    await ctx.adapter.interrupt('local');
+    expect(ctx.request.mock.calls.at(-1)).toEqual(['turn/interrupt', { threadId: 'native', turnId: 'autonomous' }]);
+  } finally { await ctx.adapter.dispose('local'); }
+});
