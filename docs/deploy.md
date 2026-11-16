@@ -111,8 +111,11 @@ WDCC_IDLE_DISPOSE_MIN=30
 ```
 
 正式发布使用 `pnpm release`。脚本要求工作区干净且当前 commit 已推送，
-在临时检出中安装依赖并构建，写入 `/opt/webdcc/releases/<commit>`，切换
+在临时检出中安装依赖并构建，每次写入独立的
+`/opt/webdcc/releases/<commit>-<release-id>`，切换
 `/opt/webdcc/current` 后只重启 `webdcc.service`，失败会恢复上一个版本。
+既有产物不会因同 commit 重发而被覆盖；激活前取消或复制失败会清理本次目录。
+manifest 和发布日志保留源码 commit，目录中的 release-id 区分不同构建。
 
 ## 运行注意事项
 
