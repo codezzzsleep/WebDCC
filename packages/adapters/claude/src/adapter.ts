@@ -197,6 +197,8 @@ type PermissionIdentityOptions = Pick<Parameters<CanUseTool>[2], 'signal'> & Par
 interface SessionRuntime {
   generation: number;
   permissionRequestIds: Set<string>;
+  conversationId?: string;
+  resetUuids?: Set<string>;
   stdio: ClaudeStdioCaptureState;
   nativeOptions: ClaudeNativeOptions;
   state: ClaudeNativeState;
@@ -771,7 +773,7 @@ export class ClaudeAdapter implements AgentAdapter {
 
   private nativeRevision(runtime: SessionRuntime): string {
     return createHash('sha256').update(JSON.stringify({ generation: this.generations.get(runtime.launchOpts.sessionId),
-      runtime: runtime.launchOpts.runtime, nativeId: runtime.nativeId, model: runtime.model ?? runtime.launchOpts.model,
+      runtime: runtime.launchOpts.runtime, nativeId: runtime.nativeId, conversationId: runtime.conversationId, model: runtime.model ?? runtime.launchOpts.model,
       effort: runtime.launchOpts.reasoningEffort, accessMode: runtime.launchOpts.accessMode, nativeOptions: runtime.nativeOptions,
       capabilities: runtime.capabilities })).digest('hex');
   }
@@ -1101,6 +1103,26 @@ export class ClaudeAdapter implements AgentAdapter {
     if (runtime === undefined) return;
 
     switch (message.type) {
+      case 'conversation_reset': {
+        if (typeof message.new_conversation_id !== 'string' || message.new_conversation_id.length === 0 || typeof message.uuid !== 'string' || message.uuid.length === 0) {
+          this.emit(sessionId, { type: 'item.complete', itemKey: `invalid-reset-${runtime.frameSeq}`, kind: 'unknown', data: { nativeType: message.type }, native: message, scope: 'session' });
+          return;
+        }
+        runtime.resetUuids ??= new Set();
+        if (!runtime.resetUuids.has(message.uuid)) {
+          runtime.resetUuids.add(message.uuid);
+          runtime.conversationId = message.new_conversation_id;
+          runtime.content = new ClaudeContentReducer(runtime.frameSeq);
+        }
+        this.emit(sessionId, { type: 'item.complete', itemKey: `conversation-reset-${message.uuid}`, kind: 'notice', scope: 'session', native: message,
+          data: { level: 'info', text: '已开始新的对话', nativeType: 'conversation_reset', contextReset: {
+            id: message.new_conversation_id, uuid: message.uuid,
+            ...(message.trigger === undefined ? {} : { trigger: message.trigger }),
+            ...(message.user_message_uuid === undefined ? {} : { userMessageUuid: message.user_message_uuid }),
+            ...(message.timestamp === undefined ? {} : { timestamp: message.timestamp }),
+          } } });
+        return;
+      }
       case 'system': {
         runtime.state.system(message);
         // Once the native level signal is available, edges are presentation

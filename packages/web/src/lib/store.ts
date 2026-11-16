@@ -14,6 +14,8 @@ export interface SessionMeta {
   workspaceId: string;
   agent: string;
   title?: string;
+  nativeId?: string;
+  conversation?: SessionDto['conversation'];
   status: 'idle' | 'running' | 'waiting' | 'error';
   updatedAt: string;
   pinned?: boolean;
@@ -250,6 +252,13 @@ export class AppStore {
         void cache.setMeta('feedSeq', this.feedSeq);
         const existing = this.sessions.get(message.sessionId);
         const patch = message.patch as Record<string, unknown>;
+        const incomingConversation = patch['conversation'] as SessionDto['conversation'];
+        if (incomingConversation !== undefined && incomingConversation.resetSeq < (existing?.conversation?.resetSeq ?? 0)) break;
+        if (incomingConversation !== undefined && incomingConversation.uuid !== existing?.conversation?.uuid) {
+          this.hot.delete(message.sessionId);
+          this.conversationHistory.delete(message.sessionId);
+          for (const key of this.derived.keys()) if (key.startsWith(`${message.sessionId}:`)) this.derived.delete(key);
+        }
         const next: SessionMeta = {
           ...(existing ?? {
             id: message.sessionId,
@@ -262,7 +271,9 @@ export class AppStore {
           ...(patch['agent'] === undefined ? {} : { agent: String(patch['agent']) }),
           ...(patch['workspaceId'] === undefined ? {} : { workspaceId: String(patch['workspaceId']) }),
           ...(patch['createdAt'] === undefined ? {} : { createdAt: String(patch['createdAt']) }),
-          ...(patch['title'] === undefined ? {} : { title: String(patch['title']) }),
+          ...(patch['title'] === undefined ? {} : { title: patch['title'] === null ? undefined : String(patch['title']) }),
+          ...(typeof patch['nativeId'] === 'string' ? { nativeId: patch['nativeId'] } : {}),
+          ...(incomingConversation === undefined ? {} : { conversation: incomingConversation }),
           ...(patch['status'] === undefined ? {} : { status: patch['status'] as SessionMeta['status'] }),
           ...(patch['archived'] === undefined ? {} : { archived: Boolean(patch['archived']) }),
           ...(patch['pinned'] === undefined ? {} : { pinned: Boolean(patch['pinned']) }),
@@ -438,6 +449,18 @@ export class AppStore {
     const seen = map.has(event.seq);
     map.set(event.seq, event);
     this.events.set(event.sessionId, map);
+    if (event.kind === 'notice') {
+      const reset = (event.data as EventData['notice']).contextReset;
+      const session = this.sessions.get(event.sessionId);
+      if (reset !== undefined && event.seq > (session?.conversation?.resetSeq ?? 0)) {
+        this.hot.delete(event.sessionId);
+        for (const key of this.derived.keys()) if (key.startsWith(`${event.sessionId}:`)) this.derived.delete(key);
+        this.sessions.set(event.sessionId, { ...session, id: event.sessionId, workspaceId: session?.workspaceId ?? '',
+          agent: session?.agent ?? 'claude-code', status: session?.status ?? 'idle', updatedAt: event.at, title: undefined,
+          conversation: { ...reset, resetSeq: event.seq, ...(session?.nativeId === undefined ? {} : { previousNativeId: session.nativeId }) } });
+        this.conversationHistory.delete(event.sessionId);
+      }
+    }
     if (event.kind === 'question') {
       const data = event.data as EventData['question'];
       const latest = this.latestInteractionEvent(event.sessionId, 'answer', data.questionId);
@@ -487,6 +510,7 @@ export class AppStore {
   }
 
   isInteractionSynced(sessionId: string, op: 'answer' | 'approve', id: string): boolean {
+    if (this.isViewingConversationHistory(sessionId)) return false;
     if (!this.isSessionSynced(sessionId)) return false;
     const event = this.latestInteractionEvent(sessionId, op, id);
     const throughSeq = this.getSessionSync(sessionId).throughSeq;
@@ -540,6 +564,10 @@ export class AppStore {
       const detail = await api.session(sessionId);
       const live = this.sessions.get(sessionId);
       const next = live !== beforeDetail && live !== undefined ? { ...detail, ...live } : detail;
+      if ((detail.conversation?.resetSeq ?? 0) > (next.conversation?.resetSeq ?? 0)) {
+        next.conversation = detail.conversation;
+        next.title = detail.title;
+      }
       this.sessions.set(sessionId, next as SessionMeta);
       serverLastSeq = detail.lastSeq;
       if (Number.isSafeInteger(serverLastSeq) && serverLastSeq! >= 0) {
@@ -620,6 +648,36 @@ export class AppStore {
     return [...map.values()].sort((a, b) => a.seq - b.seq);
   }
 
+  private conversationHistory = new Set<string>();
+  isViewingConversationHistory(sessionId: string): boolean { return this.conversationHistory.has(sessionId); }
+  viewConversationHistory(sessionId: string, history: boolean): void {
+    if (history) this.conversationHistory.add(sessionId); else this.conversationHistory.delete(sessionId);
+    this.notify();
+  }
+  getConversationEvents(sessionId: string, history = false): StoredEvent[] {
+    const events = this.getEvents(sessionId);
+    const session = this.sessions.get(sessionId);
+    const boundary = session?.conversation;
+    if (boundary === undefined) return history ? [] : events;
+    const interactionKey = (event: StoredEvent): string | undefined => {
+      if (event.kind === 'question') {
+        const question = event.data as EventData['question'];
+        return JSON.stringify(['question', question.questionId, question.groupId ?? null]);
+      }
+      if (event.kind === 'approval.request' || event.kind === 'approval.resolved') return JSON.stringify(['approval', (event.data as { approvalId: string }).approvalId]);
+      return undefined;
+    };
+    const priorInteractions = new Set(events.filter(event => event.seq < boundary.resetSeq).map(interactionKey).filter(key => key !== undefined));
+    return events.filter(event => {
+      const native = event.native as { session_id?: unknown } | undefined;
+      const oldNative = typeof native?.session_id === 'string' && native.session_id === boundary.previousNativeId
+        && session?.nativeId !== undefined && session.nativeId !== boundary.previousNativeId;
+      const interaction = interactionKey(event);
+      const priorRequest = interaction !== undefined && priorInteractions.has(interaction);
+      return history ? event.seq < boundary.resetSeq || oldNative || priorRequest : event.seq > boundary.resetSeq && !oldNative && !priorRequest;
+    });
+  }
+
   getPending(sessionId: string): PendingMessage[] {
     const sent = new Set(this.getEvents(sessionId).filter(event => event.kind === 'user.message').map(event => (event.data as { clientCommandId?: string }).clientCommandId));
     const authoritative = this.durableQueue.get(sessionId);
@@ -657,11 +715,14 @@ export class AppStore {
 
   /** 按 turnId 分组，供虚拟列表渲染 */
   getTurns(sessionId: string): TurnModel[] {
-    const cached = this.derived.get(sessionId);
+    const history = this.isViewingConversationHistory(sessionId);
+    const boundary = this.sessions.get(sessionId)?.conversation;
+    const cacheKey = `${sessionId}:${history ? 'history' : 'current'}:${boundary?.uuid ?? ''}`;
+    const cached = this.derived.get(cacheKey);
     if (cached !== undefined && cached.version === this.version) return cached.turns;
 
-    const events = this.getEvents(sessionId);
-    const hot = this.getHot(sessionId);
+    const events = this.getConversationEvents(sessionId, history);
+    const hot = history ? [] : this.getHot(sessionId);
     const byTurn = new Map<string, TurnModel>();
     const order: string[] = [];
     // 轮次之外的事件（turnId 为 null）不构成一轮，只在轨迹里显示（F4）
@@ -695,7 +756,7 @@ export class AppStore {
       turn.hot.push(item);
     }
     this.orphans.set(sessionId, orphans);
-    for (const pending of this.getPending(sessionId)) {
+    for (const pending of history ? [] : this.getPending(sessionId)) {
       const turnId = pending.turnId ?? `pending-${pending.clientCommandId}`;
       const existing = byTurn.get(turnId);
       if (existing !== undefined) { existing.pendingInputs = [...existing.pendingInputs ?? [], pending]; continue; }
@@ -722,8 +783,10 @@ export class AppStore {
       const uncertain = (this.durableQueue.get(sessionId) ?? []).some(row => row.turnId === turnId && row.state === 'uncertain');
       return { ...turn, ...view, turnId, ...(uncertain ? { commandState: 'uncertain' as const } : {}) };
     });
-    this.derived.set(sessionId, { version: this.version, turns });
-    return turns;
+    const visible = boundary === undefined || history ? turns : turns.filter(turn => turn.legacyUser !== undefined || turn.pending !== undefined
+      || turn.answer.length > 0 || turn.steps.length > 0 || turn.live.length > 0 || turn.goal !== undefined || turn.plan !== undefined);
+    this.derived.set(cacheKey, { version: this.version, turns: visible });
+    return visible;
   }
 
   // ---------- 命令 ----------
@@ -910,6 +973,7 @@ export class AppStore {
   /** Resolve only after IndexedDB admits the exact command. A network ACK
    * is separate; offline acceptance still retains the complete input. */
   async sendStructuredMessage(sessionId: string, text: string, contentParts: InputContent, intent: InputIntent = 'send', expectedTurnId?: string): Promise<{ commandId: string }> {
+    if (this.isViewingConversationHistory(sessionId)) throw new Error('正在查看此前对话，请先返回当前对话');
     if (!isInputContent(contentParts, text)) throw new Error('结构化输入与正文不一致或含有未授权字段');
     const commandId = ulid();
     const pending: PendingMessage = { clientCommandId: commandId, text, contentParts: structuredClone(contentParts),

@@ -363,6 +363,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   const submit = async (intent: ComposerIntent = running ? 'queue' : 'send'): Promise<void> => {
     if (busy) return;
+    if (sessionId !== null && store.isViewingConversationHistory(sessionId)) { setError('正在查看此前对话，请先返回当前对话'); return; }
     setError(null); setBusy(true);
     const expectedTurnId = intent === 'steer' ? store.getTurns(sessionId ?? '').findLast(turn => ['starting', 'running', 'waiting'].includes(turn.state) && turn.pending === undefined)?.turnId : undefined;
     try {
@@ -487,7 +488,8 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const stats = sessionId === null ? null : statsFor(sessionId);
   const sendIntent: ComposerIntent = running ? 'queue' : 'send';
   const blockedReason = parseSlashInput(text) ? controls.input.commandReason() : controls.input.reason(sendIntent);
-  const sendDisabled = busy || blockedReason !== undefined;
+  const viewingHistory = sessionId !== null && store.isViewingConversationHistory(sessionId);
+  const sendDisabled = busy || blockedReason !== undefined || viewingHistory;
 
   return (
     <div className="composer-wrap" data-testid="composer">
@@ -521,7 +523,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           className="composer-input"
           placeholder={`发消息给 ${agentText(agent).name}，/ 调用它的指令，@ 引用文件或会话`}
           value={text}
-          disabled={controls.drafts.loading() || controls.drafts.snapshot()?.sessionId !== draftSessionId}
+          disabled={viewingHistory || controls.drafts.loading() || controls.drafts.snapshot()?.sessionId !== draftSessionId}
           rows={Math.min(10, Math.max(isSession ? 1 : 2, text.split('\n').length))}
           onChange={(event) => updateText(event.target.value)}
           onKeyDown={(event) => {
@@ -855,7 +857,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               >
                 <Icon name="arrowUp" size={17} strokeWidth={2.2} />
               </button>
-              {capabilitiesRef.current.intents.includes('steer') ? <button type="button" className="btn" onClick={() => void submit('steer')} disabled={busy || controls.input.reason('steer') !== undefined} title={controls.input.reason('steer')} data-testid="steer-send-button">介入当前轮</button> : null}
+              {capabilitiesRef.current.intents.includes('steer') ? <button type="button" className="btn" onClick={() => void submit('steer')} disabled={viewingHistory || busy || controls.input.reason('steer') !== undefined} title={controls.input.reason('steer')} data-testid="steer-send-button">介入当前轮</button> : null}
               <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label="强制打断" title="强制打断" data-testid="stop-button">
                 <Icon name="stop" size={16} />
               </button>
@@ -1015,7 +1017,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 }
 
 function statsFor(sessionId: string): string {
-  const events = store.getEvents(sessionId);
+  const events = store.getConversationEvents(sessionId);
   // "N 轮"只统计包含 user.message 的轮次（F4）
   const turns = new Set(
     events.filter((event) => event.kind === 'user.message' && event.turnId !== null).map((event) => event.turnId as string),

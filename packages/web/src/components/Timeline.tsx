@@ -29,10 +29,12 @@ interface TimelineProps {
 
 export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compact = false }: TimelineProps): React.ReactElement {
   const turns = useTurns(sessionId);
+  const conversation = store.getSession(sessionId)?.conversation;
+  const history = store.isViewingConversationHistory(sessionId);
   const hotCount = store.getHot(sessionId).length;
   const standalone = new Map<string, StoredEvent>();
-  for (const event of store.getEvents(sessionId)) {
-    if (event.kind === 'notice' && (event.data as EventData['notice']).nativeType === 'slash.command') standalone.set(event.itemKey, event);
+  for (const event of store.getConversationEvents(sessionId, history)) {
+    if (event.kind === 'notice' && ['slash.command', 'conversation_reset_projection_failed'].includes((event.data as EventData['notice']).nativeType ?? '')) standalone.set(event.itemKey, event);
     if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
     if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
     if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
@@ -40,6 +42,8 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [stickToBottom, setStickToBottom] = useState(true);
+
+  useEffect(() => { setExpanded({}); setStickToBottom(true); }, [sessionId, conversation?.uuid, history]);
 
   useEffect(() => {
     if (!performance.getEntriesByName('wdcc:first-turns').length && turns.length > 0) {
@@ -71,6 +75,12 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   return (
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      {conversation !== undefined ? <div className="timeline-inner" role="status" data-testid="conversation-boundary">
+        <span>{history ? `此前对话${conversation.previousTitle ? ` · ${conversation.previousTitle}` : ''}（只读）` : '当前对话'}</span>
+        <button type="button" className="btn ghost" onClick={() => store.viewConversationHistory(sessionId, !history)}>
+          {history ? '返回当前对话' : '查看此前对话'}
+        </button>
+      </div> : null}
       {[...standalone.values()].filter(event => event.turnId === null).map(event => <div key={event.itemKey} className="timeline-inner">
         {event.kind === 'notice' ? <pre className="notice-card" style={{ whiteSpace: 'pre-wrap' }}>{(event.data as EventData['notice']).text}</pre> : event.kind === 'question' ? <QuestionCard event={event} data={event.data as EventData['question']} /> : <ApprovalCard event={event} data={event.data as EventData['approval.request']} />}
       </div>)}

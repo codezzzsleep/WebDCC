@@ -144,7 +144,9 @@ export type ClientMessage = HelloMessage | SubscribeMessage | UnsubscribeMessage
 export interface FeedPatch {
   permissions?: PermissionState;
   queueRevision?: number;
-  title?: string;
+  title?: string | null;
+  nativeId?: string;
+  conversation?: SessionDto['conversation'];
   /** 创建事件里带上会话身份，便于新浏览器只靠 feed 重建侧边栏 */
   agent?: string;
   createdAt?: string;

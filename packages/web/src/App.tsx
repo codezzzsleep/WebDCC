@@ -200,7 +200,7 @@ function NewSessionPage(): React.ReactElement {
 }
 
 function lastFinalText(sessionId: string): string {
-  const final = [...store.getEvents(sessionId)]
+  const final = [...store.getConversationEvents(sessionId)]
     .reverse()
     .find((event) => event.kind === 'assistant.message' && (event.data as EventData['assistant.message']).phase !== 'interim');
   return final === undefined ? '' : (final.data as EventData['assistant.message']).text;

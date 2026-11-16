@@ -15,11 +15,11 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
   const session = store.getSession(sessionId);
   const turns = store.getTurns(sessionId);
   const plan = [...turns].reverse().find((turn) => turn.plan !== undefined)?.plan;
-  const goalData = currentGoal(store.getEvents(sessionId));
+  const goalData = currentGoal(store.getConversationEvents(sessionId));
   const showGoal = goalData !== undefined && goalData.status !== 'cleared' && goalData.objective !== '';
-  const subagents = currentCodexSubagents(store.getEvents(sessionId));
+  const subagents = currentCodexSubagents(store.getConversationEvents(sessionId));
   const recoveryText = codexSubagentRecoveryText(turns.at(-1)?.state, subagents);
-  if (plan === undefined && !showGoal && subagents.length === 0) return null;
+  if (store.isViewingConversationHistory(sessionId) || plan === undefined && !showGoal && subagents.length === 0) return null;
 
   const agentName = agentText(session?.agent ?? '').name;
   const items = plan ?? [];
