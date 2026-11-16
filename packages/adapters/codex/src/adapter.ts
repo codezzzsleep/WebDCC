@@ -83,10 +83,16 @@ interface ReasoningSummary {
   nativeTurnId: string | null;
   parts: Map<number, string>;
   started: boolean;
+  content?: Map<number, string>;
 }
 
 function reasoningText(summary: ReasoningSummary): string {
   return [...summary.parts].sort(([a], [b]) => a - b).map(([, text]) => text).join('\n');
+}
+
+function reasoningData(summary: ReasoningSummary): EventData['reasoning'] {
+  return { text: reasoningText(summary), ...(summary.content?.size ? { nativeContent:
+    [...summary.content].sort(([a], [b]) => a - b).map(([index, text]) => ({ index, text })) } : {}) };
 }
 
 function completeReasoning(runtime: SessionRuntime, key: string): void {
@@ -238,6 +244,7 @@ export type CodexRoute =
   | 'agentMessage/delta'
   | 'reasoning/summaryTextDelta'
   | 'reasoning/summaryPartAdded'
+  | 'reasoning/textDelta'
   | 'commandExecution/outputDelta'
   | 'tokenUsage'
   | 'title'
@@ -269,6 +276,8 @@ export function routeNotification(method: string): CodexRoute {
       return 'reasoning/summaryTextDelta';
     case 'item/reasoning/summaryPartAdded':
       return 'reasoning/summaryPartAdded';
+    case 'item/reasoning/textDelta':
+      return 'reasoning/textDelta';
     case 'item/commandExecution/outputDelta':
       return 'commandExecution/outputDelta';
     case 'thread/tokenUsage/updated':
@@ -310,7 +319,6 @@ export function routeNotification(method: string): CodexRoute {
     case 'remoteControl/status/changed':
     case 'item/commandExecution/terminalInteraction':
     case 'item/mcpToolCall/progress':
-    case 'item/reasoning/textDelta':
     case 'account/gatewayOAuth/changed':
     case 'account/login/completed':
     case 'account/updated':
@@ -436,7 +444,9 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
         return { text: String(item['text'] ?? ''), phase, ...(nativePhase === undefined ? {} : { nativePhase }) };
       }
     case 'reasoning':
-      return { text: Array.isArray(item['summary']) ? item['summary'].filter((part): part is string => typeof part === 'string').join('\n') : '' };
+      return { text: Array.isArray(item['summary']) ? item['summary'].filter((part): part is string => typeof part === 'string').join('\n') : '',
+        ...(Array.isArray(item['content']) && item['content'].length > 0 ? { nativeContent:
+          item['content'].flatMap((text, index) => typeof text === 'string' ? [{ index, text }] : []) } : {}) };
     case 'commandExecution':
       return {
         command: String(item['command'] ?? ''),
@@ -1419,6 +1429,13 @@ export class CodexAdapter implements AgentAdapter {
         const nativeTurnId = turn.id ?? this.nativeTurnId(params) ?? runtime.turnId;
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
         const generationMs = endGeneration(runtime, nativeTurnId ?? undefined, this.now());
+        for (const [key, summary] of runtime.reasoningSummaries ?? []) {
+          if (summary.nativeTurnId === nativeTurnId && summary.content?.size) {
+            this.emit(sessionId, { type: 'item.complete', itemKey: (JSON.parse(key) as [unknown, string])[1], kind: 'reasoning',
+              nativeTurnId: nativeTurnId ?? undefined, data: { ...reasoningData(summary), incomplete: true }, native: params });
+            completeReasoning(runtime, key);
+          }
+        }
         if (nativeTurnId != null) for (const event of (runtime.plans ??= new CodexPlanStreams()).endTurn(nativeTurnId)) {
           this.emit(sessionId, { ...event, native: params });
         }
@@ -1464,7 +1481,11 @@ export class CodexAdapter implements AgentAdapter {
           };
           summaries.set(key, summary);
           summary.started = true;
-          data = { text: reasoningText(summary) };
+          const content = summary.content ??= new Map();
+          for (const [index, text] of (Array.isArray(item['content']) ? item['content'] : []).entries()) {
+            if (typeof text === 'string' && !content.has(index)) content.set(index, text);
+          }
+          data = reasoningData(summary);
         }
         this.emit(sessionId, {
           type: 'item.start',
@@ -1511,9 +1532,13 @@ export class CodexAdapter implements AgentAdapter {
           });
           return;
         }
-        const data = mapItemData(item);
+        let data = mapItemData(item);
         if (type === 'reasoning') {
           const key = JSON.stringify([this.nativeTurnId(params) ?? runtime.turnId, itemId]);
+          const pending = runtime.reasoningSummaries?.get(key);
+          if (pending?.content?.size && (!Array.isArray(item['content']) || item['content'].length === 0)) {
+            data = { ...(data as EventData['reasoning']), nativeContent: reasoningData(pending).nativeContent, incomplete: true };
+          }
           completeReasoning(runtime, key);
         }
         // 路径统一成相对工作区（改动卡片与 diff 标签都用相对路径）
@@ -1546,13 +1571,15 @@ export class CodexAdapter implements AgentAdapter {
         this.emit(sessionId, { type: 'item.delta', itemKey: itemId, field: 'text', append: String(params['delta'] ?? ''), nativeTurnId });
         return;
       }
-      case 'reasoning/summaryTextDelta': {
+      case 'reasoning/summaryTextDelta':
+      case 'reasoning/textDelta': {
         const itemId = String(params['itemId'] ?? '');
         const nativeTurnId = this.nativeTurnId(params) ?? runtime.turnId;
         const key = JSON.stringify([nativeTurnId, itemId]);
         if (runtime.completedReasoning?.has(key)) return;
-        const index = params['summaryIndex'] ?? 0;
-        if (!Number.isSafeInteger(index) || Number(index) < 0) {
+        const body = route === 'reasoning/textDelta';
+        const index = body ? params['contentIndex'] : params['summaryIndex'] ?? 0;
+        if (!Number.isSafeInteger(index) || Number(index) < 0 || body && Number(index) > 0xffff_ffff) {
           this.emit(sessionId, { type: 'item.complete', itemKey: `invalid-reasoning-index-${frameKey}`, kind: 'unknown',
             data: { nativeType: method }, native: params, nativeTurnId: nativeTurnId ?? undefined });
           return;
@@ -1561,12 +1588,13 @@ export class CodexAdapter implements AgentAdapter {
         const summaries = runtime.reasoningSummaries ??= new Map();
         const summary = summaries.get(key) ?? { nativeTurnId, started: false, parts: new Map<number, string>() };
         summaries.set(key, summary);
-        summary.parts.set(Number(index), `${summary.parts.get(Number(index)) ?? ''}${String(params['delta'] ?? '')}`);
+        const parts = body ? summary.content ??= new Map<number, string>() : summary.parts;
+        parts.set(Number(index), `${parts.get(Number(index)) ?? ''}${String(params['delta'] ?? '')}`);
         if (!summary.started) {
           summary.started = true;
           this.emit(sessionId, { type: 'item.start', itemKey: itemId, kind: 'reasoning', data: { text: '' }, nativeTurnId: nativeTurnId ?? undefined });
         }
-        this.emit(sessionId, { type: 'item.update', itemKey: itemId, nativeTurnId: nativeTurnId ?? undefined, data: { text: reasoningText(summary) } });
+        this.emit(sessionId, { type: 'item.update', itemKey: itemId, nativeTurnId: nativeTurnId ?? undefined, data: reasoningData(summary) });
         return;
       }
       case 'reasoning/summaryPartAdded': {
@@ -1585,7 +1613,7 @@ export class CodexAdapter implements AgentAdapter {
           summaries.set(key, summary);
           if (!summary.parts.has(Number(index))) summary.parts.set(Number(index), '');
           if (summary.started) this.emit(sessionId, { type: 'item.update', itemKey: itemId, nativeTurnId: nativeTurnId ?? undefined,
-            data: { text: reasoningText(summary) } });
+            data: reasoningData(summary) });
         }
         // 已知通知：并入 reasoning，不算 unknown（F12）
         this.emit(sessionId, {
