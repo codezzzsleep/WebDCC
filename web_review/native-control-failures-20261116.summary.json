@@ -1,0 +1,81 @@
+{
+  "issue": 266,
+  "baselineMain": "726e8c18aac00c62607ea27eee6432e1cb78e880",
+  "recordedAt": "2026-11-16T16:08:05.618261+00:00",
+  "behavior": "A late unavailable control error cannot dispose a replacement runtime; current failure cleanup stays in the serialized operation",
+  "verification": {
+    "before": {
+      "failed": 9,
+      "scope": "three controlled Agent identities x three settings operations; all new runtimes disposed"
+    },
+    "intermediateCleanupBoundary": {
+      "passed": 12,
+      "failed": 1,
+      "scope": "next queued control began before awaited disposal returned"
+    },
+    "source": {
+      "passed": 42,
+      "files": 6
+    },
+    "chromium": {
+      "passed": 2,
+      "files": 2
+    },
+    "workspaceTypecheck": "passed sequentially",
+    "scriptsTypecheck": "passed",
+    "changedFileLint": "passed"
+  },
+  "sourceFiles": {
+    "packages/server/src/manager.ts": "1d6626d386f525ddb10ab18f95f936baf9d073541e19b9940581223b45bfe0e7",
+    "packages/server/test/control-runtime-fence.spec.ts": "08535b389ccf94def4407da1d1ecd9ca4e0b5259084c580cf9f08d682600da8e",
+    "browser-tests/control-runtime-fence.spec.ts": "216db45b5a1f3801378d61bf8d44ca0b910113ec87601fec1de29257ca503a04"
+  },
+  "logHashes": {
+    "control-fence-before.log": "c0e801dc2000fd31827429fd9eacf679d81c4341727be537b2e95e9452d0fc65",
+    "control-fence-first.log": "cb86dc395cc51a7efcbd35c88384b6eff7b552bf0cb1e6c753c3319da89d2d3f",
+    "control-fence-cleanup-before.log": "a9c299788abd33522d0d24cb0911495ca2b2dce7fe11a6c05ab7486d21b0c5bc",
+    "control-fence-regression.log": "8d6a768e29569a62f33e4909a7e390e95aa12e7d575edc1b22cf188b98d297e1",
+    "control-fence-browser.log": "28cdb5225a95e94ea9d128024e199bcb4168ec6970c59cee81ccfbcc4259821e",
+    "control-fence-typecheck.log": "bfde5de559303021061e98f6514d8d575e2acbfe282f6fa4a309ea46a82cd99c",
+    "control-fence-scripts-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "control-fence-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "rawEvidenceHashes": {
+    "control-fence-before/claude-code-set-access-mode.json": "10a3d40bb417f5d89060f1826051e0ca8ff79c0b5c98955e9ef59e44aa176b9d",
+    "control-fence-before/claude-code-set-model.json": "77d3251f8d30b3aa724f2f2467c8d169b7c6b2640e897182141cb020d5cd3b29",
+    "control-fence-before/claude-code-set-reasoning-effort.json": "9bd38e379ae839eef13cd316d0b069704b3cf9f845bf2d7291d9dbd8466e941f",
+    "control-fence-before/codex-set-access-mode.json": "fe406464de5ce36eb2f13be5db3e7ada4506c8726db041529216f7669b437ccb",
+    "control-fence-before/codex-set-model.json": "113f0357e57670ce3ea5bb1639446b7fb052b5f6acf3a8376a3082c33c34efa7",
+    "control-fence-before/codex-set-reasoning-effort.json": "0f85c272584e26ae13fc3ec69eb460f504c33786b33595e1f32ca6b6b8ff00fc",
+    "control-fence-before/dsh-set-access-mode.json": "d584a860b141350aae5ee760619effd9dba364e4ab2be3d56665063f6c674bb8",
+    "control-fence-before/dsh-set-model.json": "e7a0f59171c1646cad00d5e683f3daee933139f858d3385fee4ef4c1809a9de7",
+    "control-fence-before/dsh-set-reasoning-effort.json": "46d757d5ef6913fe0a4a51887789b0ac62506b681125ddf5bd7a4d3c212c760b",
+    "control-fence-after/browser-control-recovered.png": "106baacc83efc8bfe718682a7ce61832949c1bf9c1feec1f2f6880cfa494691f",
+    "control-fence-after/browser-control-stream.json": "6ab33975a8f75e1be89e53c787c8960c52e97efeb03ac3341e09d610f1219eb7",
+    "control-fence-after/claude-code-set-access-mode.json": "9de2ec1aa04c5286a6f20a28c63dc2697f782744218dbb17e81697b0be182ab3",
+    "control-fence-after/claude-code-set-model.json": "93cb3b1568c97e244155c11a270dae9d373c4a7bbc74210ff1ae3d6881177b51",
+    "control-fence-after/claude-code-set-reasoning-effort.json": "2c3125df1e0003e9047d8835a44b6c0e7b6765e6f8ff4693037a49a69330e702",
+    "control-fence-after/codex-set-access-mode.json": "6b267af552afbcd803a6945f5a6ccd612803390a680078b35906c7996b859335",
+    "control-fence-after/codex-set-model.json": "fd27c0c6a91c3fd2acaf9343082cbd7c1e3e2eab65f2b7d20bd202196bac8fd5",
+    "control-fence-after/codex-set-reasoning-effort.json": "5df038007a954816b39b3ac1973d1845cf2665670f84287c55f32bf99244fb3b",
+    "control-fence-after/dsh-set-access-mode.json": "ddd3dc04da226d98072f8201ea2b2c7e8e6e37424e154283e34e3c3abdf16447",
+    "control-fence-after/dsh-set-model.json": "c3c39b8e6880a727397c39c750a5c629b9def8b357b1b308fecfd1f1936d54af",
+    "control-fence-after/dsh-set-reasoning-effort.json": "33a1b7993e2fc6bf28ac8f5a876edc0268b7c870450ce6f865a9532821d0910e"
+  },
+  "evidenceScope": {
+    "controlledAdapter": "fake-1.0.0",
+    "actualLocal": [
+      "manager",
+      "SQLite",
+      "HTTP",
+      "WebSocket",
+      "Chromium",
+      "application UI"
+    ],
+    "newOfficialNativeCalls": 0,
+    "newProviderCalls": 0,
+    "newPaidModelCalls": 0,
+    "newProductionCalls": 0
+  },
+  "remaining": "Independent source acceptance, review/merge/Issue closure and complete three-Agent target-platform verification/deployment by existing owners; full #45/#46/#47/#42 remain."
+}
