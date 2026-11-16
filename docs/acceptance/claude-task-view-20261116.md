@@ -51,6 +51,10 @@ fixture sent through the production handler; it is not a live model or actual
 ledger: four original source regressions failed; browser navigation used an
 unbroadcast synthetic title and timed out before the switch. The final test
 uses actual session identity links and does not change product behavior.
+An additional original reconnect assertion compared a fixed total receive
+sequence while other events advanced it. The final assertion binds recovery to
+the stored task message's sequence and checks its run and visible description;
+the original failure is retained rather than credited as a pass.
 
 The compatible 156-frame real Claude model/native trajectory is reused to
 check existing main text/file/tool behavior. New model requests are zero. That

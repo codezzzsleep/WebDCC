@@ -80,7 +80,9 @@ it('Claude task hierarchy, run outputs and unknown states survive source UI refr
     for (const client of ctx.app.websocketServer.clients) client.terminate();
     feed({ type: 'system', subtype: 'task_updated', session_id: 'controlled-native', uuid: 'reconnected-description', task_id: 'first', run_id: '002',
       patch: { description: 'FIRST RECOVERED TASK' } });
-    await expect.poll(() => throughSeq()).toBe(ctx.store.lastSeq(first.sessionId));
+    const recoveredEvent = ctx.store.allEvents(first.sessionId).findLast(event => (event.native as { uuid?: string } | undefined)?.uuid === 'reconnected-description');
+    expect(recoveredEvent).toBeDefined();
+    await expect.poll(() => throughSeq()).toBeGreaterThanOrEqual(recoveredEvent!.seq);
     await expect.poll(() => panel.textContent()).toContain('FIRST RECOVERED TASK');
     if (await panel.locator('details').first().getAttribute('open') === null) await panel.locator('summary').first().click();
     await page.screenshot({ path: '/root/.codex/project-state/WebDCC/claude-native-tasks-20261116/view-desktop.png', fullPage: true });
