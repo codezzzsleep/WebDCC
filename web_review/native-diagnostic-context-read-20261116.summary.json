@@ -1,0 +1,87 @@
+{
+  "issue": 213,
+  "parents": [
+    56,
+    57,
+    42
+  ],
+  "related": [
+    200,
+    211
+  ],
+  "base": "053d6c9a8ef9a2e5b7c04b69dca7ab0178eb7088",
+  "at": "2026-11-16T08:13:35.699806+00:00",
+  "scope": "Native diagnostic context files: final nonfollowing/nonblocking open, verified regular FD, read <=64KiB+1 to detect overflow, strict UTF8/JSON, always close owned descriptor; failed context attribution remains explicit/incomplete",
+  "before": {
+    "nativeResponse": "native response",
+    "processExitCodeAfterResponse": null,
+    "modelRecordingExists": false,
+    "recordedRequests": 0,
+    "summaryIncomplete": false
+  },
+  "after": {
+    "nativeResponse": "native response",
+    "processExitCode": 0,
+    "modelRequests": 1,
+    "invalidContextSummaryIncomplete": true,
+    "validRegularContextSummaryIncomplete": false
+  },
+  "verification": {
+    "negative": "1 failed real NativeHTTP FIFO natural-exit assertion; original 0-record incomplete:false proof and owned FIFO retained",
+    "initial": "22 context/nativeHTTP/recorder tests/types/lint passed; then9context and3regular-delay targeted checks passed",
+    "final": "47 source/Nodepreload/HTTP/contextFD/modelproxy/config/recorder checks plus full workspace/scripts types and changed Lint passed",
+    "contextCases": [
+      "FIFO",
+      "missing",
+      "invalidJSON",
+      "invalidUTF8",
+      "oversized",
+      "exact64KiB",
+      "finalsymlink",
+      "socket",
+      "device",
+      "regularJSON",
+      "100 repeated valid+device reads with unchanged process FD count"
+    ],
+    "metadataFixture": "OriginalFIFO context negative/50-row trace retained. Current delay uses a valid ordinary context and four isolated real FS workers held by separate FIFOs; transport/IPCs/count/omission assertions remain."
+  },
+  "runtime": {
+    "node": "26.13.0",
+    "pnpm": "12.18.0"
+  },
+  "officialNativeAgentRuns": 0,
+  "paidProviderCalls": 0,
+  "deployment": "not performed by mainline",
+  "remaining": [
+    "ordinary filesystem I/O latency",
+    "all other diagnostic reads",
+    "global concurrent context/jobs and VM/transport/encoded/child-process memory",
+    "full credentials/cross-frame/persistent-sensitive-data/retention/export policy",
+    "independent three-Agent target native acceptance"
+  ],
+  "sourceSha256": {
+    "docs/diagnostics.md": "6fd847b4e30bb34970e1be19768cc3a96bc65e67f9287cd502afa0fba8b885b4",
+    "packages/server/src/interaction-recorder.ts": "79b4c2871bd6820440c1ecc239b9207d36d0ac834c6560c51add59125f269df7",
+    "packages/server/src/native-diagnostic-context.ts": "4dc34b220e7b0f4fd4732220593317a916fa01ca44e96432fb619fc1b35e7c97",
+    "packages/server/src/native-http-recorder.ts": "ea428db8145e2cef2f7840ad24ed981795bba5a2f22e0065116f175289c3dc69",
+    "packages/server/test/fixtures/native-recorder-context.ts": "ecff74401cd118c904a87b684363cf6d70e299754aa9f4066571d0fcb8825514",
+    "packages/server/test/fixtures/native-recorder-stream.ts": "18da4e1598bed889c74776facde6085672ed3fc2ac2cf73b6267d205317170d0",
+    "packages/server/test/native-diagnostic-context.spec.ts": "87832c1f04f62b80ccad49cee389af14952f0e8734be605396a462c535a76729",
+    "packages/server/test/native-http-recorder.spec.ts": "c7904dabc32af36ae0841d098634791cc7aaa44b1e66d041a64dde235085ca5e",
+    "web_review/IMPLEMENTATION_MATRIX.json": "02f3b75dd63bcbd870f220bb281f8bc8e58410aa37d379741ff718d00231bf53"
+  },
+  "sourceFingerprint": "5804f5ba020555995e550335de35f77d0c7b2cc09d9ef2a63a3a7fde679ce0fa",
+  "evidenceSha256": {
+    "regression-matrix-first.log": "998d5dfe53f806cb371d59f68c6ab0b3fdaae0d45040c5d32e0032c4d4ab5b2d",
+    "regression-before.log": "70da452a862cf4681bef4e320532bb44e6f7af00c48932c0635733ee282c5e30",
+    "typecheck-first.log": "c09a26de87d9063b6d692cca4eaf12ffb3974329af949102054e8ef3293e6b74",
+    "rebased-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "regular-context-delay-first.log": "796412439496fda0e909b7d3215ccd2bdd5d7002fc90a529236443a1bf4c82a1",
+    "regression-first.log": "61aeafde4323f329e1aaf2a112cfd582f29c86b4e71a799b7de49e3b9fa97e1b",
+    "reproduction-before.log": "515e3019d511ca2b5f315313230aba8e6b4ddf97b8aab034d23d3367c43b253f",
+    "regression-second.log": "8a032d55332bdde73ff7d7a856322b7af74d7f36170fbfb2b61a6e7791b52b01",
+    "context-third.log": "c9fd2b6d0185d29e0a8a3476746e1adb9ead66ba2ec05e4106f12005c1ef021d",
+    "lint-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rebased-typecheck.log": "779367712a060df7ca2d807da38d4928babe540f568ee0060bf89dd964d10822"
+  }
+}

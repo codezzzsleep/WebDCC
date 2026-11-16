@@ -1,10 +1,10 @@
 /** Native DSH preload/plugin. Uses the official header hook for attribution,
  * removes its private marker before fetch, and observes actual provider bytes.
  * It never changes model messages, tool declarations or permission decisions. */
-import { readFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { DiagnosticCapture, DiagnosticFileWriter, configureDiagnosticCaptureBudget, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from '@webdcc/model-proxy';
+import { readNativeDiagnosticContext, type NativeDiagnosticContext } from './native-diagnostic-context.js';
 
 export const name = 'webdcc-native-http-recorder';
 const MARKER = 'x-webdcc-native-session';
@@ -95,7 +95,7 @@ if (directory !== undefined && !state[STATE]) {
     const clean = new Request(request, { headers });
     const requestId = randomUUID(); const started = Date.now(); let seq = 0;
     const secrets = diagnosticSecretsFromHeaders(Object.fromEntries(request.headers));
-    const context = nativeId === null ? Promise.resolve(undefined) : readFile(join(directory, `context-${encodeURIComponent(nativeId)}.json`), 'utf8').then(text => JSON.parse(text) as unknown).catch(() => undefined);
+    const context: Promise<NativeDiagnosticContext> = nativeId === null ? Promise.resolve({}) : readNativeDiagnosticContext(join(directory, `context-${encodeURIComponent(nativeId)}.json`));
     const file = join(directory, `model-${encodeURIComponent(nativeId ?? 'unassigned')}.jsonl`);
     const pendingRequest = observation.done.then(async () => {
       let value: unknown;
@@ -104,9 +104,13 @@ if (directory !== undefined && !state[STATE]) {
         value = { requestId, nativeId, logicalId, purpose, method: request.method, url: safeUrl(request.url), headers: safeHeaders(headers, secrets), body: safe.toString('base64'), bytes: requestCapture.bytes, coverage: { truncated: requestCapture.truncated, digestScope: 'redacted', ...(requestCapture.limitReason === undefined ? {} : { limitReason: requestCapture.limitReason }) }, sha256: sha256(safe), digestScope: 'redacted' };
       } finally { requestCapture.release(); }
       // Context I/O and diagnostic persistence never retain raw body chunks.
-      publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date(started).toISOString(), elapsedMs: 0, source: 'model-http', channel: 'request', direction: 'out', context: redactDiagnosticValue(await context, secrets), value });
+      const owner = await context;
+      publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date(started).toISOString(), elapsedMs: 0, source: 'model-http', channel: 'request', direction: 'out', context: redactDiagnosticValue(owner.value, secrets), ...(owner.error === undefined ? {} : { contextError: owner.error }), value });
     }).catch(() => { requestCapture.discard('capture-failed'); requestCapture.release(); recordingFailure(file); });
-    const emit = (channel: string, value: unknown): void => { void pendingRequest.then(async () => publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date().toISOString(), elapsedMs: Date.now() - started, source: 'model-http', channel, direction: 'in', context: redactDiagnosticValue(await context, secrets), value: { requestId, value } })).catch(() => recordingFailure(file)); };
+    const emit = (channel: string, value: unknown): void => { void pendingRequest.then(async () => {
+      const owner = await context;
+      publish(file, { version: 1, runId: logicalId ?? requestId, seq: ++seq, at: new Date().toISOString(), elapsedMs: Date.now() - started, source: 'model-http', channel, direction: 'in', context: redactDiagnosticValue(owner.value, secrets), ...(owner.error === undefined ? {} : { contextError: owner.error }), value: { requestId, value } });
+    }).catch(() => recordingFailure(file)); };
     let terminal = false;
     let omittedChunkEvents = 0;
     let capture: DiagnosticCapture | undefined;
