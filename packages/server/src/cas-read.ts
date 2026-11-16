@@ -31,7 +31,16 @@ export async function openCasObject(objectsPath: string, sha256: string) {
     if (!prefixInfo.isDirectory() || prefixInfo.isSymbolicLink()) throw conflict('附件 CAS 前缀不是普通目录');
     const prefix = await open(join(fdPath(root), sha256.slice(0, 2)), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); handles.push(prefix);
     const path = join(prefixPath, sha256);
-    const file = await open(join(fdPath(prefix), sha256), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); handles.push(file);
+    let file: FileHandle;
+    try { file = await open(join(fdPath(prefix), sha256), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+    catch (error) {
+      // A known final-object link remains unreadable. Explicit uploads may
+      // repair that immutable identity by replacing the link itself; directory
+      // and ancestor failures never receive this repairable classification.
+      if ((error as NodeJS.ErrnoException).code === 'ELOOP') throw Object.assign(conflict('附件 CAS 对象是不可读取的链接'), { code: 'cas-corrupt' });
+      throw error;
+    }
+    handles.push(file);
     const identities = [
       { path: dataPath, info: await data.stat(), object: false },
       { path: rootPath, info: await root.stat(), object: false },
