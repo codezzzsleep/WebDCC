@@ -49,6 +49,7 @@ import { dshGoalChange, dshGoalProjection } from './goals.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
 import { dshSubagentCatalog, dshSubagentAddress, checkDshSubagentPage, dshSubagentSummary, dshSubagentDescriptorSeq, dshSubagentInputHash } from './subagents.js';
+import { dshQuestionSignature, dshQuestionAnswers, dshQuestionResult, sameDshQuestionAnswers, type DshQuestionResult } from './questions.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
 import { dshInputParts, dshInputUnsupported, encodeDshInput, validateDshInputParts, type DshResolvableInput, type DshResolvedAttachment } from './input.js';
 
@@ -239,7 +240,11 @@ interface PendingInteraction {
   durableId?: string;
   generation?: number;
   continued?: boolean;
+  timed?: boolean;
   sent?: boolean;
+  sending?: boolean;
+  transportClosed?: boolean;
+  settlement?: DshQuestionResult;
   waitStream?: string;
   remainingMs?: number;
 }
@@ -257,6 +262,7 @@ interface SessionRuntime {
   lastSeq: number;
   turnStartedAt: number;
   pending: Map<string, PendingInteraction>;
+  questionResults?: Map<string, { result: DshQuestionResult; native: unknown; seq?: number }>;
   children: Map<string, string>;
   approvals: Map<string, { callId?: string; toolName: string; eventId?: string }>;
   history?: DshHistoryBridge;
@@ -463,7 +469,7 @@ export class DshAdapter implements AgentAdapter {
       capture: { writesBlocked: this.rpcWritesBlocked, status: this.rpcWritesBlocked ? 'incomplete' : 'observing' },
       children: [...runtime.children].map(([nativeId, mode]) => ({ nativeId, mode, parentSessionId: runtime.nativeId, continuable: mode === 'continuable' })),
       interactions: [...runtime.pending].map(([requestId, pending]) => ({ requestId, kind: pending.kind, callId: pending.callId, durableId: pending.durableId,
-        questionIds: pending.questionIds, status: pending.generation !== this.muxGeneration ? 'uncertain' : pending.sent ? 'sent' : 'pending', continued: pending.continued, remainingMs: pending.remainingMs })),
+        questionIds: pending.questionIds, status: pending.generation !== this.muxGeneration || pending.transportClosed && !pending.continued ? 'uncertain' : pending.sent ? 'sent' : 'pending', continued: pending.continued, remainingMs: pending.remainingMs })),
       surfaceOwnership: { status: 'blocked', reason: 'External native owners require native release/arbitration evidence; a platform lease cannot release them' },
     };
   }
@@ -1014,24 +1020,51 @@ export class DshAdapter implements AgentAdapter {
     for (const question of projection?.active ?? []) {
       if (question.state !== 'continued') continue;
       const eventId = `dsh-continued:${question.callId}`;
-      const existing = runtime.pending.get(eventId);
-      if (existing !== undefined) { if (existing.continued) existing.generation = this.muxGeneration; continue; }
+      const existing = [...runtime.pending.values()].find(pending => pending.kind === 'question' && pending.callId === question.callId);
+      if (existing !== undefined) {
+        existing.generation = this.muxGeneration;
+        if (!existing.continued) { existing.timed = true; this.settleQuestion(sessionId, runtime, existing, { kind: 'continued' }, question); }
+        continue;
+      }
       const questionItems: EventData['question'][] = question.questions.map(item => ({
         questionId: `${eventId}:${item.id}`, groupId: eventId, toolCallId: question.callId, prompt: item.question, header: item.header,
         options: item.options?.map(option => ({ id: option.label, label: option.label, description: option.description })), multiSelect: item.multiSelect, allowsFreeText: true,
+        isBlocking: false,
       }));
       runtime.pending.set(eventId, { kind: 'question', eventId, callId: question.callId, questionIds: question.questions.map(item => item.id), questionItems, generation: this.muxGeneration, continued: true });
       for (const data of questionItems) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${data.questionId}`, kind: 'question', data, native: question });
     }
     for (const settled of projection?.settled ?? []) {
-      const eventId = `dsh-continued:${settled.callId}`;
-      const pending = runtime.pending.get(eventId);
-      if (pending === undefined) continue;
-      runtime.pending.delete(eventId);
-      for (const question of pending.questionItems ?? []) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: {
-        ...question, status: 'answered', resolution: pending.sent ? 'native-acknowledged' : 'external',
-      }, native: settled });
+      const answers = dshQuestionAnswers(settled.answers);
+      if (answers === undefined) continue;
+      const result = { kind: 'answered', answers } as const;
+      runtime.questionResults ??= new Map(); runtime.questionResults.set(settled.callId, { result, native: settled });
+      for (const pending of [...runtime.pending.values()]) if (pending.kind === 'question' && pending.callId === settled.callId)
+        this.settleQuestion(sessionId, runtime, pending, result, settled);
     }
+  }
+
+  private settleQuestion(sessionId: string, runtime: SessionRuntime, pending: PendingInteraction, result: DshQuestionResult, native: unknown, nativeSeq?: number): void {
+    if (runtime.pending.get(pending.eventId) !== pending) return;
+    if (result.kind === 'continued') {
+      if (!pending.timed && !pending.continued) return;
+      pending.continued = true; pending.transportClosed = true;
+      if (pending.waitStream !== undefined) this.client?.closeStream(pending.waitStream);
+      for (const question of pending.questionItems ?? []) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question',
+        data: { ...question, isBlocking: false }, native, nativeSeq });
+      return;
+    }
+    const complete = result.kind === 'answered' && result.answers.length === pending.questionIds?.length
+      && result.answers.every(answer => pending.questionIds?.includes(answer.id));
+    const local = complete && (pending.sent || pending.sending) && sameDshQuestionAnswers(result.answers, pending.answers);
+    pending.settlement = result;
+    runtime.pending.delete(pending.eventId);
+    if (pending.waitStream !== undefined) this.client?.closeStream(pending.waitStream);
+    for (const question of pending.questionItems ?? []) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question', data: {
+      ...question, status: complete ? 'answered' : 'skipped',
+      ...(result.kind === 'cancelled' ? { outcome: 'cancel' as const } : {}),
+      resolution: complete ? local ? 'native-acknowledged' : 'external' : result.kind === 'cancelled' ? 'external' : 'outcome-unknown',
+    }, native, nativeSeq });
   }
   private newHost(endpoint: string | number): DshHostClient {
     const host = new DshHostClient(endpoint, { onState: state => {
@@ -1575,23 +1608,40 @@ export class DshAdapter implements AgentAdapter {
     const entry = [...runtime.pending].find(([eventId, pending]) => pending.kind === 'question' && (questionId === eventId || pending.questionIds?.some(id => `${eventId}:${id}` === questionId)));
     if (entry === undefined) throw new Error('DSH 问题已结束或不存在');
     const [eventId, pending] = entry;
-    if (pending.sent) throw dshNativeError('DSH question reply is queued; wait for native admission', 409);
+    if (pending.sent || pending.sending) throw dshNativeError('DSH question reply is queued; wait for native admission', 409);
     if (pending.generation !== this.muxGeneration || !pending.continued && this.clientId === '') throw Object.assign(new Error('DSH 问题需要重新同步'), { statusCode: 409 });
+    if (pending.transportClosed && !pending.continued) throw dshNativeError('DSH 问题的转发已结束，等待原生结果确认', 409);
     const id = questionId === eventId ? pending.questionIds?.[0] ?? questionId : questionId.slice(eventId.length + 1);
     const { selected, custom } = normalizeQuestionAnswer(answer);
     pending.answers ??= new Map();
     pending.answers.set(id, { id, selected, ...(custom === undefined || custom === '' ? {} : { custom }) });
     if (pending.answers.size < (pending.questionIds?.length ?? 1)) return { submitted: false };
-    if (pending.continued && pending.callId !== undefined) {
-      const accepted = await this.call<boolean>(client, 'userQuestions/answer', { agentId: runtime.nativeId, callId: pending.callId, answer: { answers: [...pending.answers.values()] } }, sessionId);
-      if (accepted !== true) throw dshNativeError('The native continued question has ended', 409);
+    const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch;
+    pending.sending = true;
+    const reply = (confirmed: boolean): AnswerSubmission => ({ submitted: true, confirmed,
+      questionIds: (pending.questionIds ?? [id]).map(question => `${eventId}:${question}`) });
+    const nativeConfirmed = (): boolean => this.sessions.get(sessionId) === runtime && pending.settlement?.kind === 'answered'
+      && sameDshQuestionAnswers(pending.settlement.answers, pending.answers);
+    try {
+      if (pending.continued && pending.callId !== undefined) {
+        const accepted = await this.call<boolean>(client, 'userQuestions/answer', { agentId: runtime.nativeId, callId: pending.callId, answer: { answers: [...pending.answers.values()] } }, sessionId);
+        if (accepted !== true) throw dshNativeError('The native continued question has ended', 409);
+      } else await this.call(client, '$events/result', { clientId, eventId, outcome: { kind: 'result', value: { answers: [...pending.answers.values()] } } }, sessionId);
+      // The business result may arrive before the HTTP reply. It belongs to
+      // this original call; returning its receipt never mutates a new pending.
+      if (nativeConfirmed()) return reply(true);
+      if (pending.settlement !== undefined) throw Object.assign(dshNativeError('原生问题已由其他结果结束，本次回答未确认', 503), { code: 'uncertain' });
+      const current = runtime.pending.get(eventId);
+      if (this.sessions.get(sessionId) !== runtime || this.client !== client || !pending.continued && this.clientId !== clientId || this.muxGeneration !== generation || this.hostEpoch !== epoch
+        || current !== pending && (current !== undefined || pending.settlement === undefined))
+        throw Object.assign(dshNativeError('问题回执属于旧连接，原生回答结果待核对', 503), { code: 'uncertain' });
       pending.sent = true;
-      return { submitted: true, confirmed: false, questionIds: (pending.questionIds ?? [id]).map(question => `${eventId}:${question}`) };
-    }
-    await this.call(client, '$events/result', { clientId: this.clientId, eventId, outcome: { kind: 'result', value: { answers: [...pending.answers.values()] } } }, sessionId);
-    if (pending.waitStream !== undefined) this.client?.closeStream(pending.waitStream);
-    runtime.pending.delete(eventId);
-    return { submitted: true, questionIds: (pending.questionIds ?? [id]).map(question => `${eventId}:${question}`) };
+      if (pending.waitStream !== undefined) client.closeStream(pending.waitStream);
+      return reply(false);
+    } catch (error) {
+      if (nativeConfirmed()) return reply(true);
+      throw error;
+    } finally { pending.sending = false; }
   }
 
   /** 运行期切换连接（设置页粘贴 DSH 链接后调用） */
@@ -1707,10 +1757,19 @@ export class DshAdapter implements AgentAdapter {
         // Cancellation of a forwarding waiter does not establish a sent
         // approval's outcome; its durable decided event remains authoritative.
         if (pending.kind === 'approval' && pending.sent) continue;
+        if (pending.kind === 'question' && pending.callId !== undefined) {
+          // Another Client's answer and a source abort both retire this
+          // delivery. Only the call's durable business result tells them apart.
+          pending.transportClosed = true;
+          if (pending.waitStream !== undefined) this.client?.closeStream(pending.waitStream);
+          for (const question of pending.questionItems ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-${question.questionId}`, kind: 'question',
+            data: { ...question, submission: 'uncertain' }, native: value });
+          continue;
+        }
         runtime.pending.delete(eventId);
         if (pending.waitStream !== undefined) this.client?.closeStream(pending.waitStream);
         if (pending.kind === 'approval') this.emit(id, { type: 'item.complete', itemKey: `approval-cancelled-${eventId}`, kind: 'approval.resolved', data: { approvalId: eventId, optionId: 'cancelled', by: 'other' }, native: value });
-        else for (const question of pending.questionItems ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-cancelled-${question.questionId}`, kind: 'question', data: { ...question, status: 'skipped', outcome: 'cancel', resolution: 'native-acknowledged' }, native: value });
+        else for (const question of pending.questionItems ?? []) this.emit(id, { type: 'item.complete', itemKey: `question-cancelled-${question.questionId}`, kind: 'question', data: { ...question, status: 'skipped', outcome: 'cancel', resolution: 'outcome-unknown' }, native: value });
       }
       return;
     }
@@ -1905,6 +1964,12 @@ export class DshAdapter implements AgentAdapter {
         const resultMessage = (data['message'] ?? {}) as Record<string, unknown>;
         const callId = String(data['toolCallId'] ?? resultMessage['toolCallId'] ?? resultMessage['callId'] ?? '');
         const item = runtime.toolCalls.get(callId);
+        const questions = [...runtime.pending.values()].filter(pending => pending.kind === 'question' && pending.callId === callId);
+        if (item?.name === 'ask_user_question' || questions.length > 0) {
+          const result = dshQuestionResult(data);
+          runtime.questionResults ??= new Map(); runtime.questionResults.set(callId, { result, native, seq: nativeSeq });
+          for (const pending of questions) this.settleQuestion(sessionId, runtime, pending, result, native, nativeSeq);
+        }
         runtime.toolCalls.delete(callId);
         if (process.env['WDCC_DEBUG_DSH'] === '1') console.error('[dsh] result lookup', callId, item === undefined ? 'MISS' : item.kind);
         if (item === undefined) return;
@@ -2222,7 +2287,10 @@ export class DshAdapter implements AgentAdapter {
       const questions = (request['questions'] as Record<string, unknown>[]) ?? [];
       const ids = questions.map((question, index) => String(question['id'] ?? index));
       const wait = request['wait'] as { callId?: string; timed?: boolean } | undefined;
-      const pending: PendingInteraction = { kind: 'question', eventId, questionIds: ids, generation: this.muxGeneration, callId: wait?.callId };
+      const signature = dshQuestionSignature(questions);
+      const calls = signature === undefined ? [] : [...runtime.toolCalls].filter(([, call]) => call.name === 'ask_user_question' && dshQuestionSignature(call.input['questions']) === signature);
+      const callId = typeof wait?.callId === 'string' && wait.callId !== '' ? wait.callId : calls.length === 1 ? calls[0]?.[0] : undefined;
+      const pending: PendingInteraction = { kind: 'question', eventId, questionIds: ids, generation: this.muxGeneration, callId, timed: wait?.timed === true };
       runtime.pending.set(eventId, pending);
       if (wait?.timed === true && typeof wait.callId === 'string' && this.client?.isConnected) {
         const client = this.client;
@@ -2235,7 +2303,7 @@ export class DshAdapter implements AgentAdapter {
       pending.questionItems = questions.map((first, index) => ({
           questionId: `${eventId}:${ids[index]}`,
           groupId: eventId,
-          ...(wait?.callId === undefined ? {} : { toolCallId: wait.callId }),
+          ...(callId === undefined ? {} : { toolCallId: callId }),
           prompt: String(first['question'] ?? '请回答'),
           ...(first['header'] === undefined ? {} : { header: String(first['header']) }),
           options: ((first['options'] as Record<string, unknown>[]) ?? []).map((option) => ({
@@ -2248,6 +2316,8 @@ export class DshAdapter implements AgentAdapter {
           allowsFreeText: true,
       }));
       for (const [index, data] of pending.questionItems.entries()) this.emit(target, { type: 'item.complete', itemKey: `question-${eventId}-${ids[index]}`, kind: 'question', data, native: value });
+      const settled = callId === undefined ? undefined : runtime.questionResults?.get(callId);
+      if (settled !== undefined) this.settleQuestion(target, runtime, pending, settled.result, settled.native, settled.seq);
       return;
     }
     this.emit(target, { type: 'item.complete', itemKey: `dsh-unknown-waterfall-${eventId}`, kind: 'unknown', data: { nativeType: event }, native: value });
