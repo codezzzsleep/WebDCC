@@ -35,6 +35,7 @@ import { buildManifest } from './build-info.js';
 import { isCommand, isInputContent } from '@webdcc/protocol';
 import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
+import { listWorkspaceDirectory } from './workspace-list.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
 import { createWorkspaceEntry } from './workspace-create.js';
@@ -255,6 +256,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/workspaces/:id/fs', async (request): Promise<FsListResponse | FsReadResponse> => {
     const { id } = request.params as { id: string };
     const query = request.query as { path?: string; q?: string };
+    if (query.path !== undefined && typeof query.path !== 'string' || query.q !== undefined && typeof query.q !== 'string') throw badRequest('目录路径和筛选必须为文本');
     const workspace = store.getWorkspace(id);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     const relativePath = query.path ?? '';
@@ -265,14 +267,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
     if (info.isDirectory()) {
       const query2 = query.q?.toLowerCase();
-      const entries = await readdir(target, { withFileTypes: true });
+      const { root, entries } = await listWorkspaceDirectory(workspace.path, target);
       return {
-        path: relative(workspace.path, target) || '.',
+        path: relative(root, target) || '.',
         entries: entries
           .filter((entry) => (query2 === undefined ? true : entry.name.toLowerCase().includes(query2)))
           .map((entry) => ({
             name: entry.name,
-            path: relative(workspace.path, join(target, entry.name)),
+            path: relative(root, join(target, entry.name)),
             type: entry.isDirectory() ? ('dir' as const) : ('file' as const),
           }))
           .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1)),
