@@ -40,7 +40,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     if (event.kind === 'notice' && ['slash.command', 'conversation_reset_projection_failed'].includes((event.data as EventData['notice']).nativeType ?? '')) standalone.set(event.itemKey, event);
     if (event.kind === 'question') standalone.set(`question:${(event.data as EventData['question']).questionId}`, event);
     if (event.kind === 'approval.request') standalone.set(`approval:${(event.data as EventData['approval.request']).approvalId}`, event);
-    if (event.kind === 'approval.resolved') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
+    if (event.kind === 'approval.resolved' && store.getSession(sessionId)?.agent !== 'dsh') standalone.delete(`approval:${(event.data as EventData['approval.resolved']).approvalId}`);
   }
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -685,6 +685,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
         : ['cancelled', 'cancel', 'canceled', 'aborted'].includes(option)
           ? '已取消'
           : '已处理';
+    if (store.getSession(event.sessionId)?.agent === 'dsh') return option === 'unavailable' ? '原生未取得审批回应，权限未获准' : `原生${result}`;
     return resolved.by === 'other' ? `已在其他界面处理：${result}` : result;
   })();
   const what = approvalWhat(data);
