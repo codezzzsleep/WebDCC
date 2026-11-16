@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { resolve, join } from 'node:path';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -113,6 +114,7 @@ function endGeneration(runtime: SessionRuntime, turnId: string | undefined, at: 
 }
 
 interface SessionRuntime {
+  peer?: { directory: string; socketPath: string; record(direction: 'in' | 'out', channel: string, frame: Frame): boolean };
   asyncQuestions?: Map<string, EventData['question']>;
   asyncAnswered?: Set<string>;
   nativeVersion: string;
@@ -738,12 +740,17 @@ export class CodexAdapter implements AgentAdapter {
 
   private startProcess(sessionId: string, opts: CreateOpts, nativeVersion: string): SessionRuntime {
     const spec = this.buildLaunchSpec(opts);
+    const nativeHelp = process.platform !== 'win32' && ['0.168.0', '0.169.0'].includes(nativeVersion)
+      ? spawnSync(spec.command ?? 'codex', ['app-server', '--help'], { env: { ...(this.options.env ?? process.env), ...spec.env }, encoding: 'utf8', timeout: 1500 }) : undefined;
+    const directory = nativeHelp?.status === 0 && nativeHelp.stdout.includes('unix://') ? mkdtempSync(join(tmpdir(), 'wdcc-codex-peer-')) : undefined;
+    const socketPath = directory === undefined ? undefined : join(directory, 'host.sock');
     let traceIndex = 0;
     const traceStarted = this.now();
     const runtimeRef: { current?: SessionRuntime } = {};
     const rpc = JsonRpcStdio.start({
       command: spec.command ?? 'codex',
-      args: spec.args ?? [],
+      args: [...(spec.args ?? []), ...(socketPath === undefined ? [] : ['--listen', `unix://${socketPath}`])],
+      unixSocketPath: socketPath,
       cwd: opts.cwd,
       env: { ...(this.options.env ?? process.env), ...spec.env },
       onFrame: (direction, frame) => {
@@ -754,6 +761,7 @@ export class CodexAdapter implements AgentAdapter {
         return receipt?.accepted !== false;
       },
       onExit: () => {
+        if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
         if (this.sessions.get(sessionId) !== runtimeRef.current) return;
         this.emit(sessionId, { type: 'transport.closed', reason: 'process-exited', activeWork: runtimeRef.current?.turnId != null });
       },
@@ -767,6 +775,12 @@ export class CodexAdapter implements AgentAdapter {
       markReady = resolve;
     });
     const runtime: SessionRuntime = {
+      ...(directory === undefined ? {} : { peer: { directory, socketPath: socketPath!, record: (direction, channel, frame) => {
+        if (this.sessions.get(sessionId) !== runtimeRef.current || rpc.isClosed) return false;
+        const observation = { i: ++traceIndex, t: this.now() - traceStarted, dir: direction, ch: channel, frame };
+        const receipt = opts.nativeEvents?.record(observation); traceFrame(this.options.traceSink ?? opts.traceSink, observation);
+        return receipt?.accepted !== false;
+      } } }),
       nativeId: 'nativeId' in opts && typeof opts.nativeId === 'string' ? opts.nativeId : '',
       identity: opts.runtime,
       pid: rpc.child.pid ?? 0,
@@ -1116,6 +1130,13 @@ export class CodexAdapter implements AgentAdapter {
     if (runtime === undefined) return;
     this.sessions.delete(sessionId);
     await runtime.rpc.kill().catch(() => undefined);
+    if (runtime.peer && (runtime.rpc.child.exitCode !== null || runtime.rpc.child.signalCode !== null)) rmSync(runtime.peer.directory, { recursive: true, force: true });
+  }
+
+  nativePeerConnection(sessionId: string) {
+    const runtime = this.require(sessionId);
+    if (!runtime.peer || runtime.rpc.isClosed || !runtime.nativeId || !runtime.codexHome) return undefined;
+    return { socketPath: runtime.peer.socketPath, nativeId: runtime.nativeId, nativeVersion: runtime.nativeVersion, codexHome: runtime.codexHome, command: this.options.command ?? 'codex', record: runtime.peer.record };
   }
 
   async nativeState(sessionId: string) {

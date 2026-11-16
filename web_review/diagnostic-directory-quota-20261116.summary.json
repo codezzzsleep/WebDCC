@@ -1,0 +1,60 @@
+{
+  "issue": 56,
+  "parents": [
+    42,
+    44,
+    47
+  ],
+  "scope": "aggregate diagnostic directory byte budget across cooperating writers; complete NP-14 remains unfinished",
+  "sourceBase": "41a4d12c2d119ffed5875aef6ea0bc75e45424e4",
+  "dependencyPR": 201,
+  "defaults": {
+    "maxDirectoryBytes": 536870912,
+    "fixedDirectoryMarkerAllowance": 4096,
+    "maxCoverageFileBytes": 65536
+  },
+  "sourceHashes": {
+    "packages/testing/model-proxy/src/diagnostic-writer.ts": "cd677b5585671c62f76ca5bd0c176bd370c5f2e3262b706a9100d55fd9e17037",
+    "packages/testing/model-proxy/src/diagnostic-writer.spec.ts": "56a79b202102070ccfc2daa05d9d499f8be64b958b9714c046203148542ec772",
+    "packages/testing/model-proxy/src/fixtures/diagnostic-writer-child.ts": "64c67e3304453bbc65b01ce3d7d6f2fa87de9be385dfdbaa73672235a1d5fe72",
+    "packages/testing/model-proxy/src/index.ts": "6c64c28b37c2324f54316503cbee5ace6ce131f697adaef2818478d86a63c246",
+    "packages/testing/model-proxy/src/index.spec.ts": "cc36c1855cc3fa5f3c4c1fb07f0616401140eac96c040c5166646db6e02ece88",
+    "packages/server/src/config.ts": "e5374f6398c94deab6e9f78138cf65c2c93dc86ef0b52553dbf30985407a9059",
+    "packages/server/src/main.ts": "6911fb11af55ce332deff87542ad62406557671e393ea20bc160133ef3a4e4d2",
+    "packages/server/src/interaction-recorder.ts": "638bfa84461173b5e8f6c9cc98a36d0c5f8ab7fecebe13b16318068194a98c48",
+    "packages/server/src/native-http-recorder.ts": "8c919043cc09662845a6ba8bd669ba409a1814a2aed3bc3685016ef88e692039",
+    "packages/server/test/config.spec.ts": "cd54cbc1fbc7ba2f6ac2decf5982cae8297fb7c3f317059dbba35d1af619fedf",
+    "packages/server/test/interaction-recorder.spec.ts": "69b27b73a3cd01b0925fec79a1c3a068a8c08a00d19c235627192adc03bd9067",
+    "packages/server/test/native-http-recorder.spec.ts": "ee59f4e0f9b4e40eb807e7b5edba392a3c8b8db9dd048ddf2d9dc9e9d080593f",
+    "docs/diagnostics.md": "ff966149c40a802890dcee34230e9f42a1f98d34f3c657ba9c5ac5336c042259"
+  },
+  "checks": {
+    "regression": 36,
+    "reservedPathFinal": "canonical and aliased internal paths rejected; targeted1pass/14unrun",
+    "typecheck": "fullworkspace/scripts andlatest package passed",
+    "lint": "changed sources/specs passed",
+    "scenarios": [
+      "different files/processes share current sizes",
+      "preexisting files/newWriter state retained",
+      "replace shrink and zero budgets",
+      "safe bounded failure markers/special paths",
+      "main and NativeNodepreload coverage writes",
+      "standalone ModelProxy/NativeNodepreload bytes remain unchanged"
+    ]
+  },
+  "retainedFailures": [
+    "Initial directory-budget negative1fail/10unrun",
+    "One expandedrun34pass/1fail marker count1vs2; failurecause not proven; retained",
+    "Original assertion strengthened tocheckexactquotaerror classes; isolatedcase andfresh36case runs includingparallel typechecks passed; no changedcounterfix claim"
+  ],
+  "actualNativeAgentCalls": 0,
+  "paidProviderCalls": 0,
+  "liveProvider": false,
+  "deployment": "not performed",
+  "remaining": [
+    "Global active-capture memory budget and totals across recording directories",
+    "Credential sources/cross-frame Native secret policy andcomplete retention/export",
+    "Target platform three actualAgent/config/recording/diskquota verification"
+  ],
+  "dependencyState": "merged by independent review"
+}

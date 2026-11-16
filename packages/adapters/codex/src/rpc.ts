@@ -4,6 +4,8 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface, type Interface } from 'node:readline';
+import { connect } from 'node:net';
+import WebSocket from 'ws';
 
 export type Frame = Record<string, unknown>;
 
@@ -18,6 +20,8 @@ export interface StartOptions {
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
   /** Raw diagnostic retention is opt-in and bounded. onFrame remains a stream. */
   maxFrames?: number;
+  /** Official app-server Unix transports carry WebSocket JSON frames. */
+  unixSocketPath?: string;
 }
 
 interface Pending {
@@ -42,11 +46,14 @@ export class JsonRpcStdio {
   private closed = false;
   private terminating?: Promise<void>;
   private readonly frames: Frame[] = [];
+  private socket?: WebSocket;
+  private connecting?: ReturnType<typeof setTimeout>;
+  private readonly queued: string[] = [];
 
   private constructor(child: ChildProcessWithoutNullStreams, private readonly options: StartOptions) {
     this.child = child;
     this.output = createInterface({ input: child.stdout });
-    this.output.on('line', (line) => this.onLine(line));
+    this.output.on('line', (line) => { if (options.unixSocketPath === undefined) this.onLine(line); });
     this.errors = createInterface({ input: child.stderr });
     this.errors.on('line', (line) => this.options.onStderr?.(line));
     // 没装 codex（ENOENT）等启动失败：不能让未处理的 'error' 事件拖垮整个服务进程
@@ -59,10 +66,32 @@ export class JsonRpcStdio {
       this.closePending(new Error(`子进程退出（code=${String(code)}, signal=${String(signal)}）`));
       this.options.onExit?.(code, signal);
     });
+    if (options.unixSocketPath !== undefined) this.connectSocket(Date.now());
+  }
+
+  private connectSocket(started: number): void {
+    if (this.closed) return;
+    const socket = new WebSocket('ws://localhost/', { createConnection: () => connect(this.options.unixSocketPath!) });
+    this.socket = socket;
+    let opened = false;
+    socket.once('open', () => {
+      if (this.closed || this.socket !== socket) { socket.terminate(); return; }
+      opened = true;
+      for (const frame of this.queued.splice(0)) socket.send(frame);
+    });
+    socket.on('message', data => this.onLine(data.toString()));
+    socket.on('error', () => undefined);
+    socket.once('close', () => {
+      if (this.closed || this.socket !== socket) return;
+      if (!opened && Date.now() - started < 30_000) this.connecting = setTimeout(() => this.connectSocket(started), 50);
+      else { this.closePending(new Error('Native Unix WebSocket connection closed')); this.child.kill('SIGTERM'); }
+    });
   }
 
   private closePending(error: Error): void {
     this.closed = true;
+    if (this.connecting !== undefined) clearTimeout(this.connecting);
+    this.socket?.terminate(); this.socket = undefined; this.queued.length = 0;
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();
     for (const reject of [...this.waiters]) reject(error);
@@ -179,7 +208,10 @@ export class JsonRpcStdio {
       this.child.kill('SIGTERM');
       throw error;
     }
-    this.child.stdin.write(`${JSON.stringify(frame)}\n`);
+    const serialized = JSON.stringify(frame);
+    if (this.options.unixSocketPath === undefined) this.child.stdin.write(serialized + '\n');
+    else if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(serialized);
+    else this.queued.push(serialized);
   }
 
   onNotification(handler: NotificationHandler): () => void {

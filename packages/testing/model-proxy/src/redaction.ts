@@ -60,6 +60,37 @@ export function diagnosticSecretsFromHeaders(headers: Record<string, string | st
 }
 
 export interface CapturedChunk { t: number; bytes: Buffer }
+export type CaptureLimitReason = 'body-bytes' | 'body-chunks' | 'active-buffer-budget' | 'capture-failed' | 'after-release';
+
+/** Shared raw chunk storage, independent of encoded diagnostic records. */
+export class DiagnosticCaptureBudget {
+  private used = 0;
+  private maximum: number;
+  constructor(limit = 64 * 1024 * 1024) { this.maximum = limit; this.configure(limit); }
+  get retainedBytes(): number { return this.used; }
+  get limit(): number { return this.maximum; }
+  configure(limit: number): void {
+    if (!Number.isSafeInteger(limit) || limit < 0) throw new Error('Invalid active diagnostic capture budget');
+    if (this.used > limit) throw new Error('Active diagnostic buffers exceed the requested budget');
+    this.maximum = limit;
+  }
+  reserve(bytes: number): boolean {
+    if (!Number.isSafeInteger(bytes) || bytes < 0) throw new Error('Invalid diagnostic reservation');
+    if (this.used + bytes > this.maximum) return false;
+    this.used += bytes; return true;
+  }
+  release(bytes: number): void {
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > this.used) throw new Error('Invalid diagnostic release');
+    this.used -= bytes;
+  }
+}
+// Preload bundles and imported packages can contain independent module copies.
+// They still share one pool in the same JavaScript process.
+const budgetKey = Symbol.for('webdcc.diagnostic.capture.budget');
+const budgets = globalThis as unknown as Record<symbol, DiagnosticCaptureBudget>;
+const processCaptureBudget = budgets[budgetKey] ??= new DiagnosticCaptureBudget();
+export function configureDiagnosticCaptureBudget(limit: number): void { processCaptureBudget.configure(limit); }
+export function diagnosticCaptureBudgetBytes(): number { return processCaptureBudget.retainedBytes; }
 /** Drop the entire payload on overflow so a cut credential prefix is never
  * persisted as apparently complete evidence. Transport still forwards bytes. */
 export class DiagnosticCapture {
@@ -67,13 +98,24 @@ export class DiagnosticCapture {
   bytes = 0;
   count = 0;
   truncated = false;
-  constructor(readonly maxBytes = 8 * 1024 * 1024, readonly maxChunks = 4096) {
+  limitReason?: CaptureLimitReason;
+  private retained = 0;
+  private released = false;
+  constructor(readonly maxBytes = 8 * 1024 * 1024, readonly maxChunks = 4096, private readonly budget = processCaptureBudget) {
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || !Number.isSafeInteger(maxChunks) || maxChunks < 1) throw new Error('Invalid diagnostic capture limits');
   }
   push(bytes: Buffer, t: number): void {
     this.bytes += bytes.length; this.count++;
-    if (this.bytes > this.maxBytes || this.count > this.maxChunks) { this.truncated = true; this.chunks.length = 0; }
-    if (!this.truncated) this.chunks.push({ t, bytes: Buffer.from(bytes) });
+    if (this.released) { this.discard('after-release'); return; }
+    if (this.truncated) return;
+    if (this.bytes > this.maxBytes) { this.discard('body-bytes'); return; }
+    if (this.count > this.maxChunks) { this.discard('body-chunks'); return; }
+    if (!this.budget.reserve(bytes.length)) { this.discard('active-buffer-budget'); return; }
+    try { this.chunks.push({ t, bytes: Buffer.from(bytes) }); this.retained += bytes.length; }
+    catch { this.budget.release(bytes.length); this.discard('capture-failed'); }
   }
+  discard(reason: CaptureLimitReason): void { this.truncated = true; this.limitReason ??= reason; this.clear(); }
+  private clear(): void { this.chunks.length = 0; this.budget.release(this.retained); this.retained = 0; }
+  release(): void { this.clear(); this.released = true; }
   buffer(): Buffer { return Buffer.concat(this.chunks.map(chunk => chunk.bytes)); }
 }

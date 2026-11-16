@@ -60,6 +60,16 @@ it('NP-14 file quotas leave durable incomplete evidence and retention prunes onl
   expect(await restarted.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('file size')] });
 });
 
+it('a directory quota keeps immediate and restarted recording summaries incomplete', async () => {
+  root = await mkdtemp(join(tmpdir(), 'wdcc-recorder-directory-'));
+  const recorder = new InteractionRecorder(root, { maxDirectoryBytes: 0 }); await recorder.init();
+  recorder.record('s', 'native', 'echo', { text: 'unrecorded bytes' });
+  expect(await recorder.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('directory size')] });
+  const restarted = new InteractionRecorder(root, { maxDirectoryBytes: 0 }); await restarted.init();
+  expect(await restarted.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('directory size')] });
+  expect((await stat(join(recorder.directory, '.wdcc-diagnostic-quota.json'))).size).toBeLessThanOrEqual(4096);
+});
+
 it('exports original DSH Host catalog context in causal order without foreign runs, session data or future refreshes', async () => {
   root = await mkdtemp(join(tmpdir(), 'wdcc-recorder-dsh-context-'));
   const recorder = new InteractionRecorder(root); await recorder.init();
