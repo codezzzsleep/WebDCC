@@ -768,7 +768,8 @@
           "packages/server/test/interaction-lookup.spec.ts",
           "packages/web/src/lib/store-interaction-sync.spec.ts",
           "browser-tests/interaction-sync.spec.ts",
-          "web_review/QUESTION_ADAPTATION_2026-11-15.md"
+          "web_review/QUESTION_ADAPTATION_2026-11-15.md",
+          "web_review/elicitation-empty-fields-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
@@ -776,7 +777,8 @@
           "refresh/掉线/原版UI完成后旧按钮不可再次提交；acceptForSession显示真实授权范围。"
         ],
         "remainingWork": "Codex Plan input mode and pinned experimental API negotiation implemented. Actual Codex0.167.0, ClaudeSDK0.3.322/CLI2.1.322 and DSH0.2.2-rc.1 with loopback scripted models and Chromium verify two questions, exact free text, applicable multi-select, native confirmation/continuation, stop and reload. Claude question groups wait for SDK tool_result; cancelled/continued DSH cards retain original text. Default Codex questions remain governed by native feature defaults. Full secret/elicitation/dual-native-UI/provider/network-loss/server-restart acceptance still incomplete; Issues29/41 and NP06 remain open until reviewed/merged and full scope is accepted.",
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "latestEmptyFieldScope": "2026-11-16 Issue237: explicit optional empty strings preserved; placeholder uses independent enum index identity and native labels; Native raw values unchanged.24local+6sourceChromium/types/lint pass,3completeWS/command/codec/DB/reload identities. OfficialNative/target/fullNP06 remain separate."
       },
       "dependencyIds": [
         "NP-03",
