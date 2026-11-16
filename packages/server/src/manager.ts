@@ -24,6 +24,7 @@ import type {
   SlashCommandCatalog,
   SlashControlRequest,
   QueueSnapshot,
+  ClaudeTaskRuntime,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
@@ -58,6 +59,7 @@ export interface Runtime {
   nativeId: string;
   status: Exclude<SessionDto['status'], never>;
   nativeObservedStatus?: SessionDto['status'];
+  claudeTaskRuntime?: ClaudeTaskRuntime;
   turnId: string | null;
   turnStartedAt: number | null;
   hot: Map<string, HotItem>;
@@ -1246,6 +1248,9 @@ export class SessionManager {
         data: { level: 'warning', text: '运行通道已关闭，原生轮次的结果待核对；已接受输入保留。', nativeType: 'runtime-unobserved' } });
       this.hooks.onEvent(event);
     }
+    let taskObservationFailure: { error: unknown } | undefined;
+    try { this.closeClaudeTaskRuntime(runtime); }
+    catch (error) { taskObservationFailure = { error }; }
     try {
       await runtime.adapter.dispose(sessionId);
       await this.options.modelRecording?.close(sessionId);
@@ -1253,11 +1258,24 @@ export class SessionManager {
     } catch (error) {
       this.store.nativeOwners.release(sessionId, runtime.identity, false);
       this.setStatus(runtime, 'error');
+      if (taskObservationFailure !== undefined) throw new AggregateError([taskObservationFailure.error, error], 'Claude 任务运行状态保存与原生关闭失败');
       throw error;
     }
     if (this.runtimes.get(sessionId) === runtime) this.runtimes.delete(sessionId);
     // 回收之后状态回到空闲，否则界面上会一直显示"停止"（AG-*-11）
-    this.setStatus(runtime, this.uncertainSessions.has(sessionId) || this.store.journal.queue(sessionId).some(row => row.state === 'uncertain') ? 'error' : 'idle');
+    this.setStatus(runtime, taskObservationFailure !== undefined || this.uncertainSessions.has(sessionId) || this.store.journal.queue(sessionId).some(row => row.state === 'uncertain') ? 'error' : 'idle');
+    if (taskObservationFailure !== undefined) throw taskObservationFailure.error;
+  }
+
+  private closeClaudeTaskRuntime(runtime: Runtime): void {
+    if (runtime.adapter.id !== 'claude-code' || runtime.claudeTaskRuntime?.state !== 'started') return;
+    // Disposal fences adapter output before awaiting native closure. Persist
+    // loss of observation ourselves; it does not assert that native work exited.
+    const signal = { id: runtime.claudeTaskRuntime.id, state: 'unavailable' as const };
+    const event = this.store.appendEvent({ sessionId: runtime.sessionId, turnId: null, itemKey: `claude-runtime:${signal.id}:unavailable`, kind: 'internal',
+      data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: signal } });
+    runtime.claudeTaskRuntime = signal;
+    this.hooks.onEvent(event);
   }
 
   async disposeAll(): Promise<void> {
@@ -1529,6 +1547,11 @@ export class SessionManager {
         });
         // 原生标题：用户没改过名字时才生效（C1）
         if (kind === 'internal') {
+          const signal = (completeData as EventData['internal']).claudeTaskRuntime;
+          if (runtime.adapter.id === 'claude-code' && signal !== undefined && typeof signal.id === 'string' && signal.id.length > 0
+            && (signal.state === 'started' || signal.state === 'unavailable' && signal.id === runtime.claudeTaskRuntime?.id)) {
+            runtime.claudeTaskRuntime = { ...signal };
+          }
           const internal = completeData as { nativeType?: string; title?: string };
           if ((internal.nativeType === 'thread/name/updated' || internal.nativeType === 'session/title') && typeof internal.title === 'string' && internal.title !== '') {
             if (this.store.titleSource(sessionId) !== 'user') {
