@@ -22,6 +22,13 @@
     "actualNativeInitializeDeclaration": true,
     "actualOpenInputInterruptSparedPeer": true,
     "realTaskRefreshReconnectSessionSwitch": true,
-    "remaining": "Two uncaptured recorded-model continuations; current provider and target platform not accepted by replay"
+    "remaining": "Two uncaptured recorded-model continuations; current provider and target platform not accepted by replay",
+    "finalRunId": "3097004c-076e-4d40-b9f6-430c1a9729a0",
+    "finalSourceHead": "78268449d5824d65ea9412399773b5532e4c10fc",
+    "finalSourceFingerprint": "832ea273adead776ba7ef4314dd45d3cf0005cbadadb0f6c49b1de702adc445a",
+    "finalReportSha256": "6a501924752e395e9fe87821d3ef21bc8c014f81d19958628c9ec7a8591014d5",
+    "finalNativeFramesSha256": "81ed5832c0f191c78ff5e0c8c953858bddcf04997998a65c91859ca3424ea8e7",
+    "finalNativeEnvelopesSha256": "b8670d30ace34330be4ee5df5754e51df76de7021f42322f376f4929f307f6ac",
+    "finalCleanupErrors": []
   }
 }
