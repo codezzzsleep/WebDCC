@@ -1517,7 +1517,7 @@ export class SessionManager {
     const runtime = this.runtimes.get(sessionId);
     const mismatch = runtime !== undefined && event.runtime !== undefined && (event.runtime.ownerId !== runtime.identity.ownerId || event.runtime.generation !== runtime.identity.generation || event.runtime.hostId !== runtime.identity.hostId);
     let disposition: string;
-    let envelope: { id: number; duplicate: boolean };
+    let envelope: { id: number; duplicate: boolean; unverified?: boolean };
     try {
       disposition = runtime === undefined ? 'unowned' : source !== undefined && source !== runtime.adapter ? 'source-mismatch'
         : runtime.disposing || !this.store.nativeOwners.current(sessionId, runtime.identity) || mismatch ? 'stale-generation' : 'accepted';
@@ -1562,7 +1562,7 @@ export class SessionManager {
         this.store.nativeActions.taskEnded(sessionId, runtime.identity, runtime.nativeId, native['task_id'], typeof native['run_id'] === 'string' ? native['run_id'] : null, native['status']);
       }
     }
-    if (envelope.duplicate) {
+    if (envelope.duplicate || envelope.unverified) {
       if (event.type === 'item.complete') {
         const assigned = this.turns.assignment(sessionId, event);
         runtime.hot.delete(hotKey(assigned.turnId, event.itemKey));
