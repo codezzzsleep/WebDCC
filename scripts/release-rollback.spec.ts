@@ -79,7 +79,7 @@ const Database = require(${JSON.stringify(sqliteModule)});
 let target = null;
 try { target = readlinkSync(process.env.WDCC_RELEASE_ROOT + '/current'); } catch {}
 const db = new Database(process.env.WDCC_DATA_DIR + '/webdcc.db');
-const isCandidate = target !== null && target.endsWith('/${commit}');
+const isCandidate = target !== null && target.startsWith(process.env.WDCC_RELEASE_ROOT + '/releases/${commit}');
 if (process.argv[2] === 'restart' && isCandidate) {
   db.pragma('user_version = ${migratedSchema}');
   db.exec("INSERT INTO sessions VALUES ('accepted-after-restart')");
@@ -116,7 +116,8 @@ if ((process.argv[2] === 'restart' && isCandidate && ${Boolean(options.failResta
     const schema = after.pragma('user_version', { simple: true });
     const accepted = after.prepare("SELECT COUNT(*) AS count FROM sessions WHERE status = 'accepted-after-restart'").get() as { count: number };
     after.close();
-    return { events, target, schema, stderr, exitCode, candidate, previous: previousLink, accepted: accepted.count };
+    const activatedCandidate = events.find(event => event.operation === 'restart' && event.target !== previousLink)?.target ?? candidate;
+    return { events, target, schema, stderr, exitCode, candidate: activatedCandidate, previous: previousLink, accepted: accepted.count };
   } finally {
     if (http.listening) await new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()));
     await rm(scratch, { recursive: true, force: true });
@@ -241,3 +242,4 @@ it.each([false, true])('still publishes a healthy compatible release (first=%s)'
   expect(result.schema).toBe(14);
   expect(result.stderr).toBe('');
 });
+
