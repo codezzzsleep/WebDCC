@@ -1,4 +1,4 @@
-import type { CommandState, EventData, StoredEvent } from '@webdcc/protocol';
+import type { CommandState, DshApprovalAttempt, EventData, StoredEvent } from '@webdcc/protocol';
 import type { Db } from './db.js';
 
 type Kind = 'approve' | 'answer';
@@ -91,6 +91,28 @@ export class InteractionStore {
       for (const item of group) this.commandState(item, 'completed');
       return true;
     })();
+  }
+  bindDshApproval(row: InteractionRow, attempt: DshApprovalAttempt): void {
+    const current = this.get(row.session_id, row.kind, row.id);
+    if (row.kind !== 'approve' || current?.state !== 'sending' || current.command_id !== row.command_id) throw conflict('审批在身份保存前已变化');
+    const request = { ...JSON.parse(current.request) as Record<string, unknown>, dshApprovalAttempt: attempt };
+    if (this.db.prepare("UPDATE interactions SET request = ?, revision = revision + 1 WHERE session_id = ? AND kind = 'approve' AND id = ? AND state = 'sending' AND command_id = ?")
+      .run(JSON.stringify(request), row.session_id, row.id, row.command_id).changes !== 1) throw conflict('审批身份未能保存，未提交原生回应');
+  }
+  reclaimDshApproval(expected: InteractionRow, commandId: string): InteractionRow {
+    return this.db.transaction(() => {
+      const current = this.get(expected.session_id, 'approve', expected.id);
+      if (expected.kind !== 'approve' || current?.state !== 'uncertain' || current.command_id !== expected.command_id || current.revision !== expected.revision)
+        throw conflict('原审批恢复状态已变化，请重新核对');
+      this.db.prepare("UPDATE interactions SET state = 'sending', command_id = ?, error = NULL, revision = revision + 1 WHERE session_id = ? AND kind = 'approve' AND id = ?")
+        .run(commandId, expected.session_id, expected.id);
+      return this.get(expected.session_id, 'approve', expected.id)!;
+    })();
+  }
+  restoreDshApprovalRetry(row: InteractionRow, original: InteractionRow): void {
+    // A definitely unsubmitted retry does not erase the original uncertainty.
+    this.db.prepare("UPDATE interactions SET state = 'uncertain', command_id = ?, error = ?, revision = revision + 1 WHERE session_id = ? AND kind = 'approve' AND id = ? AND state = 'failed' AND command_id = ?")
+      .run(original.command_id, original.error, row.session_id, row.id, row.command_id);
   }
   finish(row: InteractionRow, collected = false, confirmed = true): boolean {
     return this.db.transaction(() => {

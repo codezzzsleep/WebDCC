@@ -111,6 +111,8 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
         <option value="">请选择操作</option>{actions.map(action => <option key={action.type} value={action.type} disabled={!action.supported}>{action.label}{action.supported ? '' : '（尚不可用）'}</option>)}
       </select></label>
       {selectedAction ? <form onSubmit={event => { event.preventDefault(); execute(); }}>
+        {snapshot.agent === 'claude-code' && selectedAction.type === 'thinking' && catalog['sdkVersion'] === '0.3.322'
+          ? <p>enabled 不填写 budgetTokens 时使用自适应思考；固定预算需填写至少 1024 的整数。null 沿用原生设置，disabled 关闭扩展思考。调用返回后，模型实际效果仍需确认。</p> : null}
         {fields.map(([name, definition]) => {
           const schema = object(definition); const options = schema['enum'];
           if (snapshot.agent === 'codex' && selectedAction.type === 'review' && name === 'target') return <CodexReviewTarget key={name}

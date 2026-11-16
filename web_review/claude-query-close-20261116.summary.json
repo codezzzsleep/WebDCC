@@ -1,0 +1,65 @@
+{
+  "formatVersion": 1,
+  "issues": [
+    51,
+    78,
+    42
+  ],
+  "PR": 309,
+  "originalHead": "a79839c5977e6eaaa4408c8875184ee5a8f7bdbb",
+  "checkedSourceFingerprint": "d6b5e899998174aa19c14c96e09ae9fdc55b706d4ff1253e9b500e7493a9e728",
+  "sourceFilesSha256": {
+    "packages/adapters/claude/src/adapter.ts": "69bf09923e26ec79c11b29c28b110e4e9f9848ae71750ab4b0b472e89cee766a",
+    "packages/adapters/claude/test/query-handoff.spec.ts": "1a87d44ec45e75fe3549fad18df1d7c2d143097238f521dbf005d7580a55775f",
+    "packages/server/test/claude-query-handoff.spec.ts": "4484f8411f7ae4e6dc23d4b510d6251106c2a96cbe338d1c1532f1a244d68f78",
+    "docs/claude-query-handoff.md": "bc9b96ab4586506cb0dad63d782b2b175fe79943d6f48bc728355fd606547065"
+  },
+  "behavior": "Public dispose cancels pending configuration replacement and rollback even while no query is in sessions; owned failed-query cleanup retains normal rollback. Superseded errors and uncertain receipts are retained.",
+  "nativeContract": {
+    "sdk": "0.3.322",
+    "cli": "2.1.322",
+    "modified": false
+  },
+  "verification": {
+    "directed": {
+      "passed": 32,
+      "files": 7,
+      "scope": "production adapter with controlled SDK lifecycle and real HTTP/Manager/SQLite; normal rollback/task/permissions/actions regression"
+    },
+    "explicitCloseThroughHTTP": {
+      "queryCount": 1,
+      "orphanWriters": 0,
+      "receipt": "uncertain",
+      "duplicateRequestReplayed": false,
+      "secondConnection": true,
+      "databaseReopen": true
+    },
+    "types": [
+      "Claude adapter",
+      "server"
+    ],
+    "changedLint": "passed",
+    "actualSDKNativeOrProviderRuns": 0,
+    "newModelPaidRequests": 0,
+    "combinedMainSourceGate": "separate independent acceptance evidence; these directed results bind the source hashes above",
+    "targetPlatform": "not-run by review window"
+  },
+  "retainedFailures": [
+    {
+      "evidence": "pr309-independent-close-gap-before.log",
+      "sha256": "733ee30834ac6e459eb7b8d124b4d6dd7239b720e5c2ee32c5483e7b1b6578b3",
+      "failed": 2,
+      "existingPassed": 4,
+      "behavior": "explicit close during original pump exit starts replacement; during failed replacement cleanup starts rollback"
+    }
+  ],
+  "evidenceSha256": {
+    "pr309-close-gap-fixed-directed.log": "abe6da40ed1664907d51e9a98de0e6747a6fb99543baeb204a21ca00fbf5d122",
+    "pr309-close-gap-fixed-types-lint.log": "7adae51472801c9c63bc98e9a0194c1865c7feec647da9c762cb47b8918186d9"
+  },
+  "originalAuthorEvidence": "claude-query-handoff-20261116.summary.json preserved separately",
+  "remaining": [
+    "actual SDK timing and Provider/target-platform acceptance",
+    "aggregate51 and78 remaining implementation"
+  ]
+}

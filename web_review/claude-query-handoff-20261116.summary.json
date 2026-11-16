@@ -1,0 +1,88 @@
+{
+  "formatVersion": 1,
+  "issues": [
+    51,
+    78,
+    42
+  ],
+  "sourceBase": "db9919eccff9df97546dab83ad4d01ce6bbe2a88",
+  "candidateHead": "4b0d6abe52a958908e4e8714c6f85184d8d2f522",
+  "behavior": "superseded Claude query initialization/rollback cannot close or overwrite a recovered query or revive an explicit close",
+  "sourceFilesSha256": {
+    "packages/adapters/claude/src/adapter.ts": "eedffe5751e428cee309d214178a6975cd5cf8322355bfc8939c8d95d0c08e02",
+    "packages/adapters/claude/test/query-handoff.spec.ts": "d09bb937094fc81c709a7a5ad2860692e2c72be12ed76a33964e412b45b2f73a",
+    "packages/server/test/claude-query-handoff.spec.ts": "6e876fef61d1eb4b83172f15308e0b32aa26ba740707d7967a1b2d5094697f37"
+  },
+  "nativeContract": {
+    "sdk": "0.3.322",
+    "cli": "2.1.322",
+    "scope": "asynchronous Query.initializationResult/close; original rollback still owns its captured query/generation",
+    "nativeBehaviorModified": false
+  },
+  "verification": {
+    "units": {
+      "passed": 84,
+      "files": 12,
+      "scope": "actual source with controlled SDK; includes accepted structured output compatibility"
+    },
+    "earlierFinal": {
+      "passed": 67,
+      "files": 9
+    },
+    "HTTP_SQLite": {
+      "passed": true,
+      "controlledSDK": true,
+      "productionAdapterAndManager": true,
+      "secondConnection": true,
+      "reopen": true,
+      "oldReceipt": "uncertain",
+      "tasksRetained": 2,
+      "approvalRetained": true,
+      "newQueryClosedByOldError": false,
+      "oldCommandReplayed": false
+    },
+    "types": [
+      "Claude adapter",
+      "server"
+    ],
+    "lint": "passed after preserving original error cause",
+    "actualNativeModelOrSDKRuns": 0,
+    "realProviderRequests": 0,
+    "targetPlatform": "not-run, independent window"
+  },
+  "retainedFailures": [
+    {
+      "file": "query-handoff-before.log",
+      "status": "3 baseline failures: closes recovered query, loses tasks/approval, or creates extra writer"
+    },
+    {
+      "file": "query-handoff-http-first.log",
+      "status": "NOT_RUN wrong author relative import; fixed; no SDK/Provider activity"
+    },
+    {
+      "file": "query-handoff-lint.log",
+      "status": "preserve-caught-error failed; cause attached and original failure reused; original log retained"
+    }
+  ],
+  "evidenceSha256": {
+    "query-handoff-before.log": "c95a9f801f4c729b999f07bcf0c9e460890d33cf514b5234ce9bc6b0812e0caa",
+    "query-handoff-first.log": "90761edf83b07e928cc06d76b6a6901741c5c3b5d046af1d0362ec24652f02ba",
+    "query-handoff-http-first.log": "2e554e2e85ff3b9c34762c80653cec4c7afdc9062a8e32de42afb4795b9c2be5",
+    "query-handoff-http-second.log": "19e4dbb312c1d0c5837f4e1a1df411ebb1c04dfbf706b144de32d7a324f579eb",
+    "query-handoff-matrix.log": "b00e214f5e74884228fda07b30077b7b154c83646946c6cbe0b579c3a95e7c15",
+    "query-handoff-lint.log": "def793fe49dec2379e598ca799eb63cbdefcc5a9811d29ec5a992ae8173a85bb",
+    "query-handoff-postlint-units.log": "ce8eb0c48ef7e019c10109ee88b2733b11cabfed32d7c2f0a8c2ea480713b53f",
+    "query-handoff-lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "query-handoff-final-matrix.log": "54e4e20aec14befb2562a17a586ab143bbcf8bce229465096c29e5b7a5cb4d48",
+    "query-final-types.json": "58a189fb149be865dd4fc5d029eee86fd6003757103df8e0c2d3d6a5d9c39250",
+    "query-with-merged-output-matrix.log": "990303a386d9dbd4a4798af117c183ff08f117a54c9699a346354f8d7e0efaf0",
+    "query-merged-output-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "query-merged-output-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "delivery": "PR-only; independent exact-head review/merge/deployment other windows",
+  "remaining": [
+    "current native timing/Provider and target-platform acceptance",
+    "complete model/thinking/config recovery and remaining block/dialog/Teams/CLI specialty scope"
+  ],
+  "sourceFingerprint": "e55d0b886983ec35c09a70d0aed0fd70ca418ce83a3a59f44482d419169695e2"
+}

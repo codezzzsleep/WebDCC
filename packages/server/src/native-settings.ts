@@ -3,6 +3,7 @@ import { DshHostClient } from '@webdcc/adapter-dsh';
 import type { DshCredentialUpdate, DshDefaultModelUpdate, DshProviderCreate, DshSettingsPreview, DshSettingsTarget, DshSettingsView } from '@webdcc/protocol';
 import type { DshConnection, DshConnectionStore } from './dsh-connection.js';
 import { dshCapabilities, OFFICIAL_DSH_PROVIDERS } from './dsh-capabilities.js';
+import { jsonValueEqual as equal } from './json-value-equal.js';
 
 interface Namespace {
   ns: string;
@@ -18,7 +19,6 @@ interface Plan { context: Context; namespace: Namespace; ops: SetOp[]; preview: 
 
 const error = (message: string, statusCode = 400, code = 'invalid-settings'): Error => Object.assign(new Error(message), { statusCode, code });
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-const equal = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
 function includesDeclared(actual: unknown, expected: unknown): boolean {
   if (Array.isArray(expected)) return Array.isArray(actual) && actual.length === expected.length && expected.every((item, index) => includesDeclared(actual[index], item));
   if (expected !== null && typeof expected === 'object') return actual !== null && typeof actual === 'object' && !Array.isArray(actual)
