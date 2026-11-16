@@ -17,7 +17,7 @@ The controlled model observer passes already masked byte records to `recordModel
 | Setting | Default | Applies to |
 |---|---:|---|
 | `WDCC_TRACE_MAX_CAPTURE_BYTES` | 8 MiB | Each model request or response body |
-| `WDCC_TRACE_MAX_CAPTURE_CHUNKS` | 4,096 | Each captured body |
+| `WDCC_TRACE_MAX_CAPTURE_CHUNKS` | 4,096 | Each captured body and queued chunk events for each native HTTP response |
 | `WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES` | 64 MiB | Retained raw request/response chunks across all captures in one JavaScript process |
 | `WDCC_TRACE_MAX_FILE_BYTES` | 64 MiB | Each diagnostic JSONL file |
 | `WDCC_TRACE_MAX_QUEUED_BYTES` | 32 MiB | Each writer's pending serialized records |
@@ -25,6 +25,8 @@ The controlled model observer passes already masked byte records to `recordModel
 | `WDCC_TRACE_RETENTION_MS` | 7 days | Diagnostic file cleanup |
 
 All captures in one process share a reservation pool, including independent module copies in a preload bundle. Storage is reserved before copying native chunks; body overflow, capture failure, stream completion, cancellation and request abort release reservations. A completed native request releases its raw chunks before context lookup or diagnostic writes; slow record observers do not retain the raw buffers. A zero active budget observes sizes while omitting nonempty bodies. Configuring a pool below its current usage is rejected. Each native process has its own pool.
+
+Native HTTP chunk metadata also respects the response's chunk limit while request/context I/O is pending. Extra chunks do not queue another diagnostic event. Terminal coverage retains all observed `responseBytes` and `responseChunks`, and `omittedChunkEvents` reports how many metadata events were omitted. Native streaming continues. This bounds metadata jobs for one response; pending contexts and total jobs across simultaneous requests still require separate bounds.
 
 When body capture overflows, the entire captured body is omitted and `coverage.truncated` is set. Counts and native transport continue. Model terminal coverage identifies `requestLimitReason` and `responseLimitReason` as `body-bytes`, `body-chunks`, `active-buffer-budget` or `capture-failed` when applicable. Omitting the whole body avoids storing a cut credential prefix as complete evidence. Queue and file limits record an incomplete summary; a small coverage marker survives a server restart when its directory remains writable. Native preload write failures use a sibling coverage marker and bounded error reporting.
 

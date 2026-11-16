@@ -1678,7 +1678,9 @@
           "web_review/diagnostic-url-credentials-20261116.summary.json",
           "packages/server/test/fixtures/native-capture-budget.ts",
           "packages/server/test/fixtures/native-recorder-off.ts",
-          "web_review/diagnostic-active-capture-budget-20261116.summary.json"
+          "web_review/diagnostic-active-capture-budget-20261116.summary.json",
+          "packages/server/test/fixtures/native-recorder-stream.ts",
+          "web_review/native-http-chunk-metadata-20261116.summary.json"
         ],
         "actualFiles": [
           "packages/server/src/config.ts",
@@ -1726,7 +1728,9 @@
           "web_review/diagnostic-url-credentials-20261116.summary.json",
           "packages/server/test/fixtures/native-capture-budget.ts",
           "packages/server/test/fixtures/native-recorder-off.ts",
-          "web_review/diagnostic-active-capture-budget-20261116.summary.json"
+          "web_review/diagnostic-active-capture-budget-20261116.summary.json",
+          "packages/server/test/fixtures/native-recorder-stream.ts",
+          "web_review/native-http-chunk-metadata-20261116.summary.json"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1739,7 +1743,8 @@
           "web_review/diagnostic-file-admission-20261116.summary.json",
           "web_review/diagnostic-directory-quota-20261116.summary.json",
           "web_review/diagnostic-url-credentials-20261116.summary.json",
-          "web_review/diagnostic-active-capture-budget-20261116.summary.json"
+          "web_review/diagnostic-active-capture-budget-20261116.summary.json",
+          "web_review/native-http-chunk-metadata-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
@@ -1749,7 +1754,8 @@
           "200 的目标平台三家实际Agent诊断文件故障/恢复仍需绑定验证；受控FIFO/socket/device结果不是全NP14或部署验收。",
           "跨目录和全局活跃capture内存预算、完整secret/旧导出/启动对照仍未完成；本目录配额受控Source证据不代替目标三家实际Agent验收。",
           "209 initializes malformed optional model-observer URL credentials safely; target-platform native-only fallback/configuration and valid native Basic Auth still require independently bound evidence.",
-          "The retained raw capture budget needs three-Agent target-platform configuration and failure/recovery evidence; local Node/HTTP fixtures are not official Native Agent or provider acceptance."
+          "The retained raw capture budget needs three-Agent target-platform configuration and failure/recovery evidence; local Node/HTTP fixtures are not official Native Agent or provider acceptance.",
+          "211 caps queued HTTP chunk metadata per response, preserving omitted count and native bytes; target-platform native validation and total queued jobs/pending contexts across requests remain separate unfinished scope."
         ],
         "remainingWork": "Directory logical-byte quotas coordinate cooperating writers, and all default captures in a JavaScript process share a raw-buffer budget. Cross-process RAM totals, VM/native/encoded-copy memory, all credential sources and cross-frame protocol secret policy, secret-aware SQLite/commands/queue/outbox, old exports and complete retention/download/deletion policy still need implementation and acceptance.",
         "budgetNote": "共用诊断 redactor/writer 覆盖 model proxy、native preload 与主 recorder，文件范围超过初始 NP-14 规划；其中新增测试/fixture 与公共边界提取单列。仍为分阶段实施，未下调完整验收。",
@@ -1769,7 +1775,7 @@
           "confidence": "中",
           "reason": "Shared FD/OS-lock directory accounting and process-wide capture lifecycle extend the initial observer/redactor work; new controlled process and HTTP fixtures are tracked separately. Full cross-process/secret-storage/export scope remains."
         },
-        "latestScope": "2026-11-16: process-wide retained raw capture pool (64MiB default), shared across imported/preload module copies; reserve before copy and release on overflow, failure, completion, cancellation or unread request abort. ModelProxy and Native HTTP observations preserve forwarding. 45 local source/controlled HTTP/process checks plus types/lint; full NP14/native/target scope remains incomplete. Combined209 validates/decode target URL credentials at setup and retains native-only recovery; valid native Basic Auth remains unchanged."
+        "latestScope": "2026-11-16: process-wide retained raw capture pool (64MiB default), shared across imported/preload module copies; reserve before copy and release on overflow, failure, completion, cancellation or unread request abort. ModelProxy and Native HTTP observations preserve forwarding. 45 local source/controlled HTTP/process checks plus types/lint; full NP14/native/target scope remains incomplete. Combined209 validates/decode target URL credentials at setup and retains native-only recovery; valid native Basic Auth remains unchanged. 211 caps native response chunk emit jobs at the capture chunk limit while context waits, with exact observed/omitted terminal counts."
       },
       "dependencyIds": [
         "NP-02",

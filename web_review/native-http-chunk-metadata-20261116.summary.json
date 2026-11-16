@@ -1,0 +1,66 @@
+{
+  "issue": 211,
+  "parents": [
+    56,
+    42
+  ],
+  "base": "e8b906a2e911dc815030211254945503029d823c",
+  "at": "2026-11-16T07:42:55.244331+00:00",
+  "scope": "Each native HTTP response queues at most maxCaptureChunks chunk metadata emit jobs; terminal retains all observed byte/chunk counts plus omittedChunkEvents",
+  "classification": "source checks and actual Node preload with controlled loopback HTTP and delayed FIFO context; no official native Agent or live provider validation",
+  "before": {
+    "captureChunkLimit": 4,
+    "actualNativeBytes": 50,
+    "chunkMetadataEvents": 50,
+    "rawResponseChunks": 0,
+    "terminalLimitReason": "body-chunks",
+    "nodeExit": 0
+  },
+  "after": {
+    "captureChunkLimit": 4,
+    "actualNativeBytes": 50,
+    "chunkMetadataEvents": 4,
+    "omittedChunkEvents": 46,
+    "normalLimit100": "50 events, omitted0, nativebytes50, rawchunk50",
+    "zeroRawBudget": "nativebytes50, metadata4, omitted46, rawchunks0"
+  },
+  "verification": {
+    "negative": "three failures, nine unrun; actual two over-limit event failures and normal metadata omission-count field absent",
+    "initial": "33/33 passed plus types/lint",
+    "rebasedWith210": "38/38 source/actual controlled Node/HTTP/Recorder/config/redaction checks plus full workspace/scripts types and changed Lint passed"
+  },
+  "runtime": {
+    "node": "26.13.0",
+    "pnpm": "12.18.0"
+  },
+  "officialNativeAgentRuns": 0,
+  "paidProviderCalls": 0,
+  "deployment": "not performed by mainline",
+  "remaining": [
+    "aggregate pending-context and emit work across requests",
+    "VM/transport/encoded-copy and cross-process RAM bounds",
+    "full NP14 sensitive data/retention/export policy",
+    "independent three-Agent target configuration and acceptance"
+  ],
+  "sourceSha256": {
+    "docs/diagnostics.md": "22ca8411759d5c0fb532e22e4c6c52dc8558bbf7adfc1a0c5c61e93f3486abcc",
+    "packages/server/src/native-http-recorder.ts": "70b58d57d64291c85e65bd4541323e4e0ffc472037f7f25ed9462453873f3682",
+    "packages/server/test/fixtures/native-recorder-stream.ts": "73ac69b8618b257d5c45b42c828227cb74eaa6b2e86d415495f322cd158904f2",
+    "packages/server/test/native-http-recorder.spec.ts": "70be7e948ae33f2ca0b95ebcaca6d042e0b99e771f91eb6e879d4db41ffa30ec",
+    "web_review/IMPLEMENTATION_MATRIX.json": "5c5211f68b9fd4dd720bbdc162a3760c76a0c895052889455f2fb0af7f67238e"
+  },
+  "sourceFingerprint": "89d51a045884f0709494a73bc93aab772e37edfc63dc2857716dea921e42208a",
+  "evidenceSha256": {
+    "regression-before.log": "e19669489423313244f73623a42d0e940ea42a30dc6ad8f115ae5d17482e09f6",
+    "typecheck-first.log": "d15eac96a381b4be27008fbea841e7cd1e5c4e545977a3c5c26e33b3ff0a5edd",
+    "rebased-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "regression-first.log": "36ac999306a27508068f4a7955501b27791dbf4bd57b66d4989b9219a800bc19",
+    "reproduction-before.log": "29070894268558922c19a775145780013f30b390983b4a8ee129a659e13a0b40",
+    "rebased-regression.log": "abb22f31455714b1fe2a62893dfcb72b2701ef42dea66acd1239b1178a491402",
+    "lint-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rebased-typecheck.log": "154552dca66c15b6f2448da4d4cd6637a87677a85dcc2a4da00c95096468006e"
+  },
+  "originalControlledTraceSha256": {
+    "model-native-fixture.jsonl": "fa7aca7abca1b48e934c819cc023aff7dd369ba560544fe441ff9d1cb39916ad"
+  }
+}
