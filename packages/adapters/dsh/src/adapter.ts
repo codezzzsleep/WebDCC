@@ -790,6 +790,7 @@ export class DshAdapter implements AgentAdapter {
         if (epoch !== this.hostEpoch) throw new Error('DSH 连接启动已取消');
         this.client = client;
         this.sidecar = sidecar;
+        this.spawnedConnectionAt = sidecar === null ? '' : new Date().toISOString();
         client.openStream('$events', {}, frame => { if (this.client === client) this.onEventFrame('', frame); });
         this.openControl(client);
         this.openWorkspaces(client);
@@ -811,6 +812,17 @@ export class DshAdapter implements AgentAdapter {
   private muxGeneration = 0;
   private controlStream?: string;
   private observedHost?: DshHostIdentity;
+  private spawnedConnectionAt = '';
+  /** The browser surface consumes the current owned Host credential in memory.
+   * Attach mode continues to use its persisted native browser exchange. */
+  nativeBrowserConnection(): { url: string; browserCookie: string; connectedAt: string } | null | undefined {
+    if ((this.options.mode ?? 'spawn') === 'attach') return undefined;
+    const sidecar = this.sidecar;
+    const cookie = this.client?.cookieHeader;
+    if (sidecar === null || sidecar.child.exitCode !== null || sidecar.child.signalCode !== null
+      || cookie === undefined || !/^dsh-auth-[^=;]+=v1\./.test(cookie) || this.spawnedConnectionAt === '') return null;
+    return { url: dshBaseUrl(sidecar.port), browserCookie: cookie, connectedAt: this.spawnedConnectionAt };
+  }
   private hostEndpoint(): string {
     return dshBaseUrl(this.options.attachUrl ?? (this.sidecar?.port ?? this.options.port ?? 3091));
   }
@@ -1459,6 +1471,7 @@ export class DshAdapter implements AgentAdapter {
     const sidecar = this.sidecar;
     this.client = null;
     this.sidecar = null;
+    this.spawnedConnectionAt = '';
     this.booting = null;
     for (const runtime of this.sessions.values()) { runtime.history?.invalidate(); runtime.projections = undefined; runtime.children.clear(); runtime.modelObservation = undefined; runtime.controlState = undefined; }
     await client?.close().catch(() => undefined);
