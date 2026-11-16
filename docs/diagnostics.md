@@ -18,12 +18,15 @@ The controlled model observer passes already masked byte records to `recordModel
 |---|---:|---|
 | `WDCC_TRACE_MAX_CAPTURE_BYTES` | 8 MiB | Each model request or response body |
 | `WDCC_TRACE_MAX_CAPTURE_CHUNKS` | 4,096 | Each captured body |
+| `WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES` | 64 MiB | Retained raw request/response chunks across all captures in one JavaScript process |
 | `WDCC_TRACE_MAX_FILE_BYTES` | 64 MiB | Each diagnostic JSONL file |
 | `WDCC_TRACE_MAX_QUEUED_BYTES` | 32 MiB | Each writer's pending serialized records |
 | `WDCC_TRACE_MAX_DIRECTORY_BYTES` | 512 MiB | Regular diagnostic files in each recording directory |
 | `WDCC_TRACE_RETENTION_MS` | 7 days | Diagnostic file cleanup |
 
-When body capture overflows, the entire captured body is omitted and `coverage.truncated` is set. Counts and native transport continue. Omitting the whole body avoids storing a cut credential prefix as complete evidence. Queue and file limits record an incomplete summary; a small coverage marker survives a server restart when its directory remains writable. Native preload write failures use a sibling coverage marker and bounded error reporting.
+All captures in one process share a reservation pool, including independent module copies in a preload bundle. Storage is reserved before copying native chunks; body overflow, capture failure, stream completion, cancellation and request abort release reservations. A completed native request releases its raw chunks before context lookup or diagnostic writes; slow record observers do not retain the raw buffers. A zero active budget observes sizes while omitting nonempty bodies. Configuring a pool below its current usage is rejected. Each native process has its own pool.
+
+When body capture overflows, the entire captured body is omitted and `coverage.truncated` is set. Counts and native transport continue. Model terminal coverage identifies `requestLimitReason` and `responseLimitReason` as `body-bytes`, `body-chunks`, `active-buffer-budget` or `capture-failed` when applicable. Omitting the whole body avoids storing a cut credential prefix as complete evidence. Queue and file limits record an incomplete summary; a small coverage marker survives a server restart when its directory remains writable. Native preload write failures use a sibling coverage marker and bounded error reporting.
 
 Cooperating writers use `flock` and one stable `.wdcc-diagnostic-writer.lock` file per directory. An owned helper checks the current size and performs append or replacement under that lock, including exact UTF-8 byte limits. Helpers serve queued writes and exit when the queue finishes; a parent exit closes their input and releases the kernel lock after the current write finishes.
 
@@ -37,7 +40,7 @@ One reserved `.wdcc-diagnostic-quota.json` file has an additional fixed 4 KiB al
 
 Retention cleanup runs at recorder initialization and at most once an hour when records arrive. It removes only expired regular diagnostic files in the trace directory, preserving unrelated files. It is not an idle background deletion timer.
 
-Capture and pending-write limits still apply per observer/writer. A global active-capture budget, totals across different directories and a complete retention/export policy remain implementation and acceptance work. Existing recording content is not rewritten or migrated to satisfy a smaller budget.
+The active budget bounds retained raw chunks in one process. It does not bound JavaScript VM memory, native transport queues, temporary redaction/JSON/Base64 copies or RAM summed across child processes. File and serialized queue limits have separate accounting. Totals across processes or different directories and a complete retention/export policy remain acceptance work. Existing recording content is not rewritten or migrated to satisfy a smaller budget.
 
 ## Failures and remaining scope
 

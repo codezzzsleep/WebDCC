@@ -13,7 +13,7 @@ export interface Config {
   idleDisposeMin: number;
   version: string;
   recordInteractions?: boolean;
-  diagnosticLimits?: DiagnosticWriteLimits & { retentionMs: number; maxCaptureBytes: number; maxCaptureChunks: number };
+  diagnosticLimits?: DiagnosticWriteLimits & { retentionMs: number; maxCaptureBytes: number; maxCaptureChunks: number; maxActiveCaptureBytes?: number };
   publicOrigins?: string[];
   trustProxy?: boolean | string[];
   nativeDshPublicOrigin?: string;
@@ -56,6 +56,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(recordInteractions ? { diagnosticLimits: {
       maxCaptureBytes: limit('WDCC_TRACE_MAX_CAPTURE_BYTES', 8 * 1024 * 1024),
       maxCaptureChunks: limit('WDCC_TRACE_MAX_CAPTURE_CHUNKS', 4096, 1),
+      maxActiveCaptureBytes: limit('WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES', 64 * 1024 * 1024),
       maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024),
       maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024),
       maxDirectoryBytes: limit('WDCC_TRACE_MAX_DIRECTORY_BYTES', 512 * 1024 * 1024),

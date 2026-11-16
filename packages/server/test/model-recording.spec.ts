@@ -1,8 +1,9 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:http';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ModelProxy } from '@webdcc/model-proxy';
+import { ModelProxy, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBytes } from '@webdcc/model-proxy';
 import { FakeAdapter } from '@webdcc/fake-adapter';
 import { InteractionRecorder } from '../src/interaction-recorder.js';
 import { ModelRecording } from '../src/model-recording.js';
@@ -10,7 +11,7 @@ import { start, type RunningServer } from '../src/main.js';
 import { createTestApp } from './helpers.js';
 
 let root: string | undefined;
-afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); if (root !== undefined) await rm(root, { recursive: true, force: true }); root = undefined; });
+afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); configureDiagnosticCaptureBudget(64 * 1024 * 1024); if (root !== undefined) await rm(root, { recursive: true, force: true }); root = undefined; });
 
 it('NP-14 failed observer route setup retains the original native Provider and records the coverage failure', async () => {
   root = await mkdtemp(join(tmpdir(), 'wdcc-model-observer-'));
@@ -40,6 +41,23 @@ it('NP-14 malformed observer URL credentials preserve all original launch option
     expect(await recorder.read('s')).toContain('Invalid model recording target credentials');
     expect((await fetch(server.url)).status).toBeLessThan(500);
   } finally { await recording.close('s'); await server?.close(); await ctx.close(); }
+});
+
+it('NP-14 configured active limits reach actual per-session model routes and omitted bodies remain incomplete', async () => {
+  root = await mkdtemp(join(tmpdir(), 'wdcc-model-budget-'));
+  const recorder = new InteractionRecorder(root, { maxActiveCaptureBytes: 0 }); await recorder.init();
+  let input = '';
+  const upstream = createServer(async (req, res) => { for await (const bytes of req) input += String(bytes); res.end('native response'); });
+  await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  const port = (upstream.address() as { port: number }).port;
+  const recording = new ModelRecording(recorder);
+  try {
+    const prepared = await recording.prepare({ sessionId: 's', cwd: root, providerId: 'fixture', provider: { id: 'fixture', name: 'fixture', baseUrl: `http://127.0.0.1:${port}`, protocols: ['openai-responses'] } }, 'codex');
+    expect(await (await fetch(`${prepared.provider!.baseUrl}/responses`, { method: 'POST', body: 'native request' })).text()).toBe('native response');
+    expect(input).toBe('native request'); expect(diagnosticCaptureBudgetBytes()).toBe(0);
+    expect(await recorder.summary('s')).toMatchObject({ incomplete: true, errors: [expect.stringContaining('capture limits')] });
+    expect(await recorder.read('s')).toContain('active-buffer-budget');
+  } finally { await recording.close('s'); upstream.closeAllConnections(); await new Promise<void>(resolve => upstream.close(() => resolve())); }
 });
 
 it('NP-14 an unavailable diagnostic directory does not prevent an isolated server from starting', async () => {

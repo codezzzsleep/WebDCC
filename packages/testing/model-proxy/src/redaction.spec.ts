@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { DiagnosticCapture, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue } from './redaction.js';
+import { DiagnosticCapture, DiagnosticCaptureBudget, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue } from './redaction.js';
 
 it('NP-14 masks nested and escaped credential fields without redacting token usage metadata or changing native objects', () => {
   const raw = { nested: { 'x-api-key': ['first key', 'second key'], credentials: { value: 'nested-value' }, encrypted_content: 'opaque-cipher' }, input_tokens: 123, text: 'keep me' };
@@ -13,6 +13,44 @@ it('NP-14 masks nested and escaped credential fields without redacting token usa
   expect(JSON.parse(safe.toString())).toMatchObject({ text: 'keep me' });
   expect(safe.toString()).not.toContain('key-value');
   expect(safe.toString()).not.toContain('quotes');
+});
+
+it('NP-14 competing captures share retained bytes and recover reservations on overflow, discard and repeated release', () => {
+  const budget = new DiagnosticCaptureBudget(10);
+  const first = new DiagnosticCapture(100, 10, budget);
+  const second = new DiagnosticCapture(100, 10, budget);
+  const native = Buffer.from('secret');
+  first.push(native, 0); native.fill(0);
+  expect(first.buffer().toString()).toBe('secret');
+  second.push(Buffer.from('four'), 0);
+  expect(budget.retainedBytes).toBe(10);
+  expect(() => budget.configure(9)).toThrow('exceed');
+  second.push(Buffer.from('x'), 1);
+  expect(second).toMatchObject({ bytes: 5, count: 2, truncated: true, limitReason: 'active-buffer-budget', chunks: [] });
+  expect(budget.retainedBytes).toBe(6);
+  second.push(Buffer.alloc(100), 2);
+  expect(second.bytes).toBe(105); expect(budget.retainedBytes).toBe(6);
+  first.discard('capture-failed'); first.release(); first.release();
+  expect(budget.retainedBytes).toBe(0);
+  first.push(Buffer.from('late'), 3); expect(budget.retainedBytes).toBe(0);
+  const next = new DiagnosticCapture(100, 10, budget);
+  next.push(Buffer.alloc(10), 0); expect(budget.retainedBytes).toBe(10);
+  next.release(); budget.configure(0);
+  const zero = new DiagnosticCapture(100, 10, budget); zero.push(Buffer.from('x'), 0);
+  expect(zero.limitReason).toBe('active-buffer-budget'); expect(budget.retainedBytes).toBe(0);
+  for (const value of [-1, NaN, Infinity, 1.5]) {
+    expect(() => budget.configure(value)).toThrow(); expect(() => budget.reserve(value)).toThrow(); expect(() => budget.release(value)).toThrow();
+  }
+  expect(() => budget.release(1)).toThrow();
+});
+
+it('NP-14 body and chunk overflows release their existing reservations', () => {
+  const budget = new DiagnosticCaptureBudget(100);
+  for (const capture of [new DiagnosticCapture(3, 10, budget), new DiagnosticCapture(100, 1, budget)]) {
+    capture.push(Buffer.from('one'), 0); expect(budget.retainedBytes).toBe(3);
+    capture.push(Buffer.from('two'), 1); expect(budget.retainedBytes).toBe(0);
+    expect(capture.truncated).toBe(true);
+  }
 });
 
 it('NP-14 overlapping credentials and cookie token fragments cannot reveal a longer credential suffix', () => {
