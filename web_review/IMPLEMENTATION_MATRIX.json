@@ -1410,7 +1410,10 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/src/cas-read.ts",
+          "packages/server/test/cas-read-boundary.spec.ts",
+          "docs/deploy.md"
         ],
         "actualFiles": [
           "packages/server/src/auth.ts",
@@ -1431,7 +1434,10 @@
           "browser-tests/elicitation.spec.ts",
           "scripts/verify-native-elicitation.ts",
           "packages/testing/mock-models/src/plan.ts",
-          "packages/testing/mock-models/src/responses-server.ts"
+          "packages/testing/mock-models/src/responses-server.ts",
+          "packages/server/src/cas-read.ts",
+          "packages/server/test/cas-read-boundary.spec.ts",
+          "docs/deploy.md"
         ],
         "evidence": [
           "web_review/evidence/source-checks.json",
@@ -1443,7 +1449,38 @@
           "非法Origin和错误Host mutation/WS被拒；合法代理部署通过；坏cookie得到401/400而非500。",
           "越界/负数/重复/缺块/超大小上传不能变成成功文件，workspace symlink逃逸被拒。"
         ],
-        "remainingWork": "Remaining exhaustive request/upload/WS and workspace descriptor/race boundaries need completion; HTML/browser/Origin/Cookie/chunk regressions passed."
+        "remainingWork": "Remaining exhaustive request/upload/WS and workspace descriptor/race boundaries need completion; HTML/browser/Origin/Cookie/chunk regressions passed.",
+        "behaviorDeliveries": [
+          {
+            "issue": 188,
+            "behavior": "CAS download/readAll/admission pin data/files/prefix/object identities; reject changed paths including async cleanup before returning verified bytes/path",
+            "implementation": "reviewable-candidate",
+            "baseCommit": "60a3d186e7de6e6428b5b83ad1ff939c10642491",
+            "fileChanges": {
+              "added": [
+                "packages/server/src/cas-read.ts",
+                "packages/server/test/cas-read-boundary.spec.ts"
+              ],
+              "modified": [
+                "packages/server/src/files.ts",
+                "docs/deploy.md"
+              ],
+              "moved": [],
+              "deleted": []
+            },
+            "changedLines": {
+              "source": 106,
+              "tests": 254
+            },
+            "verification": "28 local tests: original3fail fixed, root/prefix/data/cleanup changes and handles closed, stream/empty/ETag/missing/platform/proc, uploads and actual metadata/MIME/admission preserved. Node/SQLite/FS/HTTP actual local; no native/model requests. Original invalid spy fixture and cleanup-window failure retained.",
+            "dataCompatibility": "No database/ID/schema change. Read requires Linux/proc, reports501 when unavailable. Internal createReadStream is now async and streams verified bytes; no existing source callers depend on synchronous return. Existing native plain-path admission format remains.",
+            "remainingAcceptance": [
+              "Independent actual target/platform and three native Agent/Provider scenarios",
+              "Plain path return to native process open handoff race remains outside this local check",
+              "Full NP13/NP17 matrix, acceptance, merge and deployment remain separate and unperformed by developer"
+            ]
+          }
+        ]
       },
       "dependencyIds": [
         "NP-02"

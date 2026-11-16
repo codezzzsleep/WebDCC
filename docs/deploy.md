@@ -47,6 +47,8 @@ pnpm install
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
 
+附件 CAS 读取需要 Linux `/proc/self/fd` 核验数据根、files、前缀目录和同一已打开对象；下载与附件校验在读取前后确认路径，大小、hash 和图片格式仍按已存身份校验。路径变化返回 409，缺对象返回 404，描述符核验不可用返回 501。内部 `createReadStream` 现在为异步入口，校验后从已读取的字节提供流；当前源码没有依赖其同步返回值的调用。普通附件路径返回后到原生进程实际打开之间的完整交接竞态仍须独立验收，不能将本地路径核验当作跨进程稳定性证明。
+
 
 ## 本机按生产方式运行（M7 已验收）
 
