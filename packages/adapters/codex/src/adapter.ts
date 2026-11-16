@@ -41,6 +41,7 @@ import { nativeRequest, nativeSettingsNotification, validateNativeServerParams, 
 import { codexSlashCommands, executeCodexSlash } from './slash.js';
 import { codexInputParts, encodeCodexInput, unsupportedCodexInput } from './input.js';
 import { elicitationResponse } from './elicitation.js';
+import { CodexPlanStreams } from './plans.js';
 import type { McpServerElicitationRequestParams } from './schema/v2/McpServerElicitationRequestParams.js';
 import type { PermissionsRequestApprovalParams } from './schema/v2/PermissionsRequestApprovalParams.js';
 import type { PermissionsRequestApprovalResponse } from './schema/v2/PermissionsRequestApprovalResponse.js';
@@ -145,6 +146,7 @@ interface SessionRuntime {
   subagents?: Map<string, CodexSubagentIdentity>;
   subagentTurns?: Map<string, Set<string>>;
   reasoningSummaries?: Map<string, ReasoningSummary>;
+  plans?: CodexPlanStreams;
   completedReasoning?: Set<string>;
   goalId?: string;
   goalVersion?: { createdAt: number; updatedAt: number };
@@ -243,6 +245,7 @@ export type CodexRoute =
   | 'goal/updated'
   | 'goal/cleared'
   | 'plan/updated'
+  | 'plan/delta'
   | 'plan/item'
   | 'diff/updated'
   | 'serverRequest/resolved'
@@ -280,6 +283,8 @@ export function routeNotification(method: string): CodexRoute {
       return 'goal/cleared';
     case 'turn/plan/updated':
       return 'plan/updated';
+    case 'item/plan/delta':
+      return 'plan/delta';
     case 'turn/diff/updated':
       return 'diff/updated';
     case 'serverRequest/resolved':
@@ -299,7 +304,6 @@ export function routeNotification(method: string): CodexRoute {
     case 'item/plan/started':
     case 'item/plan/updated':
     case 'item/plan/completed':
-    case 'item/plan/delta':
       return 'plan/item';
     case 'thread/started':
     case 'account/rateLimits/updated':
@@ -439,7 +443,7 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
         ...(typeof item['cwd'] === 'string' ? { cwd: item['cwd'] } : {}),
         ...(typeof item['exitCode'] === 'number' ? { exitCode: item['exitCode'] } : {}),
         ...(typeof item['aggregatedOutput'] === 'string' ? { outputTail: item['aggregatedOutput'].split('\n').slice(-200).join('\n') } : {}),
-        status: item['status'] === 'failed' ? 'failed' : item['status'] === 'inProgress' ? 'running' : 'completed',
+        status: item['status'] === 'failed' || item['status'] === 'declined' ? 'failed' : item['status'] === 'inProgress' ? 'running' : 'completed',
       };
     case 'exec': {
       const input = item['input'] ?? item['source'] ?? '';
@@ -470,11 +474,12 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
             ...(kind === 'add' ? { note: '整文件写入，未取得原内容' } : {}),
           };
         }),
-        status: item['status'] === 'failed' ? 'failed' : 'completed',
+        status: item['status'] === 'failed' || item['status'] === 'declined' ? 'failed' : item['status'] === 'inProgress' ? 'running' : 'completed',
       };
     }
     case 'plan':
       return {
+        ...(typeof item['text'] === 'string' ? { text: item['text'] } : {}),
         items: (Array.isArray(item['items']) ? (item['items'] as Record<string, unknown>[]) : []).map((step) => ({
           text: String(step['step'] ?? step['text'] ?? ''),
           status: step['status'] === 'completed' ? 'completed' : step['status'] === 'inProgress' ? 'in_progress' : 'pending',
@@ -1414,6 +1419,9 @@ export class CodexAdapter implements AgentAdapter {
         const nativeTurnId = turn.id ?? this.nativeTurnId(params) ?? runtime.turnId;
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
         const generationMs = endGeneration(runtime, nativeTurnId ?? undefined, this.now());
+        if (nativeTurnId != null) for (const event of (runtime.plans ??= new CodexPlanStreams()).endTurn(nativeTurnId)) {
+          this.emit(sessionId, { ...event, native: params });
+        }
         this.emit(sessionId, {
           type: 'turn.end',
           nativeTurnId: nativeTurnId ?? undefined,
@@ -1434,6 +1442,12 @@ export class CodexAdapter implements AgentAdapter {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
+        if (type === 'plan' && typeof item['text'] === 'string') {
+          for (const event of (runtime.plans ??= new CodexPlanStreams()).start(itemId, this.nativeTurnId(params) ?? runtime.turnId ?? undefined, item['text'])) {
+            this.emit(sessionId, { ...event, native: item });
+          }
+          return;
+        }
         if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') beginGeneration(runtime, this.nativeTurnId(params), this.now());
         if (type === 'agentMessage') runtime.started.add(JSON.stringify([this.nativeTurnId(params) ?? runtime.turnId, itemId]));
         const kind = mapItemKind(type);
@@ -1466,6 +1480,12 @@ export class CodexAdapter implements AgentAdapter {
         const item = (params['item'] ?? {}) as Record<string, unknown>;
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
+        if (type === 'plan' && typeof item['text'] === 'string') {
+          for (const event of (runtime.plans ??= new CodexPlanStreams()).complete(itemId, this.nativeTurnId(params) ?? runtime.turnId ?? undefined, item['text'])) {
+            this.emit(sessionId, { ...event, native: item });
+          }
+          return;
+        }
         if (type === 'userMessage') {
           const { text, replies } = nativeAsyncReplies(item);
           for (const reply of replies) (runtime.asyncAnswered ??= new Set()).add(reply.questionItemId);
@@ -1672,6 +1692,15 @@ export class CodexAdapter implements AgentAdapter {
           data: { items: mapPlanItems(params) },
           native: params,
         });
+        return;
+      }
+      case 'plan/delta': {
+        if (typeof params['turnId'] !== 'string' || typeof params['itemId'] !== 'string' || typeof params['delta'] !== 'string') {
+          this.emit(sessionId, { type: 'item.complete', itemKey: 'invalid-plan-' + frameKey, kind: 'unknown',
+            data: { nativeType: method }, native: params, nativeTurnId: this.nativeTurnId(params) });
+          return;
+        }
+        for (const event of (runtime.plans ??= new CodexPlanStreams()).delta(params['itemId'], params['turnId'], params['delta'])) this.emit(sessionId, event);
         return;
       }
       case 'plan/item': {

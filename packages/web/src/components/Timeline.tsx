@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -274,7 +274,7 @@ function TurnView({
 function summaryLabel(turn: ProtocolTurnView): string {
   const { commands, reads, edits, tools } = turn.summary;
   const parts: string[] = [];
-  if (turn.plan !== undefined) parts.push('更新了计划');
+  if (turn.plan !== undefined || turn.steps.some(step => nativePlanText(step) !== undefined)) parts.push('更新了计划');
   if (turn.goal !== undefined) parts.push(goalLabel(turn.goal));
   if (commands > 0) parts.push(`执行了 ${commands} 条命令`);
   if (reads > 0) parts.push(`读取了 ${reads} 个文件`);
@@ -354,6 +354,8 @@ function ChangesCard({ changes, onOpenDiff }: { changes: ChangeSummary[]; onOpen
 }
 
 function HotRow({ item }: { item: LiveItem }): React.ReactElement {
+  const planText = nativePlanText(item);
+  if (planText !== undefined) return <NativePlan text={planText} itemKey={item.itemKey} live />;
   const data = item.data as { text?: string; command?: string; outputTail?: string };
   if (item.kind === 'assistant.message') {
     return <div className="hot-text">{data.text ?? ''}</div>;
@@ -453,10 +455,11 @@ function StepRow({
     }
     case 'command': {
       const data = event.data as EventData['command'];
-      const failed = data.status === 'failed';
+      const declined = nativeOperationDeclined(event);
+      const failed = data.status === 'failed' || declined;
       return (
         <div className={className} id={`e-${event.seq}`}>
-          <StepLine icon="terminal" label="运行命令" detail={data.label ?? data.command} onClick={toggle} open={open} failed={failed} />
+          <StepLine icon="terminal" label={declined ? '命令已拒绝' : '运行命令'} detail={data.label ?? data.command} onClick={toggle} open={open} failed={failed} />
           {open ? <pre className="output">{data.outputTail === undefined || data.outputTail === '' ? '（无输出）' : data.outputTail}</pre> : null}
         </div>
       );
@@ -479,7 +482,7 @@ function StepRow({
         <div className={className}>
           <StepLine
             icon="edit"
-            label={failedFileOperation(event) ? '编辑失败' : '编辑'}
+            label={nativeOperationDeclined(event) ? '改动已拒绝' : failedFileOperation(event) ? '编辑失败' : '编辑'}
             detail={detail}
             failed={failedFileOperation(event)}
             {...(failedFileOperation(event) || first?.diffFileId === undefined ? {} : { onClick: () => onOpenDiff(first.diffFileId ?? '', first.path) })}
@@ -549,6 +552,8 @@ function StepRow({
     }
     case 'plan': {
       const data = event.data as EventData['plan'];
+      const text = nativePlanText(event);
+      if (text !== undefined) return <NativePlan text={text} itemKey={event.itemKey} incomplete={data.incomplete} />;
       return (
         <div className={className}>
           <StepLine icon="listChecks" label="更新了计划" detail={`${data.items.length} 项`} />
@@ -603,6 +608,13 @@ function StepRow({
     default:
       return null;
   }
+}
+
+function NativePlan({ text, itemKey, incomplete, live }: { text: string; itemKey: string; incomplete?: boolean; live?: boolean }): React.ReactElement {
+  return <div className="step" data-testid="native-plan" data-item-key={itemKey}>
+    <StepLine icon="listChecks" label={live ? '正在生成计划' : incomplete ? '计划未完成' : '原生计划'} />
+    <div className="step-detail" data-testid="native-plan-text" data-raw-text={text}><Markdown text={text} /></div>
+  </div>;
 }
 
 function toolDetail(input: unknown): string {

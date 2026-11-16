@@ -64,9 +64,16 @@ export const cache = {
     if (events.length === 0) return;
     const database = await db();
     const tx = database.transaction(['events', 'meta'], 'readwrite');
-    for (const event of events) void tx.objectStore('events').put(event);
-    if (coverage !== undefined) void tx.objectStore('meta').put(coverage, `coveredWindow:${coverage.sessionId}`);
-    await tx.done;
+    const writes: Promise<unknown>[] = [tx.done];
+    try {
+      for (const event of events) writes.push(tx.objectStore('events').put(event));
+      if (coverage !== undefined) writes.push(tx.objectStore('meta').put(coverage, `coveredWindow:${coverage.sessionId}`));
+      await Promise.all(writes);
+    } catch (error) {
+      try { tx.abort(); } catch { /* An aborted or completed transaction is already settled. */ }
+      await Promise.allSettled(writes);
+      throw error;
+    }
   },
 
   async getEvents(sessionId: string, limit = 500): Promise<StoredEvent[]> {

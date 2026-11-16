@@ -34,6 +34,7 @@ describe('NP-03 browser queue recovery', () => {
   it('NP-06 distinguishes collected answers, failed submissions and newer retries', async () => {
     const store = new AppStore();
     store.applyEvent({ sessionId: 's', seq: 1, turnId: null, itemKey: 'question-q', kind: 'question', data: { questionId: 'q', prompt: 'Question' }, at: '2026-01-01T00:00:00Z' });
+    await vi.advanceTimersByTimeAsync(100);
     mocks.session.mockResolvedValueOnce({ id: 's', lastSeq: 1 });
     await store.ensureSession('s');
     mocks.options[0]?.onState('online', 0);

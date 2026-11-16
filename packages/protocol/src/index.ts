@@ -14,6 +14,7 @@ export * from './ulid.js';
 export * from './validate.js';
 export * from './trace.js';
 export * from './turn.js';
+export * from './plans.js';
 export * from './invariants.js';
 export * from './watchdog.js';
 export * from './subagents.js';
@@ -32,4 +33,4 @@ export * from './native-observation.js';
 export * from './native-controls.js';
 
 export const PROTOCOL_VERSION = 1;
-export { failedFileOperation, fileOperationError } from './file-operation.js';
+export { failedFileOperation, fileOperationError, nativeOperationDeclined } from './file-operation.js';
