@@ -1,0 +1,217 @@
+{
+  "evidenceKind": "actual pinned native execution with loopback scripted model; selected native envelopes replay, not live Provider",
+  "sourceCaptureSha256": "a2071056d24f830813e2af519fa52b6a1e0b36e4a91ac70055ec383b7a84af3b",
+  "nativeHostFingerprint": "932fdfe376de37d1d0cf4c17978e066604874d2586ebd1de870cff21d65d73c2",
+  "sourceModelRequests": 3,
+  "newModelRequests": 0,
+  "nativeId": "session-b9838606-5f9f-4bc7-9a97-bd9454ad2625",
+  "frames": [
+    {
+      "i": 3,
+      "t": 0,
+      "dir": "in",
+      "ch": "mux:$events",
+      "frame": {
+        "type": "item",
+        "streamId": "s1",
+        "value": {
+          "type": "ready",
+          "clientId": "23cfbafa-e2a8-4b77-8c2e-83e2b85b5f01",
+          "host": {
+            "home": "/tmp/wdcc-native-question-5G2wnQ/home"
+          }
+        }
+      }
+    },
+    {
+      "i": 410,
+      "t": 0,
+      "dir": "in",
+      "ch": "mux:$events",
+      "frame": {
+        "type": "item",
+        "streamId": "s4",
+        "value": {
+          "type": "event",
+          "event": {
+            "type": "tool/call",
+            "seq": 17,
+            "time": 1794762979169,
+            "data": {
+              "turn": 1,
+              "step": 1,
+              "callId": "toolu_mock_mwi3jdqk_3",
+              "name": "ask_user_question",
+              "arguments": "{\"questions\":[{\"id\":\"q0\",\"header\":\"Language\",\"question\":\"Which language?\",\"options\":[{\"label\":\"Alpha\",\"description\":\"First choice\"},{\"label\":\"Beta\",\"description\":\"Second choice\"}],\"multi_select\":false},{\"id\":\"q1\",\"header\":\"Features\",\"question\":\"Which features?\",\"options\":[{\"label\":\"Alpha\",\"description\":\"First choice\"},{\"label\":\"Beta\",\"description\":\"Second choice\"}],\"multi_select\":true}]}"
+            }
+          }
+        }
+      }
+    },
+    {
+      "i": 413,
+      "t": 0,
+      "dir": "in",
+      "ch": "mux:$events",
+      "frame": {
+        "type": "item",
+        "streamId": "s1",
+        "value": {
+          "type": "waterfall",
+          "event": "user-questions/request",
+          "eventId": "d49b2cb9-45d4-4b3c-87cd-8867e2ce551f",
+          "agentId": "session-b9838606-5f9f-4bc7-9a97-bd9454ad2625",
+          "request": {
+            "questions": [
+              {
+                "id": "q0",
+                "question": "Which language?",
+                "header": "Language",
+                "options": [
+                  {
+                    "label": "Alpha",
+                    "description": "First choice"
+                  },
+                  {
+                    "label": "Beta",
+                    "description": "Second choice"
+                  }
+                ],
+                "multiSelect": false
+              },
+              {
+                "id": "q1",
+                "question": "Which features?",
+                "header": "Features",
+                "options": [
+                  {
+                    "label": "Alpha",
+                    "description": "First choice"
+                  },
+                  {
+                    "label": "Beta",
+                    "description": "Second choice"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "i": 1304,
+      "t": 0,
+      "dir": "out",
+      "ch": "rpc:$events/result",
+      "frame": {
+        "frame": {
+          "type": "client-request",
+          "rpcId": "1525dae0-4a5b-4d04-ac14-4cc101d7e33d",
+          "method": "$events/result",
+          "payload": {
+            "args": {
+              "clientId": "23cfbafa-e2a8-4b77-8c2e-83e2b85b5f01",
+              "eventId": "d49b2cb9-45d4-4b3c-87cd-8867e2ce551f",
+              "outcome": {
+                "kind": "result",
+                "value": {
+                  "answers": [
+                    {
+                      "id": "q0",
+                      "selected": [],
+                      "custom": "  原生自由答案 中文  "
+                    },
+                    {
+                      "id": "q1",
+                      "selected": [
+                        "Alpha",
+                        "Beta"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "dshTransport": {
+          "endpoint": "$events/result",
+          "rpcId": "1525dae0-4a5b-4d04-ac14-4cc101d7e33d",
+          "coverage": "complete",
+          "byteLength": 375,
+          "verifiedHostFingerprint": "932fdfe376de37d1d0cf4c17978e066604874d2586ebd1de870cff21d65d73c2",
+          "hostEpoch": 0,
+          "muxGeneration": 0
+        }
+      }
+    },
+    {
+      "i": 1309,
+      "t": 0,
+      "dir": "in",
+      "ch": "mux:$events",
+      "frame": {
+        "type": "item",
+        "streamId": "s4",
+        "value": {
+          "type": "event",
+          "event": {
+            "type": "tool/result",
+            "seq": 20,
+            "time": 1794762981117,
+            "data": {
+              "turn": 1,
+              "step": 1,
+              "message": {
+                "role": "tool",
+                "source": {
+                  "kind": "tool",
+                  "callId": "toolu_mock_mwi3jdqk_3"
+                },
+                "toolCallId": "toolu_mock_mwi3jdqk_3",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "{\"answers\":[{\"id\":\"q0\",\"selected\":[],\"custom\":\"  原生自由答案 中文  \"},{\"id\":\"q1\",\"selected\":[\"Alpha\",\"Beta\"]}]}"
+                  }
+                ],
+                "isError": false,
+                "id": "05e83a5e-4c2b-4f65-a34d-c278ced90644"
+              }
+            },
+            "sourceEventSeqs": [
+              17
+            ],
+            "surfaceOp": "append"
+          }
+        }
+      }
+    },
+    {
+      "i": 1360,
+      "t": 0,
+      "dir": "in",
+      "ch": "rpc:$events/result",
+      "frame": {
+        "frame": {
+          "type": "server-response",
+          "rpcId": "1525dae0-4a5b-4d04-ac14-4cc101d7e33d",
+          "result": {
+            "ok": true
+          }
+        },
+        "dshTransport": {
+          "endpoint": "$events/result",
+          "rpcId": "1525dae0-4a5b-4d04-ac14-4cc101d7e33d",
+          "coverage": "complete",
+          "httpStatus": 200,
+          "verifiedHostFingerprint": "932fdfe376de37d1d0cf4c17978e066604874d2586ebd1de870cff21d65d73c2",
+          "hostEpoch": 0,
+          "muxGeneration": 0
+        }
+      }
+    }
+  ]
+}
