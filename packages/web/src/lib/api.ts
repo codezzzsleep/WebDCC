@@ -37,6 +37,9 @@ import type {
   InputContent,
   ModelOption,
   CodexInputModeCatalog,
+  DshSubagentCatalog,
+  DshSubagentHistory,
+  DshSubagentHistoryOptions,
 } from '@webdcc/protocol';
 
 export interface SystemMetrics {
@@ -142,6 +145,13 @@ export const api = {
     request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/prompt`, { method: 'POST', body: JSON.stringify({ text }) }),
   interruptSubagent: (sessionId: string, childSessionId: string) =>
     request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/interrupt`, { method: 'POST' }),
+  subagents: (sessionId: string) => request<DshSubagentCatalog>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents`),
+  subagentHistory: (sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions) => {
+    const query = new URLSearchParams({ limit: String(options.limit),
+      ...(options.throughSeq === undefined ? {} : { throughSeq: String(options.throughSeq) }),
+      ...(options.beforeSeq === undefined ? {} : { beforeSeq: String(options.beforeSeq) }) });
+    return request<DshSubagentHistory>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(childSessionId)}/history?${query}`);
+  },
   models: async (agent: string, providerId: string | null): Promise<string[]> => {
     const query = `agent=${encodeURIComponent(agent)}${providerId === null ? '' : `&providerId=${encodeURIComponent(providerId)}`}`;
     const result = await request<{ models: string[] }>(`/api/models?${query}`);

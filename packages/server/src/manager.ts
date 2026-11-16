@@ -24,6 +24,9 @@ import type {
   SlashCommandCatalog,
   SlashControlRequest,
   QueueSnapshot,
+  DshSubagentCatalog,
+  DshSubagentHistory,
+  DshSubagentHistoryOptions,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
@@ -1140,6 +1143,26 @@ export class SessionManager {
     if (runtime.adapter.sendSubagent === undefined) throw Object.assign(new Error('该 Agent 不支持继续子 Agent'), { statusCode: 400 });
     await runtime.adapter.sendSubagent(sessionId, childSessionId, text);
     this.assertOwner(runtime);
+  }
+
+  async listSubagents(sessionId: string): Promise<DshSubagentCatalog> {
+    this.requireSession(sessionId);
+    const runtime = this.runtimes.get(sessionId);
+    if (runtime?.adapter.listSubagents === undefined) throw this.nativeControlRejected('原生子 Agent 目录仍在恢复或不可用', 409);
+    this.assertOwner(runtime);
+    const result = await runtime.adapter.listSubagents(sessionId);
+    this.assertOwner(runtime);
+    return result;
+  }
+
+  async readSubagentHistory(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions): Promise<DshSubagentHistory> {
+    this.requireSession(sessionId);
+    const runtime = this.runtimes.get(sessionId);
+    if (runtime?.adapter.readSubagentHistory === undefined) throw this.nativeControlRejected('原生子会话仍在恢复或不可用', 409);
+    this.assertOwner(runtime);
+    const result = await runtime.adapter.readSubagentHistory(sessionId, childSessionId, options);
+    this.assertOwner(runtime);
+    return result;
   }
 
   async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {

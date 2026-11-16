@@ -1,0 +1,13 @@
+.dsh-subagents { border: 1px solid var(--border-l2); border-radius: var(--radius-md); margin: 12px auto; width: 100%; max-width: 820px; overflow-wrap: anywhere; }
+.dsh-subagents-heading { display: flex; width: 100%; align-items: center; gap: 8px; padding: 10px 14px; border: 0; background: transparent; text-align: left; }
+.dsh-subagents-heading > svg:last-child { margin-left: auto; }
+.dsh-subagents-body { padding: 0 14px 14px; }
+.dsh-child { padding: 12px 0; border-top: 1px solid var(--border-l1); }
+.dsh-child-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.dsh-child-heading > strong { flex: 1 1 160px; }
+.dsh-child p { margin: 6px 0; }
+.dsh-child details { margin: 6px 0; }
+.dsh-child-history { border-top: 1px solid var(--border-l2); margin-top: 12px; padding-top: 14px; }
+.dsh-child-message { margin: 10px 0; padding: 8px 0; border-top: 1px solid var(--border-l1); }
+.dsh-child-message .output { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dsh-subagents [role="alert"] { color: var(--text-2); }
