@@ -3,11 +3,22 @@ import { stat } from 'node:fs/promises';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { WebSocket } from 'ws';
 import { authorityOf, isAuthenticated, requestBoundaryError, type RequestBoundary } from './auth.js';
-import type { NativeTerminalSupervisor } from './native-terminal.js';
 import { nativeSurfaceError } from './native-surface.js';
 
+interface SurfaceView { id: string; ownerSessionId: string; generation: number; intent: string }
+interface SurfaceSupervisor {
+  create(id: string, intent: 'new-native' | 'same-session' | 'live-session', options: { rows?: number; cols?: number; recordOutput?: boolean }): Promise<SurfaceView>;
+  list(id: string): SurfaceView[]; get(id: string): SurfaceView;
+  stop(id: string, generation: number): Promise<SurfaceView>; close(id: string): Promise<SurfaceView>;
+  log(id: string): { path: string; truncated: boolean };
+  input(id: string, generation: number, data: string): void; resize(id: string, generation: number, rows: number, cols: number): void;
+  attach(id: string, generation: number, client: { send(frame: unknown): void; close(code: number, reason: string): void }, afterSeq?: number): () => void;
+  confirmIdentity?(id: string): Promise<boolean>; dispose(): Promise<void>;
+}
+
 export interface NativeTerminalRoutesDeps {
-  supervisor: NativeTerminalSupervisor;
+  supervisor: SurfaceSupervisor;
+  base?: '/api/native-terminal' | '/api/native-peer';
   config: RequestBoundary & { token: string };
   /** Persistent command receipt/idempotence belongs to the common action journal. */
   executeControl<T>(action: NativeTerminalControlAction, run: () => Promise<T>): Promise<T>;
@@ -16,7 +27,7 @@ export interface NativeTerminalRoutesDeps {
 }
 
 export type NativeTerminalControlAction =
-  | { kind: 'native-terminal.create'; commandId: string; sessionId: string; intent: 'new-native' | 'same-session'; recordOutput: boolean; rows: number; cols: number }
+  | { kind: 'native-terminal.create'; commandId: string; sessionId: string; intent: 'new-native' | 'same-session' | 'live-session'; recordOutput: boolean; rows: number; cols: number }
   | { kind: 'native-terminal.stop' | 'native-terminal.close' | 'native-terminal.return'; commandId: string; sessionId: string; terminalId: string; generation: number };
 
 export function nativeControlCommandId(value: unknown): string {
@@ -33,7 +44,7 @@ export function registerNativeTerminalRoutes(app: FastifyInstance, deps: NativeT
     if (error !== undefined) { await reply.status(403).send({ error }); return; }
     if (!isAuthenticated(config.token, request.headers.cookie, authorityOf(request.headers, config.host, config.port))) await reply.status(401).send({ error: 'unauthorized' });
   };
-  const base = '/api/native-terminal';
+  const base = deps.base ?? '/api/native-terminal';
   app.get(`${base}/takeover-status`, { onRequest: boundary }, request => {
     const { sessionId } = request.query as { sessionId?: string };
     if (!sessionId) throw nativeSurfaceError('缺少来源会话', 400);
@@ -46,10 +57,10 @@ export function registerNativeTerminalRoutes(app: FastifyInstance, deps: NativeT
   });
   app.post(base, { onRequest: boundary, bodyLimit: 4_096 }, async request => {
     const body = request.body as { commandId?: unknown; sessionId?: unknown; intent?: unknown; rows?: unknown; cols?: unknown; recordOutput?: unknown };
-    if (!body || typeof body !== 'object' || typeof body.sessionId !== 'string' || !body.sessionId || !['same-session', 'new-native'].includes(String(body.intent))) throw nativeSurfaceError('无效的原生终端创建参数', 400);
+    if (!body || typeof body !== 'object' || typeof body.sessionId !== 'string' || !body.sessionId || !(base === '/api/native-peer' ? ['live-session'] : ['same-session', 'new-native']).includes(String(body.intent))) throw nativeSurfaceError('无效的原生终端创建参数', 400);
     if (Object.keys(body).some(key => !['commandId', 'sessionId', 'intent', 'rows', 'cols', 'recordOutput'].includes(key))) throw nativeSurfaceError('原生终端不接受 executable、argv、cwd 或 env 请求参数', 400);
     if ((body.rows !== undefined && typeof body.rows !== 'number') || (body.cols !== undefined && typeof body.cols !== 'number') || (body.recordOutput !== undefined && typeof body.recordOutput !== 'boolean')) throw nativeSurfaceError('终端尺寸或日志选项无效', 400);
-    const action: NativeTerminalControlAction = { kind: 'native-terminal.create', commandId: nativeControlCommandId(body.commandId), sessionId: body.sessionId, intent: body.intent as 'same-session' | 'new-native', rows: (body.rows as number | undefined) ?? 30, cols: (body.cols as number | undefined) ?? 100, recordOutput: body.recordOutput === true };
+    const action: NativeTerminalControlAction = { kind: 'native-terminal.create', commandId: nativeControlCommandId(body.commandId), sessionId: body.sessionId, intent: body.intent as 'same-session' | 'new-native' | 'live-session', rows: (body.rows as number | undefined) ?? 30, cols: (body.cols as number | undefined) ?? 100, recordOutput: body.recordOutput === true };
     return deps.executeControl(action, () => supervisor.create(action.sessionId, action.intent, action));
   });
   app.get(`${base}/:id`, { onRequest: boundary }, async request => supervisor.get((request.params as { id: string }).id));
@@ -64,7 +75,7 @@ export function registerNativeTerminalRoutes(app: FastifyInstance, deps: NativeT
     const { commandId, generation } = (request.body ?? {}) as { commandId?: string; generation?: number };
     if (generation !== terminal.generation || terminal.intent !== 'same-session' || !deps.returnToStructured) throw nativeSurfaceError('此终端没有同会话返回合同');
     return deps.executeControl({ kind: 'native-terminal.return', commandId: nativeControlCommandId(commandId), sessionId: terminal.ownerSessionId, terminalId: terminal.id, generation }, async () => {
-      if (!await supervisor.confirmIdentity(terminal.id)) throw nativeSurfaceError('原生 CLI 当前身份无法确认，返回未执行');
+      if (!await supervisor.confirmIdentity?.(terminal.id)) throw nativeSurfaceError('原生 CLI 当前身份无法确认，返回未执行');
       await supervisor.close(terminal.id);
       return deps.returnToStructured!(terminal.ownerSessionId);
     });

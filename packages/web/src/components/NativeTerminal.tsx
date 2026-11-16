@@ -13,7 +13,7 @@ export interface NativeTerminalInfo {
   nativeIdentityVerified?: boolean;
   identityInspection?: { state: 'unverified' | 'verified' | 'drifted' | 'uncertain'; nativeId: string | null; observedAt: string; reason: string };
   identityChanges?: { state: 'unverified' | 'verified' | 'drifted' | 'uncertain'; nativeId: string | null; observedAt: string; reason: string }[];
-  intent?: 'new-native' | 'same-session';
+  intent?: 'new-native' | 'same-session' | 'live-session';
   state: 'starting' | 'running' | 'closing' | 'exited' | 'uncertain';
   exitCode: number | null;
   outputTruncated: boolean;
@@ -36,7 +36,7 @@ export async function nativeSurfaceRequest<T>(url: string, init?: RequestInit): 
 /** xterm consumes ANSI bytes; native output never enters an HTML renderer. */
 export function NativeTerminal({ terminal, endpoint = '/api/native-terminal', onChanged, onClosed, initialCommand }: {
   terminal: NativeTerminalInfo;
-  endpoint?: '/api/native-terminal' | '/api/native-process';
+  endpoint?: '/api/native-terminal' | '/api/native-process' | '/api/native-peer';
   onChanged?(terminal: NativeTerminalInfo): void;
   onClosed?(): void;
   initialCommand?: string;
@@ -72,7 +72,7 @@ export function NativeTerminal({ terminal, endpoint = '/api/native-terminal', on
     xterm.current = term;
     const update = (next: NativeTerminalInfo): void => {
       viewRef.current = next; setView(next); callbacks.current.onChanged?.(next);
-      term.options.disableStdin = !['starting', 'running'].includes(next.state) || (next.intent === 'same-session' && !next.nativeIdentityVerified);
+      term.options.disableStdin = !['starting', 'running'].includes(next.state) || ((next.intent === 'same-session' || next.intent === 'live-session') && !next.nativeIdentityVerified);
     };
     const send = (message: object): void => { if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message)); };
     const data = term.onData(input => {
@@ -162,11 +162,11 @@ export function NativeTerminal({ terminal, endpoint = '/api/native-terminal', on
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: 12, alignItems: 'center' }}>
       <strong>{view.agent} {view.nativeVersion}</strong>
       <span role="status">{connection === 'connected' ? '已连接' : connection === 'blocked' ? '连接受阻' : connection === 'connecting' ? '正在连接' : '连接已断开'} · {view.state}{view.exitCode !== null ? ` · exit ${view.exitCode}` : ''}</span>
-      <button type="button" disabled={pending || !['starting', 'running'].includes(view.state)} onClick={() => { void control('stop'); }}>停止进程</button>
+      <button type="button" disabled={pending || !['starting', 'running'].includes(view.state)} onClick={() => { void control('stop'); }}>{view.intent === 'live-session' ? '关闭原生界面' : '停止进程'}</button>
       {view.intent === 'same-session' ? <button type="button" disabled={pending || !view.nativeIdentityVerified || view.state !== 'running'} onClick={() => void returnToStructured()}>结束 CLI 并返回结构化会话</button> : null}
       <button type="button" disabled={connection !== 'connected' || !['starting', 'running'].includes(view.state)} onClick={() => { void paste(); }}>粘贴剪贴板</button>
-      {initialCommand ? <button type="button" disabled={connection !== 'connected' || !['starting', 'running'].includes(view.state) || view.intent === 'same-session' && !view.nativeIdentityVerified}
-        onClick={() => { if (socket.current?.readyState === WebSocket.OPEN && (view.intent !== 'same-session' || view.nativeIdentityVerified)) { xterm.current?.paste(initialCommand); xterm.current?.focus(); } }}>填入原生指令</button> : null}
+      {initialCommand ? <button type="button" disabled={connection !== 'connected' || !['starting', 'running'].includes(view.state) || (view.intent === 'same-session' || view.intent === 'live-session') && !view.nativeIdentityVerified}
+        onClick={() => { if (socket.current?.readyState === WebSocket.OPEN && (!(view.intent === 'same-session' || view.intent === 'live-session') || view.nativeIdentityVerified)) { xterm.current?.paste(initialCommand); xterm.current?.focus(); } }}>填入原生指令</button> : null}
       <button type="button" disabled={pending} onClick={() => { void control('close'); }}>关闭并清除日志</button>
       {view.logDownloadAvailable && <a href={`${endpoint}/${encodeURIComponent(view.id)}/log`} download>下载临时日志</a>}
     </div>

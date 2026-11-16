@@ -8,6 +8,7 @@ import type { Store } from './store.js';
 import type { SessionManager } from './manager.js';
 import type { Config } from './config.js';
 import { NativeTerminalSupervisor } from './native-terminal.js';
+import { NativePeerSupervisor } from './native-peer.js';
 import { NativeProcessSupervisor, type NativeProcessBridge } from './native-terminal-process.js';
 import { registerNativeTerminalRoutes, type NativeTerminalControlAction } from './native-terminal-routes.js';
 import { registerNativeProcessRoutes, type NativeProcessControlAction } from './native-terminal-process-routes.js';
@@ -211,4 +212,29 @@ export function registerNativeSurfaces(app: FastifyInstance, store: Store, manag
         reason: session.agent !== 'codex' ? '此版本未验证本地会话跨进程仲裁，请使用独立原生会话' : '接管时将核对原生线程写锁、历史与设置；请先结束当前工作' };
     }, returnToStructured: sessionId => manager.returnFromNativeTerminal(sessionId) });
   registerNativeProcessRoutes(app, { supervisor: processes, config, executeControl });
+  const peers = new NativePeerSupervisor(async sessionId => {
+    const session = manager.requireSession(sessionId); const value = manager.getRuntime(sessionId);
+    const connection = value?.adapter.nativePeerConnection?.(sessionId);
+    if (session.agent !== 'codex' || !value || !connection || !store.nativeOwners.current(sessionId, value.identity)) throw nativeSurfaceError('当前原生服务未提供已验证的运行中界面');
+    const selected = value.adapter.nativeTerminalEnvironment?.() ?? process.env;
+    const env: Record<string, string> = {};
+    for (const key of ['HOME', 'PATH', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'TZ']) if (selected[key] !== undefined) env[key] = selected[key]!;
+    env['CODEX_HOME'] = connection.codexHome;
+    return { ...connection, identity: value.identity, executable: await executablePath(connection.command), cwd: value.workspacePath, env,
+      assert: () => { if (manager.getRuntime(sessionId) !== value || value.disposing || !store.nativeOwners.current(sessionId, value.identity) || value.adapter.nativePeerConnection?.(sessionId) === undefined) throw nativeSurfaceError('原生运行实例已更换'); },
+      hold: () => manager.holdNativeActivity(sessionId),
+    };
+  }, join(config.dataDir, 'temporary-native-peer-logs'));
+  registerNativeTerminalRoutes(app, { base: '/api/native-peer', supervisor: peers, config,
+    executeControl: async (action, run) => {
+      const { kind, commandId, sessionId, ...payload } = action;
+      const response = await store.nativeActions.execute(sessionId, { commandId, action: { type: `native-peer-${kind.split('.').at(-1)}`, ...payload } }, run);
+      if (response.result !== undefined) return response.result as Awaited<ReturnType<typeof run>>;
+      throw nativeSurfaceError('原生视图结果未确认，不能重复启动');
+    }, takeoverStatus: sessionId => {
+      const value = manager.getRuntime(sessionId);
+      return { allowed: !!value && !value.disposing && store.nativeOwners.current(sessionId, value.identity) && value.adapter.nativePeerConnection?.(sessionId) !== undefined,
+        reason: '此原生版本或当前运行实例未提供并行界面；现有任务保持运行' };
+    },
+  });
 }

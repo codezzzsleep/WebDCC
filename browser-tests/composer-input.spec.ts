@@ -56,8 +56,19 @@ it('product Composer keeps failed uploads in A across B/refresh, resumes exact b
     await page.goto(`${base}/s/${a.sessionId}`);
     const input = page.getByTestId('composer-input'); await input.waitFor();
     await input.fill('  exact\n正文  '); const editor = await input.inputValue();
-    await page.route('**/chunks/1', async route => { await page.context().setOffline(true); await route.abort('internetdisconnected'); });
+    let interruptedUploadId: string | undefined;
+    let acceptedBeforeOffline: number[] = [];
+    await page.route('**/chunks/1', async route => {
+      await page.context().setOffline(true);
+      await route.abort('internetdisconnected');
+      const id = new URL(route.request().url()).pathname.split('/')[3]!;
+      acceptedBeforeOffline = ctx.files.uploadStatus(id).received;
+      interruptedUploadId = id;
+    });
     await page.getByTestId('add-file-input').setInputFiles({ name: 'proof.bin', mimeType: 'application/octet-stream', buffer: fixture });
+    // The button is also visible while queued; require the actual network cut.
+    await expect.poll(() => interruptedUploadId).toBeDefined();
+    expect(acceptedBeforeOffline).toEqual([0]);
     await page.getByTestId('composer-attachments').getByRole('button', { name: '继续上传' }).waitFor();
     await input.press('Enter');
     expect(ctx.store.allEvents(a.sessionId).filter(event => event.kind === 'user.message')).toHaveLength(0);
@@ -68,10 +79,19 @@ it('product Composer keeps failed uploads in A across B/refresh, resumes exact b
     expect(await page.getByTestId('composer-attachments').count()).toBe(0);
     await page.goto(`${base}/s/${a.sessionId}`);
     await expect.poll(() => page.getByTestId('composer-input').inputValue()).toBe(editor);
-    let repeatedChunk = 0; page.on('request', request => { if (request.url().endsWith('/chunks/0')) repeatedChunk++; });
+    let repeatedChunk = 0;
+    const resumedUploads: string[] = [];
+    page.on('request', request => {
+      if (request.url().endsWith('/chunks/0')) repeatedChunk++;
+      const match = new URL(request.url()).pathname.match(/^\/api\/uploads\/([^/]+)\/chunks\/[0-9]+$/);
+      if (match) resumedUploads.push(match[1]!);
+    });
     await page.getByTestId('composer-attachments').getByRole('button', { name: '继续上传' }).click();
     await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);
     expect(repeatedChunk).toBe(0);
+    expect(resumedUploads).toHaveLength(2);
+    expect(resumedUploads.every(id => id === interruptedUploadId)).toBe(true);
+    console.log('upload recovery cut', JSON.stringify({ interruptedUploadId, acceptedBeforeOffline, resumedUploads, repeatedChunk }));
     const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6n1sAAAAASUVORK5CYII=', 'base64');
     await page.getByTestId('add-image-input').setInputFiles({ name: 'pixel.png', mimeType: 'image/png', buffer: image });
     await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);

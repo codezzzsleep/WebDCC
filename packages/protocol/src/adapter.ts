@@ -203,6 +203,11 @@ export interface AgentAdapter {
   nativeProcessTerminate?(sessionId: string, params: { processId: string }): Promise<void>;
   /** Server-only launch environment, never part of a public catalog. */
   nativeTerminalEnvironment?(): Record<string, string | undefined>;
+  /** Server-only peer transport; it shares the existing native process. */
+  nativePeerConnection?(sessionId: string): {
+    socketPath: string; nativeId: string; nativeVersion: string; codexHome: string; command: string;
+    record(direction: 'in' | 'out', channel: string, frame: Record<string, unknown>): boolean;
+  } | undefined;
   /** Host-wide transport records have an explicit non-session diagnostic scope. */
   bindGlobalNativeEvents?(sink: NativeFrameSink): void;
 }

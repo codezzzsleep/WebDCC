@@ -12,19 +12,34 @@ export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [takeoverState, setTakeoverState] = useState(takeover ?? { allowed: false, reason: '正在核对同会话接管条件' });
+  const [peerState, setPeerState] = useState({ allowed: false, reason: '' });
+  const [peers, setPeers] = useState<NativeTerminalInfo[]>([]);
   const currentSession = useRef(sessionId); currentSession.current = sessionId;
   useEffect(() => {
     let cancelled = false;
     setTerminals([]); setError(''); setPending(false);
+    setPeers([]); setPeerState({ allowed: false, reason: '' });
+    if (agent === 'codex') {
+      void nativeSurfaceRequest<{ allowed: boolean; reason: string }>(`/api/native-peer/takeover-status?sessionId=${encodeURIComponent(sessionId)}`).then(value => { if (!cancelled) setPeerState(value); }).catch(() => undefined);
+      void nativeSurfaceRequest<{ terminals: NativeTerminalInfo[] }>(`/api/native-peer?sessionId=${encodeURIComponent(sessionId)}`).then(value => { if (!cancelled) setPeers(value.terminals); }).catch(() => undefined);
+    }
     void nativeSurfaceRequest<{ terminals: NativeTerminalInfo[] }>(`/api/native-terminal?sessionId=${encodeURIComponent(sessionId)}`).then(result => { if (!cancelled) setTerminals(result.terminals); }).catch(failure => { if (!cancelled) setError(failure instanceof Error ? failure.message : '原生终端读取失败'); });
     return () => { cancelled = true; };
-  }, [sessionId]);
+  }, [sessionId, agent]);
   useEffect(() => {
     let active = true;
     if (takeover) { setTakeoverState(takeover); return; }
     void nativeSurfaceRequest<{ allowed: boolean; reason: string }>(`/api/native-terminal/takeover-status?sessionId=${encodeURIComponent(sessionId)}`).then(value => { if (active) setTakeoverState(value); }).catch(() => { if (active) setTakeoverState({ allowed: false, reason: '同会话接管条件无法核对' }); });
     return () => { active = false; };
   }, [sessionId, terminals.length, takeover]);
+  const openPeer = async (): Promise<void> => {
+    setPending(true); setError('');
+    try {
+      const view = await nativeSurfaceRequest<NativeTerminalInfo>('/api/native-peer', { method: 'POST', body: JSON.stringify({ commandId: crypto.randomUUID(), sessionId, intent: 'live-session', recordOutput }) });
+      if (currentSession.current === sessionId) setPeers(values => [...values.filter(value => value.id !== view.id), view]);
+    } catch (failure) { if (currentSession.current === sessionId) setError(failure instanceof Error ? failure.message : '原生界面打开失败'); }
+    finally { if (currentSession.current === sessionId) setPending(false); }
+  };
   const open = async (intent: 'new-native' | 'same-session'): Promise<void> => {
     setPending(true); setError('');
     try {
@@ -37,13 +52,17 @@ export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
     <strong>{agent === 'codex' ? 'Codex' : 'Claude Code'} 原生 CLI</strong>
     {initialCommand ? <p>待执行原生指令：<code>{initialCommand}</code>。请选择原生会话，再将指令填入终端并按 Enter 执行。</p> : null}
     <p style={{ margin: 0 }}>在浏览器中操作服务器上的原生终端。新建会话拥有独立历史；同会话接管需要确认原生身份、旧进程释放及历史与设置。</p>
+    {agent === 'codex' ? <p style={{ margin: 0 }}>当前原生界面可在任务运行期间操作。关闭界面后，当前会话和任务继续运行。</p> : null}
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+      {agent === 'codex' ? <button type="button" disabled={pending || !peerState.allowed} onClick={() => { void openPeer(); }}>打开当前原生界面</button> : null}
       <button type="button" disabled={pending} onClick={() => { void open('new-native'); }}>创建新原生会话</button>
       <button type="button" disabled={pending || !takeoverState.allowed} onClick={() => { void open('same-session'); }}>接管当前原生会话</button>
     </div>
     {!takeoverState.allowed && <p role="status" style={{ margin: 0 }}>当前会话接管受阻：{takeoverState.reason}</p>}
+    {agent === 'codex' && !peerState.allowed && peerState.reason ? <p role="status" style={{ margin: 0 }}>当前原生界面不可用：{peerState.reason}</p> : null}
     <label><input type="checkbox" checked={recordOutput} onChange={event => setRecordOutput(event.currentTarget.checked)} /> 临时保留日志供下载（可能含敏感内容，关闭终端时删除）</label>
     {error && <p role="alert">{error}</p>}
+    {peers.map(peer => <NativeTerminal key={peer.id} terminal={peer} endpoint="/api/native-peer" initialCommand={initialCommand} onChanged={next => setPeers(values => values.map(value => value.id === next.id ? next : value))} onClosed={() => setPeers(values => values.filter(value => value.id !== peer.id))} />)}
     {terminals.map(terminal => <NativeTerminal key={terminal.id} terminal={terminal} initialCommand={initialCommand} onChanged={next => setTerminals(values => values.map(value => value.id === next.id ? next : value))} onClosed={() => setTerminals(values => values.filter(value => value.id !== terminal.id))} />)}
   </section>;
 }
