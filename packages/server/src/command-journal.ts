@@ -138,6 +138,19 @@ export class CommandJournal {
     })();
   }
 
+  /** A late submission failure cannot replace a confirmed outcome or touch
+   * a queued admission that no longer belongs to the failed dispatch. */
+  settleInputFailure(turnId: string, state: 'failed' | 'uncertain'): boolean {
+    return this.db.transaction(() => {
+      const row = this.db.prepare('SELECT command_id, state FROM input_queue WHERE turn_id = ?').get(turnId) as { command_id: string; state: CommandState } | undefined;
+      if (row === undefined || !['dispatching', 'native-accepted', 'uncertain'].includes(row.state)) return false;
+      const command = this.get(row.command_id);
+      if (command !== undefined && ['completed', 'failed', 'cancelled'].includes(command.state)) return false;
+      this.inputState(turnId, state);
+      return true;
+    }).immediate();
+  }
+
   beginInput(turnId: string, targetTurnId?: string): boolean {
     return this.db.transaction(() => {
       const changed = this.db.prepare("UPDATE input_queue SET state = 'dispatching' WHERE turn_id = ? AND state = 'queued'").run(turnId).changes === 1;
