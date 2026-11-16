@@ -64,6 +64,14 @@ try {
     const receipt = opts.nativeEvents!.record(frame);
     for (const event of replay.feed(frame)) emit(session.id, { ...event, runtime: opts.runtime, nativeEnvelopeId: receipt.envelopeId });
   }
+  // A turn observed without a Web send first commits its public activation.
+  // Await the durable terminal before inspecting its stored item identities.
+  const terminalCount = new Set(expected.map(value => value.nativeTurnId)).size;
+  const deadline = Date.now() + 5000;
+  while (ctx.store.allEvents(session.id).filter(row => row.kind === 'turn.completed').length < terminalCount) {
+    assert.ok(Date.now() < deadline, 'Captured native terminal was not committed');
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
   const events = ctx.store.allEvents(session.id);
   const results = expected.map(value => {
     const event = events.find(row => {
