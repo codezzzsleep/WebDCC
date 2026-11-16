@@ -50,17 +50,19 @@ it('the captured baseline preview exposes the same identity-bound spellings', ()
   for (const descriptor of descriptors) expect(slashCommandFor(commands, `/${descriptor.alias}`)).toMatchObject({ definitionId: descriptor.definitionId });
 });
 
-it('the execution path forwards a Chinese line and every argument byte unchanged', async () => {
+it('the execution path resolves the registered native name and retains every Chinese argument byte', async () => {
   const adapter = new DshAdapter();
   const client = {};
   const runtime = { nativeId: 'controlled-native' };
   const stub = adapter as unknown as { client: unknown; sessions: Map<string, unknown>; ensureSidecar(): Promise<unknown>; call(...args: unknown[]): Promise<unknown> };
   stub.client = client; stub.sessions.set('controlled', runtime);
   vi.spyOn(stub, 'ensureSidecar').mockResolvedValue(client);
-  const call = vi.spyOn(stub, 'call').mockResolvedValue({ commandId: 'controlled-command', result: { kind: 'success', text: 'fixture receipt' } });
+  const call = vi.spyOn(stub, 'call').mockImplementation(async (_client, endpoint) => endpoint === 'commands/list'
+    ? descriptors.map(({ name, definitionId }) => ({ name, definitionId, description: 'native descriptor' }))
+    : { commandId: 'controlled-command', result: { kind: 'success', text: 'fixture receipt' } });
   const line = '/反馈\t  原始正文\r\nsecond  ';
   await adapter.executeSlashControl('controlled', line);
-  expect(call).toHaveBeenCalledWith(client, 'commands/execute', { agentId: runtime.nativeId, line, submittedAttachments: [] }, 'controlled');
+  expect(call).toHaveBeenCalledWith(client, 'commands/execute', { agentId: runtime.nativeId, line: '/feedback\t  原始正文\r\nsecond  ', submittedAttachments: [] }, 'controlled');
 });
 
 it('a same-named custom definition never acquires first-party aliases', async () => {

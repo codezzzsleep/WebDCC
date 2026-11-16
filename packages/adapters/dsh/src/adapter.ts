@@ -25,7 +25,7 @@ import type {
   SlashControlResult,
   ResolvedInputContent,
 } from '@webdcc/protocol';
-import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode, slashCommandFor } from '@webdcc/protocol';
+import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestionAnswer, nativeAccessMode, slashCommandFor, parseSlashInput } from '@webdcc/protocol';
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
 import type { DshHistoryRecord, DshSubagentPrompt, DshSubagentInterrupt } from './contracts.js';
 import { DshHistoryBridge, type DshOpening } from './history.js';
@@ -951,9 +951,17 @@ export class DshAdapter implements AgentAdapter {
     const input = { text: line, ...(options.contentParts === undefined ? {} : { contentParts: options.contentParts }) } as UserInput & DshResolvableInput;
     const encoded = await encodeDshInput(input, { inputModalities: ['text', 'image'], uploadFile: (part, bytes) => this.uploadNativeFile(sessionId, runtime, client, part, bytes) });
     const command = slashCommandFor(await this.slashCommands(sessionId), line);
+    // Native UI resolves localized spellings before calling commands/execute,
+    // whose registry accepts only the exact registered name. Retain argument
+    // bytes and the original Web request; capture the actual canonical RPC.
+    const parsed = parseSlashInput(line);
+    const nativeLine = command && parsed ? `${command.name}${parsed.rawArguments}` : line;
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令运行实例已变化'), { code: 'native-control-rejected', statusCode: 409 });
-    const result = await this.call<{ commandId: string; result: { kind: 'success' | 'error'; text?: string } }>(client, 'commands/execute', { agentId: runtime.nativeId, line, submittedAttachments: encoded.submittedAttachments }, sessionId);
+    const result = await this.call<{ commandId: string; result: { kind: 'success' | 'error'; text?: string } } | undefined>(client, 'commands/execute', { agentId: runtime.nativeId, line: nativeLine, submittedAttachments: encoded.submittedAttachments }, sessionId);
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || generation !== this.muxGeneration) throw Object.assign(new Error('DSH 指令结果需要核对'), { code: 'uncertain' });
+    if (!result || typeof result.commandId !== 'string' || !result.commandId || !['success', 'error'].includes(result.result?.kind)) {
+      return { failed: true, text: 'DSH 未返回可确认的原生指令执行结果，请读取原生状态。', result };
+    }
     return { text: result.result.text ?? '', result, failed: result.result.kind === 'error',
       ...(result.result.kind === 'success' && command?.definitionId === '@deepseek-ai/dsh-session-log-export' ? {
         confirmed: true, form: 'dsh-export' as const, download: { kind: 'dsh-session-log' as const, nativeId: runtime.nativeId },

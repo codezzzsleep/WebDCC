@@ -24,5 +24,24 @@ it.each([
   });
   const result = await replay.adapter.executeSlashControl('web-session', line);
   expect(result.download !== undefined).toBe(download);
-  expect(executions).toEqual([{ agentId: 'native-session', line, submittedAttachments: [] }]);
+  const separator = line.search(/\s/u);
+  const nativeLine = `/${name}${separator < 0 ? '' : line.slice(separator)}`;
+  expect(executions).toEqual([{ agentId: 'native-session', line: nativeLine, submittedAttachments: [] }]);
+});
+
+it('a native empty acknowledgement remains a failed unconfirmed command and never creates a download', async () => {
+  const replay = DshAdapter.replay('web-session', 'native-session');
+  const host = new DshHostClient('https://host.test/dsh/'); host.connect = async () => undefined;
+  Object.assign(replay.adapter, { client: host });
+  vi.stubGlobal('fetch', async (_url: unknown, init: RequestInit) => {
+    const request = JSON.parse(String(init.body));
+    return new Response(JSON.stringify({ type: 'server-response', rpcId: request.rpcId, result: request.method === 'commands/list'
+      ? { ok: true, value: [{ name: 'export', definitionId: '@deepseek-ai/dsh-session-log-export', description: 'native export' }] }
+      : { ok: true } }));
+  });
+  const result = await replay.adapter.executeSlashControl('web-session', '/导出');
+  expect(result.failed).toBe(true);
+  expect(result.text).toContain('未返回可确认');
+  expect(result.download).toBeUndefined();
+  expect(result.result).toBeUndefined();
 });
