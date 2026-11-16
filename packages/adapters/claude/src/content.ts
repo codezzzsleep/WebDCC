@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SDKAssistantMessage, SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AdapterEvent } from '@webdcc/protocol';
+import type { AdapterEvent, ClaudeOutputOrigin } from '@webdcc/protocol';
 
 type ContentEvent = Exclude<AdapterEvent, { type: 'history' }>;
 type Kind = 'assistant.message' | 'reasoning';
@@ -12,6 +12,7 @@ interface Message {
   blocks: Map<number, Block>;
   seen: Set<string>;
   ended: boolean;
+  origin?: Omit<ClaudeOutputOrigin, 'nativeMessageId' | 'blockIndex' | 'taskId' | 'runId'>;
 }
 
 /** Content indices belong to one actor and one native message. SDK assistant
@@ -31,7 +32,9 @@ export class ClaudeContentReducer {
     const key = JSON.stringify([actor, id ?? `unidentified-${++this.sequence}`]);
     let message = this.messages.get(key);
     if (message === undefined) {
-      message = { key: createHash('sha256').update(key).digest('hex').slice(0, 24), actor, nativeId: id, blocks: new Map(), seen: new Set(), ended: false };
+      const [nativeSessionId, parentToolUseId] = JSON.parse(actor) as [string, string | null];
+      message = { key: createHash('sha256').update(key).digest('hex').slice(0, 24), actor, nativeId: id, blocks: new Map(), seen: new Set(), ended: false,
+        ...(parentToolUseId === null ? {} : { origin: { agent: 'claude-code', nativeSessionId, parentToolUseId } }) };
       this.messages.set(key, message);
       if (this.messages.size > 256) for (const [oldKey, old] of this.messages) {
         if (old !== message && old.ended && [...old.blocks.values()].every(block => block.completed)) { this.messages.delete(oldKey); if (this.messages.size <= 256) break; }
@@ -42,6 +45,10 @@ export class ClaudeContentReducer {
   }
 
   private key(message: Message, index: number): string { return `msg-${this.generation}-${message.key}-${index}`; }
+  private data(message: Message, index: number, text: string): { text: string; claudeActor?: ClaudeOutputOrigin } {
+    return { text, ...(message.origin === undefined ? {} : { claudeActor: { ...message.origin,
+      ...(message.nativeId === undefined ? {} : { nativeMessageId: message.nativeId }), blockIndex: index } }) };
+  }
 
   stream(message: SDKPartialAssistantMessage): ContentEvent[] {
     const actor = this.actor(message);
@@ -61,7 +68,7 @@ export class ClaudeContentReducer {
       const text = kind === 'reasoning' ? raw.thinking ?? '' : raw.text ?? '';
       const block = { itemKey: this.key(state, index), kind, text, completed: false };
       state.blocks.set(index, block);
-      return [{ type: 'item.start', itemKey: block.itemKey, kind, data: { text }, native: message }];
+      return [{ type: 'item.start', itemKey: block.itemKey, kind, data: this.data(state, index, text), native: message, ...(state.origin === undefined ? {} : { scope: 'session' as const }) }];
     }
     if (event.type !== 'content_block_delta') return [];
     const delta = event.delta;
@@ -72,12 +79,12 @@ export class ClaudeContentReducer {
       const kind: Kind = delta.type === 'thinking_delta' ? 'reasoning' : 'assistant.message';
       block = { itemKey: this.key(state, index), kind, text: '', completed: false };
       state.blocks.set(index, block);
-      events.push({ type: 'item.start', itemKey: block.itemKey, kind, data: { text: '' }, native: message });
+      events.push({ type: 'item.start', itemKey: block.itemKey, kind, data: this.data(state, index, ''), native: message, ...(state.origin === undefined ? {} : { scope: 'session' as const }) });
     }
     if (block.completed) return events;
     const append = delta.type === 'thinking_delta' ? delta.thinking ?? '' : delta.text ?? '';
     block.text += append;
-    events.push({ type: 'item.delta', itemKey: block.itemKey, field: 'text', append });
+    events.push({ type: 'item.delta', itemKey: block.itemKey, field: 'text', append, ...(state.origin === undefined ? {} : { scope: 'session' as const }) });
     return events;
   }
 
@@ -108,7 +115,7 @@ export class ClaudeContentReducer {
       const block: Block = { itemKey: previous?.itemKey ?? this.key(state, index), kind, text, completed: true };
       state.blocks.set(index, block);
       if (previous?.completed && previous.kind === kind && previous.text === text) continue;
-      events.push({ type: 'item.complete', itemKey: block.itemKey, kind, data: { text }, native: message });
+      events.push({ type: 'item.complete', itemKey: block.itemKey, kind, data: this.data(state, index, text), native: message, ...(state.origin === undefined ? {} : { scope: 'session' as const }) });
     }
     if (message.message?.stop_reason != null) state.ended = true;
     return { events, duplicate: false };

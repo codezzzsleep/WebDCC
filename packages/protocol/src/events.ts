@@ -1,6 +1,7 @@
 /** 统一事件模型（SPEC 第 6 节） */
 import type { ElicitationForm, ElicitationAction } from './elicitation.js';
 import type { InputContent, InputIntent } from './input.js';
+import type { ClaudeOutputOrigin } from './claude-tasks.js';
 
 export type EventKind =
   | 'user.message'
@@ -110,8 +111,8 @@ export interface EventData {
   'user.message': { text: string; images?: string[]; contentParts?: InputContent; intent?: InputIntent; clientCommandId?: string };
   /** `phase` is retained for old rows. New translations preserve the native
    * phase in `nativePhase`; the turn reducer is the sole final-answer authority. */
-  'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string };
-  reasoning: { text: string; summary?: boolean };
+  'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string; claudeActor?: ClaudeOutputOrigin; incomplete?: boolean };
+  reasoning: { text: string; summary?: boolean; claudeActor?: ClaudeOutputOrigin; incomplete?: boolean };
   command: {
     command: string;
     label?: string;
@@ -120,8 +121,9 @@ export interface EventData {
     outputTail?: string;
     outputFileId?: string;
     status: 'running' | 'completed' | 'failed';
+    claudeActor?: ClaudeOutputOrigin;
   };
-  'file.read': { path: string; label?: string; status?: 'running' | 'completed' | 'failed'; error?: string };
+  'file.read': { path: string; label?: string; status?: 'running' | 'completed' | 'failed'; error?: string; claudeActor?: ClaudeOutputOrigin; output?: string };
   'file.change': {
     changes: FileChangeEntry[];
     status: 'running' | 'completed' | 'failed';
@@ -129,10 +131,12 @@ export interface EventData {
     error?: string;
     /** @deprecated Codex cumulative snapshots use turn.diff. */
     snapshot?: boolean;
+    claudeActor?: ClaudeOutputOrigin;
+    output?: string;
   };
   /** A cumulative diff emitted by an Agent for the current turn. */
   'turn.diff': { changes: FileChangeEntry[]; status?: 'running' | 'completed' | 'failed' };
-  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown' };
+  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown'; claudeActor?: ClaudeOutputOrigin };
   plan: { items: PlanItem[] };
   /** Native session goal, including Codex notifications and DSH durable projections. */
   goal: {

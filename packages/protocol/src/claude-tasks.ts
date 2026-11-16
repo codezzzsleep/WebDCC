@@ -1,4 +1,16 @@
-import type { StoredEvent } from './events.js';
+import type { EventKind, StoredEvent } from './events.js';
+
+/** The spawning tool, native message and block identify a child output. A run
+ * is attached only when the native tool-to-task join is unambiguous. */
+export interface ClaudeOutputOrigin {
+  agent: 'claude-code';
+  nativeSessionId: string;
+  parentToolUseId: string;
+  nativeMessageId?: string;
+  blockIndex?: number;
+  taskId?: string;
+  runId?: string;
+}
 
 export type ClaudeTaskStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'stopped' | 'unknown';
 export interface ClaudeTask {
@@ -52,6 +64,7 @@ export function claudeTaskStatusLabel(status: string): string {
  * shared by the live adapter and recovery from stored original envelopes. */
 export class ClaudeTaskProjection {
   readonly tasks = new Map<string, ClaudeTask>();
+  readonly runs = new Map<string, ClaudeTask>();
   private backgroundSnapshot?: Map<string, string | undefined>;
 
   resetLiveness(): void {
@@ -96,7 +109,7 @@ export class ClaudeTaskProjection {
         // Membership proves live background work, not a particular lifecycle
         // phase. It cannot turn an unknown/pending/paused task into running.
         this.status(task);
-        this.tasks.set(task.taskId, task);
+        this.save(task);
       }
       return true;
     }
@@ -146,8 +159,25 @@ export class ClaudeTaskProjection {
       else if (run === task.runId) task.backgroundPresence = 'present';
     }
     this.status(task);
-    this.tasks.set(task.taskId, task);
+    this.save(task);
     return true;
+  }
+
+  sourceForTool(nativeSessionId: string, toolUseId: string): Pick<ClaudeOutputOrigin, 'taskId' | 'runId'> | undefined {
+    const matches = [...this.runs.values()].filter(task => task.nativeSessionId === nativeSessionId && task.toolUseId === toolUseId);
+    if (matches.length !== 1) return undefined;
+    const task = matches[0]!;
+    return { taskId: task.taskId, ...(task.runId === undefined ? {} : { runId: task.runId }) };
+  }
+
+  private save(task: ClaudeTask): void {
+    const previous = this.tasks.get(task.taskId);
+    if (previous !== undefined && claudeTaskKey(previous) !== claudeTaskKey(task) && !terminal(previous.nativeStatus)) {
+      previous.status = 'unknown';
+      previous.backgroundPresence = 'unknown';
+    }
+    this.tasks.set(task.taskId, task);
+    this.runs.set(claudeTaskKey(task), task);
   }
 
   private prepare(native: Record<string, unknown>, nativeSessionId?: string): ClaudeTask | undefined {
@@ -188,4 +218,88 @@ export function currentClaudeTasks(events: readonly StoredEvent[]): ClaudeTask[]
   const projection = new ClaudeTaskProjection();
   for (const event of events) projection.system(event.native);
   return [...projection.tasks.values()];
+}
+
+export function claudeOutputOrigin(item: { data?: unknown; native?: unknown }): ClaudeOutputOrigin | undefined {
+  const actor = object(object(item.data)['claudeActor']);
+  if (actor['agent'] === 'claude-code' && text(actor['nativeSessionId']) !== undefined && text(actor['parentToolUseId']) !== undefined) return actor as unknown as ClaudeOutputOrigin;
+  // Old persisted rows still carry the original SDK envelope.
+  const native = object(item.native);
+  const parent = text(native['parent_tool_use_id']);
+  const session = text(native['session_id']);
+  if (parent === undefined || session === undefined) return undefined;
+  const message = object(native['message']);
+  return { agent: 'claude-code', nativeSessionId: session, parentToolUseId: parent,
+    ...(text(message['id']) === undefined ? {} : { nativeMessageId: text(message['id']) }) };
+}
+
+export interface ClaudeTaskOutput {
+  itemKey: string;
+  kind: EventKind;
+  text: string;
+  origin: ClaudeOutputOrigin;
+  live: boolean;
+  incomplete?: boolean;
+}
+export interface ClaudeTaskRun extends ClaudeTask { outputs: ClaudeTaskOutput[] }
+export interface ClaudeTaskView extends ClaudeTaskRun { previousRuns: ClaudeTaskRun[] }
+export interface ClaudeTaskViews { tasks: ClaudeTaskView[]; unassignedOutputs: ClaudeTaskOutput[] }
+
+function taskOutput(item: { itemKey: string; kind: EventKind; data: unknown; native?: unknown }, live: boolean): ClaudeTaskOutput | undefined {
+  const origin = claudeOutputOrigin(item);
+  if (origin === undefined) return undefined;
+  const data = object(item.data);
+  let output: string;
+  switch (item.kind) {
+    case 'assistant.message': case 'reasoning': output = String(data['text'] ?? ''); break;
+    case 'command': output = `$ ${String(data['command'] ?? '')}\n${String(data['outputTail'] ?? '')}`; break;
+    case 'tool.call': output = `${String(data['name'] ?? '')}\n${typeof data['output'] === 'string' ? data['output'] : JSON.stringify(data['output'] ?? data['input'])}`; break;
+    case 'file.read': output = `读取 ${String(data['path'] ?? '')}${typeof data['output'] === 'string' ? `\n${data['output']}` : typeof data['error'] === 'string' ? `\n${data['error']}` : ''}`; break;
+    case 'file.change': output = `编辑 ${JSON.stringify(data['changes'] ?? [])}${typeof data['output'] === 'string' ? `\n${data['output']}` : typeof data['error'] === 'string' ? `\n${data['error']}` : ''}`; break;
+    default: return undefined;
+  }
+  return { itemKey: item.itemKey, kind: item.kind, text: output, origin, live, ...(data['incomplete'] === true ? { incomplete: true } : {}) };
+}
+
+/** Includes previous runs without attributing an ambiguous legacy output to
+ * the newest run. Live items are the same keyed blocks before persistence. */
+export function currentClaudeTaskViews(events: readonly StoredEvent[], live: readonly { itemKey: string; kind: EventKind; data: unknown }[] = []): ClaudeTaskViews {
+  const projection = new ClaudeTaskProjection();
+  for (const event of events) projection.system(event.native);
+  const runs = new Map<string, ClaudeTaskRun>([...projection.runs].map(([key, task]) => [key, { ...task, outputs: [] }]));
+  const outputs = new Map<string, ClaudeTaskOutput>();
+  for (const item of events) { const output = taskOutput(item, false); if (output !== undefined) outputs.set(item.itemKey, output); }
+  for (const item of live) { const output = taskOutput(item, true); if (output !== undefined) outputs.set(item.itemKey, output); }
+  const unassignedOutputs: ClaudeTaskOutput[] = [];
+  for (const output of outputs.values()) {
+    const origin = output.origin;
+    const matches = [...runs.values()].filter(task => task.nativeSessionId === origin.nativeSessionId && (origin.taskId === undefined
+      ? task.toolUseId === origin.parentToolUseId : task.taskId === origin.taskId && task.runId === origin.runId));
+    if (matches.length === 1) matches[0]!.outputs.push(output);
+    else unassignedOutputs.push(output);
+  }
+  const tasks = [...projection.tasks.values()].map(task => ({ ...runs.get(claudeTaskKey(task))!, previousRuns: [...runs.values()]
+    .filter(run => run.nativeSessionId === task.nativeSessionId && run.taskId === task.taskId && run.runId !== task.runId) }));
+  return { tasks, unassignedOutputs };
+}
+
+export interface ClaudeTaskNode { task: ClaudeTaskView; children: ClaudeTaskNode[] }
+export function claudeTaskTree(tasks: readonly ClaudeTaskView[]): ClaudeTaskNode[] {
+  const key = (task: Pick<ClaudeTask, 'nativeSessionId' | 'taskId'>) => JSON.stringify([task.nativeSessionId ?? null, task.taskId]);
+  const nodes = new Map(tasks.map(task => [key(task), { task, children: [] as ClaudeTaskNode[] }]));
+  const roots: ClaudeTaskNode[] = [];
+  for (const node of nodes.values()) {
+    const parent = nodes.get(key({ ...node.task, taskId: node.task.parentTaskId ?? '' }));
+    const seen = new Set([key(node.task)]);
+    let current = parent;
+    let cycle = false;
+    while (current !== undefined) {
+      if (seen.has(key(current.task))) { cycle = true; break; }
+      seen.add(key(current.task));
+      current = nodes.get(key({ ...current.task, taskId: current.task.parentTaskId ?? '' }));
+    }
+    if (parent === undefined || cycle) roots.push(node);
+    else parent.children.push(node);
+  }
+  return roots;
 }
