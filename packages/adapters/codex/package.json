@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@webdcc/protocol": "workspace:*",
-    "ajv": "8.20.0"
+    "ajv": "8.20.0",
+    "ws": "^8.22.2"
   }
 }
