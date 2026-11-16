@@ -47,6 +47,8 @@ pnpm install
 - 配置项见 SPEC 12.2（端口、`WDCC_HOME`、`WDCC_DSH_PORT`、`WDCC_IDLE_DISPOSE_MIN` 等）
 - HTTPS 可选；访问 token 换 HttpOnly Cookie，与 DSH 相同
 
+把已上传附件复制到工作区时，服务通过 Linux `/proc/self/fd` 核验工作区根和 `.webdcc/uploads` 的普通目录，原子替换目标并验证最终字节。链接、非法名称或目录变化明确拒绝；已复制到原目录但确认失败时返回 409，保留实际副作用。其他平台/缺少核验能力时返回 501。此边界只覆盖附件复制，自动 Git exclude 更新的配置边界和 worktree 支持需另行核对。
+
 
 ## 本机按生产方式运行（M7 已验收）
 
