@@ -36,7 +36,16 @@ export class CapabilityRegistry {
       const expected = nativeInventory.baseline[adapter.id];
       const compatibility = runtimeCompatibility(probe, kind, expected);
       const source = nativeInventory.sources[adapter.id === 'claude-code' ? 'claude' : adapter.id];
-      runtimes.push({ agent: adapter.id, hostId: fingerprint({ hostname: hostname(), agent: adapter.id }).slice(0, 24), os: platform(), profile: 'native-default', probe, adapterKind: kind, compatibility, schemaHash: source.sha256, configurationFingerprint: fingerprint({ providers, workspaceId }), pluginStatus: 'unverified' });
+      const context = probe.runtimeContext;
+      runtimes.push({
+        agent: adapter.id,
+        hostId: context?.hostId ?? fingerprint({ hostname: hostname(), agent: adapter.id }).slice(0, 24),
+        os: context === undefined ? platform() : context.os ?? 'unknown',
+        profile: context === undefined ? 'native-default' : context.profile.identity ?? context.profile.scope,
+        probe, adapterKind: kind, compatibility, schemaHash: source.sha256,
+        configurationFingerprint: fingerprint({ providers, workspaceId }), pluginStatus: 'unverified',
+        ...(context === undefined ? {} : { runtimeContext: context }),
+      });
       const groups = new Map<string, NativeMethodInventoryEntry[]>();
       for (const entry of frozenNativeInventory.filter(entry => entry.agent === adapter.id && entry.role !== 'internal')) {
         const group = groups.get(entry.capabilityId) ?? [];

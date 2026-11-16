@@ -18,6 +18,18 @@ export interface CodexInputModeCatalog {
   reason?: string;
 }
 
+/** Public observation metadata; endpoint IDs are opaque and contain no credentials. */
+export interface NativeRuntimeContext {
+  hostId: string;
+  source: 'native-bootstrap' | 'local-process';
+  status: 'observed' | 'unverified';
+  /** Release/bootstrap evidence, not an immutable machine identity. */
+  hostFingerprint?: string;
+  os?: string;
+  profile: { scope: string; identity?: string; status: 'observed' | 'unverified' | 'unavailable-in-api' };
+  connectionRevision: string;
+}
+
 export interface ProbeResult {
   installed: boolean;
   version?: string;
@@ -25,6 +37,7 @@ export interface ProbeResult {
   auth: 'ok' | 'missing' | 'unknown';
   notes?: string[];
   compatible?: boolean;
+  runtimeContext?: NativeRuntimeContext;
 }
 
 export interface ModelOption {
