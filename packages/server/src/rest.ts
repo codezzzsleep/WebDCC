@@ -1,5 +1,4 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -712,16 +711,6 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const original = body.name ?? found.file.name;
     const safeName = original.replace(/[/\\]/g, '_');
     const copied = await copyWorkspaceAttachment(workspace.path, `${body.fileId}-${safeName}`, found.buffer);
-    // 工作区是 git 仓库时把 .webdcc/ 写进 .git/info/exclude（不改用户的 .gitignore）
-    const gitDir = join(workspace.path, '.git');
-    if (existsSync(gitDir)) {
-      const exclude = join(gitDir, 'info', 'exclude');
-      await mkdir(join(gitDir, 'info'), { recursive: true });
-      const current = existsSync(exclude) ? await readFile(exclude, 'utf8') : '';
-      if (!current.split('\n').some((line) => line.trim() === '.webdcc/')) {
-        await writeFile(exclude, `${current}${current.endsWith('\n') || current === '' ? '' : '\n'}.webdcc/\n`);
-      }
-    }
     return {
       path: copied.path,
       name: safeName,
