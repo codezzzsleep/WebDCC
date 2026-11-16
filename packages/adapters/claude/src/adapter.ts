@@ -46,6 +46,7 @@ import type { ClaudeStdioCaptureState } from './stdio-capture.js';
 import { ClaudeNativeHistory, claudeNativeActionCatalog, elicitationResult, nativeError, nativeValidationError, parseClaudeNativeAction, record, type ClaudeNativeOptions } from './native.js';
 import { ClaudeNativeState } from './native-state.js';
 import { claudeSlashCommands } from './slash.js';
+import { permissionProposal, permissionSuggestions, type ClaudePermissionOptions } from './permission-proposal.js';
 
 export const PINNED_SDK_VERSION = '0.3.322';
 export const PINNED_CLI_VERSION = '2.1.322';
@@ -184,6 +185,7 @@ interface PendingInteraction {
   toolName: string;
   input: Record<string, unknown>;
   answers?: Record<string, unknown>;
+  approvalOptionIds?: string[];
   resolve: (decision: { approved: boolean; optionId: string; answers?: Record<string, unknown>; annotations?: Record<string, unknown> }) => void;
 }
 
@@ -292,7 +294,12 @@ export class ClaudeAdapter implements AgentAdapter {
       const raw = frame.frame as Record<string, unknown>;
       if (frame.dir === 'in' && frame.ch === 'sdk') adapter.onSdkMessage(sessionId, raw as unknown as SDKMessage);
       else if (frame.dir === 'in' && frame.ch === 'canUseTool') {
-        void adapter.handleCanUseTool(sessionId, String(raw['toolName'] ?? raw['tool'] ?? ''), (raw['input'] ?? {}) as Record<string, unknown>, { signal: new AbortController().signal, toolUseID: raw['toolUseID'] as string | undefined }).then(result => decisions.push(result));
+        void adapter.handleCanUseTool(sessionId, String(raw['toolName'] ?? raw['tool'] ?? ''), (raw['input'] ?? {}) as Record<string, unknown>, {
+          signal: new AbortController().signal, toolUseID: typeof raw['toolUseID'] === 'string' ? raw['toolUseID'] : undefined,
+          suggestions: permissionSuggestions(raw['suggestions']),
+          suppressAlwaysAllowRule: typeof raw['suppressAlwaysAllowRule'] === 'boolean' ? raw['suppressAlwaysAllowRule'] : undefined,
+          defaultToNo: typeof raw['defaultToNo'] === 'boolean' ? raw['defaultToNo'] : undefined,
+        }).then(result => decisions.push(result));
       }
       return events.length > 0 ? [...events] : [{ type: 'item.complete', itemKey: `transport-${frame.ch}-${frame.i}`, kind: 'internal', data: { nativeType: frame.ch }, native: frame.frame }];
     } };
@@ -637,8 +644,9 @@ export class ClaudeAdapter implements AgentAdapter {
     const runtime = this.sessions.get(sessionId);
     const pending = runtime?.pending.get(decision.approvalId);
     if (runtime === undefined || pending === undefined) throw Object.assign(new Error('Claude 审批已结束或不存在'), { statusCode: 409 });
+    if (pending.kind !== 'approval' || !pending.approvalOptionIds?.includes(decision.optionId)) throw Object.assign(new Error('此原生审批没有该选项'), { statusCode: 400 });
     runtime.pending.delete(decision.approvalId);
-    pending.resolve({ approved: decision.optionId === 'allow', optionId: decision.optionId });
+    pending.resolve({ approved: decision.optionId === 'allow' || decision.optionId === 'allow-native-suggestions', optionId: decision.optionId });
   }
 
   /** 打断时把挂起的审批按拒绝处理（回调必须被 resolve，否则 SDK 一直等） */
@@ -929,10 +937,10 @@ export class ClaudeAdapter implements AgentAdapter {
     runtime.generationStartedAt = null;
   }
 
-  private waitForDecision(runtime: SessionRuntime, id: string, kind: 'approval' | 'question', toolName: string, input: Record<string, unknown>, signal: AbortSignal): Promise<Parameters<PendingInteraction['resolve']>[0]> {
+  private waitForDecision(runtime: SessionRuntime, id: string, kind: 'approval' | 'question', toolName: string, input: Record<string, unknown>, signal: AbortSignal, approvalOptionIds?: string[]): Promise<Parameters<PendingInteraction['resolve']>[0]> {
     let abort = (): void => undefined;
     return new Promise<Parameters<PendingInteraction['resolve']>[0]>(resolve => {
-      runtime.pending.set(id, { kind, toolName, input, resolve });
+      runtime.pending.set(id, { kind, toolName, input, resolve, approvalOptionIds });
       abort = () => resolve({ approved: false, optionId: 'cancel' });
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) abort();
@@ -956,10 +964,15 @@ export class ClaudeAdapter implements AgentAdapter {
     sessionId: string,
     toolName: string,
     input: Record<string, unknown>,
-    options: { signal: AbortSignal; toolUseID?: string },
+    options: ClaudePermissionOptions,
   ): Promise<PermissionResult> {
     const runtime = this.require(sessionId);
-    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
+    const proposal = permissionProposal(options);
+    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: 'canUseTool', frame: { toolName, input, toolUseID: options.toolUseID,
+      ...(options.suggestions === undefined ? {} : { suggestions: structuredClone(options.suggestions) }),
+      ...(options.suppressAlwaysAllowRule === undefined ? {} : { suppressAlwaysAllowRule: options.suppressAlwaysAllowRule }),
+      ...(options.defaultToNo === undefined ? {} : { defaultToNo: options.defaultToNo }),
+    } })) return { behavior: 'deny', message: 'WebDCC 原生交互未持久化' };
     if (toolName === 'AskUserQuestion') {
       const questions = (input['questions'] as Record<string, unknown>[]) ?? [];
       const questionId = `${options.toolUseID ?? `q-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
@@ -992,7 +1005,7 @@ export class ClaudeAdapter implements AgentAdapter {
 
     const isPlanMode = toolName === 'ExitPlanMode';
     const approvalId = `${sessionId}:${options.toolUseID ?? `tool-${this.generations.get(sessionId) ?? 1}-${runtime.frameSeq + 1}`}`;
-    const decisionPromise = this.waitForDecision(runtime, approvalId, 'approval', toolName, input, options.signal);
+    const decisionPromise = this.waitForDecision(runtime, approvalId, 'approval', toolName, input, options.signal, proposal.options.map(option => option.id));
     this.emit(sessionId, {
       type: 'item.complete',
       itemKey: `approval-${approvalId}`,
@@ -1004,19 +1017,16 @@ export class ClaudeAdapter implements AgentAdapter {
           : String(input['command'] ?? input['file_path'] ?? input['path'] ?? '') === ''
             ? toolName
             : `${toolName} · ${String(input['command'] ?? input['file_path'] ?? input['path'])}`,
-        detail: JSON.stringify(input, null, 2).slice(0, 2000),
+        detail: proposal.suggestions === undefined ? JSON.stringify(input, null, 2).slice(0, 2000) : JSON.stringify({ input, nativePermissionSuggestions: proposal.suggestions }, null, 2),
         tool: toolName,
         ...(isPlanMode
           ? { planMarkdown: String(input['plan'] ?? input['planMarkdown'] ?? input['content'] ?? JSON.stringify(input, null, 2)) }
           : {}),
-        options: [
-          { id: 'allow', label: '允许一次' },
-          { id: 'deny', label: '拒绝' },
-        ],
+        options: proposal.options,
       },
     });
     const decision = await decisionPromise;
-    if (decision.approved) return { behavior: 'allow', updatedInput: input } as PermissionResult;
+    if (decision.approved) return { behavior: 'allow', updatedInput: input, ...(decision.optionId === 'allow-native-suggestions' && proposal.suggestions !== undefined ? { updatedPermissions: proposal.suggestions } : {}) };
     return { behavior: 'deny', message: '用户拒绝', interrupt: true } as PermissionResult;
   }
 
