@@ -60,7 +60,7 @@ async function until(predicate: () => boolean | Promise<boolean>, message: strin
 function deltas() {
   return frames.flatMap(frame => {
     const value = frame.frame as { method?: string; params?: { processId: string; stream: string; deltaBase64: string; capReached: boolean } };
-    return frame.dir === 'in' && value.method === 'command/exec/outputDelta' && value.params?.processId === evidence['processId'] ? [value.params] : [];
+    return frame.dir === 'in' && value.method === 'command/exec/outputDelta' && value.params !== undefined && value.params.processId === evidence['processId'] ? [value.params] : [];
   });
 }
 function stdout(): Buffer {
