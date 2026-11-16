@@ -6,6 +6,7 @@ const record = (value: unknown): Record<string, unknown> => value !== null && ty
 export function ElicitationForm({ form, busy, submit }: { form: Form; busy: boolean; submit: (answer: { action: ElicitationAction; content: unknown }) => void }): React.ReactElement {
   const [values, setValues] = useState<Record<string, string | boolean>>({});
   const [error, setError] = useState('');
+  const valueFor = (name: string): string | boolean | undefined => Object.hasOwn(values, name) ? values[name] : undefined;
   const properties = form.kind === 'form' ? record(form.schema['properties']) : {};
   const required = new Set(form.kind === 'form' && Array.isArray(form.schema['required']) ? form.schema['required'] : []);
   const fields = Object.entries(properties);
@@ -14,11 +15,11 @@ export function ElicitationForm({ form, busy, submit }: { form: Form; busy: bool
     try {
       let content: unknown = null;
       if (form.kind === 'form' && action === 'accept') {
-        if (fields.length === 0) content = JSON.parse(String(values['$json'] ?? '{}')) as unknown;
+        if (fields.length === 0) content = JSON.parse(String(valueFor('$json') ?? '{}')) as unknown;
         else {
           const object: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
           for (const [name, value] of fields) {
-            const schema = record(value); const raw = values[name] ?? (schema['type'] === 'boolean' && required.has(name) ? false : undefined);
+            const schema = record(value); const raw = valueFor(name) ?? (schema['type'] === 'boolean' && required.has(name) ? false : undefined);
             if (raw === undefined || raw === '' && !required.has(name) && ['integer', 'number', 'object', 'array'].includes(String(schema['type']))) continue;
             if (raw === '' && (schema['type'] === 'integer' || schema['type'] === 'number')) throw new Error('Missing number');
             object[name] = schema['type'] === 'integer' || schema['type'] === 'number' ? Number(raw)
@@ -37,24 +38,24 @@ export function ElicitationForm({ form, busy, submit }: { form: Form; busy: bool
   return <div aria-label="原生表单">
     {form.kind === 'url' ? url === null ? <p role="alert">原生链接地址无效，已阻止打开。可以拒绝或取消此请求。</p>
       : <p><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">打开 {form.serverName} 的原生链接</a><br />完成原生页面操作后再确认。</p>
-      : fields.length === 0 ? <label>表单内容<textarea className="text-input" value={String(values['$json'] ?? '{}')} disabled={busy} onChange={event => setValues({ $json: event.target.value })} /></label>
+      : fields.length === 0 ? <label>表单内容<textarea className="text-input" value={String(valueFor('$json') ?? '{}')} disabled={busy} onChange={event => setValues({ $json: event.target.value })} /></label>
       : fields.map(([name, value]) => {
         const schema = record(value); const title = typeof schema['title'] === 'string' ? schema['title'] : name;
         const secret = schema['writeOnly'] === true || schema['isSecret'] === true || schema['format'] === 'password';
         const options = Array.isArray(schema['enum']) && schema['enum'].every(option => typeof option === 'string') ? schema['enum'] : undefined;
-        const selection = options?.findIndex(option => option === values[name]);
+        const selection = options?.findIndex(option => option === valueFor(name));
         const labels = Array.isArray(schema['enumNames']) && schema['enumNames'].every(label => typeof label === 'string') ? schema['enumNames'] : undefined;
         return <label key={name} style={{ display: 'block', margin: '8px 0' }}>{title}{required.has(name) ? '（必填）' : ''}
           {typeof schema['description'] === 'string' ? <span className="desc">{schema['description']}</span> : null}
-          {schema['type'] === 'boolean' ? <input type="checkbox" checked={values[name] === true} disabled={busy} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.checked }))} />
+          {schema['type'] === 'boolean' ? <input type="checkbox" checked={valueFor(name) === true} disabled={busy} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.checked }))} />
             : options !== undefined ? <select className="text-input" disabled={busy} value={selection === undefined || selection < 0 ? '' : String(selection)} onChange={event => {
               const selected = options.find((_option, index) => String(index) === event.target.value);
               setValues(previous => { const next = { ...previous }; if (selected === undefined) delete next[name]; else next[name] = selected; return next; });
             }}>
               <option value="">请选择</option>{options.map((option, index) => <option key={index} value={String(index)}>{labels?.[index] ?? (option === '' ? '空字符串' : option)}</option>)}
             </select>
-            : schema['type'] === 'object' || schema['type'] === 'array' ? <textarea className="text-input" disabled={busy} value={String(values[name] ?? '')} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))} />
-            : <input className="text-input" type={secret ? 'password' : schema['type'] === 'number' || schema['type'] === 'integer' ? 'number' : 'text'} autoComplete={secret ? 'off' : undefined} disabled={busy} value={String(values[name] ?? '')} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))} />}
+            : schema['type'] === 'object' || schema['type'] === 'array' ? <textarea className="text-input" disabled={busy} value={String(valueFor(name) ?? '')} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))} />
+            : <input className="text-input" type={secret ? 'password' : schema['type'] === 'number' || schema['type'] === 'integer' ? 'number' : 'text'} autoComplete={secret ? 'off' : undefined} disabled={busy} value={String(valueFor(name) ?? '')} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))} />}
         </label>;
       })}
     {error ? <p role="alert">{error}</p> : null}
