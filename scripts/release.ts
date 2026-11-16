@@ -1,12 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { cp, mkdir, readdir, readFile, readlink, rename, rm, symlink, lstat, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 
 interface ReadonlyDb { prepare: (sql: string) => { get: () => unknown }; pragma: (sql: string, options: { simple: boolean }) => unknown; close: () => void }
 type DatabaseConstructor = new (file: string, options: { readonly: boolean; fileMustExist: boolean }) => ReadonlyDb;
+interface DatabaseRange { minimum: number; maximum: number }
 const Database = createRequire(import.meta.url)('better-sqlite3') as DatabaseConstructor;
 
 const releaseRoot = process.env['WDCC_RELEASE_ROOT'] ?? '/opt/webdcc';
@@ -20,14 +21,43 @@ if (remoteHead !== commit) throw new Error(`HEAD 尚未推送：本地 ${commit}
 const staging = join(tmpdir(), `wdcc-release-${commit}-${process.pid}`);
 const checkout = join(staging, 'src');
 let restartAttempted = false;
+let minimumSchema = 0;
 let maximumSchema = 0;
+
+function databaseRange(manifest: unknown): DatabaseRange {
+  const range = (manifest as { database?: Partial<DatabaseRange> } | null)?.database;
+  if (range === undefined || !Number.isSafeInteger(range.minimum) || !Number.isSafeInteger(range.maximum)
+    || (range.minimum as number) < 0 || (range.maximum as number) < (range.minimum as number)) {
+    throw new Error('构建清单数据库兼容范围无效');
+  }
+  return range as DatabaseRange;
+}
+
+function requireCompatible(schema: number, range: DatabaseRange, context: string): void {
+  if (!Number.isSafeInteger(schema) || schema < range.minimum || schema > range.maximum) {
+    throw new Error(`${context}：数据库 ${schema} 不在产物兼容范围 ${range.minimum}–${range.maximum}`);
+  }
+}
+
+function databaseSchema(): number {
+  if (!existsSync(join(dataDir, 'webdcc.db'))) return 0;
+  const db = new Database(join(dataDir, 'webdcc.db'), { readonly: true, fileMustExist: true });
+  try { return db.pragma('user_version', { simple: true }) as number; }
+  finally { db.close(); }
+}
+
+async function previousDatabaseRange(current: string, previous: string): Promise<DatabaseRange> {
+  const manifestPath = join(resolve(dirname(current), previous), 'packages/server/dist/build-manifest.json');
+  try { return databaseRange(JSON.parse(await readFile(manifestPath, 'utf8'))); }
+  catch (error) { throw new Error('无法核验回滚产物的数据库兼容范围', { cause: error }); }
+}
 
 function activeTurnCount(): number {
     if (!existsSync(join(dataDir, 'webdcc.db'))) return 0;
     const db = new Database(join(dataDir, 'webdcc.db'), { readonly: true, fileMustExist: true });
     try {
       const schema = db.pragma('user_version', { simple: true }) as number;
-      if (schema > maximumSchema) throw new Error(`数据库 ${schema} 与产物最大版本 ${maximumSchema} 不兼容`);
+      requireCompatible(schema, { minimum: minimumSchema, maximum: maximumSchema }, '发布已取消');
       const row = db.prepare("SELECT COUNT(*) AS count FROM sessions WHERE status IN ('running', 'waiting')").get() as { count?: number };
       return Number(row.count ?? 0);
     } finally {
@@ -42,7 +72,9 @@ try {
   execFileSync('pnpm', ['build'], { cwd: checkout, stdio: 'inherit', env: { ...process.env, WDCC_COMMIT: commit, WDCC_BUILT_AT: new Date().toISOString() } });
   const manifest = JSON.parse(await readFile(join(checkout, 'packages/server/dist/build-manifest.json'), 'utf8')) as { commit: string; sourceFingerprint: string; schemaFingerprint: string; database: { minimum: number; maximum: number } };
   if (manifest.commit !== commit || !/^[a-f0-9]{64}$/.test(manifest.sourceFingerprint) || !/^[a-f0-9]{64}$/.test(manifest.schemaFingerprint) || !Number.isSafeInteger(manifest.database.maximum)) throw new Error('构建清单不完整或提交不匹配');
-  maximumSchema = manifest.database.maximum;
+  const candidateRange = databaseRange(manifest);
+  minimumSchema = candidateRange.minimum;
+  maximumSchema = candidateRange.maximum;
   const builtAt = new Date().toISOString();
   const target = join(releaseRoot, 'releases', commit);
   await mkdir(target, { recursive: true });
@@ -89,6 +121,13 @@ try {
   await cp(dataDir, join(releaseRoot, 'backups', `${commit}-${Date.now().toString(36)}`), { recursive: true });
   const current = join(releaseRoot, 'current');
   const previous = await readlinkSafe(current);
+  if (previous !== undefined) {
+    const rollbackRange = await previousDatabaseRange(current, previous);
+    requireCompatible(databaseSchema(), rollbackRange, '回滚兼容性检查失败');
+    // Starting the candidate can migrate to its maximum schema. A backup
+    // alone cannot justify silently overwriting data accepted after restart.
+    requireCompatible(maximumSchema, rollbackRange, '候选迁移后无法安全回滚，发布已取消');
+  }
   const activeBeforeRestart = activeTurnCount();
   if (activeBeforeRestart > 0) throw new Error(`当前有 ${activeBeforeRestart} 个活动会话，发布已取消以避免中断执行`);
   await switchCurrent(current, target);
@@ -121,9 +160,26 @@ try {
     const meta = await metaResponse.json() as { commit?: string };
     if (meta.commit !== commit) throw new Error(`线上 commit 不匹配：${meta.commit ?? 'missing'}`);
   } catch (error) {
-    if (previous !== undefined) await switchCurrent(current, previous);
-    else await rm(current, { force: true });
-    if (restartAttempted) execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
+    try {
+      if (previous !== undefined) {
+        // Re-read both the artifact and the live database after the failed
+        // restart; preflight is not proof that their state is unchanged.
+        const rollbackRange = await previousDatabaseRange(current, previous);
+        requireCompatible(databaseSchema(), rollbackRange, '拒绝回滚');
+        await switchCurrent(current, previous);
+        if (restartAttempted) execFileSync('systemctl', ['restart', service], { stdio: 'inherit' });
+      } else {
+        await rm(current, { force: true });
+        if (restartAttempted) execFileSync('systemctl', ['stop', service], { stdio: 'inherit' });
+      }
+    } catch (rollbackError) {
+      const errors = [error, rollbackError];
+      if (restartAttempted) {
+        try { execFileSync('systemctl', ['stop', service], { stdio: 'inherit' }); }
+        catch (stopError) { errors.push(stopError); }
+      }
+      throw new AggregateError(errors, '发布失败，回滚未完成；数据库保持现状，请核对产物和服务状态', { cause: rollbackError });
+    }
     throw error;
   }
   const releasesDir = join(releaseRoot, 'releases');
