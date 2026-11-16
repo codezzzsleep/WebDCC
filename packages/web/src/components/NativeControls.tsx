@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NativeActionReceipt, NativeActionResponse, NativeControlSnapshot } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
+import { nativeActionFields } from '../lib/native-action-fields.js';
 import { ElicitationForm } from './ElicitationForm.js';
 import { NativeSurface, NativeProcessSurface } from './NativeSurface.js';
 import { NativeDshSurface } from './NativeDshSurface.js';
@@ -48,12 +49,10 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
     const commandId = crypto.randomUUID();
     // Recovery keeps only the operation identity, never its form content.
     try {
+      const prepared = connect ? action : nativeActionFields(action, selectedAction?.type === action.type ? selectedAction.schema : undefined, catalog, commandId);
       sessionStorage.setItem(`native-action:${sessionId}`, commandId);
-      for (const [name, schema] of Object.entries(object(selectedAction?.schema['properties']))) {
-        if (object(schema)['generated'] === 'commandId' && action[name] === undefined) action[name] = commandId;
-      }
       const response: NativeActionResponse = connect ? await api.connectNativeControls(sessionId, commandId)
-        : await api.nativeAction(sessionId, { commandId, revision: snapshot?.revision, action });
+        : await api.nativeAction(sessionId, { commandId, revision: snapshot?.revision, action: prepared });
       if (!active()) return;
       setReceipt(response.receipt); setResult(response.result);
       setValues({});
