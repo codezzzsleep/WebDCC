@@ -8,6 +8,35 @@ import { ModelProxy, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBy
 afterEach(() => { expect(diagnosticCaptureBudgetBytes()).toBe(0); configureDiagnosticCaptureBudget(64 * 1024 * 1024); });
 async function listen(server: Server): Promise<number> { server.listen(0, '127.0.0.1'); await once(server, 'listening'); return (server.address() as { port: number }).port; }
 async function close(server: Server): Promise<void> { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+
+it.each(['http://fixture:%@127.0.0.1:1', 'http://fixture:%ff@127.0.0.1:1', 'http://%:valid@127.0.0.1:1'])('rejects malformed target credentials before listening: %s', target => {
+  expect(() => new ModelProxy({ target })).toThrow('Invalid model recording target credentials');
+});
+
+it('preserves valid percent-encoded upstream Basic Auth and masks both encoded and decoded password echoes', async () => {
+  const username = 'fixture@name'; const password = 'secret%:value';
+  const encoded = encodeURIComponent(password);
+  let authorization: string | undefined; let input = '';
+  const upstream = createServer(async (req, res) => {
+    authorization = req.headers.authorization;
+    for await (const bytes of req) input += String(bytes);
+    res.end(`native output ${password} ${encoded}`);
+  });
+  const port = await listen(upstream); const records: ModelProxyRecord[] = [];
+  const proxy = new ModelProxy({ target: `http://${encodeURIComponent(username)}:${encoded}@127.0.0.1:${port}`, onRecord: record => { records.push(record); } });
+  try {
+    const address = await proxy.listen();
+    const text = await (await fetch(address.url, { method: 'POST', body: `native input ${password} ${encoded}` })).text();
+    expect(authorization).toBe(`Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`);
+    expect(input).toBe(`native input ${password} ${encoded}`); expect(text).toBe(`native output ${password} ${encoded}`);
+    await proxy.flush();
+    const requestBody = Buffer.from(records[0]!.request.body, 'base64').toString();
+    const responseBody = Buffer.concat(records[0]!.response.chunks.map(chunk => Buffer.from(chunk.data, 'base64'))).toString();
+    for (const body of [requestBody, responseBody]) { expect(body).not.toContain(password); expect(body).not.toContain(encoded); }
+    expect(records[0]?.outcome).toBe('completed');
+  } finally { await proxy.close(); await close(upstream); }
+});
+
 it('a standalone proxy directory quota marks recording incomplete after unchanged forwarding', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-proxy-directory-'));
   let sent = '';
