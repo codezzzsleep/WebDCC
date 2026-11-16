@@ -8,6 +8,7 @@ import schema from '../src/json-schema/compatibility-0.169.0.schemas.json' with 
 import capture from './fixtures/collab-call-native.json' with { type: 'json' };
 
 const branch = schema.definitions.v2.ThreadItem.oneOf.find(value => value.properties.type.enum.includes('collabAgentToolCall'));
+if (branch === undefined) throw new Error('Missing reviewed native collab item contract');
 const ajv = new Ajv({ strict: false, allErrors: true, allowUnionTypes: true });
 for (const [name, min, max] of [['uint', 0, Number.MAX_SAFE_INTEGER], ['uint16', 0, 65535],
   ['uint32', 0, 4294967295], ['uint64', 0, Number.MAX_SAFE_INTEGER],

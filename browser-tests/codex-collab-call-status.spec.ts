@@ -47,7 +47,7 @@ it('the source Codex timeline retains native call interruption and old native st
     await page.goto(base + '/s/' + session.id);
     const check = async () => {
       const summary = page.locator('.turn-summary').first(); await summary.waitFor(); await summary.click();
-      const status = (id: string) => page.getByTestId('codex-collab-call-status').filter({ hasText: id });
+      const status = (id: string) => page.locator('[data-testid="codex-collab-call-status"][data-native-call-id="' + id + '"]');
       await expect.poll(() => status('native:interrupted:wait').textContent()).toContain('已中断');
       expect(await status('legacy:interrupted').textContent()).toContain('已中断');
       expect(await status('legacy:running').textContent()).toContain('运行中');
