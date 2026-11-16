@@ -1149,23 +1149,35 @@ export class SessionManager {
   }
 
   async listSubagents(sessionId: string): Promise<DshSubagentCatalog> {
-    this.requireSession(sessionId);
-    const runtime = this.runtimes.get(sessionId);
-    if (runtime?.adapter.listSubagents === undefined) throw this.nativeControlRejected('原生子 Agent 目录仍在恢复或不可用', 409);
-    this.assertOwner(runtime);
-    const result = await runtime.adapter.listSubagents(sessionId);
-    this.assertOwner(runtime);
+    const context = this.subagentReadContext(sessionId);
+    if (context.adapter.listSubagents === undefined) throw this.nativeControlRejected('原生子 Agent 目录不可用', 409);
+    const result = await context.adapter.listSubagents(sessionId, { nativeId: context.nativeId });
+    context.guard();
     return result;
   }
 
   async readSubagentHistory(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions): Promise<DshSubagentHistory> {
-    this.requireSession(sessionId);
-    const runtime = this.runtimes.get(sessionId);
-    if (runtime?.adapter.readSubagentHistory === undefined) throw this.nativeControlRejected('原生子会话仍在恢复或不可用', 409);
-    this.assertOwner(runtime);
-    const result = await runtime.adapter.readSubagentHistory(sessionId, childSessionId, options);
-    this.assertOwner(runtime);
+    const context = this.subagentReadContext(sessionId);
+    if (context.adapter.readSubagentHistory === undefined) throw this.nativeControlRejected('原生子会话不可用', 409);
+    const result = await context.adapter.readSubagentHistory(sessionId, childSessionId, options, { nativeId: context.nativeId });
+    context.guard();
     return result;
+  }
+
+  private subagentReadContext(sessionId: string) {
+    const session = this.requireSession(sessionId);
+    const runtime = this.runtimes.get(sessionId);
+    const registry = this.adapters.get(session.agent);
+    const adapter = runtime?.adapter ?? registry;
+    const nativeId = session.nativeId;
+    if (adapter === undefined || nativeId === undefined || nativeId === '') throw this.nativeControlRejected('父会话没有可读取的原生身份', 409);
+    const guard = (): void => {
+      if (this.adapters.get(session.agent) !== registry || this.runtimes.get(sessionId) !== runtime || this.store.getSession(sessionId)?.nativeId !== nativeId)
+        throw this.nativeControlRejected('父会话读取身份已变化，请刷新', 409);
+      if (runtime !== undefined) this.assertOwner(runtime);
+    };
+    guard();
+    return { adapter, nativeId, guard };
   }
 
   async interruptSubagent(sessionId: string, childSessionId: string): Promise<void> {

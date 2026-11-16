@@ -39,6 +39,9 @@ export interface DshSubagentCatalog {
   items: DshSubagentSummary[];
 }
 
+/** Server-selected persistent native ID; the browser cannot override it. */
+export interface DshSubagentReadTarget { nativeId: string }
+
 export interface DshSubagentHistoryOptions {
   limit: number;
   throughSeq?: number;

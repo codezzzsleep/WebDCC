@@ -152,3 +152,24 @@ it('DSH child history preserves earlier context and labels native runtime input 
     expect(ctx.store.allEvents(session.id).filter(event => event.kind === 'assistant.message')).toEqual([]);
   } finally { await browser?.close(); await ctx.close(); await native.close(); }
 }, 60000);
+
+it('DSH historical parents restore native children after a fresh browser without creating a managed runtime', async () => {
+  const ctx = await createSourceTestApp();
+  const workspace = ctx.store.createWorkspace('Cold DSH browser', ctx.dataDir);
+  const session = ctx.store.createSession({ workspaceId: workspace.id, agent: 'dsh' });
+  const native = await createDshSubagentFixture(session.id); native.cold();
+  ctx.store.updateSession(session.id, { nativeId: native.parentId }); ctx.manager.registerAdapter(native.adapter);
+  let browser: Browser | undefined;
+  try {
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 }); const address = ctx.app.server.address(); if (address === null || typeof address === 'string') throw new Error('cold browser listener missing');
+    const base = `http://127.0.0.1:${address.port}`; browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]); await page.goto(`${base}/s/${session.id}`);
+    const panel = page.getByTestId('dsh-subagents-panel'); await panel.getByRole('button', { name: '子 Agent', exact: true }).click();
+    await panel.locator('[data-child-id="reviewer"]').getByRole('button').click();
+    const history = page.getByTestId('dsh-child-history'); await expect.poll(() => history.textContent()).toContain('REVIEWER CHILD ONLY FINAL');
+    await page.reload(); await expect.poll(() => history.textContent()).toContain('REVIEWER CHILD ONLY FINAL');
+    expect(ctx.manager.getRuntime(session.id)).toBeUndefined(); expect(ctx.store.nativeOwners.get(session.id)).toBeUndefined();
+    expect(ctx.store.allEvents(session.id)).toEqual([]);
+    expect(native.calls.some(call => /prompt|interrupt|cancel/.test(call.method))).toBe(false);
+  } finally { await browser?.close(); await ctx.close(); await native.close(); }
+}, 60000);

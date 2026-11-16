@@ -82,6 +82,11 @@ export async function createDshSubagentFixture(localId = 'parent') {
   adapter.listModels = async () => [];
   adapter.resume = async () => undefined;
   return { adapter, native, client, parentId, states, descriptorSeqs, records, calls,
+    cold() {
+      (adapter as unknown as { sessions: Map<string, unknown> }).sessions.clear();
+      adapter.hostIdentity = async () => ({ url: `http://127.0.0.1:${address.port}/`, source: 'native-bootstrap', status: 'verified', version: '0.2.2-rc.1',
+        fingerprint: 'f'.repeat(64), profile: { scope: 'current-host-profile', identity: 'unavailable-in-api' } });
+    },
     setPageSize(value: number) { pageSize = value; },
     setCatalog(value: typeof catalog) { catalog = value; },
     disconnect() { for (const socket of sockets.clients) socket.terminate(); },
