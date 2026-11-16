@@ -143,8 +143,8 @@ export const api = {
   slashControlResult: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${sessionId}/slash-commands/${encodeURIComponent(commandId)}`),
   sendSubagent: (sessionId: string, childSessionId: string, text: string) =>
     request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/prompt`, { method: 'POST', body: JSON.stringify({ text }) }),
-  interruptSubagent: (sessionId: string, childSessionId: string) =>
-    request<{ accepted: true }>(`/api/sessions/${sessionId}/subagents/${encodeURIComponent(childSessionId)}/interrupt`, { method: 'POST' }),
+  interruptSubagent: (sessionId: string, childSessionId: string, commandId = crypto.randomUUID()) =>
+    request<NativeActionResponse | { accepted: true }>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(childSessionId)}/interrupt`, { method: 'POST', body: JSON.stringify({ commandId }) }),
   subagents: (sessionId: string) => request<DshSubagentCatalog>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents`),
   subagentHistory: (sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions) => {
     const query = new URLSearchParams({ limit: String(options.limit),

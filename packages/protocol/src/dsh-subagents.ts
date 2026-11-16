@@ -42,6 +42,17 @@ export interface DshSubagentCatalog {
 /** Server-selected persistent native ID; the browser cannot override it. */
 export interface DshSubagentReadTarget { nativeId: string }
 
+/** A server-side ownership check immediately before a child side effect. */
+export interface DshSubagentControlTarget extends DshSubagentReadTarget { guard?: () => void }
+
+export interface DshSubagentInterruptReceipt {
+  id: string;
+  address: { kind: 'subagent'; parentSessionId: string; childSessionId: string; mode: 'continuable' };
+  accepted: true;
+  /** The native cancel ACK does not confirm that the child has stopped. */
+  confirmed: false;
+}
+
 export interface DshSubagentHistoryOptions {
   limit: number;
   throughSeq?: number;

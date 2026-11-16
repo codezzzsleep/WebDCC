@@ -18,7 +18,7 @@ export interface DshFollowRequest { address: DshSessionAddress; activate?: boole
 export interface DshSubagentPrompt {
   request: { requestId: string; parentSessionId: string; childSessionId: string; mode: 'continuable'; delivery: 'queue' | 'steer'; content: { type: 'text'; text: string }[] };
 }
-export interface DshSubagentInterrupt { childSessionId: string; parentSessionId: string; mode: 'continuable' }
+export interface DshSubagentInterrupt { childSessionId: string }
 
 interface Descriptor { parameters: { name: string; jsonSchema?: object }[]; result?: object }
 const endpoints = catalog.endpoints as Record<string, Descriptor>;

@@ -1,11 +1,21 @@
 import { expect, it } from 'vitest';
-import { validateDshArgs } from '../src/contracts.js';
+import { validateDshArgs, validateDshResult } from '../src/contracts.js';
+import stopEvidence from '../../../../fixtures/dsh/subagent-stop-contract.json' with { type: 'json' };
 
 it('NP-02/11 checks real catalog wrappers, exact parent identity fields and mode discriminators', () => {
   expect(() => validateDshArgs('subagents/prompt', { requestId: 'one', childSessionId: 'child', content: [] })).toThrow('request');
   expect(() => validateDshArgs('subagents/prompt', { request: { requestId: 'one', childSessionId: 'child', mode: 'continuable', delivery: 'queue', content: [] } })).toThrow('parentSessionId');
-  expect(() => validateDshArgs('subagents/interruptByUser', { childSessionId: 'child' })).toThrow('absent');
-  expect(() => validateDshArgs('subagents/interruptByParent', { childSessionId: 'child', parentSessionId: 'parent', mode: 'one-shot' })).toThrow('constant');
-  expect(() => validateDshArgs('subagents/interruptByParent', { childSessionId: 'child', parentSessionId: 'parent', mode: 'continuable' })).not.toThrow();
+  expect(() => validateDshArgs('subagents/interruptByUser', { childSessionId: 'child' })).not.toThrow();
+  expect(() => validateDshArgs('subagents/interruptByUser', { childSessionId: 'child', parentSessionId: 'parent', mode: 'continuable' })).toThrow('additional');
+  expect(() => validateDshArgs('subagents/interruptByParent', { childSessionId: 'child', parentSessionId: 'parent', mode: 'continuable' })).toThrow('absent');
   expect(() => validateDshArgs('session/follow', { request: { address: { kind: 'session', sessionId: 'one' }, afterSeq: 42 } })).toThrow('additional');
+});
+
+it('the captured actual native Stop request and receipt pass the contract while an unaccepted receipt does not', () => {
+  const accepted = stopEvidence.capture['subagents/interruptByUser'];
+  expect(accepted.httpStatus).toBe(200);
+  expect(() => validateDshArgs('subagents/interruptByUser', accepted.request.payload.args)).not.toThrow();
+  expect(() => validateDshResult('subagents/interruptByUser', accepted.response.result.value)).not.toThrow();
+  expect(() => validateDshResult('subagents/interruptByUser', { accepted: false })).toThrow();
+  expect(stopEvidence.capture['subagents/interruptByParent'].httpStatus).toBe(404);
 });

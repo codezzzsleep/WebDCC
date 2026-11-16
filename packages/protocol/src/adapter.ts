@@ -9,7 +9,7 @@ import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } 
 import type { InputSkillPart, ResolvedInputContent } from './input.js';
 import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './slash.js';
 import type { CodexSubagentView } from './subagents.js';
-import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions, DshSubagentReadTarget } from './dsh-subagents.js';
+import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions, DshSubagentReadTarget, DshSubagentControlTarget, DshSubagentInterruptReceipt } from './dsh-subagents.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -188,7 +188,7 @@ export interface AgentAdapter {
   /** Read-only mode discovery; it must not activate or resume a native writer. */
   inputModes?(sessionId?: string): Promise<CodexInputModeCatalog>;
   sendSubagent?(sessionId: string, childSessionId: string, text: string): Promise<void>;
-  interruptSubagent?(sessionId: string, childSessionId: string): Promise<void>;
+  interruptSubagent?(sessionId: string, childSessionId: string, target?: DshSubagentControlTarget): Promise<void | DshSubagentInterruptReceipt>;
   /** Passive direct-child discovery and reads; these never submit a prompt. */
   listSubagents?(sessionId: string, target?: DshSubagentReadTarget): Promise<DshSubagentCatalog>;
   readSubagentHistory?(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions, target?: DshSubagentReadTarget): Promise<DshSubagentHistory>;

@@ -418,8 +418,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   app.post('/api/sessions/:id/subagents/:childId/interrupt', async (request) => {
     const { id, childId } = request.params as { id: string; childId: string };
-    await manager.interruptSubagent(id, childId);
-    return { accepted: true };
+    const body = request.body as { commandId?: string } | undefined;
+    if (body !== undefined && (body === null || typeof body !== 'object' || Array.isArray(body)
+      || Object.keys(body).some(key => key !== 'commandId') || typeof body.commandId !== 'string')) throw badRequest('停止请求需要有效的命令身份');
+    return await manager.interruptSubagent(id, childId, body?.commandId) ?? { accepted: true };
   });
 
   app.get('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {
