@@ -76,7 +76,7 @@ export class ClaudeTaskProjection {
     if (signal.state === 'started' && signal.id !== this.runtimeId) {
       this.resetLiveness();
       this.runtimeId = signal.id;
-    } else if (signal.state === 'unavailable' && signal.id === this.runtimeId) this.resetLiveness();
+    } else if (signal.state === 'unavailable' && (this.runtimeId === undefined || signal.id === this.runtimeId)) this.resetLiveness();
   }
 
   event(event: Pick<StoredEvent, 'kind' | 'data' | 'native'>): void {
