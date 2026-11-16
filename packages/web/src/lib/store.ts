@@ -1,6 +1,6 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
-import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
-import { isInputContent, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
+import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse, QueueSnapshot } from '@webdcc/protocol';
+import { isInputContent, isQueueInputReorderable, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { cache, type CachedSession } from './db.js';
 import { SyncConnection, type ConnectionState } from './connection.js';
@@ -97,6 +97,8 @@ export class AppStore {
   private pending = new Map<string, PendingMessage[]>();
   private durableQueue = new Map<string, QueuedInput[]>();
   private queueRevisions = new Map<string, number>();
+  private queueOrderRevisions = new Map<string, string>();
+  private queueOrderMutations = new Set<string>();
   private drafts = new Map<string, { text: string; fileIds: string[] }>();
   private outbox = new Map<string, { command: Command; status: PendingMessage['status']; durable?: boolean; createdAt?: number; error?: string }>();
   private interactionSubmissions = new Map<string, InteractionSubmission>();
@@ -691,16 +693,41 @@ export class AppStore {
         ...(row.preparationError === undefined ? {} : { error: row.preparationError }),
         at: row.createdAt, status: row.state === 'uncertain' ? 'uncertain' : 'queued' });
     }
-    return [...pending.values()];
+    const ordered = (authoritative ?? []).flatMap(row => pending.has(row.commandId) ? [pending.get(row.commandId)!] : []);
+    const accepted = new Set((authoritative ?? []).map(row => row.commandId));
+    return [...ordered, ...[...pending.values()].filter(row => !accepted.has(row.clientCommandId))];
   }
 
   async refreshQueue(sessionId: string): Promise<void> {
     const result = await api.queue(sessionId).catch(() => undefined);
-    if (result === undefined) return;
+    if (result !== undefined) this.applyQueueSnapshot(sessionId, result);
+  }
+
+  private applyQueueSnapshot(sessionId: string, result: QueueSnapshot): void {
     if (result.revision < (this.queueRevisions.get(sessionId) ?? -1)) return;
     this.queueRevisions.set(sessionId, result.revision);
     this.durableQueue.set(sessionId, result.inputs);
+    if (typeof result.orderRevision === 'string') this.queueOrderRevisions.set(sessionId, result.orderRevision);
+    else this.queueOrderRevisions.delete(sessionId);
     this.notify();
+  }
+
+  canMoveQueuedInput(sessionId: string, commandId: string, direction: -1 | 1): boolean {
+    if (this.queueOrderMutations.has(sessionId) || !this.queueOrderRevisions.has(sessionId)) return false;
+    const queue = (this.durableQueue.get(sessionId) ?? []).filter(isQueueInputReorderable);
+    const index = queue.findIndex(row => row.commandId === commandId);
+    return index >= 0 && index + direction >= 0 && index + direction < queue.length;
+  }
+
+  async moveQueuedInput(sessionId: string, commandId: string, direction: -1 | 1): Promise<void> {
+    if (!this.canMoveQueuedInput(sessionId, commandId, direction)) throw new Error('当前队列位置不可调整，请刷新后重试');
+    const ids = this.durableQueue.get(sessionId)!.filter(isQueueInputReorderable).map(row => row.commandId);
+    const index = ids.indexOf(commandId), target = index + direction;
+    [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+    const expectedRevision = this.queueOrderRevisions.get(sessionId)!;
+    this.queueOrderMutations.add(sessionId); this.notify();
+    try { this.applyQueueSnapshot(sessionId, await api.reorderQueue(sessionId, ids, expectedRevision)); }
+    finally { await this.refreshQueue(sessionId); this.queueOrderMutations.delete(sessionId); this.notify(); }
   }
 
   async cancelQueued(sessionId: string, commandId: string): Promise<void> {

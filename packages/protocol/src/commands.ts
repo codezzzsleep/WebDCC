@@ -23,3 +23,15 @@ export interface QueuedInput {
   createdAt: string;
   preparationError?: string;
 }
+
+export interface QueueSnapshot {
+  inputs: QueuedInput[];
+  /** Feed sequence used to reject late browser reads. */
+  revision: number;
+  /** Exact queue state and order used for compare-and-set mutations. */
+  orderRevision: string;
+}
+
+export function isQueueInputReorderable(input: QueuedInput): boolean {
+  return input.state === 'queued' && input.input.delivery !== 'steer';
+}
