@@ -1,0 +1,49 @@
+{
+  "issue": 198,
+  "parents": [
+    42,
+    44,
+    47,
+    56,
+    57
+  ],
+  "sourceBase": "d6d4a3c7080945515992666a270d3c87fb593e29",
+  "evidenceKind": "actual-source-controlled-process-and-HTTP-regression",
+  "sourceHashes": {
+    "packages/testing/model-proxy/src/diagnostic-writer.ts": "f118c8b2c98409bee7ed4073f051d93ae6b209d573554c9d5b390861a41e34b8",
+    "packages/testing/model-proxy/src/diagnostic-writer.spec.ts": "24e8447b14be8adafef1bbd9d32c3b0c8cff8b4c4b07321aa3275af96797cb6b",
+    "packages/testing/model-proxy/src/fixtures/diagnostic-writer-child.ts": "c508e6c3fe2987755d5c0bedb29533fcf7ce0c444d8df75279fd8e70cc9a5f5c",
+    "docs/diagnostics.md": "09a2ad59d8e8a6962f96109faa135e45b27361fbf61f222cdbac40604a051d8b"
+  },
+  "checks": {
+    "regression": 22,
+    "typecheck": "full workspace and scripts passed",
+    "lint": "changed TS sources and fixtures passed",
+    "OSLock": "flock from util-linux 2.39.3",
+    "platform": "Linux",
+    "covered": [
+      "independent instances and processes",
+      "active lock rejects bounded write",
+      "killed parent helper releases lock",
+      "UTF-8 and mixed replacement/append",
+      "missing utility reports failure with no retained bytes",
+      "unchanged streaming HTTP and native Node preload forwarding"
+    ]
+  },
+  "retainedFailures": [
+    "Three independent-source probes: configured64, actual128/errors0",
+    "Four-writer negative:1failed/1passed actual256/64",
+    "Initial .ts probe TLA CJS startup failure, not executed",
+    "Child fixture optional process.disconnect TS2722; other recursive type checks terminated, corrected"
+  ],
+  "actualNativeAgentCalls": 0,
+  "paidProviderCalls": 0,
+  "liveProvider": false,
+  "fullAcceptance": "incomplete",
+  "deployment": "not performed",
+  "remaining": [
+    "Target-platform flock availability and exact release/native/config evidence",
+    "Three actual Agents with optional recording and recovery under target deployment",
+    "NP-14 aggregate disk/capture quotas, credential sources and cross-frame secret policy"
+  ]
+}
