@@ -16,6 +16,7 @@ import { InputAttachments } from './InputAttachments.js';
 import { DshSubagentPanel } from './DshSubagentPanel.js';
 import { openDshSubagent } from '../lib/dsh-subagent-navigation.js';
 import { DshQuestionWait, useDshQuestionWait } from './DshQuestionWait.js';
+import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -73,12 +74,13 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     if (element === null) return;
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
     setStickToBottom(distance < 80);
-    if (element.scrollTop < 40) void store.loadOlder(sessionId);
+    if (element.scrollTop < 40 && store.getOlderHistoryState(sessionId).phase !== 'error') void store.loadOlder(sessionId);
   };
 
   return (
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      <OlderHistoryRecovery sessionId={sessionId} />
       {store.getSession(sessionId)?.agent === 'dsh' && !history ? <DshSubagentPanel key={`${sessionId}:${store.getSession(sessionId)?.nativeId ?? ''}`} sessionId={sessionId} nativeId={store.getSession(sessionId)?.nativeId} /> : null}
       {conversation !== undefined ? <div className="timeline-inner" role="status" data-testid="conversation-boundary">
         <span>{history ? `此前对话${conversation.previousTitle ? ` · ${conversation.previousTitle}` : ''}（只读）` : '当前对话'}</span>
@@ -689,6 +691,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
         : ['cancelled', 'cancel', 'canceled', 'aborted'].includes(option)
           ? '已取消'
           : '已处理';
+    if (store.getSession(event.sessionId)?.agent === 'dsh') return option === 'unavailable' ? '原生未取得审批回应，权限未获准' : `原生${result}`;
     return resolved.by === 'other' ? `已在其他界面处理：${result}` : result;
   })();
   const what = approvalWhat(data);
