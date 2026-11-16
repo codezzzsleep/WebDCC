@@ -9,7 +9,7 @@ it('NP-14 full interaction and model diagnostics require explicit opt-in', () =>
 });
 
 it('NP-14 diagnostic limits have bounded defaults and reject malformed settings only when diagnostics are enabled', () => {
-  expect(loadConfig({ WDCC_TRACE: '1' }).diagnosticLimits).toEqual({ maxCaptureBytes: 8 * 1024 * 1024, maxCaptureChunks: 4096, maxActiveCaptureBytes: 64 * 1024 * 1024, maxFileBytes: 64 * 1024 * 1024, maxQueuedBytes: 32 * 1024 * 1024, maxDirectoryBytes: 512 * 1024 * 1024, retentionMs: 7 * 24 * 60 * 60 * 1000 });
+  expect(loadConfig({ WDCC_TRACE: '1' }).diagnosticLimits).toEqual({ maxCaptureBytes: 8 * 1024 * 1024, maxCaptureChunks: 4096, maxActiveCaptureBytes: 64 * 1024 * 1024, maxFileBytes: 64 * 1024 * 1024, maxQueuedBytes: 32 * 1024 * 1024, maxActiveQueuedBytes: 64 * 1024 * 1024, maxDirectoryBytes: 512 * 1024 * 1024, retentionMs: 7 * 24 * 60 * 60 * 1000 });
   expect(loadConfig({ WDCC_TRACE_MAX_CAPTURE_BYTES: 'invalid' }).diagnosticLimits).toBeUndefined();
   expect(() => loadConfig({ WDCC_TRACE: '1', WDCC_TRACE_MAX_CAPTURE_BYTES: '-1' })).toThrow('WDCC_TRACE_MAX_CAPTURE_BYTES');
   expect(() => loadConfig({ WDCC_TRACE: '1', WDCC_TRACE_RETENTION_MS: '0' })).toThrow('WDCC_TRACE_RETENTION_MS');
@@ -19,4 +19,7 @@ it('NP-14 diagnostic limits have bounded defaults and reject malformed settings 
   expect(loadConfig({ WDCC_TRACE: '1', WDCC_TRACE_MAX_DIRECTORY_BYTES: '128' }).diagnosticLimits?.maxDirectoryBytes).toBe(128);
   expect(loadConfig({ WDCC_TRACE_MAX_DIRECTORY_BYTES: 'invalid' }).diagnosticLimits).toBeUndefined();
   expect(() => loadConfig({ WDCC_TRACE: '1', WDCC_TRACE_MAX_DIRECTORY_BYTES: '-1' })).toThrow('WDCC_TRACE_MAX_DIRECTORY_BYTES');
+  expect(loadConfig({ WDCC_TRACE: '1', WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES: '0' }).diagnosticLimits?.maxActiveQueuedBytes).toBe(0);
+  expect(loadConfig({ WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES: 'invalid' }).diagnosticLimits).toBeUndefined();
+  expect(() => loadConfig({ WDCC_TRACE: '1', WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES: '1.5' })).toThrow('WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES');
 });

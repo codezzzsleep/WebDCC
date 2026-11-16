@@ -43,7 +43,9 @@ it.each([{ captureBytes: 10000, fileBytes: 1000000, directoryBytes: 512 * 1024 *
   { captureBytes: 10000, fileBytes: 1000000, directoryBytes: 0, activeBytes: 64 * 1024 * 1024 },
   { captureBytes: 10000, fileBytes: 1000000, directoryBytes: 128, activeBytes: 64 * 1024 * 1024 },
   { captureBytes: 10000, fileBytes: 1000000, directoryBytes: 512 * 1024 * 1024, activeBytes: 0 },
-  { captureBytes: 10000, fileBytes: 1000000, directoryBytes: 128, activeBytes: 0 }])('NP-14 native preload preserves transport with capture/file/directory/active limits $captureBytes/$fileBytes/$directoryBytes/$activeBytes', async ({ captureBytes, fileBytes, directoryBytes, activeBytes }) => {
+  { captureBytes: 10000, fileBytes: 1000000, directoryBytes: 128, activeBytes: 0 }].map(limits => ({ ...limits, activeQueuedBytes: 64 * 1024 * 1024 })).concat([
+    { captureBytes: 10000, fileBytes: 1000000, directoryBytes: 512 * 1024 * 1024, activeBytes: 64 * 1024 * 1024, activeQueuedBytes: 0 },
+  ]))('NP-14 native preload preserves transport with capture/file/directory/active/queue limits $captureBytes/$fileBytes/$directoryBytes/$activeBytes/$activeQueuedBytes', async ({ captureBytes, fileBytes, directoryBytes, activeBytes, activeQueuedBytes }) => {
   const root = await mkdtemp(join(tmpdir(), 'wdcc-native-observer-'));
   let sent = '';
   let privateHeader: string | string[] | undefined;
@@ -57,7 +59,7 @@ it.each([{ captureBytes: 10000, fileBytes: 1000000, directoryBytes: 512 * 1024 *
   await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
   const address = upstream.address();
   if (address === null || typeof address === 'string') throw new Error('Missing test address');
-  const child = fork(join(import.meta.dirname, 'fixtures/native-recorder.ts'), [`http://127.0.0.1:${address.port}/responses`], { execArgv: ['--import', 'tsx'], env: { ...process.env, WDCC_TRACE_DIR: root, WDCC_TRACE_MAX_CAPTURE_BYTES: String(captureBytes), WDCC_TRACE_MAX_FILE_BYTES: String(fileBytes), WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES: String(activeBytes), WDCC_TRACE_MAX_DIRECTORY_BYTES: String(directoryBytes) }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  const child = fork(join(import.meta.dirname, 'fixtures/native-recorder.ts'), [`http://127.0.0.1:${address.port}/responses`], { execArgv: ['--import', 'tsx'], env: { ...process.env, WDCC_TRACE_DIR: root, WDCC_TRACE_MAX_CAPTURE_BYTES: String(captureBytes), WDCC_TRACE_MAX_FILE_BYTES: String(fileBytes), WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES: String(activeBytes), WDCC_TRACE_MAX_DIRECTORY_BYTES: String(directoryBytes), WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES: String(activeQueuedBytes) }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let errors = ''; child.stderr?.on('data', data => { errors += String(data); });
   const exited = once(child, 'exit');
   try {
@@ -66,6 +68,13 @@ it.each([{ captureBytes: 10000, fileBytes: 1000000, directoryBytes: 512 * 1024 *
     await exited;
     expect(JSON.parse(sent)).toEqual({ password: 'nested-secret', prompt: 'native input unchanged' });
     expect(privateHeader).toBeUndefined();
+    if (activeQueuedBytes === 0) {
+      const marker = join(root, '.wdcc-diagnostic-quota.json');
+      expect(JSON.parse(await readFile(marker, 'utf8'))).toMatchObject({ incomplete: true, errors: ['Diagnostic active write queue limit reached'] });
+      expect((await stat(marker)).size).toBeLessThanOrEqual(4096);
+      expect((await readdir(root)).filter(name => name.endsWith('.jsonl'))).toEqual([]);
+      return;
+    }
     if (directoryBytes <= 128) {
       const marker = join(root, '.wdcc-diagnostic-quota.json');
       expect(JSON.parse(await readFile(marker, 'utf8'))).toMatchObject({ incomplete: true, scope: 'directory' });
@@ -95,12 +104,12 @@ it('NP-14 a preload with recording disabled preserves the original fetch and nat
   await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve));
   const address = upstream.address();
   if (address === null || typeof address === 'string') throw new Error('Missing address');
-  const child = fork(join(import.meta.dirname, 'fixtures/native-recorder-off.ts'), [`http://127.0.0.1:${address.port}/responses`], { execArgv: ['--import', 'tsx'], env: { ...process.env, WDCC_TRACE_DIR: undefined, WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES: '0' }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  const child = fork(join(import.meta.dirname, 'fixtures/native-recorder-off.ts'), [`http://127.0.0.1:${address.port}/responses`], { execArgv: ['--import', 'tsx'], env: { ...process.env, WDCC_TRACE_DIR: undefined, WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES: '0', WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES: '0' }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let errors = ''; child.stderr?.on('data', data => { errors += String(data); });
   const exited = once(child, 'exit');
   try {
     const [message] = await Promise.race([once(child, 'message'), exited.then(() => { throw new Error(errors); })]);
-    expect(message).toEqual({ unchanged: true, text: 'original' }); expect(marker).toBe('untouched');
+    expect(message).toEqual({ unchanged: true, text: 'original', peerRecord: 'peerok' }); expect(marker).toBe('untouched');
     await exited; expect(child.exitCode).toBe(0);
   } finally { if (child.exitCode === null) child.kill('SIGTERM'); upstream.closeAllConnections(); await new Promise<void>(resolve => upstream.close(() => resolve())); }
 });

@@ -94,6 +94,7 @@ export async function start(config: Config = loadConfig(), options: ServerOption
         WDCC_TRACE_MAX_ACTIVE_CAPTURE_BYTES: String(config.diagnosticLimits?.maxActiveCaptureBytes ?? 64 * 1024 * 1024),
         WDCC_TRACE_MAX_FILE_BYTES: String(config.diagnosticLimits?.maxFileBytes ?? 64 * 1024 * 1024),
         WDCC_TRACE_MAX_QUEUED_BYTES: String(config.diagnosticLimits?.maxQueuedBytes ?? 32 * 1024 * 1024),
+        WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES: String(config.diagnosticLimits?.maxActiveQueuedBytes ?? 64 * 1024 * 1024),
         WDCC_TRACE_MAX_DIRECTORY_BYTES: String(config.diagnosticLimits?.maxDirectoryBytes ?? 512 * 1024 * 1024),
       } } }),
       dsh: {

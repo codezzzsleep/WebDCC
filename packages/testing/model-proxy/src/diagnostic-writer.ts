@@ -4,10 +4,22 @@ import { constants } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
-export interface DiagnosticWriteLimits { maxFileBytes?: number; maxQueuedBytes?: number; maxDirectoryBytes?: number }
-interface Lease { write(file: string, text: string, mode: string, limit: number, directoryLimit: number): Promise<void>; prune(cutoff: number): Promise<void>; release(): Promise<void> }
+export interface DiagnosticWriteLimits { maxFileBytes?: number; maxQueuedBytes?: number; maxActiveQueuedBytes?: number; maxDirectoryBytes?: number }
+interface Lease { write(file: string, text: string, mode: string, limit: number, directoryLimit: number): Promise<void>; prune(cutoff: number): Promise<void>; coverage(message: string): Promise<void>; release(): Promise<void> }
 interface DirectoryQueue { tail: Promise<void>; lease?: Lease; failure?: Error }
 const directories = new Map<string, DirectoryQueue>();
+interface WriteQueueBudget { used: number; maximum: number; coverageBytes: number }
+const budgetKey = Symbol.for('webdcc.diagnostic.write.queue.budget');
+const budgets = globalThis as unknown as Record<symbol, WriteQueueBudget>;
+const writeQueueBudget = budgets[budgetKey] ??= { used: 0, maximum: 64 * 1024 * 1024, coverageBytes: 0 };
+const COVERAGE_QUEUE_BYTES = 4096;
+const QUEUE_LIMIT_ERROR = 'Diagnostic active write queue limit reached';
+export function configureDiagnosticWriteQueueBudget(bytes: number): void {
+  if (!Number.isSafeInteger(bytes) || bytes < 0) throw new Error('Invalid active diagnostic write queue budget');
+  if (writeQueueBudget.used > bytes) throw new Error('Pending diagnostic writes exceed the requested budget');
+  writeQueueBudget.maximum = bytes;
+}
+export function diagnosticWriteQueueBytes(): { queued: number; coverage: number } { return { queued: writeQueueBudget.used, coverage: writeQueueBudget.coverageBytes }; }
 
 // The owned helper performs the whole check/write while it holds the OS lock.
 // A parent exit closes stdin; the helper finishes any current synchronous write
@@ -58,9 +70,9 @@ function writeTarget(file, text, mode, limit, directoryLimit) {
     fs.writeFileSync(descriptor, text); current();
   } finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
 }
-function recordQuotaFailure(file) {
+function recordQuotaFailure(file, message = quotaMessage) {
   const marker = path.join(path.dirname(file), markerName);
-  let failures = 0, descriptor;
+  let failures = 0, descriptor, errors = [];
   try {
     descriptor = fs.openSync(marker, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW);
     const info = fs.fstatSync(descriptor);
@@ -68,11 +80,12 @@ function recordQuotaFailure(file) {
       const buffer = Buffer.alloc(info.size), count = fs.readSync(descriptor, buffer, 0, buffer.length, 0);
       const value = JSON.parse(buffer.subarray(0, count).toString('utf8'));
       if (Number.isSafeInteger(value.failures) && value.failures >= 0) failures = value.failures;
+      if (Array.isArray(value.errors)) errors = value.errors.filter(error => typeof error === 'string' && error.length <= 256).slice(0, 8);
     }
   } catch { /* first or unavailable marker */ }
   finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
   writeTarget(marker, JSON.stringify({ version: 1, incomplete: true, scope: 'directory',
-    failures: Math.min(Number.MAX_SAFE_INTEGER, failures + 1), updatedAt: new Date().toISOString(), errors: [quotaMessage] }), 'replace', 4096);
+    failures: Math.min(Number.MAX_SAFE_INTEGER, failures + 1), updatedAt: new Date().toISOString(), errors: [...new Set([...errors, message])] }), 'replace', 4096);
 }
 function pruneExpired(directory, cutoff) {
   for (const name of fs.readdirSync(directory)) {
@@ -92,6 +105,7 @@ lines.on('line', line => {
   catch { process.stdout.write(JSON.stringify({ error: 'Invalid diagnostic helper command' }) + '\\n'); return; }
   try {
     if (command.op === 'prune') pruneExpired(command.directory, command.cutoff);
+    else if (command.op === 'coverage') recordQuotaFailure(path.join(command.directory, markerName), command.message);
     else writeTarget(command.file, command.text, command.mode, command.limit, command.directoryLimit);
     process.stdout.write(JSON.stringify({ ok: true }) + '\\n');
   } catch (error) {
@@ -132,6 +146,7 @@ async function acquire(directory: string): Promise<Lease> {
         ready({
           write: (file, text, mode, limit, directoryLimit) => send({ file, text, mode, limit, directoryLimit }),
           prune: cutoff => send({ op: 'prune', directory, cutoff }),
+          coverage: message => send({ op: 'coverage', directory, message }),
           release: async () => { child.stdin.end(); await closed; lines.close(); },
         });
       } else {
@@ -179,6 +194,7 @@ export class DiagnosticFileWriter {
     this.maxQueuedBytes = limits.maxQueuedBytes ?? 32 * 1024 * 1024;
     this.maxDirectoryBytes = limits.maxDirectoryBytes ?? 512 * 1024 * 1024;
     if (![this.maxFileBytes, this.maxQueuedBytes, this.maxDirectoryBytes].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error('Invalid diagnostic write limits');
+    if (limits.maxActiveQueuedBytes !== undefined) configureDiagnosticWriteQueueBudget(limits.maxActiveQueuedBytes);
   }
   pendingFor(file: string): Promise<void> | undefined { return this.queues.get(resolve(file)); }
   get pendingBytes(): number { return this.queuedBytes; }
@@ -198,16 +214,34 @@ export class DiagnosticFileWriter {
     this.maintenance.add(work);
     return work;
   }
+  private reportQueueOverflow(directory: string, report: (message: string) => void): Promise<void> {
+    const bytes = Buffer.byteLength(QUEUE_LIMIT_ERROR);
+    if (writeQueueBudget.coverageBytes + bytes > COVERAGE_QUEUE_BYTES) {
+      report(`${QUEUE_LIMIT_ERROR}; coverage queue limit reached`); return Promise.resolve();
+    }
+    writeQueueBudget.coverageBytes += bytes;
+    const work = directoryOperation(directory, lease => lease.coverage(QUEUE_LIMIT_ERROR))
+      .catch(() => report(`${QUEUE_LIMIT_ERROR}; coverage marker unavailable`)).finally(() => {
+        writeQueueBudget.coverageBytes -= bytes; this.maintenance.delete(work);
+      });
+    this.maintenance.add(work);
+    return work;
+  }
   private schedule(file: string, text: string, mode: 'append' | 'replace', fileLimit: number, onError: (error: Error) => void): Promise<void> {
     const report = (message: string): void => { try { onError(new Error(message)); } catch { /* diagnostic error handler */ } };
     file = resolve(file);
     if (file === join(dirname(file), '.wdcc-diagnostic-quota.json')) { report('Reserved diagnostic coverage path'); return Promise.resolve(); }
     const bytes = Buffer.byteLength(text);
     if (this.queuedBytes + bytes > this.maxQueuedBytes) { report('Diagnostic write queue limit reached'); return Promise.resolve(); }
+    if (writeQueueBudget.used + bytes > writeQueueBudget.maximum) {
+      report(QUEUE_LIMIT_ERROR); return this.reportQueueOverflow(dirname(file), report);
+    }
     this.queuedBytes += bytes;
+    writeQueueBudget.used += bytes;
     const work = directoryOperation(dirname(file), lease => lease.write(file, text, mode, fileLimit, this.maxDirectoryBytes))
       .catch((error: unknown) => report(error instanceof Error ? error.message : 'Diagnostic write failed')).finally(() => {
       this.queuedBytes -= bytes;
+      writeQueueBudget.used -= bytes;
       if (this.queues.get(file) === work) this.queues.delete(file);
     });
     this.queues.set(file, work);

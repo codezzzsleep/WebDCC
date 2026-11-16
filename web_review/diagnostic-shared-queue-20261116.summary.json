@@ -1,0 +1,49 @@
+{
+  "requirement": 56,
+  "ownedDefect": 234,
+  "parents": [
+    42
+  ],
+  "base": "e578a78f732cbec7586dff0f0141ef7cd69e2bae",
+  "dependencyPR": 232,
+  "sourceFingerprint": "8ce5939ae8878f021bfa2771f594635648bdebc17297c038e66d87fa8d54f575",
+  "behavior": "Process-shared64MiB default Writer serialized string budget,32MiB perwriter, optional env/Proxy configuration;4KiB pending omission payload reserve and existing4KiB marker disk reserve. Disabled Native preload does not reconfigure peer writer budget.",
+  "verification": {
+    "testsPassed": 72,
+    "testFilesPassed": 9,
+    "typecheck": "all workspace+scripts passed",
+    "lint": "all changed files passed",
+    "scope": "actualNode/flock/FS/module copies and controlledHTTP/SQLite/diagnostic transports;8byte aggregate accepts6UTF8+2ASCII and drops extra;150zero-budget omissions bounded,markerFIFO/unavailable/error/recovery and previousquotaevidence kept; standaloneProxy/Nativebyteidentity and disabledpeerwriter/fetch/header preserved"
+  },
+  "failedEvidence": [
+    "Planned budget baseline persisted9bytes forrequested8; prior state only perwriter",
+    "OriginalfixtureLint typeimport failure retained",
+    "Candidate234 disabledimport crashedbeforefetch:1failure12skipped; noNative/Providertriggered;fixedafterIssue-first",
+    "Post-implementationprobe source field wasbasee578,notmodifiedimplementationidentity;newsummaryfingerprint binds actualsource"
+  ],
+  "evidenceSha256": {
+    "baseline-global-queue.log": "9de5bc4456626eaffe7492c3620d1c5f5b41c7d1769a0be1976903d0edcb55a3",
+    "shared-global-queue-first.log": "ecb96b66e533741c524bc18dcdc7908442bcbf904a6fd6c07ff66c76c8cde54f",
+    "regression-first.log": "a198dd78bc8b0ab8552dfe557b2ae4abed65421cd03d5028d2707a472d510655",
+    "regression-expanded.log": "159825f02a347fa66b667054e41d0f4958c453caf1d5a3b12409d89929b83383",
+    "regression-final.log": "4e4c9a0b6cbb928f7715d1342fdb55aa4bc1b6b74a4cfabd87aa5a39e6840638",
+    "disabled-peer-before.log": "cb42d88a44a987bd4243bae497154fcf1ce2335772ba7d1f2e35186560c07100",
+    "regression-after234.log": "9898091bd324a9a2d58fc410302ec28cd2cf015b3a34f396cd7d81d4855ec960",
+    "typecheck-first.log": "391effbd2603e7560e8ebd83ddf64f603ffd8250d08531952279f62759f48ff0",
+    "typecheck-final.log": "21eb856486ab38ed6ecc5b28b9d28e2fca1f9ca6a52709bd8c4d25b708e1e858",
+    "typecheck-after234.log": "7a19034f0fcbfb276ad58005a6d6f2fc551f9367d5c2e16232022109a5cf06fd",
+    "lint-first.log": "e02efaab1ad4ee874499215626c605b829db9dbe6f8c7ab58f642f06645fb028",
+    "lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint-after234.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "officialNativeCalls": 0,
+  "providerCalls": 0,
+  "deployment": "not performed",
+  "remainingAcceptance": [
+    "Independent exact-head source acceptance,dependency231/232 merge/retarget",
+    "Actual targetthreeAgent diagnostic configuration/failure/recovery",
+    "ModelProxy callback-held structured records/VM/temporaryserialization/transportcopies andcross-process total not bounded bythispool",
+    "FullNP14 credential/crossframe/retention/export remaining scopes"
+  ],
+  "dataMigration": "none"
+}

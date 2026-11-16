@@ -26,7 +26,7 @@ const state = globalThis as unknown as Record<symbol, boolean>;
 const directory = process.env['WDCC_TRACE_DIR'];
 const limit = (name: string, fallback: number, minimum = 0): number => { if (process.env[name]?.trim() === '' || process.env[name] === undefined) return fallback; const value = Number(process.env[name]); return Number.isSafeInteger(value) && value >= minimum ? value : fallback; };
 const captureLimits = [limit('WDCC_TRACE_MAX_CAPTURE_BYTES', 8 * 1024 * 1024), limit('WDCC_TRACE_MAX_CAPTURE_CHUNKS', 4096, 1)] as const;
-const writer = new DiagnosticFileWriter({ maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024), maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024), maxDirectoryBytes: limit('WDCC_TRACE_MAX_DIRECTORY_BYTES', 512 * 1024 * 1024) });
+const writer = new DiagnosticFileWriter({ maxFileBytes: limit('WDCC_TRACE_MAX_FILE_BYTES', 64 * 1024 * 1024), maxQueuedBytes: limit('WDCC_TRACE_MAX_QUEUED_BYTES', 32 * 1024 * 1024), maxActiveQueuedBytes: directory === undefined ? undefined : limit('WDCC_TRACE_MAX_ACTIVE_QUEUED_BYTES', 64 * 1024 * 1024), maxDirectoryBytes: limit('WDCC_TRACE_MAX_DIRECTORY_BYTES', 512 * 1024 * 1024) });
 const reportedFiles = new Set<string>();
 let reportedOverflow = false;
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');

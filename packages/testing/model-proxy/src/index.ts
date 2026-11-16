@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DiagnosticCapture, configureDiagnosticCaptureBudget, diagnosticSecretsFromHeaders, redactDiagnosticBytes, sensitiveDiagnosticField, type CaptureLimitReason } from './redaction.js';
 export { DiagnosticCapture, DiagnosticCaptureBudget, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBytes, diagnosticSecretsFromHeaders, redactDiagnosticBytes, redactDiagnosticValue, sensitiveDiagnosticField } from './redaction.js';
 import { DiagnosticFileWriter } from './diagnostic-writer.js';
-export { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, type DiagnosticWriteLimits } from './diagnostic-writer.js';
+export { DiagnosticFileWriter, readDiagnosticDirectoryCoverage, configureDiagnosticWriteQueueBudget, diagnosticWriteQueueBytes, type DiagnosticWriteLimits } from './diagnostic-writer.js';
 export { readDiagnosticText, DiagnosticReadError } from './diagnostic-reader.js';
 
 export interface ModelProxyChunk { t: number; data: string; bytes?: number; sha256?: string; }
@@ -37,6 +37,7 @@ export interface ModelProxyOptions {
   maxActiveCaptureBytes?: number;
   maxRecordFileBytes?: number;
   maxPendingRecordBytes?: number;
+  maxActiveQueuedBytes?: number;
   maxRecordDirectoryBytes?: number;
 }
 
@@ -73,7 +74,7 @@ export class ModelProxy {
     catch { throw new Error('Invalid model recording target credentials'); }
     if (options.maxActiveCaptureBytes !== undefined) configureDiagnosticCaptureBudget(options.maxActiveCaptureBytes);
     new DiagnosticCapture(options.maxCaptureBytes, options.maxCaptureChunks);
-    this.writer = new DiagnosticFileWriter({ maxFileBytes: options.maxRecordFileBytes, maxQueuedBytes: options.maxPendingRecordBytes,
+    this.writer = new DiagnosticFileWriter({ maxFileBytes: options.maxRecordFileBytes, maxQueuedBytes: options.maxPendingRecordBytes, maxActiveQueuedBytes: options.maxActiveQueuedBytes,
       maxDirectoryBytes: options.maxRecordDirectoryBytes });
   }
 

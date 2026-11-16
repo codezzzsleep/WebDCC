@@ -4,10 +4,39 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { ModelProxy, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBytes, type ModelProxyRecord } from './index.js';
+import { ModelProxy, configureDiagnosticCaptureBudget, diagnosticCaptureBudgetBytes, configureDiagnosticWriteQueueBudget, diagnosticWriteQueueBytes, readDiagnosticDirectoryCoverage, type ModelProxyRecord } from './index.js';
 afterEach(() => { expect(diagnosticCaptureBudgetBytes()).toBe(0); configureDiagnosticCaptureBudget(64 * 1024 * 1024); });
 async function listen(server: Server): Promise<number> { server.listen(0, '127.0.0.1'); await once(server, 'listening'); return (server.address() as { port: number }).port; }
 async function close(server: Server): Promise<void> { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+
+it('a zero shared writer budget preserves proxy transport and durable omission coverage, then allows recording again', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-proxy-shared-queue-'));
+  let sent = '';
+  const upstream = createServer(async (req, res) => { for await (const part of req) sent += String(part); res.end('original response'); });
+  const port = await listen(upstream);
+  const proxy = new ModelProxy({ target: `http://127.0.0.1:${port}`, recordFile: join(directory, 'trace.jsonl'), maxActiveQueuedBytes: 0 });
+  let recovered: ModelProxy | undefined;
+  try {
+    const address = await proxy.listen();
+    expect(await (await fetch(address.url, { method: 'POST', body: 'original input' })).text()).toBe('original response');
+    expect(sent).toBe('original input');
+    await expect(proxy.flush()).rejects.toThrow('incomplete');
+    await expect(readFile(join(directory, 'trace.jsonl'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readDiagnosticDirectoryCoverage(directory)).toMatchObject({ incomplete: true, errors: ['Diagnostic active write queue limit reached'] });
+    expect(diagnosticWriteQueueBytes()).toEqual({ queued: 0, coverage: 0 });
+    configureDiagnosticWriteQueueBudget(64 * 1024 * 1024);
+    recovered = new ModelProxy({ target: `http://127.0.0.1:${port}`, recordFile: join(directory, 'recovered.jsonl') });
+    const next = await recovered.listen();
+    expect(await (await fetch(next.url)).text()).toBe('original response');
+    await recovered.flush();
+    expect(await readFile(join(directory, 'recovered.jsonl'), 'utf8')).toContain('completed');
+    expect(await readDiagnosticDirectoryCoverage(directory)).toMatchObject({ incomplete: true });
+  } finally {
+    await recovered?.close(); await expect(proxy.close()).rejects.toThrow('incomplete');
+    await close(upstream); configureDiagnosticWriteQueueBudget(64 * 1024 * 1024);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 it.each(['http://fixture:%@127.0.0.1:1', 'http://fixture:%ff@127.0.0.1:1', 'http://%:valid@127.0.0.1:1'])('rejects malformed target credentials before listening: %s', target => {
   expect(() => new ModelProxy({ target })).toThrow('Invalid model recording target credentials');
