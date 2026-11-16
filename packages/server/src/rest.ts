@@ -446,6 +446,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return store.latestInteractionEvent(id, kind, interactionId);
   });
 
+  app.get('/api/sessions/:id/dsh/approval-recovery', async request => {
+    const { id } = request.params as { id: string };
+    const approvalId = (request.query as { approvalId?: unknown }).approvalId;
+    if (typeof approvalId !== 'string' || !approvalId || approvalId.length > 2048) throw badRequest('审批身份无效');
+    return manager.dshApprovalRecovery(id, approvalId);
+  });
+
   app.put('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {
     const { id } = request.params as { id: string };
     if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });

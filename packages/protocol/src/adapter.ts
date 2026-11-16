@@ -13,6 +13,7 @@ import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions,
   DshSubagentPromptOptions, DshSubagentPromptReceipt, DshSubagentInputReference, DshSubagentInputObservation } from './dsh-subagents.js';
 import type { DshQuestionWaitOpening } from './dsh-questions.js';
 import type { ClaudeQueryConfiguration } from './claude-configuration.js';
+import type { DshApprovalAttempt, DshApprovalDelivery } from './dsh-interactions.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -207,6 +208,8 @@ export interface AgentAdapter {
   observe?(opts: CreateOpts & { nativeId: string }): Promise<NativeObservation>;
   nativeCatalog?(sessionId: string): Promise<unknown>;
   nativeState?(sessionId: string): unknown | Promise<unknown>;
+  dshApprovalDelivery?(sessionId: string, approvalId: string): Promise<DshApprovalDelivery | undefined>;
+  retryDshApproval?(sessionId: string, attempt: DshApprovalAttempt, revision: string): Promise<void | { confirmed: boolean }>;
   executeNativeControl?(sessionId: string, action: unknown): Promise<unknown>;
   readNativeHistory?(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown>;
   nativeProcessStart?(sessionId: string, params: NativeProcessStart, onOutput: (delta: NativeProcessDelta) => void): Promise<NativeProcessCompletion>;

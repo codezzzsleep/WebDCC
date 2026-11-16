@@ -17,7 +17,9 @@ export function isCommand(value: unknown): value is Command {
       && !(value['contentParts'] !== undefined && Array.isArray(value['images']) && value['images'].length > 0)
       && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
       && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
-    case 'approve': return opaqueId(value['approvalId']) && opaqueId(value['optionId']);
+    case 'approve': return opaqueId(value['approvalId']) && opaqueId(value['optionId'])
+      && (value['retryOf'] === undefined || record(value['retryOf']) && Object.keys(value['retryOf']).every(key => ['commandId', 'revision'].includes(key))
+        && id(value['retryOf']['commandId']) && typeof value['retryOf']['revision'] === 'string' && /^[a-f0-9]{64}$/.test(value['retryOf']['revision']));
     case 'answer': return opaqueId(value['questionId']) && value['answer'] !== undefined
       && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
       && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));

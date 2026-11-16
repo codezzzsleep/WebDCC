@@ -88,3 +88,70 @@ it('HTTP keeps the recovered SDK query/owner/tasks/approval and persists the old
     if (!closed) await ctx.close(); await permission; second.close(); mock.query.mockReset(); await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+it('HTTP keeps a disposed manager closed while its old configuration query finishes exiting', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-claude-query-close-'));
+  const path = join(directory, 'state.sqlite');
+  const ctx = await createTestApp({}, undefined, {}, { dbPath: path });
+  const second = openDb(path);
+  const queries: { close: ReturnType<typeof vi.fn> }[] = [];
+  let finishExit!: () => void; const exit = new Promise<void>(resolve => { finishExit = resolve; });
+  let response: ReturnType<typeof ctx.app.inject> | undefined; let closed = false; let sessionId: string | undefined;
+  const nativeId = '73c32b55-21a3-4d5f-bef0-dafc55b58872';
+  mock.query.mockImplementation(({ options }: { options: Options }) => {
+    const index = queries.length; let ended = false; let wake: (() => void) | undefined;
+    const messages = [{ type: 'system', subtype: 'init', session_id: nativeId, model: options.model,
+      permissionMode: options.permissionMode ?? 'default', slash_commands: [], capabilities: [] }] as unknown as SDKMessage[];
+    const close = vi.fn(() => { ended = true; wake?.(); }); queries.push({ close });
+    return {
+      async *[Symbol.asyncIterator]() {
+        while (!ended || messages.length > 0) {
+          const message = messages.shift(); if (message !== undefined) yield message;
+          else await new Promise<void>(resolve => { wake = resolve; });
+        }
+        if (index === 0) await exit;
+      }, close,
+      initializationResult: async () => ({ claude_code_version: '2.1.322' }),
+      supportedModels: async () => ['old-model', 'requested-model'].map(value => ({ value, displayName: value, description: 'controlled SDK catalog' })),
+      supportedCommands: async () => [], supportedAgents: async () => [], accountInfo: async () => ({}), mcpServerStatus: async () => [],
+    } as unknown as Query;
+  });
+  const adapter = new ClaudeAdapter();
+  vi.spyOn(adapter.nativeHistory, 'info').mockRejectedValue(new Error('controlled history unavailable'));
+  ctx.manager.registerAdapter(adapter);
+  try {
+    const workspace = ctx.store.createWorkspace('Claude explicit close handoff', ctx.dataDir);
+    const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent: 'claude-code', model: 'old-model', accessMode: 'plan' });
+    sessionId = session.id;
+    await vi.waitFor(() => expect(ctx.store.getSession(session.id)?.nativeId).toBe(nativeId));
+    const initial = await ctx.manager.nativeControls(session.id); const commandId = 'claude-close-old-configuration';
+    const request = { method: 'POST' as const, url: `/api/sessions/${session.id}/native/actions`, headers: { cookie: ctx.cookie },
+      payload: { commandId, revision: initial.revision, action: { type: 'model', model: 'requested-model' } } };
+    response = ctx.app.inject(request);
+    await vi.waitFor(() => { expect(queries[0]!.close).toHaveBeenCalledOnce(); expect(adapter.debugProcesses()).toEqual([]); });
+    await ctx.manager.dispose(session.id);
+    const owner = ctx.store.nativeOwners.get(session.id); finishExit();
+    const failed = await response;
+    expect(failed.statusCode).toBe(409); expect(queries).toHaveLength(1);
+    expect(adapter.debugProcesses()).toEqual([]); expect(ctx.manager.getRuntime(session.id)).toBeUndefined();
+    expect(ctx.store.nativeOwners.get(session.id)).toEqual(owner);
+    expect(ctx.store.getSession(session.id)?.model).toBe('old-model');
+    const receipt = ctx.store.nativeActions.get(commandId, session.id);
+    expect(receipt).toMatchObject({ state: 'uncertain' });
+    expect(new Store(second).nativeActions.get(commandId, session.id)).toEqual(receipt);
+    const retried = await ctx.app.inject(request);
+    expect(retried.json().receipt.state).toBe('uncertain'); expect(queries).toHaveLength(1);
+    await ctx.close(); closed = true;
+    const reopened = openDb(path);
+    try { expect(new Store(reopened).nativeActions.get(commandId, session.id)).toEqual(receipt); }
+    finally { reopened.close(); }
+    console.info(JSON.stringify({ proof: 'explicit close during query exit through source HTTP/Manager/SQLite',
+      queryCount: queries.length, orphanWriterCount: adapter.debugProcesses().length, receipt: 'uncertain',
+      duplicateRequestReplayed: false, secondConnection: true, databaseReopen: true, actualNativeOrProvider: false }));
+  } finally {
+    finishExit(); await response; for (const query of queries) query.close();
+    if (sessionId !== undefined) await adapter.dispose(sessionId);
+    if (!closed) await ctx.close(); second.close(); mock.query.mockReset();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);

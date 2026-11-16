@@ -11,6 +11,12 @@ dispose, clear permissions, overwrite settings or start another writer over a
 new query. The superseded operation returns `uncertain` with its original error
 content. An explicitly closed replacement stays closed.
 
+Public disposal also advances a close revision when the retired query is
+temporarily absent from the session map. Pending replacement and rollback
+continuations check that revision before starting another writer. Cleanup of
+an owned failed query does not advance it, so normal rollback remains possible
+unless a separate close request supersedes the operation.
+
 When the failed query still owns its generation, the existing rollback to the
 previous accepted native session and options remains available. If the owned
 rollback also fails, the current operation still reports

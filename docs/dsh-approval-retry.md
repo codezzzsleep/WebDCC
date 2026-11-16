@@ -1,0 +1,11 @@
+# DSH explicit original approval recovery
+
+An unknown native RPC result retains the original approval choice and the independently captured Agent, event, call, durable approval and Host identities in the existing durable interaction record. Recovery queries compare that record with the currently observed native delivery; incomplete or contradictory identities remain unavailable.
+
+“Retry original response” sends the same choice through the official same-event Gateway boundary, using a new stable local command linked to the old uncertain attempt. A SQLite revision/command comparison admits one caller. A native decision, changed delivery, changed Host or changed choice prevents dispatch. A definitely unsubmitted stale retry restores the original uncertainty; it does not erase the failed retry receipt. A rejected cached token keeps the original approval's recovery entry visible so the user can check again on the same page; it does not trigger automatic resubmission.
+
+The Gateway may accept the original or new delivery or return a void no-op after another Client settled it. Consequently the native audit resolves the card's actual outcome while local receiver provenance stays unknown. It never turns an unknown attempt into local acceptance. Known sent/ended approvals cannot be retried. This capability does not replay ordinary messages or clear the ordinary-write fence following incomplete RPC capture.
+
+The source regression includes controlled native frames over real HTTP/journal/SQLite, a captured HTTP transport-error path, competing callers, identity changes, refresh and actual desktop/mobile Chromium. Seven unchanged native Gateway library points remain bound by `fixtures/dsh/approval-identity-contract.json`. All are separate from actual Host/Agent/Provider acceptance; the completed real approval task did not trigger human approval and is not repeated. The fixed native remains `0.2.2-rc.1` / `fcc0ad4`; prompts, tools, permissions and protocol are unchanged.
+
+Legacy records without original correlation remain unavailable. Question-group answer recovery, Host/activeAttempt/workspace matrices and complete target-platform acceptance are separate remaining scopes. Refs #288, #53, #52, #48 (DSH), #42; depends on the native outcome/provenance correction in PR #286.

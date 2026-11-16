@@ -145,3 +145,43 @@ it('an explicitly closed replacement stays closed when its old initialization la
     expect(h.queries).toHaveLength(2); expect(h.adapter.debugProcesses()).toEqual([]);
   } finally { initialize.reject(new Error('test cleanup')); await changing; for (const { q } of h.queries) q.close(); await h.adapter.dispose('s'); }
 });
+
+it('an explicit close while the original query pump is exiting prevents the pending replacement', async () => {
+  const h = harness(); const exit = deferred(); let changing: Promise<unknown> | undefined;
+  try {
+    await h.adapter.create(oldOptions); h.queries[0]!.q.holdExit(exit.promise);
+    changing = h.adapter.setModel('s', 'requested-model').then(() => ({ success: true }), error => error);
+    await vi.waitFor(() => { expect(h.queries[0]!.q.close).toHaveBeenCalledOnce(); expect(h.adapter.debugProcesses()).toEqual([]); });
+    await h.adapter.dispose('s');
+    exit.resolve(); const outcome = await changing;
+    console.info(JSON.stringify({ proof: 'independent explicit close during original pump exit', queryCount: h.queries.length,
+      outcome: String(outcome), processes: h.adapter.debugProcesses().length, actualNativeOrProvider: false }));
+    expect(outcome).toMatchObject({ code: 'uncertain' });
+    expect(h.queries).toHaveLength(1); expect(h.adapter.debugProcesses()).toEqual([]);
+  } finally { exit.resolve(); await changing; for (const { q } of h.queries) q.close(); await h.adapter.dispose('s'); }
+});
+
+it('an explicit close while the failed replacement pump is exiting prevents rollback', async () => {
+  const h = harness(); const exit = deferred(); let changing: Promise<unknown> | undefined;
+  try {
+    await h.adapter.create(oldOptions);
+    const original = mocked.query.getMockImplementation()!;
+    mocked.query.mockImplementation((input: { options: Options }) => {
+      const result = original(input);
+      if (h.queries.length === 2) {
+        h.queries[1]!.q.holdExit(exit.promise);
+        h.queries[1]!.q.initializationResult.mockRejectedValue(new Error('requested initialization failed before close'));
+      }
+      return result;
+    });
+    changing = h.adapter.setModel('s', 'requested-model').then(() => ({ success: true }), error => error);
+    await vi.waitFor(() => { expect(h.queries).toHaveLength(2); expect(h.queries[1]!.q.close).toHaveBeenCalledOnce(); expect(h.adapter.debugProcesses()).toEqual([]); });
+    await h.adapter.dispose('s');
+    exit.resolve(); const outcome = await changing;
+    console.info(JSON.stringify({ proof: 'independent explicit close during failed replacement cleanup', queryCount: h.queries.length,
+      outcome: String(outcome), processes: h.adapter.debugProcesses().length, actualNativeOrProvider: false }));
+    expect(outcome).toMatchObject({ code: 'uncertain' });
+    expect(String(outcome)).toContain('requested initialization failed before close');
+    expect(h.queries).toHaveLength(2); expect(h.adapter.debugProcesses()).toEqual([]);
+  } finally { exit.resolve(); await changing; for (const { q } of h.queries) q.close(); await h.adapter.dispose('s'); }
+});
