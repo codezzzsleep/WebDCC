@@ -1,0 +1,91 @@
+{
+  "formatVersion": 1,
+  "issue": 264,
+  "relatedIssues": [
+    46,
+    45,
+    251,
+    42
+  ],
+  "baseCommit": "726e8c18aac00c62607ea27eee6432e1cb78e880",
+  "behavior": "Old input failure is bound to its exact runtime/owner/turn; it cannot finish current nativeB or replace terminalA",
+  "sourceFiles": {
+    "packages/server/src/manager.ts": "69a743770be69d9c0d055b70e3ca0223885f377560bc9c9d5f5332d1d8fc37d1",
+    "packages/server/src/command-journal.ts": "75e810fe7addf32b18edfb2d2e12494e44af6bc810c4b546b5defed31c60512b",
+    "packages/server/test/late-input-failure.spec.ts": "b266abda711596f6c1e1a93f0fdf3df3b2bb0686c23b20b29822bad76b4d12da",
+    "browser-tests/late-input-failure.spec.ts": "46eb1328889a515a52401675b237a6da9952d7a4537528680a545c5fad337340",
+    "docs/late-input-failures.md": "77a91466a858885c235a64e4d264c99889cbe2b0e17166e6a22fe7ac1190757b"
+  },
+  "verification": {
+    "sourceRegression": {
+      "passed": 72,
+      "files": 7,
+      "log": "late-failure-final-regression.log"
+    },
+    "sourceBrowser": {
+      "passed": 2,
+      "files": 2,
+      "log": "late-failure-browser-second.log",
+      "scope": "Bstream survivesAerror; Bownend is soleterminal; refresh retains; Auncertain remainsblocked"
+    },
+    "workspaceTypecheck": "passed sequentially",
+    "scriptsTypecheck": "passed",
+    "changedFileLint": "passed",
+    "build": "final exact-head evidence bound in PR and private ledger after commit",
+    "independentSourceAcceptance": "pending",
+    "deployment": "not performed"
+  },
+  "preservedFailures": [
+    {
+      "log": "late-failure-before.log",
+      "failed": 6,
+      "scope": "threecontrolledAgent identities/Aunknown orcompleted; currentB falselyfinished"
+    },
+    {
+      "log": "late-failure-browser.log",
+      "passed": 1,
+      "failedSuites": 1,
+      "untriggered": "new browser test lacked rootfake-adapter dependency; relative existingfixture import corrected"
+    }
+  ],
+  "evidenceSha256": {
+    "late-failure-before.log": "1b61cde32a26d3a7cf32500765c4f43d2be74eb49be9a5cd4ae27b4a9fb09f2e",
+    "late-failure-first.log": "2798ba4bff38442e2e69bad919c06d249fac9667a5617ee99c1ae3111f7aa354",
+    "late-failure-regression.log": "7195db41dc8db7eaea342ef4b83f60ae998bcc19fb6250695fafcdfe8abad471",
+    "late-failure-final-regression.log": "0d1b68d26e1a062bca13ee47958442204a442ef9b62fadb6043c0974bb494e81",
+    "late-failure-browser.log": "aba20a587cdc53db1fd1400ea99c750fd10e94c726a9b738f2b86732d1f8b8e3",
+    "late-failure-browser-second.log": "be61b453efb2ff70879fdc88eb1f6a739d29599a0fc75dc67966c00343f2594c",
+    "late-failure-typecheck.log": "bfde5de559303021061e98f6514d8d575e2acbfe282f6fa4a309ea46a82cd99c",
+    "late-failure-scripts-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "late-failure-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "rawBeforeSha256": {
+    "dsh-false.json": "58b002763fbaf1efc1382d6139b29bb3a9697f04bcd04c2283ab417a76822630",
+    "codex-false.json": "84d3fa7476b963b6b08d3cd04e88ae119e7eb4fe4127966a268ec1c5e5eca92d",
+    "codex-true.json": "095144bf17d3274ef723dea541f5b4bfdaec96bf48c77bd49adea75191f98654",
+    "claude-code-false.json": "1f05a8bda407a5eb95da58cd9bafa4b142b66394bc2b31aaba109254e91d57cb",
+    "dsh-true.json": "eea6c244bd5201414a53624acfb4355b95f04e565fbf7985f6d8fab5faf7ca86",
+    "claude-code-true.json": "866e7877741267483e33fcaf66ddb500dfc1cbe7dcb20963dc383c12cd6e0924"
+  },
+  "rawAfterSha256": {
+    "dsh-false.json": "28bc97dd30f6f244be67b42946adc913b50e3cf35f7023c27065522c8f33928f",
+    "codex-false.json": "82e2b96f9c8fb1988772c29f9ee23c09087e3772e811abc81157a895246c0b4b",
+    "codex-true.json": "9d5d632ba9e527622684836152495b9fd76305b0ddd3db57eb26b59a71663a1d",
+    "browser-stream.json": "5ef1a0bc3eea5d9eb3700be883160b799a2535f7e5df393320a51958abddc41c",
+    "claude-code-false.json": "1c27f79c7cf7c57ab342c6892c575f390c16e6b1638769e30a520d073f83b1ce",
+    "browser-stream-recovered.png": "ce105c65a8498bc9391108ee52b4f79503a579d77c28d0bfa82f359b8f41a745",
+    "dsh-true.json": "a2e514cead7238abff4450c39b28307695b7f08de3b78ce5be4316e5d3b35c98",
+    "claude-code-true.json": "89bb46a278b3d54b04f9b7da0a820fcfb494ecc0b857c67465c09a4fd1049028"
+  },
+  "nativeEvidence": {
+    "officialAgentCalls": 0,
+    "providerCalls": 0,
+    "nativeAdapterAndProtocolChanges": false,
+    "controlledAdapterVersion": "fake-1.0.0",
+    "scope": "actualHTTP/SQLite/Chromium and controlled native callbacks; not official target availability"
+  },
+  "remainingScope": [
+    "ordinary current input unknown outcome handling retains its existing contract; complete native fault acceptance remains separate",
+    "NP45/46 fullnative andHost authority, NP47 fullolder gaps/rawprojection, NP30/54 config authority remain tracked"
+  ]
+}

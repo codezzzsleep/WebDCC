@@ -1,6 +1,6 @@
 import type { EventData, EventKind, StoredEvent, UsageData } from './events.js';
 import { isBlockingQuestion } from './events.js';
-import { failedFileOperation } from './file-operation.js';
+import { failedFileOperation, nativeOperationDeclined } from './file-operation.js';
 import type { InputContent } from './input.js';
 import { claudeOutputOrigin } from './claude-tasks.js';
 import { codexReviewItem } from './codex-review.js';
@@ -232,7 +232,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
   const latestPlan = [...events].reverse().find((event) => event.kind === 'plan' && nativePlanText(event) === undefined);
   const latestGoal = [...events].reverse().find((event) => event.kind === 'goal');
   const summary = {
-    commands: steps.filter((event) => event.kind === 'command').length,
+    commands: steps.filter((event) => event.kind === 'command' && !nativeOperationDeclined(event)).length,
     reads: steps.filter((event) => event.kind === 'file.read' && !failedFileOperation(event)).length,
     edits: steps.filter((event) => (event.kind === 'file.change' || event.kind === 'turn.diff') && !failedFileOperation(event)).length,
     tools: steps.filter((event) => event.kind === 'tool.call' && codexReviewItem(event) === undefined).length,

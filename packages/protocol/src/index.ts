@@ -34,4 +34,4 @@ export * from './native-controls.js';
 export { codexReviewItem, type CodexReviewItem } from './codex-review.js';
 
 export const PROTOCOL_VERSION = 1;
-export { failedFileOperation, fileOperationError } from './file-operation.js';
+export { failedFileOperation, fileOperationError, nativeOperationDeclined } from './file-operation.js';

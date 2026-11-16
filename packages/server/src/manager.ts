@@ -741,8 +741,8 @@ export class SessionManager {
       this.queueChanged(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing) this.finishTurn(runtime, 'failed', `${knownUnsubmittedInput(error) ? 'native-input-not-submitted' : 'native-outcome-uncertain'}: ${message}`);
-      else this.store.journal.inputState(turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain');
+      if (this.runtimes.get(sessionId) === runtime && !runtime.disposing && runtime.turnId === turnId && this.store.nativeOwners.current(sessionId, runtime.identity)) this.finishTurn(runtime, 'failed', `${knownUnsubmittedInput(error) ? 'native-input-not-submitted' : 'native-outcome-uncertain'}: ${message}`);
+      else this.store.journal.settleInputFailure(turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain');
       throw error;
     }
     if (runtime.turnId === turnId) this.refreshInteractionStatus(runtime);
@@ -768,7 +768,7 @@ export class SessionManager {
       // A real persisted echo can precede a lost RPC response. Its positive
       // admission proof must not be downgraded into blind-replay uncertainty.
       if (this.store.journal.get(accepted.commandId)?.state === 'completed') { this.queueChanged(runtime.sessionId); return { turnId: target, queued: false, confirmed: true }; }
-      this.store.journal.inputState(accepted.turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain'); this.queueChanged(runtime.sessionId); throw error;
+      this.store.journal.settleInputFailure(accepted.turnId, knownUnsubmittedInput(error) ? 'failed' : 'uncertain'); this.queueChanged(runtime.sessionId); throw error;
     }
     this.queueChanged(runtime.sessionId); return { turnId: target, queued: false, confirmed: this.store.journal.get(accepted.commandId)?.state === 'completed' };
   }

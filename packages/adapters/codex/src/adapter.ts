@@ -447,7 +447,7 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
         ...(typeof item['cwd'] === 'string' ? { cwd: item['cwd'] } : {}),
         ...(typeof item['exitCode'] === 'number' ? { exitCode: item['exitCode'] } : {}),
         ...(typeof item['aggregatedOutput'] === 'string' ? { outputTail: item['aggregatedOutput'].split('\n').slice(-200).join('\n') } : {}),
-        status: item['status'] === 'failed' ? 'failed' : item['status'] === 'inProgress' ? 'running' : 'completed',
+        status: item['status'] === 'failed' || item['status'] === 'declined' ? 'failed' : item['status'] === 'inProgress' ? 'running' : 'completed',
       };
     case 'exec': {
       const input = item['input'] ?? item['source'] ?? '';
@@ -478,7 +478,7 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
             ...(kind === 'add' ? { note: '整文件写入，未取得原内容' } : {}),
           };
         }),
-        status: item['status'] === 'failed' ? 'failed' : 'completed',
+        status: item['status'] === 'failed' || item['status'] === 'declined' ? 'failed' : item['status'] === 'inProgress' ? 'running' : 'completed',
       };
     }
     case 'plan':
@@ -1797,7 +1797,7 @@ export class CodexAdapter implements AgentAdapter {
             data: { nativeType: method }, native: params, nativeTurnId: this.nativeTurnId(params) });
           return;
         }
-        for (const event of (runtime.plans ??= new CodexPlanStreams()).delta(params['itemId'], this.nativeTurnId(params, runtime), params['delta'])) this.emit(sessionId, event);
+        for (const event of (runtime.plans ??= new CodexPlanStreams()).delta(params['itemId'], this.nativeTurnId(params, runtime) ?? params['turnId'], params['delta'])) this.emit(sessionId, event);
         return;
       }
       case 'plan/item': {

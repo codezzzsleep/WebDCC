@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, codexReviewItem } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, codexReviewItem } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -464,10 +464,11 @@ function StepRow({
     }
     case 'command': {
       const data = event.data as EventData['command'];
-      const failed = data.status === 'failed';
+      const declined = nativeOperationDeclined(event);
+      const failed = data.status === 'failed' || declined;
       return (
         <div className={className} id={`e-${event.seq}`}>
-          <StepLine icon="terminal" label="运行命令" detail={data.label ?? data.command} onClick={toggle} open={open} failed={failed} />
+          <StepLine icon="terminal" label={declined ? '命令已拒绝' : '运行命令'} detail={data.label ?? data.command} onClick={toggle} open={open} failed={failed} />
           {open ? <pre className="output">{data.outputTail === undefined || data.outputTail === '' ? '（无输出）' : data.outputTail}</pre> : null}
         </div>
       );
@@ -490,7 +491,7 @@ function StepRow({
         <div className={className}>
           <StepLine
             icon="edit"
-            label={failedFileOperation(event) ? '编辑失败' : '编辑'}
+            label={nativeOperationDeclined(event) ? '改动已拒绝' : failedFileOperation(event) ? '编辑失败' : '编辑'}
             detail={detail}
             failed={failedFileOperation(event)}
             {...(failedFileOperation(event) || first?.diffFileId === undefined ? {} : { onClick: () => onOpenDiff(first.diffFileId ?? '', first.path) })}
