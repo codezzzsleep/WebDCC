@@ -31,6 +31,16 @@ async function fixture(options: { writable?: boolean; identityRefreshMs?: number
       response.end(JSON.stringify({ type: 'server-response', rpcId: envelope.rpcId, result: { ok: true, value: 'native-receipt' } })); return;
     }
     if (request.url === '/dsh/api/file?path=notes.txt') { response.setHeader('content-type', 'text/plain'); response.setHeader('content-disposition', 'attachment; filename="notes.txt"'); response.end('native download'); return; }
+    if (request.url?.startsWith('/dsh/api/session.export') || request.url?.startsWith('/dsh/api/session.markdown')) {
+      const url = new URL(request.url, 'http://native.invalid');
+      if (!url.searchParams.get('sessionId')) { response.statusCode = 400; response.end('missing native sessionId'); return; }
+      if (url.searchParams.get('sessionId') === 'missing') { response.statusCode = 404; response.end('native session not found'); return; }
+      const archive = url.pathname.endsWith('.export');
+      response.setHeader('content-type', archive ? 'application/zip' : 'text/markdown; charset=utf-8');
+      if (archive) response.setHeader('content-disposition', 'attachment; filename="dsh-native-session.zip"');
+      response.setHeader('set-cookie', 'native-secret=must-not-leave-server');
+      response.end(archive ? Buffer.from('504b030400000000ff0013', 'hex') : '# Native session\n\n原生会话正文\n'); return;
+    }
     response.statusCode = 404; response.end();
   });
   const mux = new WebSocketServer({ noServer: true });
@@ -109,6 +119,27 @@ it('registered JSON RPCs are validated, fenced and journaled; arbitrary proxies 
   expect(invalid.statusCode).toBe(400); expect(f.authorized).toBe(1);
   for (const url of ['/proxy?target=https://evil.test', '/?token=secret', '/%2e%2e/api/commands/execute', '//evil.test/', '/api/not-known']) expect((await f.surface.app.inject({ url, headers: { ...f.headers, cookie } })).statusCode).not.toBe(200);
   expect((await f.surface.app.inject({ url: '/', headers: { ...f.headers, host: new URL(mainOrigin).host, cookie } })).statusCode).toBe(403);
+});
+it.each(['/api/session.export', '/api/session.markdown'])('authenticated native %s preserves GET/HEAD bytes, query, headers and errors without a writer', async path => {
+  const f = await fixture({ writable: false }); const { cookie } = await f.login('native-session');
+  const url = `${path}?sessionId=native-session&includeDescendants=true`;
+  const noAuth = await f.surface.app.inject({ url, headers: f.headers }); expect(noAuth.statusCode).toBe(401);
+  const headers = { ...f.headers, cookie: `${cookie}; wdcc-auth-real-main=must-not-forward` };
+  const get = await f.surface.app.inject({ url, headers }); expect(get.statusCode).toBe(200);
+  expect(f.requests.at(-1)?.url).toBe(`/dsh${url}`); expect(f.requests.at(-1)?.cookie).toBe(nativeCookie);
+  expect(get.headers['set-cookie']).toBeUndefined();
+  if (path.endsWith('.export')) {
+    expect(get.rawPayload).toEqual(Buffer.from('504b030400000000ff0013', 'hex'));
+    expect(get.headers['content-type']).toBe('application/zip');
+    expect(get.headers['content-disposition']).toBe('attachment; filename="dsh-native-session.zip"');
+  } else { expect(get.body).toBe('# Native session\n\n原生会话正文\n'); expect(get.headers['content-type']).toContain('text/markdown'); }
+  const head = await f.surface.app.inject({ method: 'HEAD', url, headers });
+  expect(head.statusCode).toBe(200); expect(head.body).toBe(''); expect(head.headers['content-type']).toBe(get.headers['content-type']);
+  const missing = await f.surface.app.inject({ url: path, headers }); expect(missing.statusCode).toBe(400); expect(missing.body).toBe('missing native sessionId');
+  const absent = await f.surface.app.inject({ url: `${path}?sessionId=missing`, headers }); expect(absent.statusCode).toBe(404); expect(absent.body).toBe('native session not found');
+  const posts = f.requests.length;
+  expect((await f.surface.app.inject({ method: 'POST', url, headers: { ...headers, origin: f.publicOrigin }, payload: {} })).statusCode).toBe(405);
+  expect(f.requests).toHaveLength(posts); expect(f.authorized).toBe(0); expect(f.journaled).toBe(0);
 });
 it('Host identity and main authentication changes invalidate issued tickets and existing surface cookies', async () => {
   const f = await fixture(); const { cookie } = await f.login(); const old = await f.surface.issueTicket(); f.changeHost();
