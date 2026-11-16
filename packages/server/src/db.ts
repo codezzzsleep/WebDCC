@@ -83,6 +83,8 @@ export function openDb(file: string): Db {
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
   db.exec(SCHEMA);
+  // Acquire the writer lock before reading migration metadata. Concurrent
+  // opens must wait here, not upgrade an already stale WAL read snapshot.
   try { db.transaction(() => {
     if (schemaVersion < 13) migrateFileAliases(db);
     db.exec(`CREATE TABLE IF NOT EXISTS native_owners (
@@ -191,7 +193,7 @@ export function openDb(file: string): Db {
     )`);
     if (schemaVersion < 12) migrateFileGrants(db);
     db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
-  })(); } catch (error) { db.close(); throw error; }
+  }).immediate(); } catch (error) { db.close(); throw error; }
   // M8 F16：Provider 增加来源与按协议的多端点
   const columns = db.prepare('PRAGMA table_info(providers)').all() as { name: string }[];
   const has = (name: string): boolean => columns.some((column) => column.name === name);
