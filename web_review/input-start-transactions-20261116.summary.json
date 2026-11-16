@@ -1,0 +1,103 @@
+{
+  "formatVersion": 1,
+  "issue": 256,
+  "relatedIssues": [
+    45,
+    46,
+    42
+  ],
+  "baseCommit": "34d4b3f3f0bc27f8498f5d2d3c7370a2c01a7a4a",
+  "behavior": "Pre-native persistence failures cannot leave partial starts, phantom runtime turns or mismatched queued command/input states",
+  "sourceFiles": {
+    "packages/server/src/input-admission.ts": "1697504dc280b330a633dda264a719e3a7bcd45ffa389700f528e8d3a519a5d3",
+    "packages/server/src/store.ts": "b9b302701a15769dc32a10835301004a234105cc28373e7c5ab92966552f9097",
+    "packages/server/src/manager.ts": "d6480f26465d3e7fb9fde5773192e4d2dadd25652127d8d0568ff916cc131928",
+    "packages/server/src/dispatcher.ts": "c627fff1d2b522898a4180f042b04704f94f5d20709eaaed380cc973f38a74e5",
+    "packages/server/test/input-start-transaction.spec.ts": "452d19c0a7123a0c05946ce580abba86c35a0076767954ab7d6ebd6aa2f85e4d",
+    "packages/server/test/fixtures/input-start-crash.ts": "895bb7bb4ea8fd287d4b8758029e59c38ef5e74912ad8a97df0d4c49864f2388",
+    "browser-tests/input-start-recovery.spec.ts": "da07ecab444f7f2ef5f91ad755ad55ab4218198b3a75b110d9f9b041263374bf",
+    "docs/input-start-transactions.md": "77389004a90b1bba6d9150cd103a4318a30a29d68709ae9eb759368b6a323a73"
+  },
+  "verification": {
+    "affectedRegression": {
+      "passed": 79,
+      "files": 9,
+      "log": "start-regression-final.log"
+    },
+    "finalEditedCrashRegression": {
+      "passed": 6,
+      "log": "start-crash-final.log",
+      "killSucceeded": true,
+      "actualExitSignal": "SIGKILL",
+      "scope": "fiveSQLitefailureboundaries and committed dispatch crash preservation; native UUID unchanged and no blind replay"
+    },
+    "actualSourceBrowser": {
+      "passed": 3,
+      "files": 3,
+      "log": "start-browser-final.log",
+      "scope": "actualSQLite/HTTP/WS/Chromium queued blocked recovery→originalinputonce→reload plus order/cancel and streamidentity"
+    },
+    "workspaceTypecheck": "passed sequentially",
+    "scriptsTypecheck": "passed",
+    "changedFileLint": "passed",
+    "build": "final exact-head manifest/log to be bound in PR and private task ledger after commit",
+    "independentSourceAcceptance": "pending",
+    "deployment": "not performed"
+  },
+  "preservedFailures": [
+    {
+      "log": "start-before.log",
+      "failed": 4,
+      "nativeSendCalls": 0,
+      "rawDirectory": "start-before-evidence",
+      "reason": "commanduncertain/inputqueued ordispatching andphantomturn/partialevent"
+    },
+    {
+      "log": "start-title-before.log",
+      "failed": 1,
+      "skipped": 4,
+      "nativeSendCalls": 0,
+      "reason": "firsttitlefeed was still outside the start transaction; extended same transaction"
+    }
+  ],
+  "evidenceSha256": {
+    "start-before.log": "b5c85ea36bd8c45cb8c817bb299ca53d7ebd25e61dd2f60beb5959224b1d2b76",
+    "start-first.log": "ce0917441fc7837313d498d063ef98423fee19f296db1ce0ff2794e4a607c5b2",
+    "start-title-before.log": "e7402451209405e9047c4b6150b9815449adab67f84c4f32fa797d44a46349e7",
+    "start-second.log": "a8ebfd22fa34a461604c948edee62e5fd4f4c64e2f09130c4fda205c00388ac9",
+    "start-regression-final.log": "3ae808c6e8cbad1e73643db9a427d3c5693a628b6d5a85ccb61231b966ad58ca",
+    "start-crash-final.log": "914379ac3e38fca836d0c391a9c692540cc7f37e004ede436b52b3522da1c674",
+    "start-browser-final.log": "e962e48a51c3db16ca06c63b8aaeb296db7a815a485869f4dd131491f9d30b9b",
+    "start-typecheck.log": "bfde5de559303021061e98f6514d8d575e2acbfe282f6fa4a309ea46a82cd99c",
+    "start-scripts-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "start-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "start-browser-recovery.json": "af0dbe4dc132fbadc871fda2933faf267969825fb8c3efb1a00be3378ebe495f",
+    "start-browser-blocked.png": "536dab0323fc89c43a0a9c92078017992bff2a9bd8db203c2713014893f438a9",
+    "start-browser-recovered.png": "3cff4b97093757e7a0b7921ad8bd4b367fd09b29e42ae11e22a7d5db22748477"
+  },
+  "rawBeforeSha256": {
+    "start-turn.started.json": "8a85f7274fc13fd98b7d06cf801cd39d902eb41fd11bdad24c6fcd0b61668f26",
+    "start-dispatch-feed.json": "e23d2ae7d2d96fcfa3668e9f295712961751add36ad63962415a2b3c786eece4",
+    "start-queued-feed.json": "5c810d2a5f9ae9938a8aab3fecc07985cc08f910a6ae6ed85d3974c90c8213fc",
+    "start-title-feed.json": "0637141feb7a0f02c1dfa91afa97ec1310491aacf018ad6638ab96629ef37fe6",
+    "start-user.message.json": "335e343abbf768c451f7cb7ec68234c42cdb36aabbb6e6682464581d89fa2b51"
+  },
+  "rawAfterSha256": {
+    "start-turn.started.json": "01f3f246188d2e87d52b61120a820f358d8d9aa34604222f99d86d68ac7a09ea",
+    "start-dispatch-feed.json": "a400d2a1efcb278fe9b04f1569704c9da71245c5b0efe136866df75a406a02ef",
+    "start-queued-feed.json": "98222a017bcbb9d09b977eb035fec66547d0faa87c66fd16dd5a2ebcbea97e5c",
+    "start-title-feed.json": "0a2dc57f14cae0f484dc163584459d74214fdaef9f1c3ad567f72f0da97ac6e1",
+    "start-user.message.json": "cae5fb326774c5aeca30d03df7e06646712349c815824f58a951590a05493acb"
+  },
+  "nativeEvidence": {
+    "officialAgentCalls": 0,
+    "providerCalls": 0,
+    "adapterVersion": "controlledfake-1.0.0",
+    "nativeAdapterAndProtocolChanges": false,
+    "baselineInventory": "unchanged Codex0.167.0/compat0.168,0.169;ClaudeSDK0.3.322/CLI2.1.322;DSH0.2.2-rc.1"
+  },
+  "remainingScope": [
+    "officialtarget3Agent and writer/Host/native outcome acceptance belongs to assigned windows",
+    "unknownnative outcomes remainuncertain; thisPR is notnativeprovideravailability orcompleteNP03/04"
+  ]
+}
