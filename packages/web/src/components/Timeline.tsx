@@ -14,6 +14,7 @@ import { ElicitationForm } from './ElicitationForm.js';
 import { InputAttachments } from './InputAttachments.js';
 import { DshSubagentPanel } from './DshSubagentPanel.js';
 import { openDshSubagent } from '../lib/dsh-subagent-navigation.js';
+import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -71,12 +72,13 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     if (element === null) return;
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
     setStickToBottom(distance < 80);
-    if (element.scrollTop < 40) void store.loadOlder(sessionId);
+    if (element.scrollTop < 40 && store.getOlderHistoryState(sessionId).phase !== 'error') void store.loadOlder(sessionId);
   };
 
   return (
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      <OlderHistoryRecovery sessionId={sessionId} />
       {store.getSession(sessionId)?.agent === 'dsh' && !history ? <DshSubagentPanel key={`${sessionId}:${store.getSession(sessionId)?.nativeId ?? ''}`} sessionId={sessionId} nativeId={store.getSession(sessionId)?.nativeId} /> : null}
       {conversation !== undefined ? <div className="timeline-inner" role="status" data-testid="conversation-boundary">
         <span>{history ? `此前对话${conversation.previousTitle ? ` · ${conversation.previousTitle}` : ''}（只读）` : '当前对话'}</span>
