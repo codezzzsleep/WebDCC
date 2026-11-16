@@ -10,6 +10,7 @@ import { SyncedInputDraftStore } from './synced-input-draft-store.js';
 import { DshQuestionWaits } from './dsh-question-waits.js';
 import type { PreparedPart } from './composer-input-controller.js';
 import { CachedEventCoverage } from './event-coverage.js';
+import { OlderEventHistory, type OlderHistoryState } from './older-event-history.js';
 
 export interface SessionMeta {
   id: string;
@@ -120,6 +121,23 @@ export class AppStore {
   private derived = new Map<string, { version: number; turns: TurnModel[] }>();
   /** 每个会话的订阅游标：新浏览器打开大会话时从服务端最新 seq 开始，不整段重拉 */
   private readonly coverage = new CachedEventCoverage();
+  private readonly olderHistory = new OlderEventHistory({
+    before: sessionId => {
+      const map = this.events.get(sessionId); if (map === undefined || map.size === 0) return undefined;
+      let first = this.maxSeq(sessionId); while (first > 1 && map.has(first - 1)) first--;
+      return first;
+    },
+    cached: (sessionId, before, limit) => cache.getEventsBefore(sessionId, before, limit),
+    fetch: (sessionId, before, limit) => api.events(sessionId, { before, limit }),
+    persist: events => cache.putEvents(events),
+    publish: (sessionId, events) => {
+      const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
+      for (const event of events) if (!map.has(event.seq)) map.set(event.seq, event);
+      this.events.set(sessionId, map); this.coverage.record(events);
+      this.replayInteractionOutbox(sessionId); this.refreshInteractionAuthorities(sessionId); this.notify();
+    },
+    changed: () => this.notify(),
+  });
   private readonly interests = new Set<string>();
   private readonly subscribed = new Set<string>();
   private readonly sensitiveCommands = new Set<string>();
@@ -630,21 +648,8 @@ export class AppStore {
     this.notify();
   }
 
-  async loadOlder(sessionId: string): Promise<boolean> {
-    const map = this.events.get(sessionId);
-    if (map === undefined) return false;
-    let first = this.maxSeq(sessionId);
-    while (first > 1 && map.has(first - 1)) first--;
-    if (first <= 1) return false;
-    const page = await api.events(sessionId, { before: first, limit: 200 }).catch(() => undefined);
-    if (page === undefined || page.events.length === 0) return false;
-    for (const event of page.events) map.set(event.seq, event);
-    void cache.putEvents(page.events);
-    this.replayInteractionOutbox(sessionId);
-    this.refreshInteractionAuthorities(sessionId);
-    this.notify();
-    return true;
-  }
+  loadOlder(sessionId: string): Promise<boolean> { return this.olderHistory.load(sessionId); }
+  getOlderHistoryState(sessionId: string): OlderHistoryState { return this.olderHistory.state(sessionId); }
 
   // ---------- 选择器 ----------
 
