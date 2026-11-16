@@ -1,0 +1,25 @@
+{
+  "kind": "official-native-library-execution-with-controlled-input-and-clock",
+  "nativeVersion": "0.2.2-rc.1",
+  "nativeSourceCommit": "fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159",
+  "officialCardSourceSha256": "142e5a2386055933e785390f86769b4c8dbd392ccec532f479085984575ecf0a",
+  "gatewayCarrierSourceSha256": "c0d26dd8d3be737cbb9ae8ecf4e7084d1fb31b37693e94d7e79263c4aa8ce040",
+  "libraryReportSha256": "9b577ac5c0db0ca420504fb2c471ae4908f54e82de07fa4acab8278d2afcc5f6",
+  "comparedContractPoints": 14,
+  "actualHostStarted": false,
+  "actualAgentStarted": false,
+  "providerRequests": 0,
+  "scope": "Unchanged official PendingQuestion and TimedQuestionWait classes, controlled clock/identities; source HTTP/mux and Chromium checks use a controlled Host producer. Not a live model trajectory or current native Host, Provider or target-platform acceptance.",
+  "timeoutResult": {
+    "clientId": "native-client",
+    "eventId": "native-waterfall",
+    "outcome": {
+      "kind": "rejected",
+      "error": {
+        "name": "UserQuestionError",
+        "message": "ask_user_question timed out before the user answered",
+        "code": "ASK_TIMED_OUT"
+      }
+    }
+  }
+}

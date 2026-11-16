@@ -885,6 +885,24 @@ export class SessionManager {
     return result ?? { submitted: true, questionIds: [questionId] };
   }
 
+  async claimDshQuestionWait(sessionId: string, questionId: string, signal: AbortSignal) {
+    if (this.requireSession(sessionId).agent !== 'dsh' || this.runtimes.get(sessionId) === undefined) throw this.nativeControlRejected('请先连接原生 DSH 以核对前台问题');
+    const context = this.subagentReadContext(sessionId);
+    if (context.adapter.claimDshQuestionWait === undefined) throw this.nativeControlRejected('此原生连接没有前台等待接口');
+    const lifetime = new AbortController();
+    try {
+      const opening = await context.adapter.claimDshQuestionWait(sessionId, questionId, AbortSignal.any([signal, lifetime.signal]));
+      context.guard(); return opening;
+    } catch (error) { lifetime.abort(); throw error; }
+  }
+
+  async timeoutDshQuestion(sessionId: string, questionId: string, signal: AbortSignal): Promise<void> {
+    if (signal.aborted || this.requireSession(sessionId).agent !== 'dsh' || this.runtimes.get(sessionId) === undefined) throw this.nativeControlRejected('原生 DSH 前台问题需要重新同步');
+    const context = this.subagentReadContext(sessionId);
+    if (context.adapter.timeoutDshQuestion === undefined) throw this.nativeControlRejected('此原生连接没有前台计时接口');
+    await context.adapter.timeoutDshQuestion(sessionId, questionId, signal, context.guard); context.guard();
+  }
+
   private async answerAsync(sessionId: string, question: EventData['question'], answer: unknown, commandId: string, delivery?: { intent?: UserInput['delivery']; expectedTurnId?: string }): Promise<AnswerSubmission> {
     const session = this.requireSession(sessionId);
     if (session.agent !== 'codex' || question.asyncReply?.nativeId !== session.nativeId) throw Object.assign(new Error('异步问题不属于当前原生会话'), { statusCode: 409 });
@@ -1614,6 +1632,14 @@ export class SessionManager {
           const previous = this.store.allEvents(sessionId).filter((candidate) => candidate.turnId === turnId);
           const data = completeData as EventData['turn.completed'];
           completeData = { ...data, answerItemKeys: data.answerItemKeys ?? resolveAnswer(previous).map((item) => item.itemKey) };
+        }
+        if (event.kind === 'question' && runtime.adapter.id === 'dsh') {
+          const question = completeData as EventData['question'];
+          const previous = this.store.interactions.get(sessionId, 'answer', question.questionId);
+          const old = previous === undefined ? undefined : (JSON.parse(previous.request) as { dshQuestion?: EventData['question']['dshQuestion'] }).dshQuestion;
+          if (question.dshQuestion?.phase === 'continued' && old?.phase === 'open' && old.nativeId === question.dshQuestion.nativeId && old.callId === question.dshQuestion.callId
+            && previous !== undefined && ['sending', 'sent', 'uncertain'].includes(previous.state))
+            completeData = { ...question, submission: 'failed', submissionError: '前台等待已结束，原回答未被前台接收；可明确提交稍后回答。' };
         }
         const duplicateStart = event.kind === 'turn.started' && turnId !== null && this.store.allEvents(sessionId).some((candidate) => candidate.turnId === turnId && candidate.kind === 'turn.started');
         const kind = duplicateStart ? 'internal' : event.kind;

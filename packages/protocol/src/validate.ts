@@ -6,6 +6,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isDshQuestionIdentity(value: unknown): boolean {
+  return isRecord(value) && ['nativeId', 'callId', 'itemId'].every(key => typeof value[key] === 'string' && value[key] !== '')
+    && (value['clientId'] === undefined || typeof value['clientId'] === 'string')
+    && typeof value['timed'] === 'boolean' && ['open', 'continued'].includes(String(value['phase']));
+}
+
 export function isValidEventData<K extends EventKind>(kind: K, data: unknown): data is EventData[K] {
   if (!isRecord(data)) return false;
   switch (kind) {
@@ -50,7 +56,8 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'approval.resolved':
       return typeof data['approvalId'] === 'string' && typeof data['optionId'] === 'string';
     case 'question':
-      return typeof data['questionId'] === 'string' && typeof data['prompt'] === 'string' && (data['isBlocking'] === undefined || typeof data['isBlocking'] === 'boolean');
+      return typeof data['questionId'] === 'string' && typeof data['prompt'] === 'string' && (data['isBlocking'] === undefined || typeof data['isBlocking'] === 'boolean')
+        && (data['dshQuestion'] === undefined || isDshQuestionIdentity(data['dshQuestion']));
     case 'turn.started':
       return true;
     case 'turn.completed':

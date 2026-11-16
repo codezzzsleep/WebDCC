@@ -38,14 +38,27 @@ export class InteractionStore {
     const id = kind === 'answer' ? question.questionId : (event.data as EventData['approval.request']).approvalId;
     const groupId = kind === 'answer' ? question.groupId ?? id : id;
     const state = kind === 'answer' && question.status === 'answered' ? 'resolved' : kind === 'answer' && question.status === 'skipped' ? 'cancelled' : question.submission ?? 'pending';
-    const request = kind === 'approve' ? { options: (event.data as EventData['approval.request']).options.map(option => ({ id: option.id })) } : { isSecret: question.isSecret === true, ...(question.asyncReply === undefined ? {} : { asyncReply: question.asyncReply }), ...(question.resolution === undefined ? {} : { resolution: question.resolution }) };
+    const request = kind === 'approve' ? { options: (event.data as EventData['approval.request']).options.map(option => ({ id: option.id })) } : { isSecret: question.isSecret === true, ...(question.asyncReply === undefined ? {} : { asyncReply: question.asyncReply }), ...(question.resolution === undefined ? {} : { resolution: question.resolution }),
+      ...(question.dshQuestion === undefined ? {} : { dshQuestion: question.dshQuestion }) };
     const previous = this.get(event.sessionId, kind, id);
+    const oldDsh = previous === undefined ? undefined : (JSON.parse(previous.request) as { dshQuestion?: EventData['question']['dshQuestion'] }).dshQuestion;
+    if (kind === 'answer' && oldDsh?.phase === 'open' && oldDsh.nativeId === question.dshQuestion?.nativeId
+      && oldDsh.callId === question.dshQuestion?.callId && question.dshQuestion?.phase === 'continued'
+      && previous !== undefined && ['sending', 'sent', 'uncertain'].includes(previous.state)) {
+      // Native pending/continued proves that the foreground returned no answer.
+      // Its old command stays failed; the late reply is an explicit new action.
+      this.commandState(previous, 'failed');
+      this.db.prepare("UPDATE interactions SET state = 'failed', revision = revision + 1 WHERE session_id = ? AND kind = 'answer' AND id = ?")
+        .run(event.sessionId, id);
+    }
     if (previous !== undefined && (state === 'resolved' || state === 'cancelled')) {
       const cancelled = previous.command_id !== null && (this.db.prepare('SELECT state FROM command_journal WHERE command_id = ?').get(previous.command_id) as { state: string } | undefined)?.state === 'cancelled';
       if (!cancelled) this.commandState(previous, question.resolution === 'external' || question.resolution === 'outcome-unknown' ? 'uncertain' : 'completed');
     }
     this.db.prepare('INSERT OR IGNORE INTO interactions (session_id, kind, id, group_id, state, revision, request) VALUES (?, ?, ?, ?, ?, 1, ?)').run(event.sessionId, kind, id, groupId, state, JSON.stringify(request));
     if (state === 'resolved' || state === 'cancelled') this.db.prepare('UPDATE interactions SET state = ?, request = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?').run(state, JSON.stringify(request), event.sessionId, kind, id);
+    else if (question.dshQuestion !== undefined && kind === 'answer') this.db.prepare('UPDATE interactions SET request = ? WHERE session_id = ? AND kind = ? AND id = ?')
+      .run(JSON.stringify(request), event.sessionId, kind, id);
     else if (question.groupId !== undefined && kind === 'answer') this.db.prepare("UPDATE interactions SET group_id = ? WHERE session_id = ? AND kind = ? AND id = ? AND state IN ('pending', 'failed')").run(groupId, event.sessionId, kind, id);
   }
   claim(sessionId: string, kind: Kind, id: string, commandId: string): InteractionRow {
@@ -80,6 +93,12 @@ export class InteractionStore {
       .run(certain ? 'failed' : 'uncertain', certain ? 'native-rejected' : 'native-outcome-uncertain', row.session_id, row.kind, row.id, row.command_id);
   }
   submission(row: InteractionRow, state: 'queued' | 'sent' | 'uncertain' | 'failed'): boolean {
+    if (row.kind === 'answer') {
+      const previous = (JSON.parse(row.request) as { dshQuestion?: EventData['question']['dshQuestion'] }).dshQuestion;
+      const current = this.get(row.session_id, row.kind, row.id);
+      const identity = current === undefined ? undefined : (JSON.parse(current.request) as { dshQuestion?: EventData['question']['dshQuestion'] }).dshQuestion;
+      if (previous?.phase === 'open' && identity?.phase === 'continued' && previous.nativeId === identity.nativeId && previous.callId === identity.callId) return false;
+    }
     return this.db.prepare("UPDATE interactions SET state = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ? AND command_id = ? AND state NOT IN ('resolved', 'cancelled') AND state != ?")
       .run(state, row.session_id, row.kind, row.id, row.command_id, state).changes === 1;
   }
