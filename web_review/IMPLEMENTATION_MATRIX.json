@@ -1675,6 +1675,7 @@
           "web_review/diagnostic-writer-concurrency-20261116.summary.json",
           "web_review/diagnostic-file-admission-20261116.summary.json",
           "web_review/diagnostic-directory-quota-20261116.summary.json",
+          "web_review/diagnostic-url-credentials-20261116.summary.json",
           "packages/server/test/fixtures/native-capture-budget.ts",
           "packages/server/test/fixtures/native-recorder-off.ts",
           "web_review/diagnostic-active-capture-budget-20261116.summary.json"
@@ -1722,6 +1723,7 @@
           "web_review/diagnostic-writer-concurrency-20261116.summary.json",
           "web_review/diagnostic-file-admission-20261116.summary.json",
           "web_review/diagnostic-directory-quota-20261116.summary.json",
+          "web_review/diagnostic-url-credentials-20261116.summary.json",
           "packages/server/test/fixtures/native-capture-budget.ts",
           "packages/server/test/fixtures/native-recorder-off.ts",
           "web_review/diagnostic-active-capture-budget-20261116.summary.json"
@@ -1736,6 +1738,7 @@
           "web_review/diagnostic-writer-concurrency-20261116.summary.json",
           "web_review/diagnostic-file-admission-20261116.summary.json",
           "web_review/diagnostic-directory-quota-20261116.summary.json",
+          "web_review/diagnostic-url-credentials-20261116.summary.json",
           "web_review/diagnostic-active-capture-budget-20261116.summary.json"
         ],
         "remainingAcceptance": [
@@ -1745,6 +1748,7 @@
           "198 的目标平台 flock/三家实际Agent诊断恢复仍待绑定验证；单文件共享排他不代表全磁盘总配额或完整跨帧秘密策略。",
           "200 的目标平台三家实际Agent诊断文件故障/恢复仍需绑定验证；受控FIFO/socket/device结果不是全NP14或部署验收。",
           "跨目录和全局活跃capture内存预算、完整secret/旧导出/启动对照仍未完成；本目录配额受控Source证据不代替目标三家实际Agent验收。",
+          "209 initializes malformed optional model-observer URL credentials safely; target-platform native-only fallback/configuration and valid native Basic Auth still require independently bound evidence.",
           "The retained raw capture budget needs three-Agent target-platform configuration and failure/recovery evidence; local Node/HTTP fixtures are not official Native Agent or provider acceptance."
         ],
         "remainingWork": "Directory logical-byte quotas coordinate cooperating writers, and all default captures in a JavaScript process share a raw-buffer budget. Cross-process RAM totals, VM/native/encoded-copy memory, all credential sources and cross-frame protocol secret policy, secret-aware SQLite/commands/queue/outbox, old exports and complete retention/download/deletion policy still need implementation and acceptance.",
@@ -1765,7 +1769,7 @@
           "confidence": "中",
           "reason": "Shared FD/OS-lock directory accounting and process-wide capture lifecycle extend the initial observer/redactor work; new controlled process and HTTP fixtures are tracked separately. Full cross-process/secret-storage/export scope remains."
         },
-        "latestScope": "2026-11-16: process-wide retained raw capture pool (64MiB default), shared across imported/preload module copies; reserve before copy and release on overflow, failure, completion, cancellation or unread request abort. ModelProxy and Native HTTP observations preserve forwarding. 45 local source/controlled HTTP/process checks plus types/lint; full NP14/native/target scope remains incomplete."
+        "latestScope": "2026-11-16: process-wide retained raw capture pool (64MiB default), shared across imported/preload module copies; reserve before copy and release on overflow, failure, completion, cancellation or unread request abort. ModelProxy and Native HTTP observations preserve forwarding. 45 local source/controlled HTTP/process checks plus types/lint; full NP14/native/target scope remains incomplete. Combined209 validates/decode target URL credentials at setup and retains native-only recovery; valid native Basic Auth remains unchanged."
       },
       "dependencyIds": [
         "NP-02",

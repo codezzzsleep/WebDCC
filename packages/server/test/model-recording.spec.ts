@@ -27,6 +27,22 @@ it('NP-14 failed observer route setup retains the original native Provider and r
   await recording.close('s');
 });
 
+it('NP-14 malformed observer URL credentials preserve all original launch options and leave the server healthy', async () => {
+  const ctx = await createTestApp(); let server: RunningServer | undefined;
+  root = await mkdtemp(join(tmpdir(), 'wdcc-model-credentials-'));
+  const recorder = new InteractionRecorder(root); await recorder.init();
+  const recording = new ModelRecording(recorder);
+  const opts = { sessionId: 's', cwd: root, providerId: 'fixture', model: 'unchanged', provider: { id: 'fixture', name: 'fixture', baseUrl: 'http://fixture:%@127.0.0.1:1', protocols: ['openai-responses'] } };
+  try {
+    server = await start(ctx.config, { adapters: [new FakeAdapter()] });
+    const prepared = await recording.prepare(opts, 'codex');
+    expect(prepared).toEqual({ ...opts, traceSink: expect.any(Object) }); expect(prepared.recordingEndpoint).toBeUndefined();
+    expect(await recorder.summary('s')).toMatchObject({ incomplete: true });
+    expect(await recorder.read('s')).toContain('Invalid model recording target credentials');
+    expect((await fetch(server.url)).status).toBeLessThan(500);
+  } finally { await recording.close('s'); await server?.close(); await ctx.close(); }
+});
+
 it('NP-14 configured active limits reach actual per-session model routes and omitted bodies remain incomplete', async () => {
   root = await mkdtemp(join(tmpdir(), 'wdcc-model-budget-'));
   const recorder = new InteractionRecorder(root, { maxActiveCaptureBytes: 0 }); await recorder.init();
