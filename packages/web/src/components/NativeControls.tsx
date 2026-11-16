@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { NativeActionReceipt, NativeActionResponse, NativeControlSnapshot } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { nativeActionFields } from '../lib/native-action-fields.js';
+import { CodexReviewTarget, DEFAULT_CODEX_REVIEW_TARGET } from './CodexReviewTarget.js';
 import { ElicitationForm } from './ElicitationForm.js';
 import { NativeSurface, NativeProcessSurface } from './NativeSurface.js';
 import { NativeDshSurface } from './NativeDshSurface.js';
@@ -80,7 +81,7 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
         if (object(schema)['readOnly'] === true && object(schema)['default'] !== undefined) action[name] = object(schema)['default'];
       }
       for (const [name, definition] of fields) {
-        const schema = object(definition); const value = values[name];
+        const schema = object(definition); const value = values[name] ?? (snapshot?.agent === 'codex' && selectedAction.type === 'review' && name === 'target' ? DEFAULT_CODEX_REVIEW_TARGET : undefined);
         if (value === undefined || value === '' && !required.has(name)) {
           if (schema['type'] === 'boolean' && required.has(name)) action[name] = false;
           else if (required.has(name)) throw new Error(`请填写 ${String(schema['title'] ?? name)}`);
@@ -106,12 +107,16 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
       : labels[receipt.state]} · {receipt.type}</p> : null}
     {snapshot ? <>
       <p style={{ margin: 0 }}>{snapshot.agent} · 原生会话 {snapshot.nativeId ?? '尚未建立'}</p>
-      <label>原生操作<select className="text-input" value={selected} disabled={busy} onChange={event => { setSelected(event.target.value); setValues({}); setResult(undefined); }}>
+      <label>原生操作<select className="text-input" value={selected} disabled={busy} onChange={event => { setSelected(event.target.value); setValues(snapshot.agent === 'codex' && event.target.value === 'review' ? { target: DEFAULT_CODEX_REVIEW_TARGET } : {}); setResult(undefined); }}>
         <option value="">请选择操作</option>{actions.map(action => <option key={action.type} value={action.type} disabled={!action.supported}>{action.label}{action.supported ? '' : '（尚不可用）'}</option>)}
       </select></label>
       {selectedAction ? <form onSubmit={event => { event.preventDefault(); execute(); }}>
         {fields.map(([name, definition]) => {
           const schema = object(definition); const options = schema['enum'];
+          if (snapshot.agent === 'codex' && selectedAction.type === 'review' && name === 'target') return <CodexReviewTarget key={name}
+            value={String(values[name] ?? DEFAULT_CODEX_REVIEW_TARGET)} disabled={busy}
+            cwd={typeof object(state['thread'])['cwd'] === 'string' ? object(state['thread'])['cwd'] as string : undefined}
+            onChange={value => setValues(previous => ({ ...previous, [name]: value }))} />;
           return <label key={name} style={{ display: 'block', marginBottom: 8 }}>{String(schema['title'] ?? name)}{required.has(name) ? '（必填）' : ''}
             {schema['type'] === 'boolean' ? <input type="checkbox" checked={values[name] === true} disabled={busy} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.checked }))} />
               : Array.isArray(options) ? <select className="text-input" value={String(values[name] ?? '')} disabled={busy} onChange={event => setValues(previous => ({ ...previous, [name]: event.target.value }))}><option value="">请选择</option>{options.map(value => <option key={String(value)} value={String(value)}>{String(value)}</option>)}</select>

@@ -96,3 +96,21 @@ it('keeps foreign native plan events out of the parent plan stream', () => {
   ];
   expect(events.every(event => event.type === 'item.complete' && event.kind === 'internal')).toBe(true);
 });
+
+for (const terminal of ['completed', 'interrupted'] as const) it(`keeps a Review execution plan in its root after ${terminal} without reopening late deltas`, () => {
+  const { feed } = fixture();
+  feed('item/started', { turnId: 'review-root', item: { type: 'enteredReviewMode', id: 'review-marker', review: 'Review' } });
+  feed('turn/started', { turn: { id: 'review-execution', rootTurnId: 'review-root', status: 'inProgress' } });
+  const item: ThreadItem = { type: 'plan', id: 'review-plan', text: '' };
+  expect(feed('item/started', { turnId: 'review-execution', item })[0]).toMatchObject({ type: 'item.start', nativeTurnId: 'review-root' });
+  const delta = feed('item/plan/delta', { turnId: 'review-execution', itemId: item.id, delta: 'Original draft\n' });
+  expect(delta).toEqual([{ type: 'item.delta', itemKey: item.id, nativeTurnId: 'review-root', field: 'text', append: 'Original draft\n' }]);
+  if (terminal === 'completed') {
+    expect(feed('item/completed', { turnId: 'review-execution', item: { ...item, text: 'Original native final\n' } })[0])
+      .toMatchObject({ type: 'item.complete', itemKey: item.id, nativeTurnId: 'review-root', data: { text: 'Original native final\n', incomplete: false } });
+  }
+  const ended = feed('turn/completed', { turn: { id: 'review-root', status: terminal } });
+  if (terminal === 'interrupted') expect(ended[0]).toMatchObject({ type: 'item.complete', itemKey: item.id, nativeTurnId: 'review-root',
+    data: { text: 'Original draft\n', incomplete: true } });
+  expectOnlyRaw(feed('item/plan/delta', { turnId: 'review-execution', itemId: item.id, delta: ' stale' }));
+});
