@@ -69,6 +69,20 @@ it('keeps a new ordinary turn distinct when its provenance points to an already 
   expect(feed('turn/started', { turn: { id: 'new-native-turn', rootTurnId: 'review' } })[0]).toMatchObject({ type: 'turn.start', nativeTurnId: 'new-native-turn' });
 });
 
+it('keeps native Markdown plan streams under the Review root and retains interrupted text when execution ids are used', () => {
+  const feed = fixture();
+  feed('item/started', { turnId: 'review', item: { type: 'enteredReviewMode', id: 'enter', review: 'current changes' } });
+  feed('turn/started', { turn: { id: 'execution', rootTurnId: 'review' } });
+  expect(feed('item/started', { turnId: 'execution', item: { type: 'plan', id: 'plan', text: '' } })[0]).toMatchObject({ type: 'item.start', nativeTurnId: 'review' });
+  expect(feed('item/plan/delta', { turnId: 'execution', itemId: 'plan', delta: '# Native draft\n' })[0]).toMatchObject({ type: 'item.delta', nativeTurnId: 'review', append: '# Native draft\n' });
+  const completed = feed('turn/completed', { turn: { id: 'review', status: 'interrupted' } });
+  expect(completed).toMatchObject([
+    { type: 'item.complete', nativeTurnId: 'review', kind: 'plan', data: { text: '# Native draft\n', incomplete: true } },
+    { type: 'turn.end', nativeTurnId: 'review', status: 'interrupted' },
+  ]);
+  expect(feed('item/plan/delta', { turnId: 'execution', itemId: 'plan', delta: 'stale' }).every(event => event.type === 'item.complete' && event.kind === 'internal')).toBe(true);
+});
+
 it('keeps Review root ownership of execution items, requests and late results while only root completion closes the operation', async () => {
   const replay = CodexAdapter.replay('s', 'thread'); let sequence = 0;
   const feed = (method: string, params: Record<string, unknown>, id?: string) => replay.feed({ i: ++sequence, t: sequence,

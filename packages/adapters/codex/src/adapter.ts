@@ -42,6 +42,7 @@ import type { ReviewStartResponse } from './schema/v2/ReviewStartResponse.js';
 import { codexSlashCommands, executeCodexSlash } from './slash.js';
 import { codexInputParts, encodeCodexInput, unsupportedCodexInput } from './input.js';
 import { elicitationResponse } from './elicitation.js';
+import { CodexPlanStreams } from './plans.js';
 import type { McpServerElicitationRequestParams } from './schema/v2/McpServerElicitationRequestParams.js';
 import type { PermissionsRequestApprovalParams } from './schema/v2/PermissionsRequestApprovalParams.js';
 import type { PermissionsRequestApprovalResponse } from './schema/v2/PermissionsRequestApprovalResponse.js';
@@ -149,6 +150,7 @@ interface SessionRuntime {
   subagents?: Map<string, CodexSubagentIdentity>;
   subagentTurns?: Map<string, Set<string>>;
   reasoningSummaries?: Map<string, ReasoningSummary>;
+  plans?: CodexPlanStreams;
   completedReasoning?: Set<string>;
   goalId?: string;
   goalVersion?: { createdAt: number; updatedAt: number };
@@ -247,6 +249,7 @@ export type CodexRoute =
   | 'goal/updated'
   | 'goal/cleared'
   | 'plan/updated'
+  | 'plan/delta'
   | 'plan/item'
   | 'diff/updated'
   | 'serverRequest/resolved'
@@ -284,6 +287,8 @@ export function routeNotification(method: string): CodexRoute {
       return 'goal/cleared';
     case 'turn/plan/updated':
       return 'plan/updated';
+    case 'item/plan/delta':
+      return 'plan/delta';
     case 'turn/diff/updated':
       return 'diff/updated';
     case 'serverRequest/resolved':
@@ -303,7 +308,6 @@ export function routeNotification(method: string): CodexRoute {
     case 'item/plan/started':
     case 'item/plan/updated':
     case 'item/plan/completed':
-    case 'item/plan/delta':
       return 'plan/item';
     case 'thread/started':
     case 'account/rateLimits/updated':
@@ -479,6 +483,7 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
     }
     case 'plan':
       return {
+        ...(typeof item['text'] === 'string' ? { text: item['text'] } : {}),
         items: (Array.isArray(item['items']) ? (item['items'] as Record<string, unknown>[]) : []).map((step) => ({
           text: String(step['step'] ?? step['text'] ?? ''),
           status: step['status'] === 'completed' ? 'completed' : step['status'] === 'inProgress' ? 'in_progress' : 'pending',
@@ -1509,6 +1514,9 @@ export class CodexAdapter implements AgentAdapter {
         }
         const usage = (params['usage'] ?? undefined) as { inputTokens?: number; outputTokens?: number } | undefined;
         const generationMs = endGeneration(runtime, nativeTurnId ?? undefined, this.now());
+        if (nativeTurnId != null) for (const event of (runtime.plans ??= new CodexPlanStreams()).endTurn(nativeTurnId)) {
+          this.emit(sessionId, { ...event, native: params });
+        }
         this.emit(sessionId, {
           type: 'turn.end',
           nativeTurnId: nativeTurnId ?? undefined,
@@ -1530,6 +1538,12 @@ export class CodexAdapter implements AgentAdapter {
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
         if (type === 'enteredReviewMode') this.beginReview(sessionId, runtime, params);
+        if (type === 'plan' && typeof item['text'] === 'string') {
+          for (const event of (runtime.plans ??= new CodexPlanStreams()).start(itemId, this.nativeTurnId(params, runtime) ?? runtime.turnId ?? undefined, item['text'])) {
+            this.emit(sessionId, { ...event, native: item });
+          }
+          return;
+        }
         if (type === 'agentMessage' || type === 'reasoning' || type === 'reasoningSummary') beginGeneration(runtime, this.nativeTurnId(params, runtime), this.now());
         if (type === 'agentMessage') runtime.started.add(JSON.stringify([this.nativeTurnId(params, runtime) ?? runtime.turnId, itemId]));
         const kind = mapItemKind(type);
@@ -1563,6 +1577,12 @@ export class CodexAdapter implements AgentAdapter {
         const itemId = String(item['id'] ?? `item-${frameKey}`);
         const type = String(item['type'] ?? '');
         if (type === 'enteredReviewMode') this.beginReview(sessionId, runtime, params);
+        if (type === 'plan' && typeof item['text'] === 'string') {
+          for (const event of (runtime.plans ??= new CodexPlanStreams()).complete(itemId, this.nativeTurnId(params, runtime) ?? runtime.turnId ?? undefined, item['text'])) {
+            this.emit(sessionId, { ...event, native: item });
+          }
+          return;
+        }
         if (type === 'userMessage') {
           const { text, replies } = nativeAsyncReplies(item);
           for (const reply of replies) (runtime.asyncAnswered ??= new Set()).add(reply.questionItemId);
@@ -1769,6 +1789,15 @@ export class CodexAdapter implements AgentAdapter {
           data: { items: mapPlanItems(params) },
           native: params,
         });
+        return;
+      }
+      case 'plan/delta': {
+        if (typeof params['turnId'] !== 'string' || typeof params['itemId'] !== 'string' || typeof params['delta'] !== 'string') {
+          this.emit(sessionId, { type: 'item.complete', itemKey: 'invalid-plan-' + frameKey, kind: 'unknown',
+            data: { nativeType: method }, native: params, nativeTurnId: this.nativeTurnId(params) });
+          return;
+        }
+        for (const event of (runtime.plans ??= new CodexPlanStreams()).delta(params['itemId'], this.nativeTurnId(params, runtime), params['delta'])) this.emit(sessionId, event);
         return;
       }
       case 'plan/item': {

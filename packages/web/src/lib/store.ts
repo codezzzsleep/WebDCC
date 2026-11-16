@@ -8,6 +8,7 @@ import { InputPreparationStore } from './input-preparation-store.js';
 import { UploadController } from './upload-controller.js';
 import { SyncedInputDraftStore } from './synced-input-draft-store.js';
 import type { PreparedPart } from './composer-input-controller.js';
+import { CachedEventCoverage } from './event-coverage.js';
 
 export interface SessionMeta {
   id: string;
@@ -117,7 +118,7 @@ export class AppStore {
   private listeners = new Set<() => void>();
   private derived = new Map<string, { version: number; turns: TurnModel[] }>();
   /** 每个会话的订阅游标：新浏览器打开大会话时从服务端最新 seq 开始，不整段重拉 */
-  private cursors = new Map<string, number>();
+  private readonly coverage = new CachedEventCoverage();
   private readonly interests = new Set<string>();
   private readonly subscribed = new Set<string>();
   private readonly sensitiveCommands = new Set<string>();
@@ -203,9 +204,19 @@ export class AppStore {
       const batch = this.cacheQueue.splice(0, this.cacheQueue.length);
       this.cacheFlushTimer = null;
       if (batch.length === 0) return;
-      void cache.putEvents(batch);
-      const last = batch[batch.length - 1];
-      if (last !== undefined) void cache.setMeta(`maxSeq:${last.sessionId}`, last.seq);
+      void cache.putEvents(batch).then(() => {
+        this.coverage.record(batch);
+        for (const sessionId of new Set(batch.map(event => event.sessionId))) {
+          this.replayInteractionOutbox(sessionId);
+          this.refreshInteractionAuthorities(sessionId);
+        }
+        this.notify();
+      }, () => {
+        // Retain the failed batch for a later event/replay. No automatic
+        // retry loop, and a failed write never certifies received coverage.
+        const pending = new Map([...batch, ...this.cacheQueue].map(event => [JSON.stringify([event.sessionId, event.seq]), event]));
+        this.cacheQueue = [...pending.values()];
+      });
     }, 100);
   }
 
@@ -226,7 +237,7 @@ export class AppStore {
   private subscriptions(): { sessionId: string; afterSeq: number }[] {
     return [...this.subscribed].map((sessionId) => ({
       sessionId,
-      afterSeq: this.cursors.get(sessionId) ?? this.contiguousSeq(sessionId, 0),
+      afterSeq: this.coverage.cursor(sessionId),
     }));
   }
 
@@ -290,7 +301,7 @@ export class AppStore {
         };
         this.sessions.set(message.sessionId, next);
         void cache.putSession(next as CachedSession);
-        if (patch['created'] === true && this.subscribed.has(message.sessionId)) this.connection.subscribe(message.sessionId, this.cursors.get(message.sessionId) ?? 0);
+        if (patch['created'] === true && this.subscribed.has(message.sessionId)) this.connection.subscribe(message.sessionId, this.coverage.cursor(message.sessionId));
         if (existing !== undefined && !this.subscribed.has(message.sessionId) &&
           (next.status === 'waiting' && existing.status !== 'waiting' || next.status === 'idle' && (existing.status === 'running' || existing.status === 'waiting'))) this.bumpUnread(message.sessionId, next.title ?? '会话');
         this.notify();
@@ -472,7 +483,6 @@ export class AppStore {
         if (previous !== undefined) this.interactionSubmissions.set(key, { commandId: previous.commandId, status: data.submission, ...(data.submissionError === undefined ? {} : { error: data.submissionError }) });
       }
     }
-    this.cursors.set(event.sessionId, this.contiguousSeq(event.sessionId, this.cursors.get(event.sessionId) ?? 0));
     const hot = this.hot.get(event.sessionId);
     if (hot !== undefined) {
       hot.delete(hotKey(event.turnId, event.itemKey));
@@ -501,7 +511,7 @@ export class AppStore {
   getSessionSync(sessionId: string): { phase: 'loading' | 'replaying' | 'ready'; throughSeq?: number; cursor: number } {
     const snapshot = this.sessionSnapshotEnds.get(sessionId);
     const target = snapshot === undefined ? this.sessionServerEnds.get(sessionId) : Math.max(snapshot, this.maxSeq(sessionId), this.sessionServerEnds.get(sessionId) ?? 0, this.sessionStreamEnds.get(sessionId) ?? 0);
-    const cursor = this.cursors.get(sessionId) ?? 0;
+    const cursor = this.coverage.cursor(sessionId);
     const ready = this.connectionState === 'online' && this.subscribed.has(sessionId) && !this.sessionHydrations.has(sessionId) && !this.sessionRollbacks.has(sessionId) &&
       snapshot !== undefined && cursor >= target! && (this.sessionStreamEnds.get(sessionId) ?? 0) >= target!;
     return { phase: ready ? 'ready' : this.sessionHydrations.has(sessionId) ? 'loading' : 'replaying', ...(target === undefined ? {} : { throughSeq: target }), cursor };
@@ -547,6 +557,7 @@ export class AppStore {
     this.trace['ensureStart'] = t0;
     if (this.events.has(sessionId) === false) {
       const cached = await cache.getEvents(sessionId, 500).catch(() => []);
+      this.coverage.record(cached);
       // 等缓存的这段时间里，实时通道可能已经送来了新事件（例如刚发出的 user.message）：
       // 只能合并，不能整张表替换，否则这些事件会丢掉，直到刷新才出现
       const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
@@ -554,7 +565,7 @@ export class AppStore {
       this.events.set(sessionId, map);
       const coverage = await cache.getMeta<{ from: number; to: number }>(`coveredWindow:${sessionId}`).catch(() => undefined);
       if (coverage !== undefined && Number.isSafeInteger(coverage.from) && Number.isSafeInteger(coverage.to) && coverage.from > 0 && coverage.to >= coverage.from &&
-        this.contiguousSeq(sessionId, coverage.from - 1) >= coverage.to) this.cursors.set(sessionId, coverage.to);
+        this.contiguousSeq(sessionId, coverage.from - 1) >= coverage.to) this.coverage.useWindow(sessionId, coverage.from, coverage.to);
     }
     performance.mark('wdcc:ensure-start');
     let serverLastSeq: number | undefined;
@@ -583,8 +594,7 @@ export class AppStore {
     performance.mark('wdcc:detail-done');
     // 没有缓存时只取最近 200 条，并从服务端最新的 seq 开始订阅：不整段重拉（SPEC 7.5 / A5）
     if (serverLastSeq !== undefined && serverLastSeq > 0 && (serverLastSeq > this.maxSeq(sessionId) ||
-      this.contiguousSeq(sessionId, this.cursors.get(sessionId) ?? 0) < serverLastSeq)) {
-      const priorCursor = this.cursors.get(sessionId) ?? 0;
+      this.coverage.cursor(sessionId) < serverLastSeq)) {
       const page = await api.events(sessionId, { before: serverLastSeq + 1, limit: 200 }).catch(() => undefined);
       const completeRecentPage = page !== undefined && page.events.length > 0 && page.events.every((event, index) => event.seq === page.events[0]!.seq + index) && page.events.at(-1)?.seq === serverLastSeq;
       let persisted = false;
@@ -592,16 +602,16 @@ export class AppStore {
         const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
         for (const event of page.events) map.set(event.seq, event);
         this.events.set(sessionId, map);
-        persisted = await cache.putEvents(page.events, completeRecentPage ? { sessionId, from: page.events[0]!.seq, to: serverLastSeq } : undefined).then(() => true, () => false);
+        persisted = await cache.putEvents(page.events, completeRecentPage ? { sessionId, from: page.events[0]!.seq, to: serverLastSeq } : undefined).then(() => {
+          this.coverage.record(page.events); return true;
+        }, () => false);
       }
-      const cursor = completeRecentPage && persisted ? this.contiguousSeq(sessionId, serverLastSeq)
-        : page !== undefined && !persisted ? priorCursor : this.contiguousSeq(sessionId, priorCursor);
-      this.cursors.set(sessionId, cursor);
+      if (completeRecentPage && persisted) this.coverage.useWindow(sessionId, page!.events[0]!.seq, serverLastSeq);
+      const cursor = this.coverage.cursor(sessionId);
       if (this.interests.has(sessionId)) { this.subscribed.add(sessionId); this.connection.subscribe(sessionId, cursor); }
       performance.mark('wdcc:events-done');
     } else {
-      const cursor = this.contiguousSeq(sessionId, this.cursors.get(sessionId) ?? 0);
-      this.cursors.set(sessionId, cursor);
+      const cursor = this.coverage.cursor(sessionId);
       if (this.interests.has(sessionId)) { this.subscribed.add(sessionId); this.connection.subscribe(sessionId, cursor); }
     }
     this.trace['ensureEnd'] = performance.now();

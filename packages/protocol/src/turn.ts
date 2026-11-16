@@ -4,6 +4,7 @@ import { failedFileOperation } from './file-operation.js';
 import type { InputContent } from './input.js';
 import { claudeOutputOrigin } from './claude-tasks.js';
 import { codexReviewItem } from './codex-review.js';
+import { nativePlanText } from './plans.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -228,7 +229,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     : TERMINAL.has(state)
       ? resolveAnswer(events)
       : [];
-  const latestPlan = [...events].reverse().find((event) => event.kind === 'plan');
+  const latestPlan = [...events].reverse().find((event) => event.kind === 'plan' && nativePlanText(event) === undefined);
   const latestGoal = [...events].reverse().find((event) => event.kind === 'goal');
   const summary = {
     commands: steps.filter((event) => event.kind === 'command').length,
