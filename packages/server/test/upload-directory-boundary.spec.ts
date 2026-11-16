@@ -83,7 +83,7 @@ it('a missing acknowledged chunk can be explicitly rewritten, then completed wit
   } finally { await ctx.close(); }
 });
 
-it('unsupported platform verification blocks upload writes while initialization retains pending uploads and existing file access', async () => {
+it('unsupported platform verification blocks CAS reads and upload writes while retaining pending data for recovery', async () => {
   const ctx = await createTestApp();
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
   try {
@@ -91,11 +91,13 @@ it('unsupported platform verification blocks upload writes while initialization 
     const { uploadId } = await ctx.files.initUpload({ name: 'file.txt', size: 6, mime: 'text/plain' });
     Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' });
     await expect(ctx.files.init()).resolves.toBeUndefined();
-    expect((await ctx.files.readAll(existing.id))?.buffer.toString()).toBe('existing');
+    await expect(ctx.files.readAll(existing.id)).rejects.toMatchObject({ statusCode: 501 });
     await expect(ctx.files.writeChunk(uploadId, 0, Buffer.from('INSIDE'))).rejects.toMatchObject({ statusCode: 501 });
     await expect(ctx.files.initUpload({ name: 'other.txt', size: 0, mime: 'text/plain' })).rejects.toMatchObject({ statusCode: 501 });
     expect(ctx.files.uploadStatus(uploadId).received).toEqual([]);
     expect(await readdir(join(ctx.dataDir, 'uploads', uploadId))).toEqual([]);
+    Object.defineProperty(process, 'platform', platform);
+    expect((await ctx.files.readAll(existing.id))?.buffer.toString()).toBe('existing');
   } finally { Object.defineProperty(process, 'platform', platform); await ctx.close(); }
 });
 

@@ -1,13 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { constants, createReadStream } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, rm, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 import type { FileDto, InputAttachmentPart, ResolvedInputAttachmentPart, UploadCompleteResponse, UploadInitResponse, UploadStatusResponse } from '@webdcc/protocol';
 import { ulid } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { isUploadId, openUploadStaging } from './upload-staging.js';
 import { publishCasFile, writeCasBuffer, writeCasBufferSync } from './cas-write.js';
+import { openCasObject } from './cas-read.js';
 
 export const CHUNK_SIZE = 1024 * 1024;
 /** 单个文件上限 100 MB（SPEC-M8 F7 / ATT-04） */
@@ -100,8 +102,9 @@ export class FileStore {
   private async verifiedObject(file: FileDto, collect: boolean): Promise<{ path: string; buffer?: Buffer; imageMime?: string }> {
     if (!/^[a-f0-9]{64}$/.test(file.sha256) || !Number.isSafeInteger(file.size) || file.size < 0 || file.size > MAX_FILE_SIZE
       || typeof file.mime !== 'string' || !/^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/.test(file.mime)) throw invalidUpload('存储附件元数据无效', 409);
-    const directory = await this.casDirectory(file.sha256);
-    const path = join(directory, file.sha256); const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const source = await openCasObject(this.objectsDir, file.sha256);
+    const { path, file: handle } = source;
+    let verified = false;
     try {
       const info = await handle.stat();
       if (!info.isFile()) throw invalidUpload('附件 CAS 对象不是普通文件', 409);
@@ -114,12 +117,14 @@ export class FileStore {
         if (collect) chunks.push(chunk);
       }
       if (bytes !== file.size || hash.digest('hex') !== file.sha256) throw corruptObject('附件内容 hash 与已存记录不一致');
+      await source.check();
       const imageMime = prefix.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? 'image/png'
         : prefix[0] === 255 && prefix[1] === 216 && prefix[2] === 255 ? 'image/jpeg'
         : ['GIF87a', 'GIF89a'].includes(prefix.subarray(0, 6).toString('ascii')) ? 'image/gif'
         : prefix.subarray(0, 4).toString('ascii') === 'RIFF' && prefix.subarray(8, 12).toString('ascii') === 'WEBP' ? 'image/webp' : undefined;
+      verified = true;
       return { path, ...(collect ? { buffer: Buffer.concat(chunks, bytes) } : {}), ...(imageMime === undefined ? {} : { imageMime }) };
-    } finally { await handle.close(); }
+    } finally { if (verified) await source.finish(); else await source.close(); }
   }
 
   /** Browser/queued paths and receipts are never authorities. Reopen the
@@ -166,14 +171,15 @@ export class FileStore {
   async readAll(id: string): Promise<{ file: FileDto; buffer: Buffer } | undefined> {
     const file = this.store.getFile(id);
     if (file === undefined) return undefined;
-    const verified = await this.verifiedObject(file, true);
+    let verified: Awaited<ReturnType<FileStore['verifiedObject']>>;
+    try { verified = await this.verifiedObject(file, true); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw invalidUpload('附件 CAS 文件缺失', 404); throw error; }
     return { file, buffer: verified.buffer! };
   }
 
-  createReadStream(id: string): { file: FileDto; stream: NodeJS.ReadableStream } | undefined {
-    const file = this.store.getFile(id);
-    if (file === undefined) return undefined;
-    return { file, stream: createReadStream(this.objectPath(file.sha256)) };
+  async createReadStream(id: string): Promise<{ file: FileDto; stream: NodeJS.ReadableStream } | undefined> {
+    const found = await this.readAll(id);
+    return found === undefined ? undefined : { file: found.file, stream: Readable.from([found.buffer]) };
   }
 
   // ---------- 可续传上传 ----------
