@@ -45,7 +45,7 @@ import { encodeClaudeInput, type ClaudeUserContent } from './input.js';
 import { claudeSystemEvent } from './system.js';
 import { managedClaudeProcess } from './managed-process.js';
 import type { ClaudeStdioCaptureState } from './stdio-capture.js';
-import { ClaudeNativeHistory, claudeNativeActionCatalog, elicitationResult, nativeError, nativeValidationError, parseClaudeNativeAction, record, type ClaudeNativeOptions } from './native.js';
+import { ClaudeNativeHistory, claudeNativeActionCatalog, claudeThinkingMode, elicitationResult, nativeError, nativeValidationError, parseClaudeNativeAction, record, type ClaudeNativeOptions } from './native.js';
 import { ClaudeNativeState } from './native-state.js';
 import { claudeSlashCommands } from './slash.js';
 import { permissionProposal, permissionSuggestions, type ClaudePermissionOptions } from './permission-proposal.js';
@@ -845,6 +845,9 @@ export class ClaudeAdapter implements AgentAdapter {
       })),
       selected: { model: runtime.model ?? runtime.launchOpts.model, effort: runtime.launchOpts.reasoningEffort,
         ...runtime.nativeOptions }, capabilities: runtime.capabilities, supportedDialogKinds: Object.keys(this.options.dialogSpecs ?? {}),
+      thinkingMapping: { requested: runtime.nativeOptions.thinking ?? null,
+        sdkMode: claudeThinkingMode(runtime.nativeOptions.thinking) ?? 'inherit', source: `SDK startup options/${PINNED_SDK_VERSION}`,
+        modelEffect: 'not-observed' },
       unsupported: { teams: 'native-surface', compact: '原生 /compact 命令；SDK 无专用 compact 控制', login: '原生 CLI 登录；SDK accountInfo 只读' },
     };
   }
@@ -883,9 +886,10 @@ export class ClaudeAdapter implements AgentAdapter {
         await this.setReasoningEffort(sessionId, action.effort); break;
       }
       case 'thinking':
-        if (action.thinking?.type === 'adaptive') {
+        if (claudeThinkingMode(action.thinking) === 'adaptive') {
           const modelId = runtime.model ?? runtime.launchOpts.model;
           const model = (await runtime.q.supportedModels()).find(model => model.value === modelId || model.resolvedModel === modelId);
+          current();
           if (model !== undefined && model.supportsAdaptiveThinking !== true) throw nativeValidationError('当前原生模型不支持 adaptive thinking');
         }
         current();

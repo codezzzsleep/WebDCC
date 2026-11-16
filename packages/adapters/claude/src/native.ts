@@ -37,6 +37,10 @@ export interface ClaudeNativeOptions {
   enableFileCheckpointing?: boolean;
   resumeSessionAt?: string;
 }
+/** The pinned SDK maps enabled without a budget to --thinking=adaptive. */
+export function claudeThinkingMode(thinking: ThinkingConfig | null | undefined): ThinkingConfig['type'] | undefined {
+  return thinking?.type === 'enabled' && thinking.budgetTokens === undefined ? 'adaptive' : thinking?.type;
+}
 /** User replies are always ephemeral; a schema may declare secrets only after journal admission. */
 export function classifySensitive(action: ClaudeNativeAction): boolean {
   return action.type === 'elicitation' || action.type === 'dialog';
@@ -44,10 +48,16 @@ export function classifySensitive(action: ClaudeNativeAction): boolean {
 export function claudeNativeActionCatalog(models: ModelInfo[]) {
   const text = { type: 'string', minLength: 1 };
   const boolean = { type: 'boolean' };
+  const display = { enum: ['summarized', 'omitted'] };
+  const thinking = { anyOf: [{ type: 'null' }, ...[
+    { type: { const: 'adaptive' }, display },
+    { type: { const: 'enabled' }, budgetTokens: { type: 'integer', minimum: 1024 }, display },
+    { type: { const: 'disabled' } },
+  ].map(properties => ({ type: 'object', properties, required: ['type'], additionalProperties: false }))] };
   const definitions: [string, string, Record<string, unknown>, string[], boolean?][] = [
     ['model', '更换原生模型', { model: { type: 'string', enum: models.map(model => model.value) } }, ['model'], true],
     ['effort', '更改原生 effort', { effort: { type: 'string', enum: [...new Set(models.flatMap(model => model.supportedEffortLevels ?? []))] } }, ['effort']],
-    ['thinking', '更改会话 thinking', { thinking: { anyOf: [{ type: 'null' }, { type: 'object', properties: { type: { enum: ['adaptive', 'enabled', 'disabled'] }, budgetTokens: { type: 'integer', minimum: 1024 }, display: { enum: ['summarized', 'omitted'] } }, required: ['type'], additionalProperties: false }] } }, ['thinking'], true],
+    ['thinking', '更改会话 thinking', { thinking }, ['thinking'], true],
     ['output', '结构化输出 schema', { schema: { type: ['object', 'null'] } }, ['schema'], true],
     ['checkpoints', '原生文件检查点', { enabled: boolean }, ['enabled'], true],
     ['resume-at', '从原生助手消息恢复', { messageId: text }, ['messageId'], true],
@@ -101,7 +111,7 @@ export function parseClaudeNativeAction(value: unknown): ClaudeNativeAction {
       if (action['thinking'] !== null) {
         const thinking = record(action['thinking']);
         if (!['adaptive', 'enabled', 'disabled'].includes(String(thinking['type']))) throw nativeValidationError('thinking.type 无效');
-        if (thinking['type'] === 'enabled' && (!Number.isSafeInteger(thinking['budgetTokens']) || Number(thinking['budgetTokens']) < 1024)) throw nativeValidationError('thinking budgetTokens 必须为至少 1024 的整数');
+        if (thinking['type'] === 'enabled' && thinking['budgetTokens'] !== undefined && (!Number.isSafeInteger(thinking['budgetTokens']) || Number(thinking['budgetTokens']) < 1024)) throw nativeValidationError('thinking budgetTokens 必须为至少 1024 的整数');
         if (thinking['display'] !== undefined && !['summarized', 'omitted'].includes(String(thinking['display']))) throw nativeValidationError('thinking.display 无效');
         const allowed = thinking['type'] === 'disabled' ? ['type'] : thinking['type'] === 'adaptive' ? ['type', 'display'] : ['type', 'display', 'budgetTokens'];
         if (Object.keys(thinking).some(key => !allowed.includes(key))) throw nativeValidationError('未知 thinking 参数');
