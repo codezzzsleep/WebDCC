@@ -29,6 +29,10 @@ import type {
   DshSubagentHistory,
   DshSubagentHistoryOptions,
   DshSubagentInputRequest,
+  DshApprovalAttempt,
+  DshApprovalDelivery,
+  DshApprovalRecoveryView,
+  DshApprovalRetry,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -46,6 +50,7 @@ import type { InteractionRow } from './interactions.js';
 import { payloadHash } from './command-journal.js';
 import type { FileStore } from './files.js';
 import { inputNotSubmitted, type QueueChange } from './input-admission.js';
+import { isDshApprovalAttempt, sameDshApproval } from '@webdcc/protocol';
 
 const TURN_SETTLE_MS = 1_500;
 const hotKey = (turnId: string | null, itemKey: string): string => JSON.stringify([turnId, itemKey]);
@@ -843,16 +848,71 @@ export class SessionManager {
     return true;
   }
 
-  async approve(sessionId: string, decision: ApprovalDecision, commandId = ulid()): Promise<void> {
+  private async dshApprovalRecoveryContext(sessionId: string, approvalId: string): Promise<{
+    runtime: Runtime; row: InteractionRow; attempt: DshApprovalAttempt; current: DshApprovalDelivery; revision: string;
+  }> {
+    const unavailable = (message: string): Error => Object.assign(new Error(message), { statusCode: 409 });
+    const session = this.requireSession(sessionId);
+    if (session.agent !== 'dsh') throw unavailable('此恢复入口仅适用于 DSH 审批');
+    const row = this.store.interactions.get(sessionId, 'approve', approvalId);
+    if (row?.state !== 'uncertain' || row.command_id === null) throw unavailable('审批已结束、已提交或没有待核对的原回应');
+    const original = this.store.journal.get(row.command_id);
+    const payload = original?.payload;
+    const attempt: unknown = (JSON.parse(row.request) as Record<string, unknown>)['dshApprovalAttempt'];
+    if (original?.state !== 'uncertain' || payload?.op !== 'approve' || payload.sessionId !== sessionId || payload.approvalId !== approvalId
+      || !isDshApprovalAttempt(attempt) || attempt.optionId !== payload.optionId || attempt.delivery.eventId !== approvalId || attempt.delivery.nativeId !== session.nativeId)
+      throw unavailable('原审批身份或原选择未留存，无法安全重试，请在原生界面核对');
+    const runtime = await this.ensureReady(session, this.requireWorkspace(session.workspaceId).path);
+    if (runtime.adapter.dshApprovalDelivery === undefined || runtime.adapter.retryDshApproval === undefined) throw unavailable('此 DSH 连接不支持原回应恢复');
+    const current = await runtime.adapter.dshApprovalDelivery(sessionId, approvalId);
+    this.assertOwner(runtime);
+    const latest = this.store.interactions.get(sessionId, 'approve', approvalId);
+    if (latest?.state !== 'uncertain' || latest.command_id !== row.command_id || latest.revision !== row.revision) throw unavailable('审批状态已变化，请重新核对');
+    if (current === undefined || !sameDshApproval(attempt.delivery, current)) throw unavailable('原审批尚未重新同步、已结束或身份已变化，请核对原生连接');
+    return { runtime, row, attempt, current, revision: payloadHash({ commandId: row.command_id, interactionRevision: row.revision, delivery: current.revision }) };
+  }
+
+  async dshApprovalRecovery(sessionId: string, approvalId: string): Promise<DshApprovalRecoveryView> {
+    this.requireSession(sessionId);
+    try {
+      const context = await this.dshApprovalRecoveryContext(sessionId, approvalId);
+      return { status: 'available', approvalId, optionId: context.attempt.optionId, retryOf: { commandId: context.row.command_id!, revision: context.revision } };
+    } catch (error) {
+      return { status: 'unavailable', approvalId, reason: error instanceof Error ? error.message : '审批恢复暂不可用，请重新核对' };
+    }
+  }
+
+  async approve(sessionId: string, decision: ApprovalDecision, commandId = ulid(), retryOf?: DshApprovalRetry): Promise<void> {
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     const pending = this.store.interactions.get(sessionId, 'approve', decision.approvalId);
     if (pending === undefined) throw Object.assign(new Error('审批已结束或不存在'), { statusCode: 409 });
     if (!(JSON.parse(pending.request) as Pick<EventData['approval.request'], 'options'>).options.some(option => option.id === decision.optionId)) throw Object.assign(new Error('审批选项无效'), { statusCode: 400 });
-    const claim = this.store.interactions.claim(sessionId, 'approve', decision.approvalId, commandId);
+    const recovery = retryOf === undefined ? undefined : await this.dshApprovalRecoveryContext(sessionId, decision.approvalId);
+    if (recovery !== undefined && (recovery.runtime !== runtime || retryOf?.commandId !== recovery.row.command_id
+      || retryOf?.revision !== recovery.revision || decision.optionId !== recovery.attempt.optionId))
+      throw Object.assign(new Error('原审批选择或恢复状态已变化，请重新核对'), { statusCode: 409 });
+    const claim = recovery === undefined ? this.store.interactions.claim(sessionId, 'approve', decision.approvalId, commandId)
+      : this.store.interactions.reclaimDshApproval(recovery.row, commandId);
     let confirmed: boolean;
-    try { const result = await runtime.adapter.respond(sessionId, decision); this.assertOwner(runtime); confirmed = result?.confirmed !== false; } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
+    try {
+      if (recovery === undefined && runtime.adapter.id === 'dsh' && runtime.adapter.dshApprovalDelivery !== undefined) {
+        const delivery = await runtime.adapter.dshApprovalDelivery(sessionId, decision.approvalId);
+        this.assertOwner(runtime);
+        if (delivery !== undefined) this.store.interactions.bindDshApproval(claim, { delivery, optionId: decision.optionId });
+      }
+      const result = recovery === undefined ? await runtime.adapter.respond(sessionId, decision)
+        : await runtime.adapter.retryDshApproval!(sessionId, recovery.attempt, recovery.current.revision);
+      this.assertOwner(runtime); confirmed = result?.confirmed !== false;
+    } catch (error) {
+      this.store.interactions.fail(claim, error);
+      if (recovery !== undefined) this.store.interactions.restoreDshApprovalRetry(claim, recovery.row);
+      const current = this.store.interactions.get(sessionId, 'approve', decision.approvalId);
+      if (current?.command_id === claim.command_id || recovery !== undefined && current?.command_id === recovery.row.command_id)
+        this.persistInteractionSubmission(current!, 'uncertain');
+      throw error;
+    }
     if (!confirmed) { if (this.store.interactions.finish(claim, false, false)) this.persistInteractionSubmission(claim, 'sent'); this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return; }
     if (!this.store.interactions.finish(claim)) { this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return; }
     const resolvedTurn = runtime.turnId;
