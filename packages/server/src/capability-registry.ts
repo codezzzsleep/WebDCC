@@ -29,7 +29,11 @@ export class CapabilityRegistry {
     if (workspaceId !== null && this.store.getWorkspace(workspaceId) === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     const runtimes: CapabilityRuntime[] = [];
     const capabilities: Capability[] = [];
-    const providers = this.store.listProviders().map(provider => ({ id: provider.id, models: provider.models, details: provider.modelDetails }));
+    const providers = this.store.listProviders().map(provider => ({
+      id: provider.id, models: provider.models, details: provider.modelDetails,
+      baseUrl: provider.baseUrl, endpoints: provider.endpoints, protocols: provider.protocols,
+      codexCatalogPath: provider.codexCatalogPath,
+    }));
     for (const adapter of this.manager.adaptersList()) {
       const probe: ProbeResult = await adapter.probe().catch(() => ({ installed: false, pinnedVersion: nativeInventory.baseline[adapter.id], auth: 'unknown' as const, notes: ['原生探测失败'] }));
       const kind = adapter.kind ?? 'real';
