@@ -223,6 +223,7 @@ export class DshHostClient {
   private authRequired = false;
   private reconnectAttempt = 0;
   private readonly streams = new Map<string, StreamSubscription>();
+  private readonly pendingSnapshots = new Set<() => void>();
   private readonly allFrames: unknown[] = [];
 
   constructor(endpoint: string | number, private readonly options: DshHostOptions = {}) {
@@ -374,14 +375,21 @@ export class DshHostClient {
   async snapshot<T = unknown>(endpoint: string, args: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<T> {
     await this.connect();
     return new Promise<T>((resolve, reject) => {
+      const cancel = () => {
+        clearTimeout(timer);
+        this.pendingSnapshots.delete(cancel);
+        reject(Object.assign(new Error(`DSH ${endpoint} Host closed before its snapshot baseline`), { code: 'dsh-host-closed' }));
+      };
       const streamId = this.openStream(endpoint, args, frame => {
         if (!['item', 'error', 'end'].includes(frame.type)) return;
         clearTimeout(timer);
+        this.pendingSnapshots.delete(cancel);
         this.closeStream(streamId);
         if (frame.type !== 'item') { reject(new Error(`DSH ${endpoint} snapshot ended before its baseline`)); return; }
         try { validateDshResult(endpoint, frame.value); resolve(frame.value as T); } catch (error) { reject(error); }
       });
-      const timer = setTimeout(() => { this.closeStream(streamId); reject(new Error(`DSH ${endpoint} snapshot timed out`)); }, timeoutMs);
+      const timer = setTimeout(() => { this.pendingSnapshots.delete(cancel); this.closeStream(streamId); reject(new Error(`DSH ${endpoint} snapshot timed out`)); }, timeoutMs);
+      this.pendingSnapshots.add(cancel);
     });
   }
 
@@ -495,6 +503,9 @@ export class DshHostClient {
     this.closing = true;
     if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
+    // Local cancellation releases promise/timer ownership without inventing
+    // an inbound native frame or notifying unrelated stream handlers.
+    for (const cancel of this.pendingSnapshots) cancel();
     this.streams.clear();
     const socket = this.ws;
     this.ws = null;
