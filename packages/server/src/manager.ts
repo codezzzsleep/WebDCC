@@ -1451,10 +1451,16 @@ export class SessionManager {
           const data = completeData as EventData['file.change'] | EventData['turn.diff'];
           const changes = data.changes.map((change) => {
             if (change.diff === undefined || this.options.saveDiff === undefined) return change;
-            const fileId = this.options.saveDiff(`${change.path}.diff`, change.diff);
-            const { diff: _diff, ...rest } = change;
-            void _diff;
-            return { ...rest, diffFileId: fileId };
+            try {
+              const fileId = this.options.saveDiff(`${change.path}.diff`, change.diff);
+              const { diff: _diff, ...rest } = change;
+              void _diff;
+              return { ...rest, diffFileId: fileId };
+            } catch {
+              // Diff persistence is a platform projection step. Preserve the
+              // native result and source text without failing its SDK pump.
+              return { ...change, note: [change.note, 'WebDCC：差异文本未保存'].filter(Boolean).join('\n') };
+            }
           });
           completeData = { ...data, changes } as EventData[EventKind];
         }
