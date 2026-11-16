@@ -15,7 +15,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, rename, realpath, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { URL, pathToFileURL } from 'node:url';
-import { closeVerifiedServer } from './deployed-native-cleanup.mjs';
+import { closeVerifiedServer, finalizeVerifiedServer } from './deployed-native-cleanup.mjs';
 
 const [configPath, agent, flag] = process.argv.slice(2);
 assert(['codex', 'claude-code', 'dsh'].includes(agent), 'Select one of all three Agents');
@@ -436,8 +436,9 @@ try {
     } catch (error) { report.captureError = String(error); }
   }
   await browser?.close();
-  await closeVerifiedServer(server, environment.DSH_HOME).then(pids => { report.cleanup = { stoppedOwnedDshPids: pids }; }).catch(error => { report.cleanupError = String(error); report.status = 'failed'; process.exitCode = 1; });
-  await new Promise(resolveClose => bridge.close(resolveClose));
+  await finalizeVerifiedServer(server, environment.DSH_HOME, () => new Promise(resolveClose => bridge.close(resolveClose)))
+    .then(pids => { report.cleanup = { stoppedOwnedDshPids: pids }; })
+    .catch(error => { report.cleanupError = String(error); report.status = 'failed'; process.exitCode = 1; });
   report.finishedAt = new Date().toISOString();
   await save();
   process.stdout.write(JSON.stringify(safe({ agent, status: report.status, runId, modelRequests: report.requests.length, checks: report.checks, error: report.error, report: ledger })) + '\n');
