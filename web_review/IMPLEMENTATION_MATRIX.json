@@ -774,7 +774,8 @@
           "browser-tests/interaction-sync.spec.ts",
           "web_review/QUESTION_ADAPTATION_2026-11-15.md",
           "web_review/elicitation-empty-fields-20261116.summary.json",
-          "web_review/elicitation-own-fields-20261116.summary.json"
+          "web_review/elicitation-own-fields-20261116.summary.json",
+          "web_review/elicitation-secret-json-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "自由文本、单选、多选、多题、secret、URL/form elicitation逐项以UI payload到native response断言。",
@@ -784,7 +785,8 @@
         "remainingWork": "Codex Plan input mode and pinned experimental API negotiation implemented. Actual Codex0.167.0, ClaudeSDK0.3.322/CLI2.1.322 and DSH0.2.2-rc.1 with loopback scripted models and Chromium verify two questions, exact free text, applicable multi-select, native confirmation/continuation, stop and reload. Claude question groups wait for SDK tool_result; cancelled/continued DSH cards retain original text. Default Codex questions remain governed by native feature defaults. Full secret/elicitation/dual-native-UI/provider/network-loss/server-restart acceptance still incomplete; Issues29/41 and NP06 remain open until reviewed/merged and full scope is accepted.",
         "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
         "latestEmptyFieldScope": "2026-11-16 Issue237: explicit optional empty strings preserved; placeholder uses independent enum index identity and native labels; Native raw values unchanged.24local+6sourceChromium/types/lint pass,3completeWS/command/codec/DB/reload identities. OfficialNative/target/fullNP06 remain separate.",
-        "latestJsonOwnFieldScope": "2026-11-16 Issues240/241: UIvalue lookup/Ajv alldialects use JSONown fields; Native schema unchanged; optionalconstructor blank/omitted,explicitstring andrequired/type/extra validation correct.27source+8sourcebrowser/fulltypes/lint pass. Native/target/fullNP06 remain unverified."
+        "latestJsonOwnFieldScope": "2026-11-16 Issues240/241: UIvalue lookup/Ajv alldialects use JSONown fields; Native schema unchanged; optionalconstructor blank/omitted,explicitstring andrequired/type/extra validation correct.27source+8sourcebrowser/fulltypes/lint pass. Native/target/fullNP06 remain unverified.",
+        "latestSecretJsonScope": "2026-11-16 Issue244: originalroot/nestedschemasensitivity masksJSONfallback andclears afteraccept/decline/cancel,ordinaryJSON unchanged.26source+11combinedbrowser+5finalactions (13unique) fulltypes/lint pass. Cachedsecretreceipt, beforeACKreload/noresend +originalcodeccontent/afterACKreload checked. FullNP/native/target separate."
       },
       "dependencyIds": [
         "NP-03",
@@ -1781,7 +1783,8 @@
           "web_review/diagnostic-read-file-boundary-20261116.summary.json",
           "web_review/diagnostic-summary-flush-20261116.summary.json",
           "web_review/diagnostic-retention-lock-20261116.summary.json",
-          "web_review/diagnostic-shared-queue-20261116.summary.json"
+          "web_review/diagnostic-shared-queue-20261116.summary.json",
+          "web_review/elicitation-secret-json-20261116.summary.json"
         ],
         "remainingAcceptance": [
           "关闭诊断时启动参数/环境相对于原生基线仅含允许控制字段。",
@@ -1817,7 +1820,8 @@
         "latestScope": "2026-11-16: process-wide retained raw capture pool (64MiB default), shared across imported/preload module copies; reserve before copy and release on overflow, failure, completion, cancellation or unread request abort. ModelProxy and Native HTTP observations preserve forwarding. 45 local source/controlled HTTP/process checks plus types/lint; full NP14/native/target scope remains incomplete. Combined209 validates/decode target URL credentials at setup and retains native-only recovery; valid native Basic Auth remains unchanged. 211 caps native response chunk emit jobs at the capture chunk limit while context waits, with exact observed/omitted terminal counts. 213 adds nonfollowing/nonblocking ordinary context FD reads, bounded UTF8/JSON decode and truthful contextError/incomplete summary; valid context values/Native bytes preserved. 216 bounds recording JSONL/Host andcoverageFDreads; unreadable/invalidcoverage and recording counters remainexplicit, faileddownload usesJSON503/noattachment.",
         "latestSummaryFlushScope": "2026-11-16 Issue229: first diagnostic summary snapshots failure state after pending writes/read complete; unreadable recording also keeps current failure evidence. Controlled actual OS lock/HTTP/SQLite and source checks separate from official Native/target acceptance. Complete requirement still in progress.",
         "latestRetentionLockScope": "2026-11-16 Issue227, depending on229/PR231: maintenance shares writer directory queue and OS lock; cutoff checked and old regular diagnostics removed while held.53 actual OS lock/controlled diagnostics checks plus fulltypes/lint passed. Original summary failures kept; complete NP14 and target Native acceptance remain open.",
-        "latestSharedWriteQueueScope": "2026-11-16 requirement56 + candidate234: process-shared Writer pending strings/default64MiB +fixed4KiB omissionmessage reserve; Nativeoff preservespeerbudget.72 controlledsourcechecks/types/lint pass. Callbackstructuredrecords/VM/crossprocess/completeNP14 andactualTarget acceptance remain pending."
+        "latestSharedWriteQueueScope": "2026-11-16 requirement56 + candidate234: process-shared Writer pending strings/default64MiB +fixed4KiB omissionmessage reserve; Nativeoff preservespeerbudget.72 controlledsourcechecks/types/lint pass. Callbackstructuredrecords/VM/crossprocess/completeNP14 andactualTarget acceptance remain pending.",
+        "latestSecretJsonScope": "2026-11-16 Issue244: originalroot/nestedschemasensitivity masksJSONfallback andclears afteraccept/decline/cancel,ordinaryJSON unchanged.26source+11combinedbrowser+5finalactions (13unique) fulltypes/lint pass. Cachedsecretreceipt, beforeACKreload/noresend +originalcodeccontent/afterACKreload checked. FullNP/native/target separate."
       },
       "dependencyIds": [
         "NP-02",

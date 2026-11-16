@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { elicitationUrl, type ElicitationAction, type ElicitationForm as Form } from '@webdcc/protocol';
+import { elicitationUrl, schemaHasSecrets, type ElicitationAction, type ElicitationForm as Form } from '@webdcc/protocol';
 
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
@@ -10,6 +10,7 @@ export function ElicitationForm({ form, busy, submit }: { form: Form; busy: bool
   const properties = form.kind === 'form' ? record(form.schema['properties']) : {};
   const required = new Set(form.kind === 'form' && Array.isArray(form.schema['required']) ? form.schema['required'] : []);
   const fields = Object.entries(properties);
+  const secretJson = form.kind === 'form' && fields.length === 0 && schemaHasSecrets(form.schema);
   const respond = (action: ElicitationAction): void => {
     setError('');
     try {
@@ -30,6 +31,7 @@ export function ElicitationForm({ form, busy, submit }: { form: Form; busy: bool
       }
       submit({ action, content });
       setValues(previous => Object.fromEntries(Object.entries(previous).filter(([name]) => {
+        if (name === '$json' && secretJson) return false;
         const schema = record(properties[name]); return schema['writeOnly'] !== true && schema['isSecret'] !== true && schema['format'] !== 'password';
       })));
     } catch { setError('请检查数字或 JSON 内容格式。'); }
@@ -38,7 +40,9 @@ export function ElicitationForm({ form, busy, submit }: { form: Form; busy: bool
   return <div aria-label="原生表单">
     {form.kind === 'url' ? url === null ? <p role="alert">原生链接地址无效，已阻止打开。可以拒绝或取消此请求。</p>
       : <p><a href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">打开 {form.serverName} 的原生链接</a><br />完成原生页面操作后再确认。</p>
-      : fields.length === 0 ? <label>表单内容<textarea className="text-input" value={String(valueFor('$json') ?? '{}')} disabled={busy} onChange={event => setValues({ $json: event.target.value })} /></label>
+      : fields.length === 0 ? <label>表单内容{secretJson
+        ? <input className="text-input" type="password" autoComplete="off" value={String(valueFor('$json') ?? '')} disabled={busy} onChange={event => setValues({ $json: event.target.value })} />
+        : <textarea className="text-input" value={String(valueFor('$json') ?? '{}')} disabled={busy} onChange={event => setValues({ $json: event.target.value })} />}</label>
       : fields.map(([name, value]) => {
         const schema = record(value); const title = typeof schema['title'] === 'string' ? schema['title'] : name;
         const secret = schema['writeOnly'] === true || schema['isSecret'] === true || schema['format'] === 'password';
