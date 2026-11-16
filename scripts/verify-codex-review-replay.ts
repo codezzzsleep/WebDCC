@@ -70,7 +70,7 @@ try {
   await page.goto(base + '/s/' + session.id);
   const verify = async () => {
     for (const item of expected) {
-      const deadline = Date.now() + 10_000; let shown: (string | null)[] = [];
+      const deadline = Date.now() + 10_000; let shown: (string | null)[];
       do {
         shown = await page.getByTestId('codex-review-result').evaluateAll((elements, key) => elements
           .filter(element => element.getAttribute('data-native-item-key') === key)
