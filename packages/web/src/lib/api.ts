@@ -25,6 +25,7 @@ import type {
   DshCredentialUpdate,
   DshDefaultModelUpdate,
   DshSettingsPreview,
+  NativeTerminalResultsResponse,
   NativeEnvelopeSummary,
   NativeEnvelopeDetail,
   NativeOwnerDto,
@@ -72,6 +73,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  nativeTerminalResults: (sessionId: string, signal?: AbortSignal): Promise<NativeTerminalResultsResponse> => request(`/api/sessions/${encodeURIComponent(sessionId)}/native-terminal-results`, { signal }),
   inputModes: (sessionId?: string): Promise<CodexInputModeCatalog> => request(`/api/agents/codex/input-modes${sessionId === undefined ? '' : `?sessionId=${encodeURIComponent(sessionId)}`}`),
   nativeDshSurface: () => request<{ status: string; writable: boolean }>('/api/dsh/native-surface'),
   openNativeDshSurface: (sessionId: string) => request<{ actionUrl: string; ticket: string; expiresAt: string }>('/api/dsh/native-surface/open', { method: 'POST', body: JSON.stringify({ sessionId }) }),

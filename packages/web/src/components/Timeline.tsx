@@ -22,6 +22,7 @@ import { ClaudeStructuredOutput } from './ClaudeStructuredOutput.js';
 import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 import { CodexNativeToolStatus } from './CodexNativeToolStatus.js';
 import { HotRecoveryNotice, RecoveredHotItem } from './RecoveredHot.js';
+import { NativeTerminalResults } from './NativeTerminalResults.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -86,6 +87,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
       <OlderHistoryRecovery sessionId={sessionId} />
+      {!history ? <NativeTerminalResults sessionId={sessionId} /> : null}
       {!history ? <HotRecoveryNotice sessionId={sessionId} /> : null}
       {!history ? store.getHot(sessionId).filter(item => item.turnId === null && item.observation?.state === 'lost').map(item =>
         <div className="timeline-inner" key={item.itemKey}><RecoveredHotItem item={item as LiveItem} /></div>) : null}
