@@ -56,7 +56,7 @@ export class NativeOwnerStore {
         .run(sessionId, agent, this.hostId, nativeId || null, ownerId, generation, now + this.leaseMs,
           new Date(now).toISOString(), process.pid, this.serverBoot, this.serverStart);
       return { ownerId, generation, hostId: this.hostId };
-    })();
+    }).immediate();
   }
   current(sessionId: string, identity: RuntimeIdentity): boolean {
     const row = this.get(sessionId);
