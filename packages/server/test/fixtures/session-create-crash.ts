@@ -1,0 +1,16 @@
+import { join } from 'node:path';
+import { FakeAdapter } from '@webdcc/fake-adapter';
+import type { AgentId, Command } from '@webdcc/protocol';
+import { openDb } from '../../src/db.js';
+import { Store } from '../../src/store.js';
+import { SessionManager } from '../../src/manager.js';
+import { FileStore } from '../../src/files.js';
+import { CommandDispatcher } from '../../src/dispatcher.js';
+const directory = process.argv[2]!; const agent = process.argv[3] as AgentId; const db = openDb(join(directory, 'source.sqlite')); const store = new Store(db);
+const files = new FileStore(directory, store); await files.init(); const manager = new SessionManager(store, { idleDisposeMin: 0 });
+const adapter = new FakeAdapter({ id: agent }); const create = adapter.create.bind(adapter);
+const workspace = store.createWorkspace('session command crash', directory);
+const command: Command = { op: 'create-session', workspaceId: workspace.id, agent, clientCommandId: 'GLOBAL-CREATE' };
+adapter.create = async opts => { const native = await create(opts); process.send?.({ command, native, sessionId: opts.sessionId, commandRecord: store.journal.get(command.clientCommandId) }); await new Promise(() => undefined); return native; };
+manager.registerAdapter(adapter); const dispatcher = new CommandDispatcher(store, manager, files);
+await dispatcher.dispatch(command);
