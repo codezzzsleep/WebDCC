@@ -3,6 +3,7 @@ import type { Command, CommandRecord, CommandState, QueuedInput, UserInput } fro
 import { isQueueInputReorderable } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { commandDigest, compareCommandIdentity, type CommandIdentity } from './command-digest.js';
+import { recordCommandExecution, recoverSessionlessExecutions } from './command-execution.js';
 
 export function payloadHash(value: unknown): string {
   const canonical = JSON.stringify(value, (_key, value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -60,7 +61,11 @@ export class CommandJournal {
   }
 
   acquire(commandId: string): boolean {
-    return this.db.prepare("UPDATE command_journal SET state = 'dispatching' WHERE command_id = ? AND state = 'received'").run(commandId).changes === 1;
+    return this.db.transaction(() => {
+      const changed = this.db.prepare("UPDATE command_journal SET state = 'dispatching' WHERE command_id = ? AND state = 'received'").run(commandId).changes === 1;
+      if (changed) recordCommandExecution(this.db, commandId);
+      return changed;
+    }).immediate();
   }
 
   enqueue(commandId: string, sessionId: string, turnId: string, value: UserInput): QueuedInput {
@@ -229,6 +234,7 @@ export class CommandJournal {
 
   recover(sessionIds?: string[]): void {
     this.db.transaction(() => {
+      recoverSessionlessExecutions(this.db);
       if (sessionIds !== undefined) {
         for (const id of sessionIds) {
           this.db.prepare("UPDATE input_queue SET state = 'uncertain' WHERE session_id = ? AND state IN ('dispatching', 'native-accepted')").run(id);
@@ -237,7 +243,7 @@ export class CommandJournal {
         return;
       }
       this.db.exec("UPDATE input_queue SET state = 'uncertain' WHERE state IN ('dispatching', 'native-accepted')");
-      this.db.exec("UPDATE command_journal SET state = 'uncertain' WHERE state IN ('dispatching', 'native-accepted')");
-    })();
+      this.db.exec("UPDATE command_journal SET state = 'uncertain' WHERE state IN ('dispatching', 'native-accepted') AND NOT (op = 'create-session' AND session_id IS NULL AND state = 'dispatching')");
+    }).immediate();
   }
 }
