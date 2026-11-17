@@ -1,0 +1,14 @@
+import { join } from 'node:path';
+import { FakeAdapter } from '@webdcc/fake-adapter';
+import type { AdapterEvent } from '@webdcc/protocol';
+import { openDb } from '../../src/db.js';
+import { Store } from '../../src/store.js';
+import { SessionManager } from '../../src/manager.js';
+const directory = process.argv[2]!; const db = openDb(join(directory, 'source.sqlite')); const store = new Store(db);
+const manager = new SessionManager(store, { idleDisposeMin: 0 }); const adapter = new FakeAdapter({ id: 'claude-code' });
+let callback!: (id: string, event: AdapterEvent) => void; adapter.onEvent = cb => { callback = cb; }; adapter.send = async () => undefined; manager.registerAdapter(adapter);
+const workspace = store.createWorkspace('context crash', directory); const session = await manager.createSession({ workspaceId: workspace.id, agent: 'claude-code' });
+const sent = await manager.send(session.id, { text: 'original input' });
+callback(session.id, { type: 'item.start', itemKey: 'hot', kind: 'assistant.message', data: { text: '' } });
+callback(session.id, { type: 'item.delta', itemKey: 'hot', field: 'text', append: 'original partial\n' });
+const raw = store.nativeEvents.list(session.id).at(-1)!; process.send?.({ sessionId: session.id, publicTurnId: sent.turnId, rawId: raw.id }); setInterval(() => undefined, 1000);
