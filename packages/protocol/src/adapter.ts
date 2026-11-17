@@ -12,6 +12,7 @@ import type { CodexSubagentView } from './subagents.js';
 import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions, DshSubagentReadTarget, DshSubagentControlTarget, DshSubagentInterruptReceipt,
   DshSubagentPromptOptions, DshSubagentPromptReceipt, DshSubagentInputReference, DshSubagentInputObservation } from './dsh-subagents.js';
 import type { DshQuestionWaitOpening } from './dsh-questions.js';
+import type { ClaudeQueryConfiguration } from './claude-configuration.js';
 import type { DshApprovalAttempt, DshApprovalDelivery } from './dsh-interactions.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
@@ -67,6 +68,8 @@ export interface ProviderRuntimeConfig {
 }
 
 export interface CreateOpts {
+  /** Claude-only accepted startup overrides; never a replay of a user action. */
+  restoreClaudeConfiguration?: ClaudeQueryConfiguration;
   sessionId: string;
   cwd: string;
   providerId: string | null;

@@ -29,16 +29,17 @@ import type {
   DshSubagentHistory,
   DshSubagentHistoryOptions,
   DshSubagentInputRequest,
+  ClaudeConfigurationRecovery,
   DshApprovalAttempt,
   DshApprovalDelivery,
   DshApprovalRecoveryView,
   DshApprovalRetry,
 } from '@webdcc/protocol';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
-import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents } from '@webdcc/protocol';
+import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents, currentClaudeConfiguration } from '@webdcc/protocol';
 import { TurnTracker } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -216,6 +217,11 @@ export class SessionManager {
 
   private async prepareLaunch<T extends CreateOpts>(session: SessionDto, opts: T): Promise<T> {
     if (session.agent === 'codex') opts = { ...opts, restoreCodexSubagents: currentCodexSubagents(this.store.allEvents(session.id)) };
+    if (session.agent === 'claude-code' && session.nativeId !== undefined && opts.restoreNativeHistory !== true) {
+      const recovery = this.claudeConfiguration(session.id);
+      if (recovery.state === 'unavailable') throw this.nativeControlRejected(recovery.reason);
+      if (recovery.state === 'accepted') opts = { ...opts, restoreClaudeConfiguration: recovery.configuration };
+    }
     const runtime = this.runtimes.get(session.id);
     if (runtime === undefined) throw new Error('原生实例尚未绑定运行身份');
     this.store.nativeEvents.addSecret(opts.provider?.apiKey);
@@ -363,6 +369,18 @@ export class SessionManager {
 
   private nativeControlRejected(message: string, statusCode = 409): Error {
     return Object.assign(new Error(message), { statusCode, code: 'native-control-rejected' });
+  }
+
+  /** Last accepted startup observation. Reading it never activates a writer. */
+  claudeConfiguration(sessionId: string): ClaudeConfigurationRecovery {
+    const session = this.requireSession(sessionId);
+    if (session.agent !== 'claude-code') throw this.nativeControlRejected('此会话不是 Claude', 501);
+    if (session.nativeId === undefined) return { state: 'none' };
+    const recovery = currentClaudeConfiguration(this.store.allEvents(sessionId), session.nativeId);
+    if (recovery.state === 'accepted' && recovery.configuration.optionsFingerprint !== createHash('sha256').update(JSON.stringify(recovery.configuration.options)).digest('hex')) {
+      return { state: 'unavailable', reason: 'Claude 已接受配置被脱敏或改变，无法确认原值；请核对原生设置' };
+    }
+    return recovery;
   }
 
   async nativeControls(sessionId: string, includeCatalog = false): Promise<NativeControlSnapshot> {
@@ -554,7 +572,9 @@ export class SessionManager {
   private ensureRuntime(session: SessionDto, adapter: AgentAdapter, workspacePath: string, nativeId: string): Runtime {
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) { this.assertOwner(existing); if (nativeId !== '') existing.nativeId = nativeId; return existing; }
-    const identity = this.store.nativeOwners.acquire(this.ownerId, session.id, session.agent as AgentId, nativeId);
+    let identity: RuntimeIdentity;
+    try { identity = this.store.nativeOwners.acquire(this.ownerId, session.id, session.agent as AgentId, nativeId); }
+    catch (error) { throw inputNotSubmitted(error); }
     adapter.bindRuntime?.(session.id, identity);
     const journal = this.store.journal;
     const runtime: Runtime = {

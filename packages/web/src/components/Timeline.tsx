@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
-import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, nativeReasoningContent, codexReviewItem } from '@webdcc/protocol';
+import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, nativeReasoningContent, codexReviewItem, codexCollabCallStatus, codexCollabCallStatusLabel } from '@webdcc/protocol';
 import { NativeReasoningContent } from './NativeReasoningContent.js';
 import type { DshApprovalRecoveryView } from '@webdcc/protocol';
 import { useStoreVersion } from '../lib/hooks.js';
@@ -522,6 +522,7 @@ function StepRow({
       </div>;
       const data = event.data as EventData['tool.call'];
       const toolInput = data.input as Record<string, unknown>;
+      const collabStatus = store.getSession(event.sessionId)?.agent === 'codex' ? codexCollabCallStatus(data) : undefined;
       const childId = data.name === 'subagent' && typeof toolInput?.['childId'] === 'string' ? toolInput['childId'] : undefined;
       const dsh = store.getSession(event.sessionId)?.agent === 'dsh';
       const parentSessionId = typeof toolInput?.['parentSessionId'] === 'string' ? toolInput['parentSessionId'] : undefined;
@@ -562,8 +563,12 @@ function StepRow({
             detail={toolDetail(data.input)}
             onClick={toggle}
             open={open}
-            failed={data.status === 'failed'}
+            failed={(collabStatus ?? data.status) === 'failed'}
           />
+          {collabStatus === undefined ? null : <p className="muted" role="status" data-testid="codex-collab-call-status"
+            data-native-call-id={typeof toolInput?.['id'] === 'string' ? toolInput['id'] : undefined}>
+            原生 {typeof toolInput?.['tool'] === 'string' ? toolInput['tool'] : data.name} 调用 · {codexCollabCallStatusLabel(collabStatus)}
+          </p>}
           {open ? (
             <pre className="output">
               {JSON.stringify(data.input, null, 2)}
