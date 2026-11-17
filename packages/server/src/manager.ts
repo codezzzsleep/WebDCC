@@ -496,15 +496,19 @@ export class SessionManager {
   }
 
   hotSnapshot(sessionId: string): HotSnapshot {
-    const runtime = this.runtimes.get(sessionId);
-    if (runtime !== undefined) return { items: [...runtime.hot.values()] };
-    // A second manager does not claim to have lost another live executor.
-    if (!this.recoveredSessions.has(sessionId) && !this.uncertainSessions.has(sessionId)) return { items: [] };
-    const owner = this.store.nativeOwners.get(sessionId);
-    if (owner !== undefined && ['opening', 'active', 'closing'].includes(owner.state)) return { items: [] };
-    try { return this.store.recoveredHot(sessionId); }
+    try {
+      const runtime = this.runtimes.get(sessionId);
+      if (runtime !== undefined && !runtime.disposing && this.store.nativeOwners.current(sessionId, runtime.identity)) return { items: [...runtime.hot.values()] };
+      // A second manager does not claim to have lost another live executor.
+      if (runtime === undefined && !this.recoveredSessions.has(sessionId) && !this.uncertainSessions.has(sessionId)) return { items: [] };
+      const owner = this.store.nativeOwners.get(sessionId);
+      if (owner !== undefined && ['opening', 'active', 'closing'].includes(owner.state)) return { items: [] };
+      return this.store.recoveredHot(sessionId);
+    }
     catch { return { items: [], recovery: { formatVersion: 1, coverage: 'partial', throughEnvelopeId: 0, hasMore: false,
-      issues: [{ envelopeId: null, reason: 'hot-recovery-read-failed' }], omittedIssues: 0 } }; }
+      issues: [{ envelopeId: null, reason: 'hot-recovery-read-failed' }], omittedIssues: 0 }, completed: [],
+      completedRecovery: { formatVersion: 1, scope: 'immutable-completed-items', coverage: 'partial', throughEnvelopeId: 0, hasMore: false,
+        issues: [{ envelopeId: null, reason: 'completed-recovery-read-failed' }], omittedIssues: 0, conflicts: [] } }; }
   }
 
   // ---------- 生命周期 ----------

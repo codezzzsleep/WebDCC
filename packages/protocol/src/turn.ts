@@ -7,6 +7,7 @@ import { codexReviewItem } from './codex-review.js';
 import { nativePlanText } from './plans.js';
 import { claudeStructuredOutputs, type ClaudeStructuredOutputView } from './claude-output.js';
 import type { HotObservation } from './hot-recovery.js';
+import type { RecoveredCompletion } from './completed-recovery.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -50,6 +51,7 @@ export interface TurnView {
   pending?: { clientCommandId: string; text: string; images?: string[]; contentParts?: InputContent; error?: string; at: string; status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain'; turnId?: string };
   commandState?: 'uncertain';
   observation?: 'lost';
+  recovered?: RecoveredCompletion[];
 }
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'interrupted', 'failed']);

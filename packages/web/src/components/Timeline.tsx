@@ -23,6 +23,7 @@ import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 import { CodexNativeToolStatus } from './CodexNativeToolStatus.js';
 import { HotRecoveryNotice, RecoveredHotItem } from './RecoveredHot.js';
 import { orderClaudeBlocks } from '@webdcc/protocol';
+import { CompletedRecoveryNotice, RecoveredCompletionCard } from './RecoveredCompletion.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -88,6 +89,9 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
       <OlderHistoryRecovery sessionId={sessionId} />
       {!history ? <HotRecoveryNotice sessionId={sessionId} /> : null}
+      {!history ? <CompletedRecoveryNotice sessionId={sessionId} /> : null}
+      {!history ? store.getCompletedProjection(sessionId).filter(item => item.turnId === null).map(item =>
+        <div className="timeline-inner" key={item.projectionId}><RecoveredCompletionCard item={item} /></div>) : null}
       {!history ? store.getHot(sessionId).filter(item => item.turnId === null && item.observation?.state === 'lost').map(item =>
         <div className="timeline-inner" key={item.itemKey}><RecoveredHotItem item={item as LiveItem} /></div>) : null}
       {store.getSession(sessionId)?.agent === 'dsh' && !history ? <DshSubagentPanel key={`${sessionId}:${store.getSession(sessionId)?.nativeId ?? ''}`} sessionId={sessionId} nativeId={store.getSession(sessionId)?.nativeId} /> : null}
@@ -268,6 +272,7 @@ function TurnView({
               ))}
 
         {displayedLive.map((item) => <HotRow key={item.itemKey} sessionId={sessionId} item={item} />)}</>}
+        {turn.recovered?.map(item => <RecoveredCompletionCard key={item.projectionId} item={item} />)}
 
         {turn.structuredOutputs?.map(output => <ClaudeStructuredOutput key={output.itemKey} output={output} />)}
 
