@@ -201,7 +201,8 @@ it.each(['', '-wal', '-shm', '-journal'])('the real CLI refuses directory aliase
 
 it('the real CLI resolves a linked source database before protecting the original database and journals', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-rebuild-source-link-')); const path = join(directory, 'db.sqlite');
-  const db = openDb(path); setup(db); db.close(); const source = join(directory, 'source-link.sqlite');
+  const db = openDb(path); const { store, context, event } = setup(db);
+  store.nativeEvents.mapping(context, event, 'accepted'); db.close(); const source = join(directory, 'source-link.sqlite');
   await symlink(path, source, 'file'); const before = await readFile(path);
   const cli = join(import.meta.dirname, '../../../scripts/rebuild-native-projection.ts');
   try {
