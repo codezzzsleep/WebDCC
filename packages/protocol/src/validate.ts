@@ -38,7 +38,8 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'turn.diff':
       return Array.isArray(data['changes']) && (data['status'] === undefined || typeof data['status'] === 'string');
     case 'tool.call':
-      return typeof data['name'] === 'string' && typeof data['status'] === 'string';
+      return typeof data['name'] === 'string' && typeof data['status'] === 'string'
+        && (data['codexItemPhase'] === undefined || data['codexItemPhase'] === 'started' || data['codexItemPhase'] === 'completed');
     case 'plan':
       return (
         (data['text'] === undefined || typeof data['text'] === 'string') &&
