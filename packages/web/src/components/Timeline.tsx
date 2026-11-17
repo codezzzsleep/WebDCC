@@ -256,7 +256,7 @@ function TurnView({
                 </ErrorBoundary>
               ))}
 
-        {turn.live.filter(item => item.kind !== 'assistant.message' || !reviewCopy(item.data as EventData['assistant.message'])).map((item) => <HotRow key={item.itemKey} item={item} />)}
+        {turn.live.filter(item => item.kind !== 'assistant.message' || !reviewCopy(item.data as EventData['assistant.message'])).map((item) => <HotRow key={item.itemKey} sessionId={sessionId} item={item} />)}
 
         {turn.structuredOutputs?.map(output => <ClaudeStructuredOutput key={output.itemKey} output={output} />)}
 
@@ -372,7 +372,7 @@ function ChangesCard({ changes, onOpenDiff }: { changes: ChangeSummary[]; onOpen
   );
 }
 
-function HotRow({ item }: { item: LiveItem }): React.ReactElement {
+function HotRow({ sessionId, item }: { sessionId: string; item: LiveItem }): React.ReactElement {
   const planText = nativePlanText(item);
   if (planText !== undefined) return <NativePlan text={planText} itemKey={item.itemKey} live />;
   const data = item.data as { text?: string; command?: string; outputTail?: string };
@@ -399,6 +399,7 @@ function HotRow({ item }: { item: LiveItem }): React.ReactElement {
         {item.kind === 'command' ? <span className="detail">{data.command ?? ''}</span> : null}
       </div>
       {data.outputTail !== undefined && data.outputTail !== '' ? <pre className="output">{data.outputTail}</pre> : null}
+      {item.kind === 'tool.call' ? <CodexNativeToolStatus sessionId={sessionId} data={item.data as EventData['tool.call']} /> : null}
     </div>
   );
 }
