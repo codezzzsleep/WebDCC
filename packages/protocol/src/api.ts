@@ -5,6 +5,7 @@ import type { BuildManifest } from './build.js';
 import type { AccessModeOption, PermissionState } from './permissions.js';
 import type { InputContent } from './input.js';
 import type { HotObservation, HotRecovery } from './hot-recovery.js';
+import type { CompletedRecovery, RecoveredCompletion } from './completed-recovery.js';
 
 export interface AgentMeta extends ProbeResult {
   adapterKind?: 'real' | 'fake';
@@ -64,6 +65,8 @@ export interface SnapshotItemDto {
 export interface SessionDetailResponse extends SessionDto {
   snapshot: SnapshotItemDto[];
   recovery?: HotRecovery;
+  completed?: RecoveredCompletion[];
+  completedRecovery?: CompletedRecovery;
 }
 
 export interface EventsPageResponse {
