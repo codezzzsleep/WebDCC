@@ -113,6 +113,8 @@ export function openDb(file: string): Db {
       projection_version INTEGER NOT NULL, event_key TEXT NOT NULL, envelope_id INTEGER NOT NULL, event_seq INTEGER,
       PRIMARY KEY (projection_version, event_key)
     );`);
+    db.exec(`CREATE INDEX IF NOT EXISTS native_event_projection_envelope ON native_event_projections(envelope_id, projection_version);
+      CREATE INDEX IF NOT EXISTS events_native_item ON events(session_id, kind, item_key, native_seq);`);
     const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
     if (!eventColumns.some(column => column.name === 'native_envelope_id')) db.exec('ALTER TABLE events ADD COLUMN native_envelope_id INTEGER');
     db.exec(`CREATE TABLE IF NOT EXISTS interactions (

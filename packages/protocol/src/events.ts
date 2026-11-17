@@ -97,7 +97,8 @@ export interface QuestionItem {
   toolCallId?: string;
   dshQuestion?: DshQuestionIdentity;
   status?: 'pending' | 'answered' | 'skipped';
-  resolution?: 'native-acknowledged' | 'external' | 'outcome-unknown';
+  /** native-resolved records the business outcome without asserting a replying Client. */
+  resolution?: 'native-acknowledged' | 'native-resolved' | 'external' | 'outcome-unknown';
   submission?: 'sent' | 'uncertain' | 'collected' | 'queued' | 'failed';
   submissionError?: string;
 }

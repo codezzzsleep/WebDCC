@@ -21,7 +21,7 @@ it('a void foreground reply only submits an answer; its exact native tool result
   const answer = { selected: ['Continue'], custom: '  exact answer\r\n  ' };
   expect(await replay.adapter.answer('local', 'question-waterfall:one', answer)).toMatchObject({ submitted: true, confirmed: false });
   const resolved = replay.feed(event('tool/result', 2, { message: { toolCallId: 'question-call', content: [{ type: 'text', text: JSON.stringify({ answers: [{ id: 'one', ...answer }] }) }], isError: false } }));
-  expect(resolved).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'question-waterfall:one', toolCallId: 'question-call', status: 'answered', resolution: 'native-acknowledged' }) }));
+  expect(resolved).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'question-waterfall:one', toolCallId: 'question-call', status: 'answered', resolution: 'native-resolved' }) }));
 });
 
 it('a native timed settlement from another UI closes the foreground waterfall question by its actual call identity', () => {
@@ -29,7 +29,7 @@ it('a native timed settlement from another UI closes the foreground waterfall qu
   replay.feed(input({ type: 'ready', clientId: 'client-one' }));
   replay.feed(input({ type: 'waterfall', event: 'user-questions/request', eventId: 'question-waterfall', agentId: 'native-root', request: { questions, wait: { callId: 'question-call' } } }));
   const resolved = replay.feed(input({ type: 'projection', seq: 2, changes: [{ key: 'userQuestions', val: { active: [], settled: [{ callId: 'question-call', answers: [{ id: 'one', selected: ['Continue'] }] }] } }] }));
-  expect(resolved).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'question-waterfall:one', status: 'answered', resolution: 'external' }) }));
+  expect(resolved).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'question-waterfall:one', status: 'answered', resolution: 'native-resolved' }) }));
 });
 
 it('a delayed old-client reply cannot retire a question reoffered to the current client', async () => {
@@ -51,7 +51,7 @@ it('a forwarding cancellation followed by another UI native answer converges to 
   const replay = pendingQuestion();
   replay.feed(input({ type: 'cancel', eventId: 'question-waterfall' }));
   const resolved = replay.feed(event('tool/result', 2, { message: { toolCallId: 'question-call', content: [{ type: 'text', text: JSON.stringify({ answers: [{ id: 'one', selected: ['Continue'] }] }) }], isError: false } }));
-  expect(resolved).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'question-waterfall:one', status: 'answered', resolution: 'external' }) }));
+  expect(resolved).toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ questionId: 'question-waterfall:one', status: 'answered', resolution: 'native-resolved' }) }));
 });
 
 it('replays exact native legacy multi_select, waterfall and tool result identities from the scripted-model native capture', async () => {
@@ -65,7 +65,7 @@ it('replays exact native legacy multi_select, waterfall and tool result identiti
   const questions = resolved.filter(value => value.type === 'item.complete' && value.kind === 'question');
   expect(questions).toHaveLength(2);
   for (const answer of outcome.value.answers) expect(questions).toContainEqual(expect.objectContaining({
-    data: expect.objectContaining({ questionId: `${eventId}:${answer.id}`, toolCallId: 'toolu_mock_mwi3jdqk_3', status: 'answered', resolution: 'native-acknowledged' }),
+    data: expect.objectContaining({ questionId: `${eventId}:${answer.id}`, toolCallId: 'toolu_mock_mwi3jdqk_3', status: 'answered', resolution: 'native-resolved' }),
     nativeSeq: 20,
   }));
 });
@@ -88,8 +88,8 @@ it('a native result racing the HTTP ACK remains authoritative and does not reope
   const sending = replay.adapter.answer('local', 'question-waterfall:one', { selected: ['Continue'] });
   await expect.poll(() => typeof release).toBe('function');
   expect(replay.feed(event('tool/result', 2, { message: { toolCallId: 'question-call', content: [{ type: 'text', text: '{"answers":[{"id":"one","selected":["Continue"]}]}' }], isError: false } })))
-    .toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ status: 'answered', resolution: 'native-acknowledged' }) }));
-  release(); await expect(sending).resolves.toMatchObject({ submitted: true, confirmed: true });
+    .toContainEqual(expect.objectContaining({ kind: 'question', data: expect.objectContaining({ status: 'answered', resolution: 'native-resolved' }) }));
+  release(); await expect(sending).rejects.toMatchObject({ code: 'uncertain' });
   await expect(replay.adapter.answer('local', 'question-waterfall:one', 'again')).rejects.toThrow('不存在');
 });
 

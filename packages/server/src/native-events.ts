@@ -1,10 +1,9 @@
-import { nativeCompletionIdentity } from './native-completion-identity.js';
 import { createHash } from 'node:crypto';
 import type { AdapterEvent, NativeDshRpcCaptureMetadata, NativeEnvelopeDetail, NativeEnvelopeSummary, NativeStdioCaptureMetadata, RuntimeIdentity, TraceFrame } from '@webdcc/protocol';
 import { redactDiagnosticValue } from '@webdcc/model-proxy';
 import type { Db } from './db.js';
 import inventory from './native-inventory.json' with { type: 'json' };
-import { payloadHash } from './command-journal.js';
+import { committedNativeProjection, nativeProjectionDigest } from './native-projection-match.js';
 import { nativeEnvelopeIdentity } from './native-envelope-identity.js';
 
 interface Row {
@@ -103,37 +102,33 @@ export class NativeEventStore {
   frame(context: Context, frame: TraceFrame, accepted: boolean): number {
     return this.insert(context, 'transport', frame.dir, frame.ch, frame.frame, accepted ? frame.dir === 'out' ? 'outgoing-attempt' : 'observed' : 'stale-owner');
   }
-  mapping(context: Context, event: AdapterEvent, disposition: string): { id: number; duplicate: boolean } {
+  mapping(context: Context, event: AdapterEvent, disposition: string): { id: number; duplicate: boolean; unverified?: boolean } {
     const id = this.insert(context, 'mapping', 'in', event.type, event, disposition, event.nativeEnvelopeId);
     if (disposition !== 'accepted' || event.type !== 'item.complete') return { id, duplicate: false };
     const immutable = event.kind === 'assistant.message' || event.kind === 'reasoning' || event.kind === 'file.read'
       || ['command', 'file.change', 'tool.call'].includes(event.kind) && ['completed', 'failed'].includes(String(object(event.data)['status']));
     if (event.nativeSeq === undefined && (!immutable || event.native === undefined)) return { id, duplicate: false };
-    const scope = this.db.prepare('SELECT native_id FROM native_event_envelopes WHERE id = ?').get(id) as { native_id: string | null };
-    const identity = nativeCompletionIdentity(context, event, scope.native_id);
-    const key = payloadHash(identity.canonical);
-    let previous = this.db.prepare('SELECT event_seq FROM native_event_projections WHERE projection_version = 1 AND event_key = ?').get(key) as { event_seq: number | null } | undefined;
-    if (previous?.event_seq == null && scope.native_id !== null) {
-      for (const legacy of new Set(identity.legacy.map(payloadHash))) {
-        // A digest alone cannot certify another native scope. The legacy
-        // mapping must belong to this Agent/session and its real event.
-        const committed = this.db.prepare(`SELECT p.envelope_id, p.event_seq FROM native_event_projections p
-          JOIN native_event_envelopes e ON e.id = p.envelope_id
-          JOIN events v ON v.session_id = e.session_id AND v.seq = p.event_seq AND v.native_envelope_id = e.id
-          WHERE p.projection_version = 1 AND p.event_key = ? AND e.session_id = ? AND e.agent = ? AND e.native_id = ?`)
-          .get(legacy, context.sessionId, context.agent, scope.native_id) as { envelope_id: number; event_seq: number } | undefined;
-        if (committed === undefined) continue;
+    // Raw capture commits first. Certification and its alias/claim then use
+    // one writer transaction so another connection cannot invalidate a
+    // witnessed event between the read and the index write.
+    return this.db.transaction(() => {
+      const scope = this.db.prepare('SELECT native_id, native_turn_id FROM native_event_envelopes WHERE id = ?').get(id) as { native_id: string | null; native_turn_id: string | null };
+      const key = nativeProjectionDigest(context, event, scope.native_id);
+      const { witness, unverified } = committedNativeProjection(this.db, context, event, scope, key);
+      if (witness !== undefined && witness.event_key !== key) {
         this.db.prepare(`INSERT INTO native_event_projections (projection_version, event_key, envelope_id, event_seq) VALUES (1, ?, ?, ?)
           ON CONFLICT(projection_version, event_key) DO UPDATE SET envelope_id = excluded.envelope_id, event_seq = excluded.event_seq WHERE event_seq IS NULL`)
-          .run(key, committed.envelope_id, committed.event_seq);
-        previous = committed;
-        break;
+          .run(key, witness.envelope_id, witness.event_seq);
       }
-    }
-    const duplicate = previous?.event_seq != null;
-    if (duplicate) this.db.prepare("UPDATE native_event_envelopes SET disposition = 'duplicate-projection' WHERE id = ?").run(id);
-    else this.db.prepare('INSERT INTO native_event_projections (projection_version, event_key, envelope_id) VALUES (1, ?, ?) ON CONFLICT(projection_version, event_key) DO UPDATE SET envelope_id = excluded.envelope_id WHERE event_seq IS NULL').run(key, id);
-    return { id, duplicate };
+      if (witness === undefined && unverified) {
+        this.db.prepare("UPDATE native_event_envelopes SET disposition = 'legacy-projection-unverified' WHERE id = ?").run(id);
+        return { id, duplicate: false, unverified: true };
+      }
+      const duplicate = witness !== undefined;
+      if (duplicate) this.db.prepare("UPDATE native_event_envelopes SET disposition = 'duplicate-projection' WHERE id = ?").run(id);
+      else this.db.prepare('INSERT INTO native_event_projections (projection_version, event_key, envelope_id) VALUES (1, ?, ?) ON CONFLICT(projection_version, event_key) DO UPDATE SET envelope_id = excluded.envelope_id WHERE event_seq IS NULL').run(key, id);
+      return { id, duplicate };
+    }).immediate();
   }
   projected(envelopeId: number, seq: number): void {
     this.db.prepare('UPDATE native_event_projections SET event_seq = ? WHERE envelope_id = ? AND event_seq IS NULL').run(seq, envelopeId);

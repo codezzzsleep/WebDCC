@@ -49,14 +49,14 @@ export class NativeOwnerStore {
       this.db.prepare(`INSERT INTO native_owners (session_id, agent, host_id, native_id, owner_id, generation, state,
         lease_until, observed_at, server_pid, server_boot, server_start)
         VALUES (?, ?, ?, ?, ?, ?, 'opening', ?, ?, ?, ?, ?)
-        ON CONFLICT(session_id) DO UPDATE SET owner_id=excluded.owner_id, generation=excluded.generation,
+        ON CONFLICT(session_id) DO UPDATE SET native_id=excluded.native_id, owner_id=excluded.owner_id, generation=excluded.generation,
         state='opening', lease_until=excluded.lease_until, observed_at=excluded.observed_at,
         server_pid=excluded.server_pid, server_boot=excluded.server_boot, server_start=excluded.server_start,
         managed_process=NULL, active_native_turn_id=NULL, last_observed_seq=NULL`)
         .run(sessionId, agent, this.hostId, nativeId || null, ownerId, generation, now + this.leaseMs,
           new Date(now).toISOString(), process.pid, this.serverBoot, this.serverStart);
       return { ownerId, generation, hostId: this.hostId };
-    })();
+    }).immediate();
   }
   current(sessionId: string, identity: RuntimeIdentity): boolean {
     const row = this.get(sessionId);
