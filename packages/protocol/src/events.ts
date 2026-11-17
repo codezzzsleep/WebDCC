@@ -144,7 +144,9 @@ export interface EventData {
   };
   /** A cumulative diff emitted by an Agent for the current turn. */
   'turn.diff': { changes: FileChangeEntry[]; status?: 'running' | 'completed' | 'failed' };
-  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown'; claudeActor?: ClaudeOutputOrigin };
+  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown'; claudeActor?: ClaudeOutputOrigin;
+    /** The observed native item notification phase, independent of business success. */
+    codexItemPhase?: 'started' | 'completed' };
   /** Structured task steps and native Markdown plans have distinct content.
    * incomplete preserves a draft without claiming a native final document. */
   plan: { items: PlanItem[]; text?: string; incomplete?: boolean };

@@ -461,7 +461,7 @@ export function parseUnifiedDiff(
   return files;
 }
 
-export function mapItemData(item: Record<string, unknown>): EventData[EventKind] {
+export function mapItemData(item: Record<string, unknown>, codexItemPhase?: EventData['tool.call']['codexItemPhase']): EventData[EventKind] {
   const type = String(item['type'] ?? '');
   switch (type) {
     case 'agentMessage':
@@ -485,6 +485,11 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
     case 'mcpToolCall':
     case 'dynamicToolCall': {
       const data: EventData['tool.call'] = { name: type, input: item, status: 'unknown' };
+      return { ...data, status: codexNativeToolStatus(data) ?? 'unknown' };
+    }
+    case 'webSearch': {
+      const data: EventData['tool.call'] = { name: type, input: item, status: 'unknown',
+        ...(codexItemPhase === undefined ? {} : { codexItemPhase }) };
       return { ...data, status: codexNativeToolStatus(data) ?? 'unknown' };
     }
     case 'exec': {
@@ -1674,7 +1679,7 @@ export class CodexAdapter implements AgentAdapter {
         if (type === 'agentMessage') runtime.started.add(JSON.stringify([this.nativeTurnId(params, runtime) ?? runtime.turnId, itemId]));
         const kind = mapItemKind(type);
         if (kind === 'internal') return;
-        let data = mapItemData(item);
+        let data = mapItemData(item, 'started');
         if (type === 'reasoning') {
           const nativeTurnId = this.nativeTurnId(params, runtime) ?? runtime.turnId;
           const key = JSON.stringify([nativeTurnId, itemId]);
@@ -1741,7 +1746,7 @@ export class CodexAdapter implements AgentAdapter {
           });
           return;
         }
-        let data = mapItemData(item);
+        let data = mapItemData(item, 'completed');
         if (type === 'reasoning') {
           const key = JSON.stringify([this.nativeTurnId(params, runtime) ?? runtime.turnId, itemId]);
           const pending = runtime.reasoningSummaries?.get(key);
