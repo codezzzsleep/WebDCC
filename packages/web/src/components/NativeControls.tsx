@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { NativeActionReceipt, NativeActionResponse, NativeControlSnapshot } from '@webdcc/protocol';
+import { isClaudeQueryConfiguration, type AgentId, type ClaudeConfigurationRecovery, type NativeActionReceipt, type NativeActionResponse, type NativeControlSnapshot } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { nativeActionFields } from '../lib/native-action-fields.js';
 import { CodexReviewTarget, DEFAULT_CODEX_REVIEW_TARGET } from './CodexReviewTarget.js';
@@ -12,7 +12,7 @@ interface Action { type: string; label: string; supported: boolean; requiresIdle
 const labels: Record<NativeActionReceipt['state'], string> = { dispatching: '正在执行，等待原生结果', submitted: '已提交，原生终态尚未确认', completed: '原生调用已返回，请核对操作结果', failed: '执行前已拒绝，请核对后重试', uncertain: '结果未确认，请查询原生状态，勿重复执行' };
 
 /** Reads never activate a writer; each action has an explicit submit button. */
-export function NativeControls({ sessionId, initialCommand }: { sessionId: string; initialCommand?: string }): React.ReactElement {
+export function NativeControls({ sessionId, initialCommand, agent }: { sessionId: string; initialCommand?: string; agent?: AgentId }): React.ReactElement {
   const generation = useRef({ sessionId, value: 0 });
   if (generation.current.sessionId !== sessionId) generation.current = { sessionId, value: generation.current.value + 1 };
   const [snapshot, setSnapshot] = useState<NativeControlSnapshot>();
@@ -23,11 +23,15 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
   const [receipt, setReceipt] = useState<NativeActionReceipt>();
   const [result, setResult] = useState<unknown>();
   const [history, setHistory] = useState<unknown>();
+  const [knownConfiguration, setKnownConfiguration] = useState<{ sessionId: string; recovery: ClaudeConfigurationRecovery }>();
   const refresh = async (): Promise<void> => {
     const current = generation.current;
-    const value = await api.nativeControls(sessionId, true);
+    const [native, known] = await Promise.allSettled([api.nativeControls(sessionId, true),
+      agent === 'claude-code' ? api.claudeConfiguration(sessionId) : Promise.resolve(undefined)]);
     if (generation.current !== current || current.sessionId !== sessionId) return;
-    setSnapshot(value);
+    if (known.status === 'fulfilled' && known.value !== undefined) setKnownConfiguration({ sessionId, recovery: known.value });
+    if (native.status === 'rejected') throw native.reason;
+    setSnapshot(native.value);
     let commandId: string | null = null;
     try { commandId = sessionStorage.getItem(`native-action:${sessionId}`); } catch { /* optional read recovery */ }
     if (commandId) await api.nativeActionReceipt(sessionId, commandId).then(value => { if (generation.current === current) setReceipt(value); }).catch(() => undefined);
@@ -35,13 +39,15 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
   useEffect(() => {
     let live = true;
     setSnapshot(undefined); setError(''); setReceipt(undefined); setResult(undefined); setHistory(undefined);
+    setKnownConfiguration(undefined);
     setSelected(''); setValues({}); setBusy(false);
     void api.nativeControls(sessionId, true).then(value => { if (live) setSnapshot(value); }).catch(failure => { if (live) setError(failure instanceof Error ? failure.message : '原生读取失败'); });
+    if (agent === 'claude-code') void api.claudeConfiguration(sessionId).then(recovery => { if (live) setKnownConfiguration({ sessionId, recovery }); }).catch(() => undefined);
     let commandId: string | null = null;
     try { commandId = sessionStorage.getItem(`native-action:${sessionId}`); } catch { /* Storage is optional for read-only UI. */ }
     if (commandId) void api.nativeActionReceipt(sessionId, commandId).then(value => { if (live) setReceipt(value); }).catch(() => undefined);
     return () => { live = false; };
-  }, [sessionId]);
+  }, [sessionId, agent]);
   const submit = async (action: { type: string; [key: string]: unknown }, connect = false): Promise<void> => {
     if (busy) return;
     const current = generation.current;
@@ -68,6 +74,9 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
   };
   const catalog = object(snapshot?.catalog);
   const state = object(snapshot?.state);
+  const known = knownConfiguration?.sessionId === sessionId ? knownConfiguration.recovery : undefined;
+  const activeConfiguration = snapshot?.sessionId === sessionId && snapshot.agent === 'claude-code' && isClaudeQueryConfiguration(catalog['configuration']) ? catalog['configuration'] : undefined;
+  const configuration = activeConfiguration ?? (known?.state === 'accepted' ? known.configuration : undefined);
   const actions = Array.isArray(catalog['actions']) ? catalog['actions'] as Action[] : [];
   const selectedAction = actions.find(action => action.type === selected);
   const fields = Object.entries(object(selectedAction?.schema['properties'])).filter(([name, schema]) => !['type', 'revision'].includes(name) && object(schema)['readOnly'] !== true);
@@ -102,6 +111,12 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
       {snapshot === undefined ? <button className="btn primary" type="button" disabled={busy} onClick={() => { void submit({ type: 'connect' }, true); }}>连接原生控制</button> : null}
     </div>
     {error ? <p role="alert">{error}</p> : null}
+    {known?.state === 'unavailable' && activeConfiguration === undefined ? <p role="alert">{known.reason}</p> : null}
+    {configuration ? <details data-testid="claude-configuration"><summary>{activeConfiguration === undefined ? '上次已接受的 Claude 会话配置' : '当前 Claude 会话配置'}</summary>
+      <p role="status">{activeConfiguration === undefined ? '上次原生启动已接受；当前原生连接未确认。' : `原生启动已接受${configuration.restoredFromQueryId === undefined ? '' : ' · 已恢复会话配置'}；生成效果尚未确认。`}</p>
+      <p>模型：{configuration.requestedModel ?? '沿用原生设置'}。以下为本会话显式设置的启动参数；空对象沿用原生设置。</p>
+      <pre data-testid="claude-configuration-options" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(configuration.options, null, 2)}</pre>
+    </details> : null}
     {receipt ? <p role="status" data-testid="native-action-receipt">{receipt.type === 'stop-task'
       ? `${receipt.callReturnedAt === undefined ? '调用返回尚未确认' : '调用已返回'} · ${receipt.state === 'completed' ? '原生停止已确认' : labels[receipt.state]}`
       : labels[receipt.state]} · {receipt.type}</p> : null}

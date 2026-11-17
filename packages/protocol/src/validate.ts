@@ -3,6 +3,7 @@ import type { EventData, EventKind } from './events.js';
 import { isInputContent } from './input.js';
 import { validNativeReasoningParts } from './codex-reasoning.js';
 import { isClaudeStructuredOutput } from './claude-output.js';
+import { isClaudeQueryConfiguration } from './claude-configuration.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -71,8 +72,9 @@ export function isValidEventData<K extends EventKind>(kind: K, data: unknown): d
     case 'error':
       return typeof data['message'] === 'string';
     case 'unknown':
-    case 'internal':
       return typeof data['nativeType'] === 'string';
+    case 'internal':
+      return typeof data['nativeType'] === 'string' && (data['claudeConfiguration'] === undefined || isClaudeQueryConfiguration(data['claudeConfiguration']));
     default:
       return false;
   }

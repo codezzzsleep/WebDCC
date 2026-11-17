@@ -22,6 +22,8 @@ import type {
   SlashCommandPreview,
   ClaudeOutputOrigin,
   ClaudeTaskRuntime,
+  ClaudeQueryConfiguration,
+  ClaudeQueryOptions,
 } from '@webdcc/protocol';
 import {
   query,
@@ -38,7 +40,7 @@ import {
   type UserDialogRequest,
   type UserDialogResult,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, canStopClaudeTask, claudeOutputOrigin, claudeResultOutput, elicitationUrl, schemaHasSecrets, isValidEventData, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
+import { buildFileChanges, canStopClaudeTask, claudeOutputOrigin, claudeResultOutput, elicitationUrl, schemaHasSecrets, isValidEventData, isClaudeQueryConfiguration, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 
 import { ClaudeContentReducer } from './content.js';
 import { encodeClaudeInput, type ClaudeUserContent } from './input.js';
@@ -205,6 +207,9 @@ interface SessionRuntime {
   resetUuids?: Set<string>;
   stdio: ClaudeStdioCaptureState;
   nativeOptions: ClaudeNativeOptions;
+  configuration?: ClaudeQueryConfiguration;
+  startupAccepted?: boolean;
+  restoredFromQueryId?: string;
   state: ClaudeNativeState;
   capabilities: string[];
   nativePending: Map<string, NativePending>;
@@ -618,7 +623,10 @@ export class ClaudeAdapter implements AgentAdapter {
 
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
     if (this.sessions.has(opts.sessionId)) throw nativeError('Claude 会话已存在', 409);
-    const runtime = this.startQuery(opts.sessionId, opts, opts.nativeId);
+    const restored = opts.restoreNativeHistory === true ? undefined : opts.restoreClaudeConfiguration;
+    const nativeOptions = restored === undefined ? {} : this.restoreConfiguration(opts, restored);
+    const runtime = this.startQuery(opts.sessionId, opts, opts.nativeId, nativeOptions);
+    if (restored !== undefined) runtime.restoredFromQueryId = restored.queryId;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([runtime.ready,
@@ -626,6 +634,12 @@ export class ClaudeAdapter implements AgentAdapter {
         new Promise<void>(resolve => { timer = setTimeout(resolve, 3000); }),
       ]);
       if (this.sessions.get(opts.sessionId) !== runtime || runtime.state.transport !== 'live') throw nativeError('Claude 初始化连接已断开', 503);
+      if (restored !== undefined) {
+        const initialized = await runtime.q.initializationResult();
+        if (this.sessions.get(opts.sessionId) !== runtime || runtime.state.transport !== 'live') throw nativeError('Claude 配置恢复实例已替换', 409);
+        if (initialized.claude_code_version !== PINNED_CLI_VERSION) throw nativeError('Claude 配置恢复的原生版本不匹配', 503);
+        this.acceptConfiguration(opts.sessionId, runtime, initialized.claude_code_version);
+      }
     } catch (error) {
       if (this.sessions.get(opts.sessionId) === runtime) await this.dispose(opts.sessionId);
       throw error;
@@ -693,8 +707,9 @@ export class ClaudeAdapter implements AgentAdapter {
     let replacement: SessionRuntime | undefined;
     try {
       replacement = this.startQuery(sessionId, launchOpts, resume, { ...previous.nativeOptions, ...nativePatch });
-      await replacement.q.initializationResult();
+      const initialized = await replacement.q.initializationResult();
       if (this.sessions.get(sessionId) !== replacement || replacement.retiring || replacement.state.transport !== 'live') throw new Error('原生运行实例已替换或结束');
+      this.acceptConfiguration(sessionId, replacement, initialized.claude_code_version);
     } catch (error) {
       const owner = replacement ?? previous;
       // Native stream failure may already have removed this query. Restore
@@ -707,8 +722,9 @@ export class ClaudeAdapter implements AgentAdapter {
       let rollback: SessionRuntime | undefined;
       try {
         rollback = this.startQuery(sessionId, previous.launchOpts, resume, previous.nativeOptions);
-        await rollback.q.initializationResult();
+        const initialized = await rollback.q.initializationResult();
         if (this.sessions.get(sessionId) !== rollback || rollback.retiring || rollback.state.transport !== 'live') throw new Error('原配置恢复实例已替换或结束', { cause: error });
+        this.acceptConfiguration(sessionId, rollback, initialized.claude_code_version);
       } catch (rollbackError) {
         const rollbackOwner = rollback ?? owner;
         const failure = new Error(`Claude 切换失败且原配置恢复失败：${String(error)}；${String(rollbackError)}`, { cause: rollbackError });
@@ -832,6 +848,50 @@ export class ClaudeAdapter implements AgentAdapter {
     return runtime;
   }
 
+  private configurationScope(opts: CreateOpts): string {
+    const env = { ...process.env, ...this.options.env };
+    const profile = resolve(opts.cwd, env['CLAUDE_CONFIG_DIR'] ?? resolve(env['HOME'] ?? homedir(), '.claude'));
+    return createHash('sha256').update(JSON.stringify([resolve(opts.cwd), profile, opts.providerId,
+      opts.provider?.baseUrl ?? null, opts.provider?.endpoints?.['anthropic-messages'] ?? null])).digest('hex');
+  }
+
+  private restoreConfiguration(opts: CreateOpts & { nativeId: string }, configuration: ClaudeQueryConfiguration): ClaudeNativeOptions {
+    if (!isClaudeQueryConfiguration(configuration) || configuration.sdkVersion !== PINNED_SDK_VERSION || configuration.cliVersion !== PINNED_CLI_VERSION
+      || configuration.nativeSessionId !== opts.nativeId || configuration.scopeFingerprint !== this.configurationScope(opts)
+      || configuration.requestedModel !== (opts.model ?? null)) throw nativeValidationError('Claude 已接受配置的会话、模型、版本或工作区/profile/Provider 已改变，不能自动复用', 409);
+    if (configuration.optionsFingerprint !== createHash('sha256').update(JSON.stringify(configuration.options)).digest('hex')) {
+      throw nativeValidationError('Claude 已接受配置被脱敏或改变，无法确认原值；请核对原生设置', 409);
+    }
+    const options = configuration.options;
+    if (options.thinking !== undefined) parseClaudeNativeAction({ type: 'thinking', thinking: options.thinking });
+    if (options.outputFormat !== undefined) parseClaudeNativeAction({ type: 'output', schema: options.outputFormat.schema });
+    return options;
+  }
+
+  private acceptConfiguration(sessionId: string, runtime: SessionRuntime, cliVersion: string | undefined = PINNED_CLI_VERSION): void {
+    if (cliVersion !== PINNED_CLI_VERSION || this.sessions.get(sessionId) !== runtime || runtime.retiring
+      || runtime.closePromise !== undefined || runtime.state.transport !== 'live') return;
+    runtime.startupAccepted = true;
+    const options: ClaudeQueryOptions = {
+      ...(runtime.nativeOptions.thinking === undefined ? {} : { thinking: runtime.nativeOptions.thinking }),
+      ...(runtime.nativeOptions.outputFormat === undefined ? {} : { outputFormat: runtime.nativeOptions.outputFormat }),
+      ...(runtime.nativeOptions.enableFileCheckpointing === undefined ? {} : { enableFileCheckpointing: runtime.nativeOptions.enableFileCheckpointing }),
+    };
+    const optionsFingerprint = createHash('sha256').update(JSON.stringify(options)).digest('hex');
+    const nativeSessionId = runtime.nativeId || null; const requestedModel = runtime.launchOpts.model ?? null;
+    const scopeFingerprint = this.configurationScope(runtime.launchOpts);
+    const previous = runtime.configuration;
+    if (previous?.optionsFingerprint === optionsFingerprint && previous.nativeSessionId === nativeSessionId
+      && previous.scopeFingerprint === scopeFingerprint && previous.requestedModel === requestedModel) return;
+    const configuration: ClaudeQueryConfiguration = { formatVersion: 1, queryId: runtime.instanceId, nativeSessionId,
+      sdkVersion: PINNED_SDK_VERSION, cliVersion, scopeFingerprint, requestedModel, options, optionsFingerprint,
+      nativeAcceptedAt: previous?.nativeAcceptedAt ?? new Date().toISOString(), modelEffect: 'not-observed',
+      ...(runtime.restoredFromQueryId === undefined ? {} : { restoredFromQueryId: runtime.restoredFromQueryId }) };
+    runtime.configuration = configuration;
+    this.emit(sessionId, { type: 'item.complete', itemKey: `claude-configuration:${runtime.instanceId}:${nativeSessionId}:${optionsFingerprint}`,
+      kind: 'internal', data: { nativeType: 'claude/query-configuration', claudeConfiguration: configuration }, scope: 'session' });
+  }
+
   private nativeRevision(runtime: SessionRuntime): string {
     return createHash('sha256').update(JSON.stringify({ generation: this.generations.get(runtime.launchOpts.sessionId),
       runtime: runtime.launchOpts.runtime, nativeId: runtime.nativeId, conversationId: runtime.conversationId, model: runtime.model ?? runtime.launchOpts.model,
@@ -861,6 +921,7 @@ export class ClaudeAdapter implements AgentAdapter {
       runtime.nativeId === '' ? Promise.resolve(null) : this.nativeHistory.info(runtime.launchOpts.cwd, runtime.nativeId).catch(error => ({ status: 'unavailable', reason: error instanceof Error ? error.message : String(error) })),
     ]);
     if (this.sessions.get(sessionId) !== runtime) throw nativeError('原生运行实例已替换', 409);
+    this.acceptConfiguration(sessionId, runtime, initialization.claude_code_version);
     return { revision: this.nativeRevision(runtime), sdkVersion: PINNED_SDK_VERSION, cliVersion: initialization.claude_code_version,
       nativeId: runtime.nativeId, models, commands, agents, account, metadata,
       // Never return transport config: stdio args, headers, or URL query strings may contain credentials.
@@ -872,6 +933,7 @@ export class ClaudeAdapter implements AgentAdapter {
       })),
       selected: { model: runtime.model ?? runtime.launchOpts.model, effort: runtime.launchOpts.reasoningEffort,
         ...runtime.nativeOptions }, capabilities: runtime.capabilities, supportedDialogKinds: Object.keys(this.options.dialogSpecs ?? {}),
+      configuration: runtime.configuration,
       thinkingMapping: { requested: runtime.nativeOptions.thinking ?? null,
         sdkMode: claudeThinkingMode(runtime.nativeOptions.thinking) ?? 'inherit', source: `SDK startup options/${PINNED_SDK_VERSION}`,
         modelEffect: 'not-observed' },
@@ -1228,6 +1290,7 @@ export class ClaudeAdapter implements AgentAdapter {
         const event = claudeSystemEvent(message, runtime.frameSeq, 'task_id' in message ? runtime.state.tasks.get(message.task_id) : undefined);
         this.emit(sessionId, message.subtype === 'init' && event.type === 'item.complete'
           ? { ...event, data: { ...record(event.data), claudeTaskRuntime: { id: runtime.instanceId, state: 'started' } }, scope: 'session' } : event);
+        if (message.subtype === 'init' && runtime.startupAccepted) this.acceptConfiguration(sessionId, runtime);
         return;
       }
       case 'stream_event': {
