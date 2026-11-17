@@ -1,0 +1,16 @@
+import { join } from 'node:path';
+import { FakeAdapter } from '@webdcc/fake-adapter';
+import type { AdapterEvent } from '@webdcc/protocol';
+import { openDb } from '../../src/db.js';
+import { Store } from '../../src/store.js';
+import { SessionManager } from '../../src/manager.js';
+const directory = process.argv[2]!; const db = openDb(join(directory, 'source.sqlite')); const store = new Store(db);
+const manager = new SessionManager(store, { idleDisposeMin: 0 }); const adapter = new FakeAdapter({ id: 'codex' });
+let callback!: (id: string, event: AdapterEvent) => void; adapter.onEvent = cb => { callback = cb; }; adapter.send = async () => undefined;
+manager.registerAdapter(adapter); const workspace = store.createWorkspace('early crash', directory);
+const session = await manager.createSession({ workspaceId: workspace.id, agent: 'codex' });
+store.journal.claim({ op: 'send', sessionId: session.id, clientCommandId: 'CRASH', text: 'kept input' });
+const sent = await manager.send(session.id, { text: 'kept input' }, 'CRASH');
+callback(session.id, { type: 'item.complete', nativeTurnId: 'early', itemKey: 'answer', kind: 'assistant.message', data: { text: 'original answer' }, native: { source: 'controlled', turnId: 'early' } });
+process.send?.({ sessionId: session.id, nativeId: session.nativeId, turnId: sent.turnId });
+setInterval(() => undefined, 1000);

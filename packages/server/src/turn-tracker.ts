@@ -18,6 +18,11 @@ export interface TurnAssignment {
   late: boolean;
 }
 
+export interface NativeTurnBindings {
+  turn(sessionId: string, nativeTurnId: string): string | undefined;
+  bind(sessionId: string, nativeTurnId: string, turnId: string): void;
+}
+
 /**
  * Owns the only event-to-turn assignment rule.  Adapters may report a native
  * turn id, but that id is only a binding hint; the public identity is always
@@ -29,7 +34,7 @@ export class TurnTracker {
   private readonly active = new Map<string, string>();
   private readonly lastEnded = new Map<string, { turnId: string; at: number }>();
 
-  constructor(private readonly lateWindowMs = 10_000) {}
+  constructor(private readonly lateWindowMs = 10_000, private readonly bindings?: NativeTurnBindings) {}
 
   start(sessionId: string, turnId: string, at = Date.now()): void {
     const record: TurnRecord = { sessionId, turnId, state: 'starting', startedAt: at, open: new Set() };
@@ -41,21 +46,27 @@ export class TurnTracker {
     if (nativeTurnId === undefined || nativeTurnId === '') return;
     const record = this.turns.get(turnId);
     if (record === undefined) return;
-    if (record.nativeTurnId !== undefined && record.nativeTurnId !== nativeTurnId) return;
-    const existing = this.nativeToTurn.get(JSON.stringify([record.sessionId, nativeTurnId]));
+    if (record.nativeTurnId !== undefined) return;
+    const existing = this.publicTurn(record.sessionId, nativeTurnId);
     if (existing !== undefined && existing !== turnId) return;
+    // Commit the identity before accepting it in memory or publishing items.
+    // A failed write must leave this turn unbound so the caller can fence it.
+    this.bindings?.bind(record.sessionId, nativeTurnId, turnId);
     record.nativeTurnId = nativeTurnId;
     this.nativeToTurn.set(JSON.stringify([record.sessionId, nativeTurnId]), turnId);
   }
 
-  assignment(sessionId: string, event: AdapterEvent, at = Date.now()): TurnAssignment {
+  assignment(sessionId: string, event: AdapterEvent, at = Date.now(), bindUnknown = true): TurnAssignment {
     if (event.scope === 'session') return { turnId: null, late: false };
     const nativeTurnId = 'nativeTurnId' in event ? event.nativeTurnId : 'turnId' in event ? event.turnId : undefined;
     if (nativeTurnId !== undefined) {
-      const known = this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));
-      if (known !== undefined) return { turnId: known, late: this.isLate(sessionId, known, at) };
+      const known = this.publicTurn(sessionId, nativeTurnId);
+      if (known !== undefined) {
+        if (bindUnknown && known === this.active.get(sessionId)) this.bindNative(known, nativeTurnId);
+        return { turnId: known, late: known !== this.active.get(sessionId) || this.isLate(sessionId, known, at) };
+      }
       const current = this.active.get(sessionId);
-      if (current !== undefined && this.turns.get(current)?.nativeTurnId === undefined) {
+      if (bindUnknown && current !== undefined && this.turns.get(current)?.nativeTurnId === undefined) {
         this.bindNative(current, nativeTurnId);
         return { turnId: current, late: false };
       }
@@ -135,7 +146,7 @@ export class TurnTracker {
   nativeTurn(turnId: string): string | undefined { return this.turns.get(turnId)?.nativeTurnId; }
 
   publicTurn(sessionId: string, nativeTurnId: string): string | undefined {
-    return this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId]));
+    return this.nativeToTurn.get(JSON.stringify([sessionId, nativeTurnId])) ?? this.bindings?.turn(sessionId, nativeTurnId);
   }
 
   startedAt(turnId: string): number | undefined { return this.turns.get(turnId)?.startedAt; }

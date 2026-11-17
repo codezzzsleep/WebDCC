@@ -213,6 +213,7 @@ interface SessionRuntime {
   state: ClaudeNativeState;
   capabilities: string[];
   nativePending: Map<string, NativePending>;
+  dialogRefusals?: Map<string, { requestId: string; payload: UserDialogRequest; status: 'unsupported' | 'invalid' }>;
   questionGroups: Map<string, { items: EventData['question'][]; toolUseID?: string; submitted: boolean; cancelled?: boolean }>;
   envelopeId?: number;
   turnActive: boolean;
@@ -906,6 +907,7 @@ export class ClaudeAdapter implements AgentAdapter {
       tasks: [...runtime.state.tasks.values()], planTasks: [...runtime.state.plans.values()], usage: runtime.state.usage,
       rateLimit: runtime.state.rateLimit, auth: runtime.state.auth, structuredOutput: runtime.state.structuredOutput,
       interactions: [...runtime.nativePending.values()].map(({ requestId, kind, payload, status }) => ({ requestId, kind, payload, status })),
+      dialogRefusals: [...(runtime.dialogRefusals?.values() ?? [])],
       teams: { mode: 'native-surface', reason: '锁定 SDK 没有公开 Teams 成员管理/发送接口；任务 actor 来自原生事件' },
       controls: { perTaskStopAffordance: runtime.taskStopAffordance,
         taskStop: runtime.taskStopAffordance ? 'verified-public-sdk' : 'public-sdk-unverified',
@@ -1071,24 +1073,43 @@ export class ClaudeAdapter implements AgentAdapter {
 
   private async nativeCallback(sessionId: string, runtime: SessionRuntime | undefined, kind: 'elicitation' | 'dialog', payload: ElicitationRequest | UserDialogRequest, options: { signal: AbortSignal; requestId: string }): Promise<ElicitationResult | UserDialogResult> {
     const cancelled = kind === 'elicitation' ? { action: 'cancel' as const } : { behavior: 'cancelled' as const };
-    if (runtime === undefined || runtime.retiring || runtime.closePromise !== undefined || this.sessions.get(sessionId) !== runtime) return cancelled;
+    if (runtime === undefined || runtime.retiring || runtime.closePromise !== undefined || this.sessions.get(sessionId) !== runtime || kind === 'dialog' && options.signal.aborted) {
+      if (kind === 'dialog') throw nativeError('Claude 对话的运行实例或请求已结束，此客户端不能回应', 409);
+      return cancelled;
+    }
     const existing = runtime.nativePending.get(options.requestId);
     if (existing !== undefined) {
       if (existing.kind !== kind || JSON.stringify(existing.payload) !== JSON.stringify(payload)) {
-        this.emit(sessionId, { type: 'item.complete', itemKey: `claude-native-conflict-${options.requestId}`, kind: 'notice', data: { level: 'warning', text: 'Claude 原生 requestId 对应了冲突的交互内容，已取消冲突请求', nativeType: 'native-interaction/conflict' }, scope: 'session' });
+        this.emit(sessionId, { type: 'item.complete', itemKey: `claude-native-conflict-${options.requestId}`, kind: 'notice', data: { level: 'warning', text: kind === 'dialog' ? 'Claude 原生对话 requestId 对应了冲突的内容，未回应冲突请求' : 'Claude 原生 requestId 对应了冲突的交互内容，已取消冲突请求', nativeType: 'native-interaction/conflict' }, scope: 'session' });
+        if (kind === 'dialog') throw nativeError('Claude 原生对话 requestId 对应了冲突的内容', 409);
         return cancelled;
       }
       return existing.promise;
     }
-    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: kind, frame: { requestId: options.requestId, payload } })) return cancelled;
+    if (!this.observeNative(runtime, runtime.launchOpts, { i: ++runtime.frameSeq, t: 0, dir: 'in', ch: kind, frame: { requestId: options.requestId, payload } })) {
+      if (kind === 'dialog') throw nativeError('Claude 原生对话记录未接受，此客户端不能回应', 503);
+      return cancelled;
+    }
     if (kind === 'dialog') {
       const dialog = payload as UserDialogRequest;
-      const spec = this.options.dialogSpecs?.[dialog.dialogKind];
+      const spec = this.options.dialogSpecs !== undefined && Object.hasOwn(this.options.dialogSpecs, dialog.dialogKind)
+        ? this.options.dialogSpecs[dialog.dialogKind] : undefined;
       if (spec === undefined) {
-        this.emit(sessionId, { type: 'item.complete', itemKey: `claude-native-${options.requestId}`, kind: 'notice', data: { level: 'warning', text: `Claude 原生对话 ${dialog.dialogKind} 没有已验证的 Web renderer，已取消；可使用原生界面`, nativeType: 'request_user_dialog/unsupported' }, native: payload, scope: 'session' });
-        return cancelled;
+        runtime.dialogRefusals ??= new Map();
+        runtime.dialogRefusals.set(options.requestId, { requestId: options.requestId, payload: dialog, status: 'unsupported' });
+        if (runtime.dialogRefusals.size > 128) runtime.dialogRefusals.delete(runtime.dialogRefusals.keys().next().value!);
+        this.emit(sessionId, { type: 'item.complete', itemKey: `claude-native-${options.requestId}`, kind: 'notice', data: { level: 'warning', text: `Claude 原生对话 ${dialog.dialogKind} 未在此客户端声明，无法回应；请使用支持该类型的原生客户端`, nativeType: 'request_user_dialog/unsupported' }, native: { requestId: options.requestId, queryId: runtime.instanceId, payload }, scope: 'session' });
+        // An undeclared renderer's error is discarded by the native control
+        // contract. cancelled would settle another client's dialog instead.
+        throw nativeError('此客户端未声明该 Claude 原生对话类型', 409);
       }
-      try { spec.validateRequest(dialog.payload); } catch { return cancelled; }
+      try { spec.validateRequest(dialog.payload); } catch (cause) {
+        runtime.dialogRefusals ??= new Map();
+        runtime.dialogRefusals.set(options.requestId, { requestId: options.requestId, payload: dialog, status: 'invalid' });
+        if (runtime.dialogRefusals.size > 128) runtime.dialogRefusals.delete(runtime.dialogRefusals.keys().next().value!);
+        this.emit(sessionId, { type: 'item.complete', itemKey: `claude-native-${options.requestId}`, kind: 'notice', data: { level: 'warning', text: `Claude 原生对话 ${dialog.dialogKind} 的内容不符合此客户端的已验证合同，未回应`, nativeType: 'request_user_dialog/invalid' }, native: { requestId: options.requestId, queryId: runtime.instanceId, payload }, scope: 'session' });
+        throw Object.assign(nativeError('Claude 原生对话内容不符合已验证合同', 400), { cause });
+      }
     }
     let resolve: NativePending['resolve'] = () => undefined;
     const promise = new Promise<ElicitationResult | UserDialogResult>(res => { resolve = res; });
@@ -1110,7 +1131,10 @@ export class ClaudeAdapter implements AgentAdapter {
     if (options.signal.aborted) abort();
     try {
       const result = await promise;
-      if (runtime.retiring || runtime.closePromise !== undefined || this.sessions.get(sessionId) !== runtime) return cancelled;
+      if (runtime.retiring || runtime.closePromise !== undefined || this.sessions.get(sessionId) !== runtime) {
+        if (kind === 'dialog') throw nativeError('Claude 对话的运行实例已结束，此客户端不能回应', 409);
+        return cancelled;
+      }
       return result;
     } finally {
       options.signal.removeEventListener('abort', abort);

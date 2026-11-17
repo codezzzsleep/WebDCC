@@ -79,12 +79,12 @@ it('keeps MCP request identities, retries invalid form replies, deduplicates red
   } finally { await h.adapter.dispose('s'); }
 });
 
-it('cancels an unregistered opaque SDK dialog without hanging or declaring a renderer', async () => {
+it('refuses an undeclared opaque SDK dialog without hanging or settling it as user cancellation', async () => {
   const h = harness();
   try {
     await h.adapter.create({ sessionId: 's', cwd: '/tmp', providerId: null });
     expect(h.options().supportedDialogKinds).toBeUndefined();
-    expect(await h.options().onUserDialog!({ dialogKind: 'future-native-dialog', payload: {} }, { requestId: 'dialog', signal: new AbortController().signal })).toEqual({ behavior: 'cancelled' });
+    await expect(h.options().onUserDialog!({ dialogKind: 'future-native-dialog', payload: {} }, { requestId: 'dialog', signal: new AbortController().signal })).rejects.toThrow('未声明');
   } finally { await h.adapter.dispose('s'); }
 });
 
