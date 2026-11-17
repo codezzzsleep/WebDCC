@@ -240,7 +240,9 @@ export class LiveHub {
     }
     const hot = this.manager.hotSnapshot(sessionId);
     const snapshot: SnapshotMessage = { op: 'snapshot', sessionId, items: hot.items, throughSeq: cursor,
-      ...(hot.recovery === undefined ? {} : { recovery: hot.recovery }) };
+      ...(hot.recovery === undefined ? {} : { recovery: hot.recovery }),
+      ...(hot.completed === undefined ? {} : { completed: hot.completed }),
+      ...(hot.completedRecovery === undefined ? {} : { completedRecovery: hot.completedRecovery }) };
     this.flushClientDeltas(client, pending => pending.sessionId === sessionId);
     this.send(client, snapshot);
   }

@@ -332,6 +332,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       ...session,
       snapshot: hot.items,
       ...(hot.recovery === undefined ? {} : { recovery: hot.recovery }),
+      ...(hot.completed === undefined ? {} : { completed: hot.completed }),
+      ...(hot.completedRecovery === undefined ? {} : { completedRecovery: hot.completedRecovery }),
     };
   });
 
