@@ -1,0 +1,163 @@
+{
+  "formatVersion": 1,
+  "issues": [
+    78,
+    51,
+    49,
+    42
+  ],
+  "behavior": "Restores accepted Claude thinking/schema/checkpoint startup overrides after owned query/dispatcher recovery, with authenticated historical reads, current acceptance and unobserved model effect kept separate",
+  "sourceBase": "23d38ca9000c973e2170ca92043df5222feb2478",
+  "checkedSourceHead": "2badee8e27f00ba2ce033678248ccdd797fbfc09",
+  "sourceFingerprint": "d97e06280f0f6fb3439931151dfd4c68335f100fd8a2669a9d131bf12b2b36e8",
+  "sourceFilesSha256": {
+    "browser-tests/claude-configuration.spec.ts": "bdf3578ce3b456d3a601f5afadf9dfd0847aa438dc86a637d1d4cfccbb30a901",
+    "docs/claude-configuration-recovery.md": "df50ace17ddd6189332a4c6179b8afccc770284869c52ce9b541e7386e2d1a63",
+    "packages/adapters/claude/src/adapter.ts": "8c180e3e6f09dc156c2b10989360c10f92b6ffbfb7c5b915f49d7d515b62c6a1",
+    "packages/adapters/claude/test/configuration-boundaries.spec.ts": "0d962f2013ed13b91db346f03aa00810172aa54b7bf19c1daf9732e4b49646e5",
+    "packages/protocol/src/adapter.ts": "6fb92b32ca11cb673a21b9940224f9a93b9e09905dc21886e52fbb58b92bb8ce",
+    "packages/protocol/src/claude-configuration.ts": "948c0a5612517e0421cf2288838ada0bcc3fdfa62be7ac9d0a0695db097c7504",
+    "packages/protocol/src/events.ts": "9e129b00ae6d9c625ef4b5c4ed21161d032a6fb8664b6f0f799516127c244e7a",
+    "packages/protocol/src/index.ts": "ca373018c6f904f20a9875720c086022a78aeeaa0314f68841067bc3ca80de8f",
+    "packages/protocol/src/validate.ts": "a980448a75383122d469b906b4ce6efb68ec95cf3d9d27587081730a7ac2a4da",
+    "packages/protocol/test/claude-configuration.spec.ts": "e85824d0c0f364a3aff9b27a4ad6ddc1713a5bf01faa2fb14bdef3292be77676",
+    "packages/server/src/manager.ts": "951210f0a510ae787353940dd4b41c0752f38c6b30cf06fc2da392519028cfa3",
+    "packages/server/src/native-control-routes.ts": "9e2b870b103ef05b38b343fabd12c8bf95f388ed3e1503d7d8ba37d0a65612c3",
+    "packages/server/src/store.ts": "3b51240fa5cc83c52e264bdd01fab5c0a7fa3a5457d81e8a84092ff5a5b046f0",
+    "packages/server/test/claude-configuration-recovery.spec.ts": "64bc7c1abf9c8f0bd62912d651713adf4341ff82521b4a02d213e3eed643895a",
+    "packages/web/src/components/NativeControls.tsx": "7613af6375f5eb8a1720e7a3839c005878fdc6e86b0a9ef0e2769682a948a543",
+    "packages/web/src/components/SessionHeader.tsx": "6f77a1eb66834af81e639cb2ef25e37ce47bf132f9374600f73a4bf6b3dd66f9",
+    "packages/web/src/lib/api.ts": "34af397b58590d02393db7b94c12de33e6cdbb4aef5683e427e1575b581bf3c6"
+  },
+  "nativeContract": {
+    "sdkVersion": "0.3.322",
+    "cliVersion": "2.1.322",
+    "hashes": {
+      "binary": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+      "sdk": "1c70356fe073f6c5423fb7138e2f2f6580a790eb055ad247e5d7927f57b53e8b",
+      "schema": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f"
+    },
+    "nativeModified": false,
+    "restorable": [
+      "thinking",
+      "outputFormat",
+      "enableFileCheckpointing"
+    ],
+    "oneShotExcluded": "resumeSessionAt",
+    "CLIreturn": "inherit native, do not replay SDK overrides",
+    "acceptance": "owned native startup only, generated model effect not-observed"
+  },
+  "verification": {
+    "directed": {
+      "passed": 82,
+      "files": 15,
+      "includes": "source HTTP/two SQLite connections/reopen, context/redaction, native control, accepted query-close-gap fixes and previous own-dispatcher SIGKILL task recovery"
+    },
+    "currentSourceBrowser": {
+      "passed": 5,
+      "files": 4,
+      "mode": "actual source HTTP/SQLite/WebSocket/Chromium with controlled SDK/FakeAdapter",
+      "configurationFlow": {
+        "dispatcherReopen": true,
+        "readonlyBeforeConnect": true,
+        "exactRestoredOptions": true,
+        "explicitSingleQueryReconnect": true,
+        "reload": true,
+        "newSocketGeneration": true,
+        "switch": true,
+        "newTab": true,
+        "outputIdentityRetained": true,
+        "ownedSessionQueries": 6,
+        "transientCatalogQueries": 3
+      },
+      "screenshots": {
+        "last-accepted-before-connect": "be4b933ccc41355b03b35041cf38515bf34d8b1bee2b93b5af0143a7541bc01a",
+        "restored-current-configuration": "dbb3489f0c0dbb22da652dc42ffe8bce20f5b2bbdd371f5e4b9f0688f4379b66"
+      }
+    },
+    "types": [
+      "protocol",
+      "Claude",
+      "server",
+      "web"
+    ],
+    "changedLint": "passed",
+    "actualNewSDKorCLIRuns": 0,
+    "modelRequests": 0,
+    "liveProviderRequests": 0,
+    "capturedOfficialOutputReplay": {
+      "frames": 17,
+      "captureRunId": "b4c93f84-513e-4eb8-a737-a3747985d48e",
+      "originalMode": "actual official SDK/CLI with1controlled local model request, not live Provider",
+      "nativeResultId": "d9da3272-dbfe-48c8-8e98-3514f1c7a58f",
+      "newNativeOrModelCalls": 0
+    },
+    "capturedRealClaudeReplay": {
+      "frames": 156,
+      "invalid": 0,
+      "originalStatus": "failed",
+      "traceSha256": "159efc0462aa075b85a19d5c275dcdee1505c603e755c538a34e786eb1d6e584",
+      "newNativeOrModelCalls": 0
+    }
+  },
+  "retainedFailures": [
+    {
+      "evidence": "configuration-before.log",
+      "status": "4semantic baseline failures"
+    },
+    {
+      "evidence": "configuration-first.log",
+      "status": "4first implementation stale snapshot revision failures; catalogue-only state fixed"
+    },
+    {
+      "evidence": "configuration-boundaries-first.log",
+      "status": "18passed/1test reached close-before-init instead of intended deferred native init; awaited native init witness added"
+    },
+    {
+      "evidence": "configuration-web-types-first.log",
+      "status": "nullable Header session/agent type failure; Claude-only optional prop fixed"
+    },
+    {
+      "evidence": "configuration-browser-first.log",
+      "status": "FAILED after historical config/output recovery; total count included3transient catalog queries, later steps NOT_RUN; actual session writers now counted separately"
+    },
+    {
+      "evidence": "original156frame live capture",
+      "status": "FAILED retained, replay projection pass does not relabel original execution"
+    }
+  ],
+  "evidenceSha256": {
+    "configuration-before.log": "4e88a617b166cbbc8af1a01d75e8b42d4459f9681c2e22c8a0de9af632d66623",
+    "configuration-first.log": "313d2dbd4f082127806c112a64a1f34192bc3e6a64585f7821159afa75a4ab48",
+    "configuration-second.log": "bb6468d0a81229f270ec98cdb65f21a5114110e0c83af06d615e411a4cd0bb68",
+    "configuration-boundaries-first.log": "2dc2a628142795d1272686ba32d67e25f8415d140d0360b17b001b7b1a8ff3ea",
+    "configuration-boundaries-second.log": "f35f30053503c6aec97cdedbbc39cacd03d30ebb5a3714fc0705b63e75859a9d",
+    "configuration-protocol-types-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-claude-types-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-web-types-first.log": "910fad0b17f4f018dc3d9f256ba59eb0e1ed7ba26a271a0081cee19463675999",
+    "configuration-web-types-second.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-server-types-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-browser-first.log": "338a419520991205bc1bcdf9e6f476f537dd1c351173489e3b1800893d03cdee",
+    "configuration-browser-second.log": "084e698975daa386b01e1676799b603959833efc25afa4e22bf68208d70de6c2",
+    "configuration-matrix-current-main.log": "6d57b2c0b8fbe2b196ecef0acc7ddc36e38b6670cc44b86e7ba6017103d17ae5",
+    "configuration-protocol-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-claude-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-server-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-web-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-lint-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "configuration-browser-current-main.log": "3009bc65ac3b8f5b8c9348fd489beb209b77722ef59a630b75236f43c9e6eb97",
+    "configuration-native-output-replay.log": "0445b59ec6b4ae7bf72b3295729ff4f41cb5ea345ab3d4991429d4b500e8342c",
+    "configuration-native-output-replay.json": "3560e7cef8d6fc224bd0e49af81b3a9fae2ac204e3fee5149e9aee913c720ea0",
+    "configuration-real-frame-replay.log": "148c587f1b50545c32d2926ba8a28192a68a2256cbf9cb2ea91869784dd04d2a",
+    "configuration-real-frame-replay.json": "859939bd0553517256840ce02a3479ed86df681ce13acdd7f0b8de7b926f35af",
+    "configuration-browser/current-main/report.json": "6b443849c46f93370ab5c0264256674c115880890ad6519bdcfd85f9ea81ba66",
+    "configuration-browser/current-main/last-accepted-before-connect.png": "be4b933ccc41355b03b35041cf38515bf34d8b1bee2b93b5af0143a7541bc01a",
+    "configuration-browser/current-main/restored-current-configuration.png": "dbb3489f0c0dbb22da652dc42ffe8bce20f5b2bbdd371f5e4b9f0688f4379b66"
+  },
+  "remaining": [
+    "independent exact-head source acceptance and target-platform deployment",
+    "current Provider/model/native restart effects remain independently unaccepted",
+    "unsupported native dialog ownership defect318 and remaining Claude block/Teams/CLI specialty scopes"
+  ],
+  "delivery": "PR only, no merge/Issue closure/deploy by author"
+}

@@ -115,7 +115,7 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
           <button type="button" className="btn ghost" aria-expanded={nativeOpen} onClick={() => setNativeOpen(value => !value)}>原生控制</button>
           {nativeOpen ? <div ref={nativeDialogRef} role="dialog" aria-modal="true" aria-label="原生控制台" className="native-control-dialog" style={{ position: 'fixed', inset: '5vh 5vw', zIndex: 100, background: 'var(--bg)', color: 'var(--text-primary)', overflowY: 'auto', border: '1px solid var(--border-l1)', borderRadius: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: 16 }}><strong>原生控制台</strong><button type="button" className="btn" onClick={() => setNativeOpen(false)}>关闭</button></div>
-            <NativeControls key={sessionId} sessionId={sessionId} initialCommand={store.getNativeCommandRequest(sessionId)?.line} />
+            <NativeControls key={sessionId} sessionId={sessionId} agent={session?.agent === 'claude-code' ? 'claude-code' : undefined} initialCommand={store.getNativeCommandRequest(sessionId)?.line} />
           </div> : null}
           <span className="menu-anchor">
             <button
