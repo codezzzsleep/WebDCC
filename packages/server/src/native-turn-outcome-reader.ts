@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
-import { CURRENT_SCHEMA_VERSION } from './db.js';
+import { CURRENT_SCHEMA_VERSION, type Db } from './db.js';
 import { NativeEventStore } from './native-events.js';
 import { readNativeProjectionContext } from './native-projection-context.js';
-import { rebuildNativeTurnOutcomes, type NativeTurnOutcomeOptions, type NativeTurnOutcomes } from './native-turn-outcomes.js';
+import { rebuildNativeTurnOutcomes, type NativeTurnOutcomeOptions, type NativeTurnOutcomes, type NativeTurnOutcomeSource } from './native-turn-outcomes.js';
 
 /** No migration, source writes, Adapter calls, or live outcome application. */
 export function readNativeTurnOutcomes(databasePath: string, options: NativeTurnOutcomeOptions = {}): NativeTurnOutcomes {
@@ -10,8 +10,15 @@ export function readNativeTurnOutcomes(databasePath: string, options: NativeTurn
   try {
     const version = db.pragma('user_version', { simple: true });
     if (version !== CURRENT_SCHEMA_VERSION) throw new Error(`Native turn rebuild requires schema ${CURRENT_SCHEMA_VERSION}; found ${String(version)}`);
-    db.pragma('query_only = 1'); const native = new NativeEventStore(db);
-    return db.transaction(() => rebuildNativeTurnOutcomes({ schemaHash: native.schemaHash,
+    db.pragma('query_only = 1');
+    return db.transaction(() => rebuildNativeTurnOutcomes(storedNativeTurnOutcomeSource(db), options))();
+  } finally { db.close(); }
+}
+
+/** Read-only source shared by a single Store read transaction. */
+export function storedNativeTurnOutcomeSource(db: Db): NativeTurnOutcomeSource {
+  const native = new NativeEventStore(db);
+  return { schemaHash: native.schemaHash,
       list: (session, after, limit) => native.list(session, after, limit), get: id => native.get(id),
       restricted: session => native.restricted(session), diagnosticValue: value => native.diagnosticValue(value),
       context: id => readNativeProjectionContext(db, native, id),
@@ -23,6 +30,5 @@ export function readNativeTurnOutcomes(databasePath: string, options: NativeTurn
         JOIN events v ON v.native_envelope_id = e.id AND v.session_id = t.session_id AND v.turn_id = t.turn_id
         WHERE t.session_id = ? AND t.native_turn_id = ? AND e.native_id = ? AND e.source = 'mapping'
           AND e.disposition = 'accepted' LIMIT 1`).get(session, nativeTurn, nativeId) as { turn_id: string } | undefined)?.turn_id,
-    }, options))();
-  } finally { db.close(); }
+    };
 }

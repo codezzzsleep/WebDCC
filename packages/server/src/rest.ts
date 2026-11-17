@@ -127,6 +127,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       ...(event.native === undefined ? {} : { native: store.nativeEvents.diagnosticValue(event.native) }) },
       envelope: event.nativeEnvelopeId === undefined ? null : store.nativeEvents.get(event.nativeEnvelopeId) ?? null };
   });
+  app.get('/api/sessions/:id/native-terminal-results', async request => {
+    const { id } = request.params as { id: string };
+    manager.requireSession(id);
+    return store.nativeTerminalResults(id);
+  });
   app.get('/api/sessions/:id/runtime', async request => {
     const { id } = request.params as { id: string };
     manager.requireSession(id);

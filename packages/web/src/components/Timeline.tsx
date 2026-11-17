@@ -22,6 +22,8 @@ import { ClaudeStructuredOutput } from './ClaudeStructuredOutput.js';
 import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 import { CodexNativeToolStatus } from './CodexNativeToolStatus.js';
 import { HotRecoveryNotice, RecoveredHotItem } from './RecoveredHot.js';
+import { NativeTerminalResults } from './NativeTerminalResults.js';
+import { orderClaudeBlocks } from '@webdcc/protocol';
 import { CompletedRecoveryNotice, RecoveredCompletionCard } from './RecoveredCompletion.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
@@ -87,6 +89,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
       <OlderHistoryRecovery sessionId={sessionId} />
+      {!history ? <NativeTerminalResults sessionId={sessionId} /> : null}
       {!history ? <HotRecoveryNotice sessionId={sessionId} /> : null}
       {!history ? <CompletedRecoveryNotice sessionId={sessionId} /> : null}
       {!history ? store.getCompletedProjection(sessionId).filter(item => item.turnId === null).map(item =>
@@ -177,6 +180,10 @@ function TurnView({
   const changes = turn.changes.map((change) => ({ ...change, ...(change.diffFileId === undefined ? {} : { fileId: change.diffFileId }) }));
   // 运行中、或用户展开时显示全部步骤；完成后默认只显示摘要和最终回答（DSH 的做法）
   const showAll = running || expanded;
+  const claude = store.getSession(sessionId)?.agent === 'claude-code';
+  const displayedSteps = showAll ? visibleSteps : visibleSteps.filter(event => INTERACTIVE_KINDS.has(event.kind) || event.kind === 'error' || answerKeys.has(event.itemKey)
+    || failedFileOperation(event) || codexReviewItem(event)?.phase === 'finished');
+  const displayedLive = turn.live.filter(item => item.kind !== 'assistant.message' || !reviewCopy(item.data as EventData['assistant.message']));
   const waitingOnUser = turn.activity?.kind === 'waiting';
   const finalText = turn.answer.map((answer) => answer.text).join('\n');
 
@@ -251,7 +258,7 @@ function TurnView({
           </button>
         ) : null}
 
-        {showAll
+        {claude ? <ClaudeBlockRows events={displayedSteps} live={displayedLive} sessionId={sessionId} highlightSeq={highlightSeq} onOpenDiff={onOpenDiff} /> : <>{showAll
           ? visibleSteps.map((event) => (
               <ErrorBoundary key={`${event.itemKey}-${event.seq}`} label="timeline-item">
                 <StepRow event={event} highlight={highlightSeq === event.seq} onOpenDiff={onOpenDiff} />
@@ -266,7 +273,7 @@ function TurnView({
                 </ErrorBoundary>
               ))}
 
-        {turn.live.filter(item => item.kind !== 'assistant.message' || !reviewCopy(item.data as EventData['assistant.message'])).map((item) => <HotRow key={item.itemKey} sessionId={sessionId} item={item} />)}
+        {displayedLive.map((item) => <HotRow key={item.itemKey} sessionId={sessionId} item={item} />)}</>}
         {turn.recovered?.map(item => <RecoveredCompletionCard key={item.projectionId} item={item} />)}
 
         {turn.structuredOutputs?.map(output => <ClaudeStructuredOutput key={output.itemKey} output={output} />)}
@@ -298,6 +305,20 @@ function TurnView({
       </div>
     </section>
   );
+}
+
+function ClaudeBlockRows({ events, live, sessionId, highlightSeq, onOpenDiff }: {
+  events: StoredEvent[]; live: LiveItem[]; sessionId: string; highlightSeq?: number; onOpenDiff: (fileId: string, path: string) => void;
+}): React.ReactElement {
+  const rows = orderClaudeBlocks([
+    ...events.map(event => ({ data: event.data, event, live: undefined })),
+    ...live.map(item => ({ data: item.data, event: undefined, live: item })),
+  ]);
+  return <>{rows.map(row => row.event === undefined
+    ? <HotRow key={row.live!.itemKey} sessionId={sessionId} item={row.live!} />
+    : <ErrorBoundary key={`${row.event.itemKey}-${row.event.seq}`} label="timeline-item">
+      <StepRow event={row.event} highlight={highlightSeq === row.event.seq} onOpenDiff={onOpenDiff} />
+    </ErrorBoundary>)}</>;
 }
 
 function summaryLabel(turn: ProtocolTurnView): string {

@@ -13,8 +13,12 @@ it('real captured Write/Read/Bash blocks produce valid live and final file/tool 
       for (const event of events) if (event.type === 'item.start' || event.type === 'item.complete') expect(isValidEventData(event.kind, event.data), `${scenario} frame ${frame.i} ${event.kind}`).toBe(true);
       const raw = frame.frame as { type?: string; message?: { content?: { type: string; name?: string; id?: string; input?: { file_path?: string; command?: string } }[] } };
       if (raw.type !== 'assistant' || !Array.isArray(raw.message?.content)) continue;
-      for (const block of raw.message.content.filter(block => block.type === 'tool_use')) {
-        const start = events.find(event => event.type === 'item.start' && event.itemKey === `tool-${block.id}`) as Extract<AdapterEvent, { type: 'item.start' }> | undefined;
+      const blocks = raw.message.content.filter(block => block.type === 'tool_use');
+      const starts = events.filter((event): event is Extract<AdapterEvent, { type: 'item.start' }> => event.type === 'item.start');
+      expect(starts).toHaveLength(blocks.length);
+      for (const [index, block] of blocks.entries()) {
+        const start = starts[index];
+        expect(start?.native).toBe(frame.frame);
         if (block.name === 'Read') { expect(start?.kind).toBe('file.read'); expect(start?.data).toMatchObject({ path: block.input?.file_path }); }
         if (block.name === 'Write') { expect(start?.kind).toBe('file.change'); expect(start?.data).toMatchObject({ changes: [{ path: block.input?.file_path }] }); }
         if (block.name === 'Bash') { expect(start?.kind).toBe('command'); expect(start?.data).toMatchObject({ command: block.input?.command }); }
