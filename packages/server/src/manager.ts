@@ -554,7 +554,9 @@ export class SessionManager {
   private ensureRuntime(session: SessionDto, adapter: AgentAdapter, workspacePath: string, nativeId: string): Runtime {
     const existing = this.runtimes.get(session.id);
     if (existing !== undefined) { this.assertOwner(existing); if (nativeId !== '') existing.nativeId = nativeId; return existing; }
-    const identity = this.store.nativeOwners.acquire(this.ownerId, session.id, session.agent as AgentId, nativeId);
+    let identity: RuntimeIdentity;
+    try { identity = this.store.nativeOwners.acquire(this.ownerId, session.id, session.agent as AgentId, nativeId); }
+    catch (error) { throw inputNotSubmitted(error); }
     adapter.bindRuntime?.(session.id, identity);
     const journal = this.store.journal;
     const runtime: Runtime = {
