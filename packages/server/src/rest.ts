@@ -327,14 +327,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     const { id } = request.params as { id: string };
     const session = store.getSession(id);
     if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+    const hot = manager.hotSnapshot(id);
     return {
       ...session,
-      snapshot: manager.hotItems(id).map((item) => ({
-        itemKey: item.itemKey,
-        kind: item.kind,
-        data: item.data,
-        turnId: item.turnId,
-      })),
+      snapshot: hot.items,
+      ...(hot.recovery === undefined ? {} : { recovery: hot.recovery }),
     };
   });
 

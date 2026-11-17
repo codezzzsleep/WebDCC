@@ -20,6 +20,7 @@ import { DshQuestionWait, useDshQuestionWait } from './DshQuestionWait.js';
 import { ClaudeStructuredOutput } from './ClaudeStructuredOutput.js';
 import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 import { CodexNativeToolStatus } from './CodexNativeToolStatus.js';
+import { HotRecoveryNotice, RecoveredHotItem } from './RecoveredHot.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -84,6 +85,9 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     <MarkdownWorkspace.Provider value={store.getSession(sessionId)?.workspaceId}>
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
       <OlderHistoryRecovery sessionId={sessionId} />
+      {!history ? <HotRecoveryNotice sessionId={sessionId} /> : null}
+      {!history ? store.getHot(sessionId).filter(item => item.turnId === null && item.observation?.state === 'lost').map(item =>
+        <div className="timeline-inner" key={item.itemKey}><RecoveredHotItem item={item as LiveItem} /></div>) : null}
       {store.getSession(sessionId)?.agent === 'dsh' && !history ? <DshSubagentPanel key={`${sessionId}:${store.getSession(sessionId)?.nativeId ?? ''}`} sessionId={sessionId} nativeId={store.getSession(sessionId)?.nativeId} /> : null}
       {conversation !== undefined ? <div className="timeline-inner" role="status" data-testid="conversation-boundary">
         <span>{history ? `此前对话${conversation.previousTitle ? ` · ${conversation.previousTitle}` : ''}（只读）` : '当前对话'}</span>
@@ -153,6 +157,7 @@ function TurnView({
   const [cancelError, setCancelError] = useState('');
   const user = turn.user;
   const running = turn.state === 'starting' || turn.state === 'running' || turn.state === 'waiting';
+  const observationLost = turn.observation === 'lost';
   const steps = turn.steps;
   const reviewTexts = new Set(steps.flatMap(event => {
     const review = codexReviewItem(event); return review?.phase === 'finished' ? [review.text] : [];
@@ -176,7 +181,7 @@ function TurnView({
       : `${turn.state === 'interrupted' ? '已中断' : turn.state === 'failed' ? '出错' : '已完成'}${turn.durationMs === undefined ? '' : `，用时 ${duration(turn.durationMs)}`}`;
 
   return (
-    <section className={`turn ${running ? 'turn-running' : ''}`} id={turn.userSeq === undefined ? undefined : `e-${turn.userSeq}`}>
+    <section className={`turn ${running && !observationLost ? 'turn-running' : ''}`} id={turn.userSeq === undefined ? undefined : `e-${turn.userSeq}`}>
       {turn.pending !== undefined || user.text !== '' || (user.images?.length ?? 0) > 0 || user.contentParts?.parts.some(part => part.type !== 'text') ? (
         <div className="user-message" data-testid="user-message">
           <div className="user-bubble">
@@ -211,7 +216,7 @@ function TurnView({
 
       {turn.pending !== undefined ? null : (
         <div className="turn-header">
-          {running ? (
+          {observationLost ? <span className="turn-title" data-testid="turn-observation-lost">观测已丢失，原生结果待核对</span> : running ? (
             waitingOnUser ? (
               <span className="turn-title waiting" data-testid="turn-waiting">
                 <Icon name="shield" size={14} />
@@ -373,6 +378,7 @@ function ChangesCard({ changes, onOpenDiff }: { changes: ChangeSummary[]; onOpen
 }
 
 function HotRow({ sessionId, item }: { sessionId: string; item: LiveItem }): React.ReactElement {
+  if (item.observation?.state === 'lost') return <RecoveredHotItem item={item} />;
   const planText = nativePlanText(item);
   if (planText !== undefined) return <NativePlan text={planText} itemKey={item.itemKey} live />;
   const data = item.data as { text?: string; command?: string; outputTail?: string };

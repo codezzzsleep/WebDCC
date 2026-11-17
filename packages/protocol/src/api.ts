@@ -4,6 +4,7 @@ import type { ProbeResult, ModelOption } from './adapter.js';
 import type { BuildManifest } from './build.js';
 import type { AccessModeOption, PermissionState } from './permissions.js';
 import type { InputContent } from './input.js';
+import type { HotObservation, HotRecovery } from './hot-recovery.js';
 
 export interface AgentMeta extends ProbeResult {
   adapterKind?: 'real' | 'fake';
@@ -57,10 +58,12 @@ export interface SnapshotItemDto {
   kind: EventKind;
   data: EventData[EventKind];
   turnId?: string | null;
+  observation?: HotObservation;
 }
 
 export interface SessionDetailResponse extends SessionDto {
   snapshot: SnapshotItemDto[];
+  recovery?: HotRecovery;
 }
 
 export interface EventsPageResponse {
