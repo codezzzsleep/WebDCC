@@ -15,6 +15,12 @@ under `results` with `incomplete=true`; the source UI labels it “正文未完�
 Reading these fields does not modify stored rows. Earlier completed-result
 rows remain compatible.
 
+These start/delta observations retain `tool.call.status=running` for the
+unfinished body; `input.nativeStatus` still records the native child entity
+state. A caller's completed child snapshot cannot turn unfinished text chunks
+into immutable completed items or deduplicate two legitimate identical chunks.
+Existing turn, caller and completed-result observations keep their status rules.
+
 `item/completed.text` remains the authoritative complete result in the existing
 `output.result` field. It replaces the partial text, including when the native
 final text is empty or differs from the streamed text. Only this item completion

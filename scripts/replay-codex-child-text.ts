@@ -94,18 +94,18 @@ try {
   await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
   const showResult = async (activePage: Page, childId: string, nativeTurnId: string, itemId: string, text: string, incomplete: boolean) => {
     await activePage.getByTestId('codex-subagents-panel').waitFor();
-    await activePage.waitForFunction(identity => [...document.querySelectorAll('[data-testid="codex-child-result"]')].some(element =>
-      element.getAttribute('data-child-id') === identity.childId && element.getAttribute('data-native-turn-id') === identity.nativeTurnId
-      && element.getAttribute('data-native-item-id') === identity.itemId && element.querySelector('pre')?.textContent === identity.text),
-    { childId, nativeTurnId, itemId, text });
     const results = activePage.getByTestId('codex-child-result');
-    for (const result of await results.all()) {
-      if (await result.getAttribute('data-child-id') !== childId || await result.getAttribute('data-native-turn-id') !== nativeTurnId
-        || await result.getAttribute('data-native-item-id') !== itemId) continue;
-      const detail = result.locator('xpath=ancestor::details[1]');
-      if (await detail.getAttribute('open') === null) await detail.locator(':scope > summary').click();
-      await result.locator('pre').waitFor(); assert.equal(await result.locator('pre').textContent(), text);
-      assert.equal(await result.getByRole('status').count(), incomplete ? 1 : 0); return;
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      for (const result of await results.all()) {
+        if (await result.getAttribute('data-child-id') !== childId || await result.getAttribute('data-native-turn-id') !== nativeTurnId
+          || await result.getAttribute('data-native-item-id') !== itemId || await result.locator('pre').textContent() !== text) continue;
+        const detail = result.locator('xpath=ancestor::details[1]');
+        if (await detail.getAttribute('open') === null) await detail.locator(':scope > summary').click();
+        await result.locator('pre').waitFor(); assert.equal(await result.locator('pre').textContent(), text);
+        assert.equal(await result.getByRole('status').count(), incomplete ? 1 : 0); return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 25));
     }
     throw new Error('Original child/turn/item result not present in source UI');
   };

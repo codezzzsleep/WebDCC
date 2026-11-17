@@ -1403,10 +1403,13 @@ export class CodexAdapter implements AgentAdapter {
       children.set(child.childId, child);
       const itemKey = snapshot === undefined ? `codex-subagent-${child.childId}`
         : `codex-subagent-collab-${JSON.stringify([child.childId, snapshot.senderThreadId, snapshot.nativeTurnId ?? null, snapshot.callId, snapshot.callStatus])}`;
+      // A persisted text chunk is not an immutable native item completion.
+      const textInProgress = output !== null && typeof output === 'object'
+        && (Object.hasOwn(output, 'resultStart') || Object.hasOwn(output, 'resultDelta'));
       this.emit(sessionId, { type: 'item.complete', kind: 'tool.call', itemKey, scope: 'session',
         ...(snapshot?.nativeTurnId === undefined ? {} : { nativeTurnId: snapshot.nativeTurnId }),
         data: { name: 'subagent', label: child.agentPath ?? child.childId, input: { ...child },
-          status: child.nativeStatus === 'failed' || child.nativeStatus === 'errored' || child.nativeStatus === 'interrupted' ? 'failed'
+          status: textInProgress ? 'running' : child.nativeStatus === 'failed' || child.nativeStatus === 'errored' || child.nativeStatus === 'interrupted' ? 'failed'
             : child.nativeStatus === 'completed' ? 'completed' : child.nativeStatus === 'shutdown' ? 'stopped'
               : child.nativeStatus === 'pendingInit' ? 'pending' : child.nativeStatus === 'running' || child.nativeStatus === 'waiting' ? 'running' : 'unknown',
           ...(output === undefined ? {} : { output }) }, native: frame });
