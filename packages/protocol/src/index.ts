@@ -48,3 +48,4 @@ export { failedFileOperation, fileOperationError, nativeOperationDeclined } from
 export * from './codex-tool-call.js';
 export * from './native-terminal-results.js';
 export * from './codex-image-generation.js';
+export * from './codex-child-command.js';

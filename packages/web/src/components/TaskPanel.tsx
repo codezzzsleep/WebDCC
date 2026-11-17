@@ -5,6 +5,7 @@ import { store } from '../lib/store.js';
 import { agentText } from '../lib/agents.js';
 import { Icon, Spinner } from './Icon.js';
 import { ClaudeTaskPanel } from './ClaudeTaskPanel.js';
+import { CodexChildCommand } from './CodexChildCommand.js';
 
 /**
  * 输入框上方的任务条（DSH 的"任务"位置）。三家用同一个位置，内容是各自原生的：
@@ -44,6 +45,8 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
             {result.incomplete ? <p role="status">正文未完成</p> : null}
             <pre className="output">{result.text}</pre>
           </div>)}
+          {child.commands?.map(command => <CodexChildCommand key={JSON.stringify([command.nativeTurnId, command.itemId])}
+            sessionId={sessionId} childId={child.childId} command={command} />)}
           {child.snapshots?.map(snapshot => <details key={codexSubagentSnapshotKey(snapshot)} data-testid="codex-collab-observation"
             data-child-id={child.childId} data-native-call-id={snapshot.callId}>
             <summary>原生 {snapshot.tool} 观测 · {codexSubagentStatusLabel(snapshot.status)}</summary>

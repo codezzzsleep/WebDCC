@@ -35,7 +35,7 @@ import type {
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
 import { normalizeQuestionAnswer } from '@webdcc/protocol';
-import { nativeAccessMode, schemaHasSecrets, codexSubagentSnapshotKey, codexCollabCallStatus, codexNativeToolStatus, codexNativeImageStatus } from '@webdcc/protocol';
+import { nativeAccessMode, schemaHasSecrets, codexSubagentSnapshotKey, codexCollabCallStatus, codexNativeToolStatus, codexNativeImageStatus, validCodexCommandItem } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 import { nativeRequest, nativeSettingsNotification, validateNativeResult, validateNativeServerParams, type NativeParams } from './controls.js';
@@ -158,6 +158,7 @@ interface SessionRuntime {
   subagentTurns?: Map<string, Set<string>>;
   subagentTurnCompletions?: Set<string>;
   subagentMessageCompletions?: Set<string>;
+  subagentCommandCompletions?: Set<string>;
   collabCalls?: Map<string, { startFrame?: number; completed: boolean }>;
   subagentStateFrames?: Map<string, number>;
   subagentSnapshotStarts?: Map<string, number>;
@@ -183,9 +184,13 @@ function subagentMessageKey(childId: string, nativeTurnId: string | undefined, i
   return JSON.stringify([childId, nativeTurnId ?? null, itemId]);
 }
 
+function subagentCommandKey(childId: string, nativeTurnId: string, itemId: string): string {
+  return JSON.stringify([childId, nativeTurnId, itemId]);
+}
+
 function restoreSubagentState(runtime: SessionRuntime, children: readonly CodexSubagentView[]): void {
-  runtime.subagents = new Map(children.map(({ turns: _turns, results: _results, snapshots: _snapshots, ...identity }) => {
-    void _turns; void _results; void _snapshots;
+  runtime.subagents = new Map(children.map(({ turns: _turns, results: _results, snapshots: _snapshots, commands: _commands, ...identity }) => {
+    void _turns; void _results; void _snapshots; void _commands;
     return [identity.childId, identity];
   }));
   runtime.subagentTurns = new Map(children.map(child => [child.childId, new Set(Object.keys(child.turns))]));
@@ -193,6 +198,8 @@ function restoreSubagentState(runtime: SessionRuntime, children: readonly CodexS
     .filter(([, turn]) => turn.status !== 'inProgress').map(([turnId]) => JSON.stringify([child.childId, turnId]))));
   runtime.subagentMessageCompletions = new Set(children.flatMap(child => child.results.filter(result => result.incomplete !== true)
     .map(result => subagentMessageKey(child.childId, result.nativeTurnId, result.itemId))));
+  runtime.subagentCommandCompletions = new Set(children.flatMap(child => (child.commands ?? []).filter(command => command.incomplete !== true)
+    .map(command => subagentCommandKey(child.childId, command.nativeTurnId, command.itemId))));
   runtime.collabCalls = new Map(children.flatMap(child => (child.snapshots ?? []).filter(snapshot =>
     ['completed', 'failed', 'interrupted'].includes(snapshot.callStatus)).map(snapshot =>
       [codexSubagentSnapshotKey(snapshot), { completed: true }] as const)));
@@ -1417,13 +1424,13 @@ export class CodexAdapter implements AgentAdapter {
       children.set(child.childId, child);
       const itemKey = snapshot === undefined ? `codex-subagent-${child.childId}`
         : `codex-subagent-collab-${JSON.stringify([child.childId, snapshot.senderThreadId, snapshot.nativeTurnId ?? null, snapshot.callId, snapshot.callStatus])}`;
-      // A persisted text chunk is not an immutable native item completion.
-      const textInProgress = output !== null && typeof output === 'object'
-        && (Object.hasOwn(output, 'resultStart') || Object.hasOwn(output, 'resultDelta'));
+      // A persisted progress chunk is not an immutable native item completion.
+      const outputInProgress = output !== null && typeof output === 'object'
+        && ['resultStart', 'resultDelta', 'commandStart', 'commandDelta'].some(key => Object.hasOwn(output, key));
       this.emit(sessionId, { type: 'item.complete', kind: 'tool.call', itemKey, scope: 'session',
         ...(snapshot?.nativeTurnId === undefined ? {} : { nativeTurnId: snapshot.nativeTurnId }),
         data: { name: 'subagent', label: child.agentPath ?? child.childId, input: { ...child },
-          status: textInProgress ? 'running' : child.nativeStatus === 'failed' || child.nativeStatus === 'errored' || child.nativeStatus === 'interrupted' ? 'failed'
+          status: outputInProgress ? 'running' : child.nativeStatus === 'failed' || child.nativeStatus === 'errored' || child.nativeStatus === 'interrupted' ? 'failed'
             : child.nativeStatus === 'completed' ? 'completed' : child.nativeStatus === 'shutdown' ? 'stopped'
               : child.nativeStatus === 'pendingInit' ? 'pending' : child.nativeStatus === 'running' || child.nativeStatus === 'waiting' ? 'running' : 'unknown',
           ...(output === undefined ? {} : { output }) }, native: frame });
@@ -1501,6 +1508,7 @@ export class CodexAdapter implements AgentAdapter {
     observed.set(actor, knownTurns);
     const completedTurns = runtime.subagentTurnCompletions ??= new Set();
     const completedMessages = runtime.subagentMessageCompletions ??= new Set();
+    const completedCommands = runtime.subagentCommandCompletions ??= new Set();
     if (frame['method'] === 'turn/started' && nativeTurnId !== undefined) {
       if (knownTurns.has(nativeTurnId)) return;
       knownTurns.add(nativeTurnId);
@@ -1537,6 +1545,19 @@ export class CodexAdapter implements AgentAdapter {
         completedMessages.add(key);
         publish(child, { result });
       }
+    } else if (frame['method'] === 'item/commandExecution/outputDelta' && nativeTurnId !== undefined && nativeTurnId !== '' && typeof params['itemId'] === 'string'
+      && params['itemId'] !== '' && typeof params['delta'] === 'string') {
+      if (completedTurns.has(JSON.stringify([actor, nativeTurnId])) || completedCommands.has(subagentCommandKey(actor, nativeTurnId, params['itemId']))) return;
+      if (child.nativeTurnId === undefined || child.nativeTurnId === nativeTurnId) (runtime.subagentStateFrames ??= new Map()).set(actor, runtime.frameSeq);
+      publish(child, { commandDelta: { nativeTurnId, itemId: params['itemId'], text: params['delta'] } });
+    } else if ((frame['method'] === 'item/started' || frame['method'] === 'item/completed') && nativeTurnId !== undefined && nativeTurnId !== '' && validCodexCommandItem(item)) {
+      const id = item['id'] as string; const key = subagentCommandKey(actor, nativeTurnId, id);
+      if (completedCommands.has(key)) return;
+      if (frame['method'] === 'item/started' && completedTurns.has(JSON.stringify([actor, nativeTurnId]))) return;
+      if (child.nativeTurnId === undefined || child.nativeTurnId === nativeTurnId) (runtime.subagentStateFrames ??= new Map()).set(actor, runtime.frameSeq);
+      const command = { nativeTurnId, itemId: id, native: item };
+      if (frame['method'] === 'item/started') publish(child, { commandStart: command });
+      else { completedCommands.add(key); publish(child, { command }); }
     }
   }
 

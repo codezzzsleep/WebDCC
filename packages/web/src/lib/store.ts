@@ -6,6 +6,7 @@ import type { CompletedRecovery, RecoveredCompletion } from '@webdcc/protocol';
 import { isInputContent, isQueueInputReorderable, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { completeRecentEventPage } from './recent-event-history.js';
+import { FeedCheckpoint } from './feed-checkpoint.js';
 import { cache, type CachedSession } from './db.js';
 import { SyncConnection, type ConnectionState } from './connection.js';
 import { InputPreparationStore } from './input-preparation-store.js';
@@ -163,6 +164,7 @@ export class AppStore {
   currentSessionId: string | null = null;
   private visibleSessionIds = new Set<string>();
   feedSeq = 0;
+  private readonly feedCheckpoint = new FeedCheckpoint<CachedSession>((sessions, sequence) => cache.putFeedCheckpoint(sessions, sequence));
   /** 窄屏抽屉侧边栏（F9） */
   drawerOpen = false;
   connectionState: ConnectionState = 'connecting';
@@ -172,7 +174,7 @@ export class AppStore {
   constructor() {
     this.connection = new SyncConnection({
       getSubscriptions: () => this.subscriptions(),
-      getFeedAfter: () => this.feedSeq,
+      getFeedAfter: () => this.feedCheckpoint.cursor(),
       onMessage: (message) => this.handleMessage(message),
       onState: (state, attempt) => {
         if (state !== this.connectionState || state !== 'online') {
@@ -198,7 +200,10 @@ export class AppStore {
     performance.mark('wdcc:init-start');
     const cached = await cache.getSessions().catch(() => [] as CachedSession[]);
     for (const session of cached) this.sessions.set(session.id, session as SessionMeta);
-    this.feedSeq = (await cache.getMeta<number>('feedSeq').catch(() => 0)) ?? 0;
+    const [sequence, checkpoint] = await Promise.all([cache.getMeta<number>('feedSeq').catch(() => undefined),
+      cache.getMeta<{ formatVersion?: unknown; feedSeq?: unknown }>('feedCheckpoint').catch(() => undefined)]);
+    if (checkpoint?.formatVersion === 1 && checkpoint.feedSeq === sequence && (sequence === 0 || cached.length > 0)) this.feedCheckpoint.restore(sequence);
+    this.feedSeq = Math.max(this.feedSeq, this.feedCheckpoint.cursor());
     this.notify();
     this.connection.start();
     const readVisible = (): void => {
@@ -294,9 +299,12 @@ export class AppStore {
         break;
       }
       case 'feed': {
+        if (message.feedSeq <= this.feedSeq) {
+          this.feedCheckpoint.retry();
+          break;
+        }
         if (message.patch.queueRevision !== undefined) void this.refreshQueue(message.sessionId);
         this.feedSeq = Math.max(this.feedSeq, message.feedSeq);
-        void cache.setMeta('feedSeq', this.feedSeq);
         const existing = this.sessions.get(message.sessionId);
         const patch = message.patch as Record<string, unknown>;
         const incomingConversation = patch['conversation'] as SessionDto['conversation'];
@@ -336,7 +344,7 @@ export class AppStore {
           updatedAt: nowIso(),
         };
         this.sessions.set(message.sessionId, next);
-        void cache.putSession(next as CachedSession);
+        this.feedCheckpoint.record(next as CachedSession, message.feedSeq);
         if (patch['created'] === true && this.subscribed.has(message.sessionId)) this.connection.subscribe(message.sessionId, this.coverage.cursor(message.sessionId));
         if (existing !== undefined && !this.subscribed.has(message.sessionId) &&
           (next.status === 'waiting' && existing.status !== 'waiting' || next.status === 'idle' && (existing.status === 'running' || existing.status === 'waiting'))) this.bumpUnread(message.sessionId, next.title ?? '会话');
