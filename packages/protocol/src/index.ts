@@ -47,3 +47,4 @@ export const PROTOCOL_VERSION = 1;
 export { failedFileOperation, fileOperationError, nativeOperationDeclined } from './file-operation.js';
 export * from './codex-tool-call.js';
 export * from './native-terminal-results.js';
+export * from './codex-image-generation.js';
