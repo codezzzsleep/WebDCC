@@ -5,6 +5,7 @@ import type { PermissionState } from './permissions.js';
 import type { InputContent, InputIntent } from './input.js';
 import type { DshApprovalRetry } from './dsh-interactions.js';
 import type { DshQuestionRetry } from './dsh-question-replies.js';
+import type { HotObservation, HotRecovery } from './hot-recovery.js';
 
 export interface SubscribeItem {
   sessionId: string;
@@ -192,6 +193,7 @@ export interface SnapshotItem {
   kind: EventKind;
   data: EventData[EventKind];
   turnId?: string | null;
+  observation?: HotObservation;
 }
 
 export interface SnapshotMessage {
@@ -200,6 +202,7 @@ export interface SnapshotMessage {
   items: SnapshotItem[];
   /** Last stored event actually replayed to this subscriber; not a cursor instruction. */
   throughSeq?: number;
+  recovery?: HotRecovery;
 }
 
 export interface DeltaMessage {

@@ -27,6 +27,7 @@ import { InteractionStore } from './interactions.js';
 import { NativeOwnerStore } from './native-owners.js';
 import { NativeEventStore } from './native-events.js';
 import { NativeProjectionContexts } from './native-projection-context.js';
+import { recoverNativeHot, type HotSnapshot } from './native-hot-recovery.js';
 import { NativeReconciliationStore } from './native-reconciliation.js';
 import { NativeActionStore } from './native-actions.js';
 import { InputAdmissionStore } from './input-admission.js';
@@ -232,6 +233,15 @@ export class Store {
     this.projectionContexts = new NativeProjectionContexts(db, this.nativeEvents, this.nativeOwners);
     this.inputAdmissions = new InputAdmissionStore(db, this);
     this.restoreLegacyConversations();
+  }
+
+  recoveredHot(sessionId: string): HotSnapshot {
+    return this.db.transaction(() => {
+      const session = this.getSession(sessionId);
+      const owner = this.nativeOwners.get(sessionId);
+      return session === undefined ? { items: [] } : recoverNativeHot(this.nativeEvents, this.projectionContexts, session, this.allEvents(sessionId),
+        owner === undefined ? {} : { identity: { ownerId: owner.ownerId, generation: owner.generation, hostId: owner.hostId } });
+    })();
   }
 
   /** Older releases retained reset frames as unknown events. Restore only the

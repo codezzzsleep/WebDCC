@@ -38,6 +38,7 @@ import type {
   DshQuestionDelivery,
   DshQuestionRecoveryView,
   DshQuestionRetry,
+  HotObservation,
 } from '@webdcc/protocol';
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -56,6 +57,7 @@ import { payloadHash } from './command-journal.js';
 import type { FileStore } from './files.js';
 import { inputNotSubmitted, type QueueChange } from './input-admission.js';
 import { isDshApprovalAttempt, sameDshApproval, isDshQuestionAnswers, sameDshQuestionDelivery } from '@webdcc/protocol';
+import type { HotSnapshot } from './native-hot-recovery.js';
 
 const TURN_SETTLE_MS = 1_500;
 const hotKey = (turnId: string | null, itemKey: string): string => JSON.stringify([turnId, itemKey]);
@@ -65,6 +67,7 @@ export interface HotItem {
   kind: EventKind;
   data: EventData[EventKind];
   turnId: string | null;
+  observation?: HotObservation;
 }
 
 export interface Runtime {
@@ -112,6 +115,7 @@ export class SessionManager {
   private readonly controlRuntime = new AsyncLocalStorage<{ sessionId: string; runtime?: Runtime }>();
   private readonly queuePreparations = new Map<string, number>();
   private readonly uncertainSessions = new Set<string>();
+  private readonly recoveredSessions = new Set<string>();
   private readonly ownerId = randomUUID();
   private files?: FileStore;
   private hooks: ManagerHooks = {
@@ -138,6 +142,7 @@ export class SessionManager {
     this.turns = new TurnTracker(10_000, this.store.nativeHistory);
     this.files = options.files;
     const recoverable = new Set(this.store.nativeOwners.recoverableSessions());
+    for (const sessionId of recoverable) this.recoveredSessions.add(sessionId);
     this.store.journal.recover([...recoverable]);
     for (const row of this.store.interactions.recover([...recoverable])) this.persistInteractionSubmission(row, 'uncertain');
     // An unfinished legacy turn has no verifiable native outcome. Preserve it
@@ -481,7 +486,19 @@ export class SessionManager {
   }
 
   hotItems(sessionId: string): HotItem[] {
-    return [...(this.runtimes.get(sessionId)?.hot.values() ?? [])];
+    return this.hotSnapshot(sessionId).items as HotItem[];
+  }
+
+  hotSnapshot(sessionId: string): HotSnapshot {
+    const runtime = this.runtimes.get(sessionId);
+    if (runtime !== undefined) return { items: [...runtime.hot.values()] };
+    // A second manager does not claim to have lost another live executor.
+    if (!this.recoveredSessions.has(sessionId) && !this.uncertainSessions.has(sessionId)) return { items: [] };
+    const owner = this.store.nativeOwners.get(sessionId);
+    if (owner !== undefined && ['opening', 'active', 'closing'].includes(owner.state)) return { items: [] };
+    try { return this.store.recoveredHot(sessionId); }
+    catch { return { items: [], recovery: { formatVersion: 1, coverage: 'partial', throughEnvelopeId: 0, hasMore: false,
+      issues: [{ envelopeId: null, reason: 'hot-recovery-read-failed' }], omittedIssues: 0 } }; }
   }
 
   // ---------- 生命周期 ----------
