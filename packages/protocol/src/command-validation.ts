@@ -1,11 +1,14 @@
 import type { ClientMessage, Command } from './sync.js';
 import { isInputContent } from './input.js';
+import { isDshQuestionAnswers } from './dsh-question-replies.js';
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256;
 const opaqueId = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 65536;
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 32 && value.every(id);
 const sequence = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+const retry = (value: unknown): boolean => record(value) && Object.keys(value).every(key => ['commandId', 'revision'].includes(key))
+  && id(value['commandId']) && typeof value['revision'] === 'string' && /^[a-f0-9]{64}$/.test(value['revision']);
 
 export function isCommand(value: unknown): value is Command {
   if (!record(value) || !id(value['clientCommandId'])) return false;
@@ -18,9 +21,10 @@ export function isCommand(value: unknown): value is Command {
       && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
       && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
     case 'approve': return opaqueId(value['approvalId']) && opaqueId(value['optionId'])
-      && (value['retryOf'] === undefined || record(value['retryOf']) && Object.keys(value['retryOf']).every(key => ['commandId', 'revision'].includes(key))
-        && id(value['retryOf']['commandId']) && typeof value['retryOf']['revision'] === 'string' && /^[a-f0-9]{64}$/.test(value['retryOf']['revision']));
+      && (value['retryOf'] === undefined || retry(value['retryOf']));
     case 'answer': return opaqueId(value['questionId']) && value['answer'] !== undefined
+      && (value['retryOf'] === undefined || retry(value['retryOf']) && value['intent'] === undefined && value['expectedTurnId'] === undefined
+        && record(value['answer']) && Object.keys(value['answer']).length === 1 && isDshQuestionAnswers(value['answer']['answers']))
       && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
       && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
     case 'interrupt': return sequence(value['createdAt']);

@@ -1,4 +1,4 @@
-import type { CommandState, DshApprovalAttempt, EventData, StoredEvent } from '@webdcc/protocol';
+import { isDshQuestionAttempt, type CommandState, type DshApprovalAttempt, type DshQuestionAttempt, type EventData, type StoredEvent } from '@webdcc/protocol';
 import type { Db } from './db.js';
 
 type Kind = 'approve' | 'answer';
@@ -7,6 +7,7 @@ export interface InteractionRow {
   session_id: string; kind: Kind; id: string; group_id: string; state: State;
   revision: number; command_id: string | null; request: string; error: string | null;
 }
+export interface DshQuestionOriginal extends DshQuestionAttempt { questionId: string; commandId: string; sent: boolean; sentCommandId?: string }
 type ObservedEvent = Pick<StoredEvent, 'sessionId' | 'kind' | 'data'>;
 const conflict = (message: string, code = 'conflict'): Error => Object.assign(new Error(message), { statusCode: 409, code });
 
@@ -41,6 +42,10 @@ export class InteractionStore {
     const request = kind === 'approve' ? { options: (event.data as EventData['approval.request']).options.map(option => ({ id: option.id })) } : { isSecret: question.isSecret === true, ...(question.asyncReply === undefined ? {} : { asyncReply: question.asyncReply }), ...(question.resolution === undefined ? {} : { resolution: question.resolution }),
       ...(question.dshQuestion === undefined ? {} : { dshQuestion: question.dshQuestion }) };
     const previous = this.get(event.sessionId, kind, id);
+    // This private immutable batch belongs to the original command, not the
+    // newest waterfall projection. Keep it across re-delivery and recovery.
+    const original = previous === undefined ? undefined : this.dshQuestionOriginal(previous);
+    const indexedRequest = original === undefined ? request : { ...request, dshQuestionOriginal: original };
     const oldDsh = previous === undefined ? undefined : (JSON.parse(previous.request) as { dshQuestion?: EventData['question']['dshQuestion'] }).dshQuestion;
     if (kind === 'answer' && oldDsh?.phase === 'open' && oldDsh.nativeId === question.dshQuestion?.nativeId
       && oldDsh.callId === question.dshQuestion?.callId && question.dshQuestion?.phase === 'continued'
@@ -56,9 +61,9 @@ export class InteractionStore {
       if (!cancelled) this.commandState(previous, question.resolution === 'external' || question.resolution === 'outcome-unknown' || question.resolution === 'native-resolved' ? 'uncertain' : 'completed');
     }
     this.db.prepare('INSERT OR IGNORE INTO interactions (session_id, kind, id, group_id, state, revision, request) VALUES (?, ?, ?, ?, ?, 1, ?)').run(event.sessionId, kind, id, groupId, state, JSON.stringify(request));
-    if (state === 'resolved' || state === 'cancelled') this.db.prepare('UPDATE interactions SET state = ?, request = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?').run(state, JSON.stringify(request), event.sessionId, kind, id);
+    if (state === 'resolved' || state === 'cancelled') this.db.prepare('UPDATE interactions SET state = ?, request = ?, revision = revision + 1 WHERE session_id = ? AND kind = ? AND id = ?').run(state, JSON.stringify(indexedRequest), event.sessionId, kind, id);
     else if (question.dshQuestion !== undefined && kind === 'answer') this.db.prepare('UPDATE interactions SET request = ? WHERE session_id = ? AND kind = ? AND id = ?')
-      .run(JSON.stringify(request), event.sessionId, kind, id);
+      .run(JSON.stringify(indexedRequest), event.sessionId, kind, id);
     else if (question.groupId !== undefined && kind === 'answer') this.db.prepare("UPDATE interactions SET group_id = ? WHERE session_id = ? AND kind = ? AND id = ? AND state IN ('pending', 'failed')").run(groupId, event.sessionId, kind, id);
   }
   claim(sessionId: string, kind: Kind, id: string, commandId: string): InteractionRow {
@@ -112,6 +117,55 @@ export class InteractionStore {
   restoreDshApprovalRetry(row: InteractionRow, original: InteractionRow): void {
     // A definitely unsubmitted retry does not erase the original uncertainty.
     this.db.prepare("UPDATE interactions SET state = 'uncertain', command_id = ?, error = ?, revision = revision + 1 WHERE session_id = ? AND kind = 'approve' AND id = ? AND state = 'failed' AND command_id = ?")
+      .run(original.command_id, original.error, row.session_id, row.id, row.command_id);
+  }
+  dshQuestionOriginal(row: InteractionRow): DshQuestionOriginal | undefined {
+    const value: unknown = (JSON.parse(row.request) as Record<string, unknown>)['dshQuestionOriginal'];
+    if (!isDshQuestionAttempt(value)) return undefined;
+    const metadata = value as DshQuestionOriginal;
+    return typeof metadata.questionId === 'string' && typeof metadata.commandId === 'string' && typeof metadata.sent === 'boolean' ? metadata : undefined;
+  }
+  bindDshQuestion(row: InteractionRow, attempt: DshQuestionAttempt): void {
+    this.db.transaction(() => {
+      const current = this.get(row.session_id, 'answer', row.id);
+      if (row.kind !== 'answer' || current?.state !== 'sending' || current.command_id !== row.command_id || !isDshQuestionAttempt(attempt))
+        throw conflict('问题在原答案保存前已变化，未提交');
+      const group = this.group(current); const ids = attempt.delivery.itemIds.map(id => `${attempt.delivery.eventId}:${id}`);
+      if (group.length !== ids.length || group.some(item => !ids.includes(item.id)
+        || (JSON.parse(item.request) as { isSecret?: boolean }).isSecret === true
+        || item.id !== row.id && item.state !== 'collected')) throw conflict('原问题组答案或身份不完整，未提交');
+      const original: DshQuestionOriginal = { ...attempt, questionId: row.id, commandId: row.command_id!, sent: false };
+      for (const item of group) this.db.prepare("UPDATE interactions SET request = ?, revision = revision + 1 WHERE session_id = ? AND kind = 'answer' AND id = ?")
+        .run(JSON.stringify({ ...JSON.parse(item.request) as Record<string, unknown>, dshQuestionOriginal: original }), row.session_id, item.id);
+    })();
+  }
+  /** A known submitted reply remains non-retryable after recover() changes its index state. */
+  markDshQuestionSent(row: InteractionRow): void {
+    this.db.transaction(() => {
+      const current = this.get(row.session_id, 'answer', row.id);
+      const original = current === undefined ? undefined : this.dshQuestionOriginal(current);
+      if (row.kind !== 'answer' || current?.command_id !== row.command_id || original === undefined || original.sent) return;
+      for (const item of this.group(current)) this.db.prepare("UPDATE interactions SET request = ?, revision = revision + 1 WHERE session_id = ? AND kind = 'answer' AND id = ?")
+        .run(JSON.stringify({ ...JSON.parse(item.request) as Record<string, unknown>, dshQuestionOriginal: { ...original, sent: true, sentCommandId: row.command_id } }), row.session_id, item.id);
+    })();
+  }
+  reclaimDshQuestion(expected: InteractionRow[], questionId: string, commandId: string): InteractionRow {
+    return this.db.transaction(() => {
+      const anchor = expected.find(item => item.id === questionId);
+      const current = anchor === undefined ? undefined : this.get(anchor.session_id, 'answer', questionId);
+      const group = current === undefined ? [] : this.group(current);
+      if (anchor === undefined || current?.state !== 'uncertain' || group.length !== expected.length || group.some(item => {
+        const old = expected.find(value => value.id === item.id);
+        return old === undefined || item.kind !== 'answer' || !['uncertain', 'collected'].includes(item.state)
+          || item.revision !== old.revision || item.command_id !== old.command_id || item.state !== old.state || item.request !== old.request;
+      })) throw conflict('原问题组恢复状态已变化，请重新核对');
+      this.db.prepare("UPDATE interactions SET state = 'sending', command_id = ?, error = NULL, revision = revision + 1 WHERE session_id = ? AND kind = 'answer' AND id = ?")
+        .run(commandId, current.session_id, questionId);
+      return this.get(current.session_id, 'answer', questionId)!;
+    })();
+  }
+  restoreDshQuestionRetry(row: InteractionRow, original: InteractionRow): void {
+    this.db.prepare("UPDATE interactions SET state = 'uncertain', command_id = ?, error = ?, revision = revision + 1 WHERE session_id = ? AND kind = 'answer' AND id = ? AND state = 'failed' AND command_id = ?")
       .run(original.command_id, original.error, row.session_id, row.id, row.command_id);
   }
   finish(row: InteractionRow, collected = false, confirmed = true): boolean {

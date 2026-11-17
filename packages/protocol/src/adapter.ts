@@ -14,6 +14,7 @@ import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions,
 import type { DshQuestionWaitOpening } from './dsh-questions.js';
 import type { ClaudeQueryConfiguration } from './claude-configuration.js';
 import type { DshApprovalAttempt, DshApprovalDelivery } from './dsh-interactions.js';
+import type { DshQuestionAttempt, DshQuestionDelivery } from './dsh-question-replies.js';
 
 export type AgentId = 'dsh' | 'codex' | 'claude-code';
 
@@ -181,7 +182,7 @@ export interface AgentAdapter {
   respond(sessionId: string, d: ApprovalDecision): Promise<void | NativeInteractionSubmission>;
   /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
   cancelPending?(sessionId: string): Promise<void | NativeInteractionSubmission>;
-  answer?(sessionId: string, questionId: string, answer: unknown): Promise<void | AnswerSubmission>;
+  answer?(sessionId: string, questionId: string, answer: unknown, prepared?: DshQuestionAttempt): Promise<void | AnswerSubmission>;
   claimDshQuestionWait?(sessionId: string, questionId: string, signal: AbortSignal): Promise<DshQuestionWaitOpening | undefined>;
   timeoutDshQuestion?(sessionId: string, questionId: string, signal: AbortSignal, guard?: () => void): Promise<void>;
   setModel?(sessionId: string, model: string): Promise<void>;
@@ -210,6 +211,9 @@ export interface AgentAdapter {
   nativeState?(sessionId: string): unknown | Promise<unknown>;
   dshApprovalDelivery?(sessionId: string, approvalId: string): Promise<DshApprovalDelivery | undefined>;
   retryDshApproval?(sessionId: string, attempt: DshApprovalAttempt, revision: string): Promise<void | { confirmed: boolean }>;
+  dshQuestionDelivery?(sessionId: string, questionId: string): Promise<DshQuestionDelivery | undefined>;
+  prepareDshQuestionAnswer?(sessionId: string, questionId: string, answer: unknown): Promise<DshQuestionAttempt | undefined>;
+  retryDshQuestion?(sessionId: string, questionId: string, attempt: DshQuestionAttempt, revision: string): Promise<AnswerSubmission>;
   executeNativeControl?(sessionId: string, action: unknown): Promise<unknown>;
   readNativeHistory?(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown>;
   nativeProcessStart?(sessionId: string, params: NativeProcessStart, onOutput: (delta: NativeProcessDelta) => void): Promise<NativeProcessCompletion>;

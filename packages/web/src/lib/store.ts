@@ -1,6 +1,6 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
 import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse, QueueSnapshot } from '@webdcc/protocol';
-import type { DshApprovalRecoveryView } from '@webdcc/protocol';
+import type { DshApprovalRecoveryView, DshQuestionRecoveryView } from '@webdcc/protocol';
 import { isInputContent, isQueueInputReorderable, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { completeRecentEventPage } from './recent-event-history.js';
@@ -908,7 +908,7 @@ export class AppStore {
       void cache.deleteOutbox(command.clientCommandId);
       return;
     }
-    const recovery = command.op === 'approve' && command.retryOf !== undefined && state === 'awaiting';
+    const recovery = command.retryOf !== undefined && state === 'awaiting';
     if (state !== 'pending' && !recovery || this.dispatchedInteractions.has(command.clientCommandId)) return;
     this.dispatchedInteractions.add(command.clientCommandId);
     this.connection.sendCommand(command);
@@ -1078,6 +1078,22 @@ export class AppStore {
     const submission = this.getInteractionSubmission(sessionId, 'approve', approvalId);
     const command = submission === undefined ? undefined : this.outbox.get(submission.commandId)?.command;
     return this.getSession(sessionId)?.agent === 'dsh' && command?.op === 'approve' && command.retryOf !== undefined;
+  }
+
+  retryDshQuestion(sessionId: string, recovery: Extract<DshQuestionRecoveryView, { status: 'available' }>): boolean {
+    if (this.getSession(sessionId)?.agent !== 'dsh' || !this.isInteractionSynced(sessionId, 'answer', recovery.questionId)
+      || ['pending', 'sent', 'queued'].includes(this.getInteractionSubmission(sessionId, 'answer', recovery.questionId)?.status ?? '')) return false;
+    const answers = recovery.items.map(({ id, selected, custom }) => ({ id, selected: [...selected], ...(custom === undefined ? {} : { custom }) }));
+    const command = { op: 'answer' as const, clientCommandId: ulid(), sessionId, questionId: recovery.questionId,
+      answer: { answers }, retryOf: recovery.retryOf };
+    if (['resolved', 'unknown'].includes(this.interactionState(command))) return false;
+    this.enqueue(command); return true;
+  }
+
+  isDshQuestionRetry(sessionId: string, questionId: string): boolean {
+    const submission = this.getInteractionSubmission(sessionId, 'answer', questionId);
+    const command = submission === undefined ? undefined : this.outbox.get(submission.commandId)?.command;
+    return this.getSession(sessionId)?.agent === 'dsh' && command?.op === 'answer' && command.retryOf !== undefined;
   }
 
   answer(sessionId: string, questionId: string, answer: unknown, delivery?: { intent?: 'send' | 'queue' | 'steer'; expectedTurnId?: string }): void {
