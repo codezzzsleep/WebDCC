@@ -121,6 +121,21 @@ export const cache = {
     return cursor?.value.seq ?? 0;
   },
 
+  async putFeedCheckpoint(sessions: CachedSession[], feedSeq: number): Promise<void> {
+    if (sessions.length === 0 || !Number.isSafeInteger(feedSeq) || feedSeq < 1) throw new Error('Invalid feed checkpoint');
+    const database = await db(); const tx = database.transaction(['sessions', 'meta'], 'readwrite');
+    const writes: Promise<unknown>[] = [tx.done];
+    try {
+      for (const session of sessions) writes.push(tx.objectStore('sessions').put(session));
+      writes.push(tx.objectStore('meta').put(feedSeq, 'feedSeq'));
+      writes.push(tx.objectStore('meta').put({ formatVersion: 1, feedSeq }, 'feedCheckpoint'));
+      await Promise.all(writes);
+    } catch (error) {
+      try { tx.abort(); } catch { /* The failed transaction is already settled. */ }
+      await Promise.allSettled(writes); throw error;
+    }
+  },
+
   async putSession(session: CachedSession): Promise<void> {
     const database = await db();
     await database.put('sessions', session);

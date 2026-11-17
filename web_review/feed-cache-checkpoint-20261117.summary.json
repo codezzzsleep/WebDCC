@@ -1,0 +1,96 @@
+{
+  "formatVersion": 1,
+  "issue": 354,
+  "relatedIssues": [
+    47,
+    42
+  ],
+  "baseCommit": "0ca29ef32d4b459b0ea8cf2b0f3359168cace177",
+  "behavior": "Feed continuation commits with complete session state in one transaction; failed/replayed feed cannot roll current metadata or unread state back",
+  "sourceFiles": {
+    "packages/web/src/lib/feed-checkpoint.ts": "695c6cb550ba37c62ac9878c15465b8f2fcba5d06e92a1b789f06964b2a62a4b",
+    "packages/web/src/lib/db.ts": "f8f07bcecb257ae18bb5b00c0cf547081c821bf20c1b5ca63d621f8ad4635669",
+    "packages/web/src/lib/store.ts": "5f41cce80a5c1d601da2b14a55f0f7201d024304b20437d17181b47a193496ca",
+    "packages/web/src/lib/feed-checkpoint.spec.ts": "1e64154f5dd119dfe429063c2ee8da8d7015531630d48031854cae4286e9b7b6",
+    "packages/web/src/lib/store-feed-checkpoint.spec.ts": "e06faa5730dbc289d2823110aca47c8f87913a38701a3e2dab3f59f5ce72c0c6",
+    "browser-tests/feed-cache-checkpoint.spec.ts": "89c1cd9e9d2ba61f2115fed06b73bec02fbba659968af6fdfe41d2d6a08d495e",
+    "docs/feed-cache-checkpoints.md": "b2139bf7958858daa804f560b51fa252eafe219ef78b580685e3073403df366b"
+  },
+  "verification": {
+    "sourceRegression": {
+      "passed": 48,
+      "files": 5,
+      "job": "a44c00f7-d967-4aa9-9b47-3c4220658ee9",
+      "log": "feed-checkpoint-light-types-lint-resumed-gate-0.log"
+    },
+    "sourceBrowser": {
+      "passed": 1,
+      "job": "9eeba539-131e-4043-b611-daab8b8043a8",
+      "scope": "actual IDB sessions+meta abort,9 source WS records replay on samepage reconnect,own Chromium SIGKILL,profile reopen,3 controlled Agent transmitted metadata and permissions recovery",
+      "log": "feed-checkpoint-resumed-browser-corrected-0.log"
+    },
+    "typesAndLint": "sourceWeb/scripts/newunit/newbrowser/changedlint passed; unaffected units bound to input hashes",
+    "build": "exacthead final evidence bound in PR and private ledger after commit",
+    "independentSourceAcceptance": "pending existing reviewer",
+    "deployment": "not performed"
+  },
+  "preservedFailures": [
+    {
+      "log": "feed-checkpoint-controlled-before.log",
+      "scope": "controlled cache promises,actual AppStore cursor advanced before commit",
+      "failed": 1
+    },
+    {
+      "log": "feed-checkpoint-audit-final-before-0.log",
+      "scope": "actual IDB abort left sessions empty/feedSeq6,own SIGKILL/reopen hello6 skips metadata",
+      "failed": 1
+    },
+    {
+      "log": "feed-checkpoint-replay-before.log",
+      "scope": "actual AppStore current-model/current-native reverted to old values after replay",
+      "failed": 1
+    },
+    {
+      "log": "feed-checkpoint-resumed-browser-0.log",
+      "scope": "samepage replay/SIGKILL/3metadata recovered; extra nativeId assertion assumed field absent in wire; type/lint suffix not executed",
+      "failed": 1
+    },
+    {
+      "log": "feed-checkpoint-audit-0.log",
+      "scope": "nonexistent fixture create REST endpoint404; abort/SIGKILL untriggered"
+    },
+    {
+      "log": "feed-checkpoint-audit-corrected-0.log",
+      "scope": "SIGKILL triggered; cache expression/reopen auth fixture incomplete; later scopes untriggered"
+    },
+    {
+      "logs": [
+        "feed-checkpoint-light-types-lint-2.log",
+        "feed-checkpoint-light-types-lint-corrected-0.log"
+      ],
+      "scope": "test-only Node/DOM/vite type configuration failures; lint suffix not executed; original logs retained"
+    }
+  ],
+  "evidenceIndexHash": "c3de6220a26439d8b38d26435e0dbed5bf98c85d51dd27da454845404786fc22",
+  "evidenceArtifactCount": 216,
+  "evidenceSha256": {
+    "feed-checkpoint-confirmed-gap.json": "4fcb10660ebd23fb9976f489707213d0c062f1323dd96a0878bac97965a2caee",
+    "feed-checkpoint-light-types-lint-resumed-gate-0.log": "341175b57753b7cede8951a3ff01a09c410a66078c0d79dbce01bfcb802084ae",
+    "feed-checkpoint-resumed-browser-corrected-0.log": "cb7f41e6fe06de14ddc0e0429359f1091f90984778a1ec730b22bcd41ab4e086",
+    "feed-checkpoint-resumed-browser-corrected/passed.json": "6d77f161bdca62e77ea1cc8a70d0e5839fafabf43b97ee6b51a8dced6a93aa83",
+    "feed-checkpoint-replay-before.log": "2e769c6b647c57a18d86d6253577a8cbcbdec94367c50ba83bf6b2670b96c40b"
+  },
+  "nativeEvidence": {
+    "officialNativeBusinessCalls": 0,
+    "providerCalls": 0,
+    "paidCalls": 0,
+    "controlledAdapter": "fake-1.0.0",
+    "actualBrowser": "Chromium158.0.8127.18",
+    "nativeIdScope": "backend original IDs are retained; creation feed does not transmit nativeId; provided nativeId preservation is tested with controlled AppStore feed",
+    "scope": "actual local HTTP/WS/IndexedDB/Chromium plus controlled Adapter; no live Provider or121 acceptance"
+  },
+  "remainingScope": [
+    "#357 separately tracks startup snapshot reads mixing concurrent checkpoints",
+    "NP45/46 native Host/writer authority,NP47 remaining projection contracts,NP30/54 profile ownership remain separate"
+  ]
+}
