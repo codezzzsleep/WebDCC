@@ -18,7 +18,9 @@ The database must already use the supported schema (currently 15). The
 reader opens it with `readonly` and `query_only`; it does not run migrations,
 recover owners or update live events, queues, receipts or native state.
 The output is atomically replaced with mode 0600. The database and its
-SQLite journals cannot be chosen as the output path.
+SQLite journals cannot be chosen as the output path. The check resolves the
+source database and the existing output parent directory, so directory aliases
+and a linked source database cannot bypass this restriction (Issue #332).
 
 Artifact format and projection version 1 cover immutable `item.complete`
 mappings: assistant messages, reasoning, completed file reads and terminal

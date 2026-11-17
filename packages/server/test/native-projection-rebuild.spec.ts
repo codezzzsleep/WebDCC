@@ -1,7 +1,7 @@
 import { fork, execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -178,6 +178,46 @@ it('SIGKILL after raw commit rebuilds through a readonly database without native
     try { expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 0 }); expect(new Store(db).nativeOwners.get(ready.sessionId)?.state).toBe('opening'); }
     finally { db.close(); }
   } finally { if (child.exitCode === null && child.signalCode === null) { const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited; } await rm(directory, { recursive: true, force: true }); }
+});
+
+it.each(['', '-wal', '-shm', '-journal'])('the real CLI refuses directory aliases of its source database%s without changing original bytes', async suffix => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-rebuild-alias-')); const real = join(directory, 'real'); const alias = join(directory, 'alias');
+  await mkdir(real); await symlink(real, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const path = join(real, 'db.sqlite'); const db = openDb(path); setup(db); db.close();
+  const target = path + suffix;
+  if (suffix !== '') await writeFile(target, 'owned journal bytes must stay unchanged');
+  const databaseBefore = await readFile(path); const targetBefore = await readFile(target);
+  const cli = join(import.meta.dirname, '../../../scripts/rebuild-native-projection.ts');
+  try {
+    for (const [source, output] of [[path, join(alias, `db.sqlite${suffix}`)], [join(alias, 'db.sqlite'), target]]) {
+      await expect(execute(process.execPath, ['--import', 'tsx', cli, '--database', source, '--output', output]))
+        .rejects.toThrow('Projection artifact cannot replace its source database or journal');
+      expect(await readFile(path)).toEqual(databaseBefore); expect(await readFile(target)).toEqual(targetBefore);
+    }
+    await evidence(`cli-directory-alias${suffix || '-database'}`, { databaseHash: createHash('sha256').update(databaseBefore).digest('hex'),
+      targetHash: createHash('sha256').update(targetBefore).digest('hex'), suffix, sourceAndOutputDirectoryAliasesRejected: true });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('the real CLI resolves a linked source database before protecting the original database and journals', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-rebuild-source-link-')); const path = join(directory, 'db.sqlite');
+  const db = openDb(path); setup(db); db.close(); const source = join(directory, 'source-link.sqlite');
+  await symlink(path, source, 'file'); const before = await readFile(path);
+  const cli = join(import.meta.dirname, '../../../scripts/rebuild-native-projection.ts');
+  try {
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+      const target = path + suffix; if (suffix !== '') await writeFile(target, 'owned linked-source journal bytes');
+      const targetBefore = await readFile(target);
+      await expect(execute(process.execPath, ['--import', 'tsx', cli, '--database', source, '--output', target]))
+        .rejects.toThrow('Projection artifact cannot replace its source database or journal');
+      expect(await readFile(path)).toEqual(before); expect(await readFile(target)).toEqual(targetBefore);
+    }
+    for (const suffix of ['-wal', '-shm', '-journal']) await rm(path + suffix);
+    const output = join(directory, 'independent.json');
+    await execute(process.execPath, ['--import', 'tsx', cli, '--database', source, '--output', output]);
+    expect(JSON.parse(await readFile(output, 'utf8')).items).toHaveLength(1); expect((await stat(output)).mode & 0o777).toBe(0o600);
+    expect(await readFile(path)).toEqual(before);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 it('the real CLI produces byte-stable private artifacts and refuses future schema or database/journal output targets', async () => {
