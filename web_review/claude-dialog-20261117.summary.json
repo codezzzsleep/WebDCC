@@ -1,0 +1,238 @@
+{
+  "formatVersion": 1,
+  "issues": [
+    318,
+    84,
+    51,
+    42
+  ],
+  "behavior": "Undeclared/unowned/invalid Claude SDK dialogs are refused without a user-cancelled settlement; native call identity and read-only refusal status remain visible through recovery",
+  "sourceBase": "93f4be82dab006545fb5ff555b11900713acd617",
+  "checkedSourceHead": "9595fadc77575d5f27752055b70ff431d2dfab87",
+  "sourceFingerprint": "840fbfb5d2871dab9ffc86f8f5ac36d44fc3152a7439ab8ea713eb09315d588b",
+  "sourceFilesSha256": {
+    "browser-tests/claude-dialog-ownership.spec.ts": "5a5ee8c6ab01ea406c040035675418578170f4d4591eecc5aa91c60c63188d70",
+    "docs/claude-dialog-ownership.md": "3bb4311551eabee047e31798d892645dee867891d9b4df06aeb9005018af212c",
+    "packages/adapters/claude/src/adapter.ts": "5797870bbe543558f2b1b01daed9ed12090c969bd6c9d47705a9063a827e84a2",
+    "packages/adapters/claude/test/dialog-ownership.spec.ts": "1a5258e08d8b7cc072ad1ddcfa056502060ff1e083fd504589c21d61088e1db9",
+    "packages/adapters/claude/test/dialog-sdk.spec.ts": "bbe84e78e45842ac110b985fea27f8499cc19aca73565429fd512257aa3b9f93",
+    "packages/adapters/claude/test/fixtures/dialog-cli.mjs": "91c4c6dec209fe63a8d2631a38a982028e611653b23cc71c0a3af762a3373838",
+    "packages/adapters/claude/test/native-contracts.spec.ts": "bb080503752fc84a9cdb891062bb150374e32690d4c69b35c464e71e7faf1a22",
+    "packages/web/src/components/NativeControls.tsx": "93d89452274744e4910bfc4ccc647f33563f5abc487207e2d04150191d11e21a"
+  },
+  "nativeContract": {
+    "sdkVersion": "0.3.322",
+    "pinnedCLI": "2.1.322",
+    "schemaSha256": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f",
+    "sdkSha256": "1c70356fe073f6c5423fb7138e2f2f6580a790eb055ad247e5d7927f57b53e8b",
+    "nativeModified": false,
+    "retainedDocConflict": "UserDialogRequest older unknown/cancelled vs control union undeclared renderer must not cancel; actual SDK does not filter kinds",
+    "nullContract": "only if already answered out-of-band; not used for a response never sent",
+    "supportedKinds": "only verified trusted host specs, production none; no exported per-kind schema catalog"
+  },
+  "verification": {
+    "sourceDirected": {
+      "passed": 37,
+      "files": 5
+    },
+    "sourceBrowser": {
+      "passed": 1,
+      "scope": "controlled SDK, production HTTP/SQLite/WebSocket/Chromium, exact native request/tool/kind, renderer disabled, reload/new socket/session switch"
+    },
+    "types": [
+      "Claude",
+      "web"
+    ],
+    "changedLint": "passed",
+    "actualUnmodifiedSDKControlledProtocol": {
+      "before": "1semanticfailure/2genuine fixture responses passed",
+      "after": "3/3passed, original captures reused; subsequent current source directed checks cover refusal state/own-key/owner validation",
+      "captures": [
+        {
+          "scope": "before",
+          "runId": "81fc1aad-5bdd-4ee4-84b0-b627df135a8d",
+          "mode": "known",
+          "outcome": "passed",
+          "originalSourceFingerprint": "f4e38893d3de0d2a107bd3e13d99700370daf669f955efad5892244a51763d5b",
+          "response": {
+            "subtype": "success",
+            "request_id": "dialog-81fc1aad-5bdd-4ee4-84b0-b627df135a8d",
+            "response": {
+              "behavior": "completed",
+              "result": {
+                "exact": [
+                  false,
+                  null,
+                  0,
+                  "中文"
+                ]
+              }
+            }
+          },
+          "officialCLIExecuted": false,
+          "childExited": true,
+          "userPrompts": 0,
+          "modelRequests": 0,
+          "providerRequests": 0
+        },
+        {
+          "scope": "before",
+          "runId": "caa1d5bc-dd7a-4db0-9bb5-3a771a12f06a",
+          "mode": "known",
+          "outcome": "passed",
+          "originalSourceFingerprint": "f4e38893d3de0d2a107bd3e13d99700370daf669f955efad5892244a51763d5b",
+          "response": {
+            "subtype": "success",
+            "request_id": "dialog-caa1d5bc-dd7a-4db0-9bb5-3a771a12f06a",
+            "response": {
+              "behavior": "cancelled"
+            }
+          },
+          "officialCLIExecuted": false,
+          "childExited": true,
+          "userPrompts": 0,
+          "modelRequests": 0,
+          "providerRequests": 0
+        },
+        {
+          "scope": "before",
+          "runId": "d2085762-f45b-4cef-b5e3-6bb980a3932d",
+          "mode": "unknown",
+          "outcome": "failed",
+          "originalSourceFingerprint": "f4e38893d3de0d2a107bd3e13d99700370daf669f955efad5892244a51763d5b",
+          "response": {
+            "subtype": "success",
+            "request_id": "dialog-d2085762-f45b-4cef-b5e3-6bb980a3932d",
+            "response": {
+              "behavior": "cancelled"
+            }
+          },
+          "officialCLIExecuted": false,
+          "childExited": true,
+          "userPrompts": 0,
+          "modelRequests": 0,
+          "providerRequests": 0
+        },
+        {
+          "scope": "after",
+          "runId": "1baabcd3-3377-48e0-8955-4ce107ee7655",
+          "mode": "known",
+          "outcome": "passed",
+          "originalSourceFingerprint": "e25d49871f7c378ca93c77c281f36bfb32949ff55321a42163f029bf00dcee9d",
+          "response": {
+            "subtype": "success",
+            "request_id": "dialog-1baabcd3-3377-48e0-8955-4ce107ee7655",
+            "response": {
+              "behavior": "completed",
+              "result": {
+                "exact": [
+                  false,
+                  null,
+                  0,
+                  "中文"
+                ]
+              }
+            }
+          },
+          "officialCLIExecuted": false,
+          "childExited": true,
+          "userPrompts": 0,
+          "modelRequests": 0,
+          "providerRequests": 0
+        },
+        {
+          "scope": "after",
+          "runId": "419e0605-874f-4c1d-bfb7-cf1d7324d6f2",
+          "mode": "unknown",
+          "outcome": "passed",
+          "originalSourceFingerprint": "e25d49871f7c378ca93c77c281f36bfb32949ff55321a42163f029bf00dcee9d",
+          "response": {
+            "subtype": "error",
+            "request_id": "dialog-419e0605-874f-4c1d-bfb7-cf1d7324d6f2",
+            "error": "此客户端未声明该 Claude 原生对话类型"
+          },
+          "officialCLIExecuted": false,
+          "childExited": true,
+          "userPrompts": 0,
+          "modelRequests": 0,
+          "providerRequests": 0
+        },
+        {
+          "scope": "after",
+          "runId": "6e1b9630-5e6d-4a72-b620-9c5606b1e530",
+          "mode": "known",
+          "outcome": "passed",
+          "originalSourceFingerprint": "e25d49871f7c378ca93c77c281f36bfb32949ff55321a42163f029bf00dcee9d",
+          "response": {
+            "subtype": "success",
+            "request_id": "dialog-6e1b9630-5e6d-4a72-b620-9c5606b1e530",
+            "response": {
+              "behavior": "cancelled"
+            }
+          },
+          "officialCLIExecuted": false,
+          "childExited": true,
+          "userPrompts": 0,
+          "modelRequests": 0,
+          "providerRequests": 0
+        }
+      ],
+      "officialCLIExecuted": false,
+      "liveProvider": false
+    }
+  },
+  "evidenceSha256": {
+    "dialog-sdk/before/81fc1aad-5bdd-4ee4-84b0-b627df135a8d/report.json": "7f5ce50a94a3806fcb36e227cdc6c36fa346bfd9bd2d2bd19d50ee5cc501c224",
+    "dialog-sdk/before/81fc1aad-5bdd-4ee4-84b0-b627df135a8d/wire.jsonl": "b38d294595d8f0270a91362a0a02d50a2c523245dbce8a9f982118daf65568c0",
+    "dialog-sdk/before/caa1d5bc-dd7a-4db0-9bb5-3a771a12f06a/report.json": "aa22dffa2b17d832104045a2e4fe218e299e83884f6f2ec1fa520a2c4c6227b3",
+    "dialog-sdk/before/caa1d5bc-dd7a-4db0-9bb5-3a771a12f06a/wire.jsonl": "ada844e49bf7f87aea2ba02063f2efb478c2ff6928b13957fea452cb3f6d6b9f",
+    "dialog-sdk/before/d2085762-f45b-4cef-b5e3-6bb980a3932d/report.json": "142a0883ada1cb1b520b60880ce8ceff633bee682045410dad793c1cf14e605e",
+    "dialog-sdk/before/d2085762-f45b-4cef-b5e3-6bb980a3932d/wire.jsonl": "40d38e1d6155dbd7cb1f35a369b4df86e029aaf075fbb556758446924663ca6a",
+    "dialog-sdk/after/1baabcd3-3377-48e0-8955-4ce107ee7655/report.json": "03d874129c804c2c03958ceaabf6c30b3582e3aea9815e23c9187804bed7badc",
+    "dialog-sdk/after/1baabcd3-3377-48e0-8955-4ce107ee7655/wire.jsonl": "365308bdb10861f9b6e74e5f22b6d150f35618eaae6366af51066d77da08534c",
+    "dialog-sdk/after/419e0605-874f-4c1d-bfb7-cf1d7324d6f2/report.json": "65b5047b9a6b452fdace7bcfed1b1fd9de493735d3be4ba775c6726f05f95550",
+    "dialog-sdk/after/419e0605-874f-4c1d-bfb7-cf1d7324d6f2/wire.jsonl": "57f2905f924aaefd9160782365fce3a2a5fd815759656451b752ef2f23a53c31",
+    "dialog-sdk/after/6e1b9630-5e6d-4a72-b620-9c5606b1e530/report.json": "86874a041e29b7cbcc950e9b9e4856bab0421c2125b04237ea3361a7fe74b4d8",
+    "dialog-sdk/after/6e1b9630-5e6d-4a72-b620-9c5606b1e530/wire.jsonl": "9bc38e00e40df9aacb8f6e08aa30ec4504f92667e58ba40e720a83026e3140d2",
+    "dialog-sdk-before.log": "d75a9af8f369a287e1c12949e4b2d9e30fdc370844f71669a171fc7d7bf119b5",
+    "dialog-sdk-after.log": "b594afff3633e0e3e6248f95bcca80f487486890d32df127d86ff76daaf5cf8d",
+    "dialog-matrix-first.log": "17ac59f33a5952d78be7e02ea54d02b74c1132f7e24cb265c8bd44c4d2f8ab60",
+    "dialog-matrix-final.log": "474302120dff4ec9c50e099a834368aa007224680bc637cf2d8723640fad3987",
+    "dialog-lint-first.log": "91660c2d0bb941b5d0f39b6d09cd2d7cc28e4ec9d8181fe90a5038c909101985",
+    "dialog-lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dialog-types-first.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dialog-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dialog-web-types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dialog-browser-first.log": "9d5b38bff1849fabb78a1761d885bd57d9942af95bb4bc62c708ef768cc838bd",
+    "dialog-browser-second.log": "e8de813c12aa2ef623bc6218e114307c8cdac4cca5310627a115103d4fee95f9",
+    "dialog-browser-third.log": "f07a3eb85bd0ac4a80c64b6dc2ad7d87fe98e733a8c9bce7e292510daacaac02",
+    "dialog-current-claude-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dialog-current-web-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dialog-current-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dialog-browser-current.log": "3517408928848cda9d8feaedbd09603a180c155fe4ccff8e2f08dee753f3eb11"
+  },
+  "retainedFailures": [
+    {
+      "evidence": "dialog-sdk-before.log",
+      "status": "SDK actually serialized success/cancelled for undeclared dialog"
+    },
+    {
+      "evidence": "dialog-lint-first.log",
+      "status": "fixture mjs process global not defined; explicit node:process import fixed"
+    },
+    {
+      "evidence": "dialog-browser-first.log",
+      "status": "FAILED, notice persisted outside turn but not visible in chat; adapter refusal state/native-control view implemented"
+    },
+    {
+      "evidence": "dialog-browser-second.log",
+      "status": "FAILED/timedout; direct store-created other session had no public feed creation; normal FakeAdapter manager creation fixed"
+    }
+  ],
+  "remaining": [
+    "real concrete dialogKind payload/result contracts are not exported by locked SDK; no fake renderer declared",
+    "actual official CLI/multi-client native deadline or withdrawal/current Provider/target acceptance not triggered by controlled peer",
+    "other Claude block/model/Teams/CLI specialty implementation audit continues"
+  ],
+  "delivery": "PR only; independent source review/merge/Issue closure/deployment other windows"
+}
