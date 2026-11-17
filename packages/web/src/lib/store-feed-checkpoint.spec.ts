@@ -32,3 +32,34 @@ it.each(['legacy', 'valid', 'wrong-version', 'wrong-sequence', 'empty-cache', 'i
     if (kind !== 'empty-cache') expect(store.getSession('cached-session')?.title).toBe('original title');
   } finally { vi.unstubAllGlobals(); }
 });
+
+it('same-page replay after a failed checkpoint cannot roll back model/native identity and can persist the already received state', async () => {
+  mocks.putFeedCheckpoint.mockRejectedValue(new Error('transaction failed'));
+  const store = new AppStore(); const connection = mocks.options.at(-1)!;
+  const first = { op: 'feed' as const, feedSeq: 1, sessionId: 'replay-session', patch: { created: true, agent: 'codex' as const, workspaceId: 'original', model: 'old-model', nativeId: 'old-native' } };
+  connection.onMessage(first); await new Promise(resolve => setTimeout(resolve, 0));
+  connection.onMessage({ ...first, feedSeq: 2, patch: { model: 'current-model', nativeId: 'current-native' } }); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(connection.getFeedAfter()).toBe(0); mocks.putFeedCheckpoint.mockResolvedValue(undefined);
+  connection.onMessage(first); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(store.getSession('replay-session')).toMatchObject({ model: 'current-model', nativeId: 'current-native' });
+  expect(connection.getFeedAfter()).toBe(2);
+});
+
+it.each(['codex', 'claude-code', 'dsh'] as const)('%s replay preserves current permissions and unread state while repairing its failed checkpoint', async agent => {
+  mocks.putFeedCheckpoint.mockRejectedValue(new Error('transaction failed'));
+  const store = new AppStore(); const connection = mocks.options.at(-1)!;
+  const originalPermissions = { requested: null, effective: null, phase: 'inherit' as const, revision: 1 };
+  const currentPermissions = { requested: null, effective: 'native-observation', phase: 'observed' as const, revision: 9, policy: { opaque: [false, 0, 'original'] } };
+  connection.onMessage({ op: 'feed', feedSeq: 1, sessionId: agent, patch: { created: true, agent, status: 'idle', model: 'old', nativeId: 'old-native', permissions: originalPermissions } });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const waiting = { op: 'feed' as const, feedSeq: 2, sessionId: agent, patch: { status: 'waiting' as const, model: 'old', nativeId: 'old-native', permissions: originalPermissions } };
+  connection.onMessage(waiting); await new Promise(resolve => setTimeout(resolve, 0));
+  connection.onMessage({ op: 'feed', feedSeq: 3, sessionId: agent, patch: { status: 'running', model: 'current', nativeId: 'current-native', permissions: currentPermissions } });
+  await new Promise(resolve => setTimeout(resolve, 0)); expect(store.unread.get(agent)).toBe(1);
+  mocks.putFeedCheckpoint.mockResolvedValue(undefined);
+  for (let i = 0; i < 10; i++) connection.onMessage(waiting);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(store.getSession(agent)).toMatchObject({ agent, status: 'running', model: 'current', nativeId: 'current-native', permissions: currentPermissions });
+  expect(store.unread.get(agent)).toBe(1); expect(connection.getFeedAfter()).toBe(3);
+  expect(mocks.putFeedCheckpoint).toHaveBeenLastCalledWith([expect.objectContaining({ id: agent, nativeId: 'current-native', permissions: currentPermissions })], 3);
+});

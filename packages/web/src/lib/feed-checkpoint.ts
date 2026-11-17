@@ -20,6 +20,12 @@ export class FeedCheckpoint<T extends { id: string }> {
     this.pendingSeq = Math.max(this.pendingSeq, sequence); this.version++;
     this.schedule();
   }
+  retry(): void {
+    // A replay requests one retry of retained snapshots, including a write
+    // still in flight. It must not replace them with an older feed patch.
+    this.version++;
+    this.schedule();
+  }
   private schedule(): void {
     if (this.scheduled || this.writing || this.pending.size === 0) return;
     this.scheduled = true;

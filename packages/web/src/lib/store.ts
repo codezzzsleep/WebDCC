@@ -299,6 +299,10 @@ export class AppStore {
         break;
       }
       case 'feed': {
+        if (message.feedSeq <= this.feedSeq) {
+          this.feedCheckpoint.retry();
+          break;
+        }
         if (message.patch.queueRevision !== undefined) void this.refreshQueue(message.sessionId);
         this.feedSeq = Math.max(this.feedSeq, message.feedSeq);
         const existing = this.sessions.get(message.sessionId);

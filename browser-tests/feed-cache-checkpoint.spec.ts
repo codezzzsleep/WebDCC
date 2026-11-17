@@ -48,8 +48,21 @@ it('actual IndexedDB session abort and own Chromium SIGKILL cannot checkpoint fe
       await expect.poll(() => page.locator(`a[href="/s/${session.id}"]`).count()).toBeGreaterThan(0);
     }
     await expect.poll(() => page.evaluate('window.__feedCacheAborts.length')).toBeGreaterThan(0);
+    for (const session of sessions) {
+      await ctx.manager.rename(session.id, `Current ${session.agent}`);
+      await expect.poll(() => page.locator(`a[href="/s/${session.id}"]`).textContent()).toContain(`Current ${session.agent}`);
+    }
+    // Close only this fixture's server sockets and observe the actual
+    // same-page reconnect replay while all session cache writes still fail.
+    const oldHelloCount = hello.length; const oldFrameCount = frames.length;
+    for (const socket of ctx.app.websocketServer.clients) socket.close(1012, 'fixture reconnect');
+    await expect.poll(() => hello.length).toBeGreaterThan(oldHelloCount);
+    await expect.poll(() => frames.length).toBeGreaterThan(oldFrameCount);
+    expect((hello.at(-1) as { feedAfter: number }).feedAfter).toBe(0);
+    for (const session of sessions) await expect.poll(() => page.locator(`a[href="/s/${session.id}"]`).textContent()).toContain(`Current ${session.agent}`);
     const beforeCache = await page.evaluate(readCache) as { sessions: { id: string }[]; feedSeq: number };
-    const before = { sessions, beforeCache, hello, frames, errors, version, aborted: await page.evaluate('window.__feedCacheAborts'), owners: sessions.map(session => ctx.store.nativeOwners.get(session.id)), feed: ctx.store.feedSince(0, 500) };
+    expect(beforeCache.feedSeq).toBe(0); expect(beforeCache.sessions).toEqual([]);
+    const before = { sessions, beforeCache, hello, frames, errors, version, samePageReplay: { oldHelloCount, oldFrameCount, replayedFrames: frames.length - oldFrameCount }, aborted: await page.evaluate('window.__feedCacheAborts'), owners: sessions.map(session => ctx.store.nativeOwners.get(session.id)), feed: ctx.store.feedSince(0, 500) };
     const first = context.browser()!; const protocol = await first.newBrowserCDPSession(); const processes = await protocol.send('SystemInfo.getProcessInfo') as { processInfo: { id: number; type: string }[] };
     const processInfo = processes.processInfo.find(item => item.type === 'browser'); if (processInfo === undefined) throw new Error('Missing browser PID');
     // Verify ownership before killing the exact browser created for this test.
@@ -69,8 +82,10 @@ it('actual IndexedDB session abort and own Chromium SIGKILL cannot checkpoint fe
     expect(restoredHello[0]?.feedAfter).toBe(0);
     for (const session of sessions) await expect.poll(() => reopened.locator(`a[href="/s/${session.id}"]`).count()).toBeGreaterThan(0);
     await expect.poll(async () => ((await reopened.evaluate(readCache)) as { sessions: unknown[] }).sessions.length).toBe(3);
+    const finalCache = await reopened.evaluate(readCache) as { sessions: { id: string; agent: string; nativeId: string; title: string }[]; feedSeq: number };
+    for (const session of sessions) expect(finalCache.sessions.find(cached => cached.id === session.id)).toMatchObject({ ...session, title: `Current ${session.agent}` });
     expect(sessions.every(session => ctx.store.journal.queue(session.id).length === 0)).toBe(true);
     expect(sessions.map(session => ctx.manager.getRuntime(session.id)?.identity)).toEqual(before.owners.map(owner => ({ ownerId: owner!.ownerId, generation: owner!.generation, hostId: owner!.hostId })));
-    if (evidence !== undefined) await writeFile(join(evidence, 'passed.json'), JSON.stringify({ actualChromiumSIGKILL: true, version, scopes: ['actual IndexedDB abort', 'actualSourceWS', 'threecontrolledAgent session metadata', 'persistentProfile reopen'], newOfficialNativeCalls: 0, newPaidCalls: 0 }, null, 2));
+    if (evidence !== undefined) await writeFile(join(evidence, 'passed.json'), JSON.stringify({ actualChromiumSIGKILL: true, version, finalCache, scopes: ['actual IndexedDB abort', 'actualSourceWS same-page reconnect', 'threecontrolledAgent session metadata/nativeId', 'persistentProfile reopen'], newOfficialNativeCalls: 0, newPaidCalls: 0 }, null, 2));
   } finally { await context?.close().catch(() => undefined); await ctx.close(); await rm(directory, { recursive: true, force: true }); }
 });

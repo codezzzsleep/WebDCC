@@ -54,3 +54,26 @@ it('captures received snapshot values rather than a later mutation of the caller
   const value = { id: 's', value: { native: 'original' } }; checkpoint.record(value, 1); value.value.native = 'mutated'; await tick();
   expect(write).toHaveBeenCalledWith([{ id: 's', value: { native: 'original' } }], 1);
 });
+
+it('replay during an in-flight failure retries the original unit once without a polling loop', async () => {
+  const first = deferred(); const write = vi.fn().mockReturnValueOnce(first.promise).mockRejectedValue(new Error('still unavailable'));
+  const checkpoint = new FeedCheckpoint<{ id: string; nativeId: string }>(write);
+  checkpoint.record({ id: 's', nativeId: 'original-native' }, 12); await tick();
+  checkpoint.retry(); first.reject(new Error('abort')); await tick(); await tick();
+  expect(write).toHaveBeenCalledTimes(2); expect(checkpoint.cursor()).toBe(0);
+  expect(write).toHaveBeenLastCalledWith([{ id: 's', nativeId: 'original-native' }], 12);
+  write.mockResolvedValue(undefined); checkpoint.retry(); await tick();
+  expect(write).toHaveBeenCalledTimes(3); expect(checkpoint.cursor()).toBe(12);
+});
+
+it('replay retries all failed sessions with their newest retained native state', async () => {
+  const write = vi.fn().mockRejectedValue(new Error('quota'));
+  const checkpoint = new FeedCheckpoint<{ id: string; nativeId: string }>(write);
+  checkpoint.record({ id: 'first', nativeId: 'original' }, 1); await tick();
+  checkpoint.record({ id: 'second', nativeId: 'other' }, 2); await tick();
+  checkpoint.record({ id: 'first', nativeId: 'current' }, 5); await tick();
+  write.mockResolvedValue(undefined); checkpoint.retry(); await tick();
+  expect(write).toHaveBeenLastCalledWith([{ id: 'first', nativeId: 'current' }, { id: 'second', nativeId: 'other' }], 5);
+  expect(checkpoint.cursor()).toBe(5);
+  checkpoint.retry(); await tick(); expect(write).toHaveBeenCalledTimes(4);
+});

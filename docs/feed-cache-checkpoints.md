@@ -10,6 +10,10 @@ FeedCheckpoint serializes writes. If a transaction fails, its affected sessions
 remain pending; newer complete state for the same session can replace that
 snapshot while every other failed session remains included. A later received
 patch can repair the unit. A lone failure does not create a retry loop.
+Same-page reconnect may replay feed records received before that failure.
+Previously received records retry the retained complete snapshots without
+applying older metadata again or repeating unread notifications. A replay
+received during an in-flight failure requests one retry after it settles.
 The token follows delivered feed records rather than artificial contiguous
 numeric IDs: deleting a session may remove its older feed records.
 
