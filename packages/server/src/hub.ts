@@ -238,13 +238,9 @@ export class LiveHub {
       }
       if (events.length < BACKFILL_LIMIT) break;
     }
-    const items = this.manager.hotItems(sessionId).map((item) => ({
-      itemKey: item.itemKey,
-      kind: item.kind,
-      data: item.data,
-      turnId: item.turnId,
-    }));
-    const snapshot: SnapshotMessage = { op: 'snapshot', sessionId, items, throughSeq: cursor };
+    const hot = this.manager.hotSnapshot(sessionId);
+    const snapshot: SnapshotMessage = { op: 'snapshot', sessionId, items: hot.items, throughSeq: cursor,
+      ...(hot.recovery === undefined ? {} : { recovery: hot.recovery }) };
     this.flushClientDeltas(client, pending => pending.sessionId === sessionId);
     this.send(client, snapshot);
   }

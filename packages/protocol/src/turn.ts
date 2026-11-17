@@ -6,6 +6,7 @@ import { claudeOutputOrigin } from './claude-tasks.js';
 import { codexReviewItem } from './codex-review.js';
 import { nativePlanText } from './plans.js';
 import { claudeStructuredOutputs, type ClaudeStructuredOutputView } from './claude-output.js';
+import type { HotObservation } from './hot-recovery.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -14,6 +15,7 @@ export interface OpenItem {
   data: EventData[EventKind];
   turnId?: string | null;
   at?: string;
+  observation?: HotObservation;
 }
 
 /** Timeline steps intentionally retain the persisted event for stable keys and
@@ -47,6 +49,7 @@ export interface TurnView {
   usage?: UsageData;
   pending?: { clientCommandId: string; text: string; images?: string[]; contentParts?: InputContent; error?: string; at: string; status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncertain'; turnId?: string };
   commandState?: 'uncertain';
+  observation?: 'lost';
 }
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'interrupted', 'failed']);
@@ -222,6 +225,9 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     const question = item.data as EventData['question']; return isBlockingQuestion(questions.get(question.questionId) ?? question);
   });
   const state = completedData?.status ?? (started === undefined ? 'starting' : waiting ? 'waiting' : 'running');
+  const observationLost = completed === undefined && !live.some(item => item.observation === undefined)
+    && (live.some(item => item.observation?.state === 'lost') || events.some(event => event.kind === 'notice'
+      && ['command-uncertain', 'runtime-unobserved'].includes((event.data as EventData['notice']).nativeType ?? '')));
   const steps = currentItems(events).filter((event) => !['user.message', 'turn.started', 'turn.completed', 'internal'].includes(event.kind) && claudeOutputOrigin(event) === undefined);
   const answer = completedData?.answerItemKeys
     ? completedData.answerItemKeys.flatMap((key) => {
@@ -244,6 +250,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
   return {
     turnId,
     state: state as TurnView['state'],
+    ...(observationLost ? { observation: 'lost' as const } : {}),
     user: {
       text: userData?.text ?? '',
       ...(userData?.images === undefined ? {} : { images: userData.images }),
@@ -258,7 +265,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     ...(completedData?.durationMs === undefined ? {} : { durationMs: completedData.durationMs }),
     ...(completed === undefined ? {} : { endedAt: completed.at }),
     ...(userEvent === undefined ? {} : { userSeq: userEvent.seq }),
-    activity: TERMINAL.has(state) ? null : activityFor(live, waiting),
+    activity: TERMINAL.has(state) || observationLost ? null : activityFor(live, waiting),
     steps,
     live: TERMINAL.has(state) ? [] : live,
     answer,

@@ -1,6 +1,7 @@
 /** 全局状态：会话、事件、进行中条目、草稿、发件箱（SPEC 7.4、7.5） */
 import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse, QueueSnapshot } from '@webdcc/protocol';
 import type { DshApprovalRecoveryView, DshQuestionRecoveryView } from '@webdcc/protocol';
+import type { HotObservation, HotRecovery } from '@webdcc/protocol';
 import { isInputContent, isQueueInputReorderable, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { completeRecentEventPage } from './recent-event-history.js';
@@ -42,6 +43,7 @@ export interface HotItem {
   kind: EventKind;
   data: unknown;
   turnId?: string | null;
+  observation?: HotObservation;
 }
 
 const hotKey = (turnId: string | null | undefined, itemKey: string): string => JSON.stringify([turnId ?? null, itemKey]);
@@ -99,6 +101,7 @@ export class AppStore {
   private sessions = new Map<string, SessionMeta>();
   private events = new Map<string, Map<number, StoredEvent>>();
   private hot = new Map<string, Map<string, HotItem>>();
+  private hotRecoveries = new Map<string, HotRecovery>();
   private pending = new Map<string, PendingMessage[]>();
   private durableQueue = new Map<string, QueuedInput[]>();
   private queueRevisions = new Map<string, number>();
@@ -297,6 +300,7 @@ export class AppStore {
         if (incomingConversation !== undefined && incomingConversation.resetSeq < (existing?.conversation?.resetSeq ?? 0)) break;
         if (incomingConversation !== undefined && incomingConversation.uuid !== existing?.conversation?.uuid) {
           this.hot.delete(message.sessionId);
+          this.hotRecoveries.delete(message.sessionId);
           this.conversationHistory.delete(message.sessionId);
           for (const key of this.derived.keys()) if (key.startsWith(`${message.sessionId}:`)) this.derived.delete(key);
         }
@@ -346,9 +350,10 @@ export class AppStore {
       case 'snapshot': {
         const map = new Map<string, HotItem>();
         for (const item of message.items) {
-          map.set(hotKey(item.turnId, item.itemKey), { itemKey: item.itemKey, kind: item.kind, data: item.data, ...(item.turnId === undefined ? {} : { turnId: item.turnId }) });
+          map.set(hotKey(item.turnId, item.itemKey), { ...item });
         }
         this.hot.set(message.sessionId, map);
+        if (message.recovery === undefined) this.hotRecoveries.delete(message.sessionId); else this.hotRecoveries.set(message.sessionId, message.recovery);
         if (Number.isSafeInteger(message.throughSeq) && message.throughSeq! >= 0) {
           this.sessionSnapshotEnds.set(message.sessionId, message.throughSeq!);
           this.sessionStreamEnds.set(message.sessionId, Math.max(this.sessionStreamEnds.get(message.sessionId) ?? 0, message.throughSeq!));
@@ -365,7 +370,7 @@ export class AppStore {
         // A delta without a preceding item.start/update violates the adapter
         // contract. Ignore it; manufacturing a live item makes refresh differ
         // from streaming state and hides the real translator bug.
-        if (item === undefined) break;
+        if (item === undefined || item.observation?.state === 'lost') break;
         const data = item.data as { text?: string; outputTail?: string };
         if (message.field === 'text') data.text = (data.text ?? '') + message.append;
         else data.outputTail = (data.outputTail ?? '') + message.append;
@@ -375,8 +380,12 @@ export class AppStore {
       }
       case 'update': {
         const map = this.hot.get(message.sessionId) ?? new Map<string, HotItem>();
-        const item = hotEntry(map, message.itemKey, message.turnId);
+        let item = hotEntry(map, message.itemKey, message.turnId);
         const payload = message.data as { started?: boolean; kind?: string; data?: unknown };
+        if (item?.observation?.state === 'lost') {
+          if (payload.started !== true) break;
+          map.delete(hotKey(message.turnId, message.itemKey)); item = undefined;
+        }
         if (item !== undefined) {
           item.data = payload.data ?? message.data;
         } else if (payload.started === true) {
@@ -495,6 +504,7 @@ export class AppStore {
       const session = this.sessions.get(event.sessionId);
       if (reset !== undefined && event.seq > (session?.conversation?.resetSeq ?? 0)) {
         this.hot.delete(event.sessionId);
+        this.hotRecoveries.delete(event.sessionId);
         for (const key of this.derived.keys()) if (key.startsWith(`${event.sessionId}:`)) this.derived.delete(key);
         this.sessions.set(event.sessionId, { ...session, id: event.sessionId, workspaceId: session?.workspaceId ?? '',
           agent: session?.agent ?? 'claude-code', status: session?.status ?? 'idle', updatedAt: event.at, title: undefined,
@@ -768,6 +778,8 @@ export class AppStore {
   getHot(sessionId: string): HotItem[] {
     return [...(this.hot.get(sessionId)?.values() ?? [])];
   }
+
+  getHotRecovery(sessionId: string): HotRecovery | undefined { return this.hotRecoveries.get(sessionId); }
 
   /** 按 turnId 分组，供虚拟列表渲染 */
   getTurns(sessionId: string): TurnModel[] {
