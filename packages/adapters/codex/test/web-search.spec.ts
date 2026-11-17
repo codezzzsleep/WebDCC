@@ -6,7 +6,7 @@ import type { WebSearchAction } from '../src/schema/v2/WebSearchAction.js';
 
 const actions: WebSearchAction[] = [{ type: 'search', query: null, queries: ['原生检索 🐈', 'same same'] },
   { type: 'openPage', url: 'https://example.com/native' }, { type: 'findInPage', url: null, pattern: '<b>原文</b>' }, { type: 'other' }];
-const item = (action: WebSearchAction): ThreadItem => ({ type: 'webSearch', id: 'search:string:🐈', query: '原生检索\r\n', action });
+const item = (action: WebSearchAction): ThreadItem => ({ type: 'webSearch', id: 'search:string:🐈', query: '原生检索\r\n', action, results: null });
 
 it.each(actions)('preserves a native WebSearch $type start as running with its original item and turn identity', action => {
   const replay = CodexAdapter.replay('session', 'parent');
