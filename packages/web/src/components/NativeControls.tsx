@@ -95,6 +95,7 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
     } catch (failure) { setError(failure instanceof Error ? failure.message : '请检查表单格式'); }
   };
   const interactions = Array.isArray(state['interactions']) ? state['interactions'].map(object).filter(value => value['kind'] === 'elicitation') : [];
+  const dialogRefusals = snapshot?.agent === 'claude-code' && Array.isArray(state['dialogRefusals']) ? state['dialogRefusals'].map(object) : [];
   return <section aria-label="原生控制" className="native-controls" style={{ padding: 16, display: 'grid', gap: 12 }}>
     <p style={{ margin: 0 }}>读取当前 Agent 的原生状态，明确选择操作后提交。历史与配置沿用当前会话。</p>
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -107,6 +108,10 @@ export function NativeControls({ sessionId, initialCommand }: { sessionId: strin
       : labels[receipt.state]} · {receipt.type}</p> : null}
     {snapshot ? <>
       <p style={{ margin: 0 }}>{snapshot.agent} · 原生会话 {snapshot.nativeId ?? '尚未建立'}</p>
+      {dialogRefusals.map(refusal => { const payload = object(refusal['payload']); return <p key={String(refusal['requestId'])} data-testid="claude-dialog-refusal" role="status">
+        Claude 原生对话 {String(payload['dialogKind'])} {refusal['status'] === 'unsupported' ? '未在此客户端声明' : '内容不符合已验证合同'}，此客户端未回应。
+        请求 {String(refusal['requestId'])}{typeof payload['toolUseID'] === 'string' ? ` · 工具调用 ${payload['toolUseID']}` : ''}。原生对话由支持该类型的客户端或原生结束通知确认。
+      </p>; })}
       <label>原生操作<select className="text-input" value={selected} disabled={busy} onChange={event => { setSelected(event.target.value); setValues(snapshot.agent === 'codex' && event.target.value === 'review' ? { target: DEFAULT_CODEX_REVIEW_TARGET } : {}); setResult(undefined); }}>
         <option value="">请选择操作</option>{actions.map(action => <option key={action.type} value={action.type} disabled={!action.supported}>{action.label}{action.supported ? '' : '（尚不可用）'}</option>)}
       </select></label>
