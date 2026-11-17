@@ -2,6 +2,7 @@
 import type { Command, EventData, EventKind, OpenItem, ServerMessage, SessionDto, StoredEvent, TurnView, QueuedInput, PermissionState, InputContent, InputIntent, SlashControlRequest, NativeActionResponse, QueueSnapshot } from '@webdcc/protocol';
 import type { DshApprovalRecoveryView, DshQuestionRecoveryView } from '@webdcc/protocol';
 import type { HotObservation, HotRecovery } from '@webdcc/protocol';
+import type { CompletedRecovery, RecoveredCompletion } from '@webdcc/protocol';
 import { isInputContent, isQueueInputReorderable, publicInputContent, reduceTurn, ulid } from '@webdcc/protocol';
 import { api } from './api.js';
 import { completeRecentEventPage } from './recent-event-history.js';
@@ -102,6 +103,8 @@ export class AppStore {
   private events = new Map<string, Map<number, StoredEvent>>();
   private hot = new Map<string, Map<string, HotItem>>();
   private hotRecoveries = new Map<string, HotRecovery>();
+  private completedProjections = new Map<string, RecoveredCompletion[]>();
+  private completedRecoveries = new Map<string, CompletedRecovery>();
   private pending = new Map<string, PendingMessage[]>();
   private durableQueue = new Map<string, QueuedInput[]>();
   private queueRevisions = new Map<string, number>();
@@ -301,6 +304,7 @@ export class AppStore {
         if (incomingConversation !== undefined && incomingConversation.uuid !== existing?.conversation?.uuid) {
           this.hot.delete(message.sessionId);
           this.hotRecoveries.delete(message.sessionId);
+          this.completedProjections.delete(message.sessionId); this.completedRecoveries.delete(message.sessionId);
           this.conversationHistory.delete(message.sessionId);
           for (const key of this.derived.keys()) if (key.startsWith(`${message.sessionId}:`)) this.derived.delete(key);
         }
@@ -354,6 +358,8 @@ export class AppStore {
         }
         this.hot.set(message.sessionId, map);
         if (message.recovery === undefined) this.hotRecoveries.delete(message.sessionId); else this.hotRecoveries.set(message.sessionId, message.recovery);
+        this.completedProjections.set(message.sessionId, message.completed ?? []);
+        if (message.completedRecovery === undefined) this.completedRecoveries.delete(message.sessionId); else this.completedRecoveries.set(message.sessionId, message.completedRecovery);
         if (Number.isSafeInteger(message.throughSeq) && message.throughSeq! >= 0) {
           this.sessionSnapshotEnds.set(message.sessionId, message.throughSeq!);
           this.sessionStreamEnds.set(message.sessionId, Math.max(this.sessionStreamEnds.get(message.sessionId) ?? 0, message.throughSeq!));
@@ -505,6 +511,7 @@ export class AppStore {
       if (reset !== undefined && event.seq > (session?.conversation?.resetSeq ?? 0)) {
         this.hot.delete(event.sessionId);
         this.hotRecoveries.delete(event.sessionId);
+        this.completedProjections.delete(event.sessionId); this.completedRecoveries.delete(event.sessionId);
         for (const key of this.derived.keys()) if (key.startsWith(`${event.sessionId}:`)) this.derived.delete(key);
         this.sessions.set(event.sessionId, { ...session, id: event.sessionId, workspaceId: session?.workspaceId ?? '',
           agent: session?.agent ?? 'claude-code', status: session?.status ?? 'idle', updatedAt: event.at, title: undefined,
@@ -526,6 +533,9 @@ export class AppStore {
       }
     }
     const hot = this.hot.get(event.sessionId);
+    const recovered = this.completedProjections.get(event.sessionId);
+    if (recovered !== undefined) this.completedProjections.set(event.sessionId, recovered.filter(item =>
+      !item.origins.some(origin => origin.id === event.nativeEnvelopeId)));
     if (hot !== undefined) {
       hot.delete(hotKey(event.turnId, event.itemKey));
       if (event.kind === 'turn.completed') for (const [key, item] of hot) if (item.turnId === event.turnId) hot.delete(key);
@@ -780,6 +790,8 @@ export class AppStore {
   }
 
   getHotRecovery(sessionId: string): HotRecovery | undefined { return this.hotRecoveries.get(sessionId); }
+  getCompletedProjection(sessionId: string): RecoveredCompletion[] { return this.completedProjections.get(sessionId) ?? []; }
+  getCompletedRecovery(sessionId: string): CompletedRecovery | undefined { return this.completedRecoveries.get(sessionId); }
 
   /** 按 turnId 分组，供虚拟列表渲染 */
   getTurns(sessionId: string): TurnModel[] {
@@ -791,6 +803,7 @@ export class AppStore {
 
     const events = this.getConversationEvents(sessionId, history);
     const hot = history ? [] : this.getHot(sessionId);
+    const recovered = history ? [] : this.getCompletedProjection(sessionId);
     const byTurn = new Map<string, TurnModel>();
     const order: string[] = [];
     // 轮次之外的事件（turnId 为 null）不构成一轮，只在轨迹里显示（F4）
@@ -823,6 +836,12 @@ export class AppStore {
       }
       turn.hot.push(item);
     }
+    for (const item of recovered) {
+      if (item.turnId === null) continue;
+      let turn = byTurn.get(item.turnId);
+      if (turn === undefined) { turn = { ...reduceTurn([], []), turnId: item.turnId, events: [], hot: [] }; byTurn.set(item.turnId, turn); order.push(item.turnId); }
+      (turn.recovered ??= []).push(item);
+    }
     this.orphans.set(sessionId, orphans);
     for (const pending of history ? [] : this.getPending(sessionId)) {
       const turnId = pending.turnId ?? `pending-${pending.clientCommandId}`;
@@ -849,10 +868,11 @@ export class AppStore {
       if (turn.pending !== undefined) return turn;
       const view = reduceTurn(turn.events, turn.hot as unknown as OpenItem[], turnId === activeTurn ? orphans : [], turnId === activeTurn && this.sessions.get(sessionId)?.status === 'waiting');
       const uncertain = (this.durableQueue.get(sessionId) ?? []).some(row => row.turnId === turnId && row.state === 'uncertain');
-      return { ...turn, ...view, turnId, ...(uncertain ? { commandState: 'uncertain' as const } : {}) };
+      const lost = turn.completed === undefined && (turn.recovered?.length ?? 0) > 0 && !view.live.some(item => item.observation === undefined);
+      return { ...turn, ...view, turnId, ...(lost ? { observation: 'lost' as const, activity: null } : {}), ...(uncertain ? { commandState: 'uncertain' as const } : {}) };
     });
     const visible = boundary === undefined || history ? turns : turns.filter(turn => turn.legacyUser !== undefined || turn.pending !== undefined
-      || turn.answer.length > 0 || turn.steps.length > 0 || turn.live.length > 0 || turn.goal !== undefined || turn.plan !== undefined);
+      || turn.answer.length > 0 || turn.steps.length > 0 || turn.live.length > 0 || (turn.recovered?.length ?? 0) > 0 || turn.goal !== undefined || turn.plan !== undefined);
     this.derived.set(cacheKey, { version: this.version, turns: visible });
     return visible;
   }
