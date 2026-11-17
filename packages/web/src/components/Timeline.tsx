@@ -5,6 +5,7 @@ import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as Pro
 import { goalLabel, isValidEventData, displayCodexAsyncReply, failedFileOperation, fileOperationError, nativePlanText, nativeOperationDeclined, nativeReasoningContent, codexReviewItem } from '@webdcc/protocol';
 import { NativeReasoningContent } from './NativeReasoningContent.js';
 import type { DshApprovalRecoveryView } from '@webdcc/protocol';
+import { DshQuestionRecovery } from './DshQuestionRecovery.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { api } from '../lib/api.js';
@@ -821,6 +822,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
     ? { commandId: '', status: data.submission, error: data.submissionError } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
       ?? (data.submission === undefined ? undefined : { commandId: '', status: data.submission, error: data.submissionError });
   const synchronized = store.isInteractionSynced(event.sessionId, 'answer', data.questionId);
+  const isRetry = store.isDshQuestionRetry(event.sessionId, data.questionId);
   const submitting = submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
   const wait = useDshQuestionWait(event.sessionId, data.questionId, identity, data.status !== 'answered' && data.status !== 'skipped', synchronized && !submitting && store.connectionState === 'online');
   const collapsed = wait?.hidden ?? hidden;
@@ -886,6 +888,8 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
       ) : null}
       {data.isSecret ? <p>敏感回答只在本页面保留，刷新后需要重新输入。</p> : null}
       {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
+      {synchronized && (submission?.status === 'uncertain' || isRetry) && store.getSession(event.sessionId)?.agent === 'dsh'
+        ? <DshQuestionRecovery event={event} questionId={data.questionId} /> : null}
       <div className="approval-actions">
         <button
           type="button"

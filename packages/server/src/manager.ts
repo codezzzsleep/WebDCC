@@ -33,6 +33,10 @@ import type {
   DshApprovalDelivery,
   DshApprovalRecoveryView,
   DshApprovalRetry,
+  DshQuestionAttempt,
+  DshQuestionDelivery,
+  DshQuestionRecoveryView,
+  DshQuestionRetry,
 } from '@webdcc/protocol';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -50,7 +54,7 @@ import type { InteractionRow } from './interactions.js';
 import { payloadHash } from './command-journal.js';
 import type { FileStore } from './files.js';
 import { inputNotSubmitted, type QueueChange } from './input-admission.js';
-import { isDshApprovalAttempt, sameDshApproval } from '@webdcc/protocol';
+import { isDshApprovalAttempt, sameDshApproval, isDshQuestionAnswers, sameDshQuestionDelivery } from '@webdcc/protocol';
 
 const TURN_SETTLE_MS = 1_500;
 const hotKey = (turnId: string | null, itemKey: string): string => JSON.stringify([turnId, itemKey]);
@@ -939,18 +943,90 @@ export class SessionManager {
     }
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown, commandId = ulid(), delivery?: { intent?: UserInput['delivery']; expectedTurnId?: string }): Promise<AnswerSubmission> {
+  private async dshQuestionRecoveryContext(sessionId: string, questionId: string): Promise<{
+    runtime: Runtime; row: InteractionRow; group: InteractionRow[]; attempt: DshQuestionAttempt; current: DshQuestionDelivery; revision: string;
+  }> {
+    const unavailable = (message: string): Error => Object.assign(new Error(message), { statusCode: 409 });
+    const session = this.requireSession(sessionId);
+    if (session.agent !== 'dsh') throw unavailable('此恢复入口仅适用于 DSH 问题组');
+    const row = this.store.interactions.get(sessionId, 'answer', questionId);
+    if (row?.state !== 'uncertain' || row.command_id === null) throw unavailable('问题已结束、已提交或没有待核对的原回答');
+    const attempt = this.store.interactions.dshQuestionOriginal(row);
+    if (attempt === undefined || attempt.questionId !== questionId || attempt.delivery.nativeId !== session.nativeId
+      || attempt.delivery.agentId !== session.nativeId) throw unavailable('完整原回答或身份未留存，无法安全重试，请在原生界面核对');
+    if (attempt.sent) throw unavailable('本组回答已提交，等待原生结果，不能再次发送');
+    const original = this.store.journal.get(row.command_id); const payload = original?.payload;
+    const source = this.store.journal.get(attempt.commandId); const sourcePayload = source?.payload;
+    if (original?.state !== 'uncertain' || payload?.op !== 'answer' || payload.sessionId !== sessionId || payload.questionId !== questionId
+      || this.store.journal.compare(payload, original) !== 'same' || source?.state !== 'uncertain' || sourcePayload?.op !== 'answer'
+      || sourcePayload.sessionId !== sessionId || sourcePayload.questionId !== questionId || sourcePayload.retryOf !== undefined
+      || this.store.journal.compare(sourcePayload, source) !== 'same') throw unavailable('原回答命令身份未留存，无法安全重试');
+    const id = questionId.slice(attempt.delivery.eventId.length + 1); const value = normalizeQuestionAnswer(sourcePayload.answer);
+    const last = attempt.answers.find(answer => answer.id === id);
+    if (last === undefined || JSON.stringify(last.selected) !== JSON.stringify(value.selected) || (last.custom ?? '') !== (value.custom ?? ''))
+      throw unavailable('原问题组答案已变化，不能重试');
+    if (payload.retryOf !== undefined) {
+      const answers = (payload.answer as { answers?: unknown } | null)?.answers;
+      if (!isDshQuestionAnswers(answers) || JSON.stringify(answers) !== JSON.stringify(attempt.answers)) throw unavailable('原问题组答案已变化，不能重试');
+    } else if (row.command_id !== attempt.commandId) throw unavailable('原回答命令关联已变化，不能重试');
+    const group = this.store.interactions.group(row);
+    if (group.length !== attempt.delivery.itemIds.length || group.some(item => !attempt.delivery.itemIds.some(id => item.id === `${attempt.delivery.eventId}:${id}`)
+      || !['uncertain', 'collected'].includes(item.state) || (JSON.parse(item.request) as { isSecret?: boolean }).isSecret === true
+      || JSON.stringify(this.store.interactions.dshQuestionOriginal(item)) !== JSON.stringify(attempt))) throw unavailable('原问题组状态或完整答案已变化，请重新核对');
+    const runtime = await this.ensureReady(session, this.requireWorkspace(session.workspaceId).path);
+    if (runtime.adapter.dshQuestionDelivery === undefined || runtime.adapter.retryDshQuestion === undefined) throw unavailable('此 DSH 连接不支持原回答恢复');
+    const current = await runtime.adapter.dshQuestionDelivery(sessionId, questionId); this.assertOwner(runtime);
+    const latest = this.store.interactions.get(sessionId, 'answer', questionId);
+    if (latest?.state !== 'uncertain' || JSON.stringify(this.store.interactions.group(latest)) !== JSON.stringify(group)) throw unavailable('问题组状态已变化，请重新核对');
+    if (current === undefined || !sameDshQuestionDelivery(attempt.delivery, current)) throw unavailable('原问题组尚未重新同步、已结束或身份已变化，请核对原生连接');
+    return { runtime, row, group, attempt, current, revision: payloadHash({ group, delivery: current.revision }) };
+  }
+
+  async dshQuestionRecovery(sessionId: string, questionId: string): Promise<DshQuestionRecoveryView> {
+    if (this.store.getSession(sessionId) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+    try {
+      const context = await this.dshQuestionRecoveryContext(sessionId, questionId);
+      const questions = JSON.parse(context.attempt.delivery.signature) as { id: string; question: string }[];
+      return { status: 'available', questionId, items: context.attempt.answers.map(answer => ({ ...answer,
+        prompt: questions.find(question => question.id === answer.id)!.question })), retryOf: { commandId: context.row.command_id!, revision: context.revision } };
+    } catch (error) { return { status: 'unavailable', questionId, reason: error instanceof Error ? error.message : '原回答需要核对' }; }
+  }
+
+  async answer(sessionId: string, questionId: string, answer: unknown, commandId = ulid(), delivery?: { intent?: UserInput['delivery']; expectedTurnId?: string }, retryOf?: DshQuestionRetry): Promise<AnswerSubmission> {
     this.protectAnswer(sessionId, questionId, answer);
     const question = this.store.allEvents(sessionId).findLast(event => event.kind === 'question' && (event.data as EventData['question']).questionId === questionId)?.data as EventData['question'] | undefined;
-    if (question?.asyncReply !== undefined) return this.control(sessionId, () => this.answerAsync(sessionId, question, answer, commandId, delivery));
+    if (question?.asyncReply !== undefined && retryOf === undefined) return this.control(sessionId, () => this.answerAsync(sessionId, question, answer, commandId, delivery));
     if (delivery?.intent !== undefined) throw Object.assign(new Error('此原生问题不支持排队或介入回答'), { statusCode: 400 });
+    if (retryOf !== undefined && delivery?.expectedTurnId !== undefined) throw Object.assign(new Error('原问题组恢复不能改为轮次输入'), { statusCode: 400 });
     const session = this.requireSession(sessionId);
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     if (runtime.adapter.answer === undefined) throw Object.assign(new Error('该 Agent 不支持回答问题'), { statusCode: 400 });
-    const claim = this.store.interactions.claim(sessionId, 'answer', questionId, commandId);
+    const recovery = retryOf === undefined ? undefined : await this.dshQuestionRecoveryContext(sessionId, questionId);
+    if (recovery !== undefined) {
+      const answers = (answer as { answers?: unknown } | null)?.answers;
+      if (runtime !== recovery.runtime || retryOf?.commandId !== recovery.row.command_id || retryOf.revision !== recovery.revision
+        || !isDshQuestionAnswers(answers) || JSON.stringify(answers) !== JSON.stringify(recovery.attempt.answers))
+        throw Object.assign(new Error('原回答恢复身份或答案已变化，请重新核对'), { statusCode: 409 });
+    }
+    const claim = recovery === undefined ? this.store.interactions.claim(sessionId, 'answer', questionId, commandId)
+      : this.store.interactions.reclaimDshQuestion(recovery.group, questionId, commandId);
     let result: void | AnswerSubmission;
-    try { result = await runtime.adapter.answer(sessionId, questionId, answer); this.assertOwner(runtime); } catch (error) { this.store.interactions.fail(claim, error); this.persistInteractionSubmission(claim, 'uncertain'); throw error; }
+    try {
+      if (recovery === undefined) {
+        const prepared = await runtime.adapter.prepareDshQuestionAnswer?.(sessionId, questionId, answer);
+        if (prepared !== undefined) this.store.interactions.bindDshQuestion(claim, prepared);
+        result = await runtime.adapter.answer(sessionId, questionId, answer, prepared);
+      } else result = await runtime.adapter.retryDshQuestion!(sessionId, questionId, recovery.attempt, recovery.current.revision);
+      if (runtime.adapter.id === 'dsh' && result?.submitted !== false) this.store.interactions.markDshQuestionSent(claim);
+      this.assertOwner(runtime);
+    } catch (error) {
+      this.store.interactions.fail(claim, error);
+      if (recovery !== undefined) this.store.interactions.restoreDshQuestionRetry(claim, recovery.row);
+      const current = this.store.interactions.get(sessionId, 'answer', questionId);
+      if (current?.command_id === claim.command_id || recovery !== undefined && current?.command_id === recovery.row.command_id) this.persistInteractionSubmission(current!, 'uncertain');
+      throw error;
+    }
     if (result?.submitted === false) { if (this.store.interactions.finish(claim, true)) this.persistInteractionSubmission(claim, 'collected'); return result; }
     if (result?.confirmed === false) { if (this.store.interactions.finish(claim, false, false)) for (const row of this.store.interactions.group(claim)) this.persistInteractionSubmission(row, 'sent'); this.refreshInteractionStatus(runtime); this.touchIdle(runtime); return result; }
     if (!this.store.interactions.finish(claim) && !(runtime.adapter.id === 'dsh' && result?.confirmed === true && this.store.interactions.confirmDshQuestionReceipt(claim))) {

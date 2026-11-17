@@ -4,6 +4,7 @@ import type { SessionDto } from './api.js';
 import type { PermissionState } from './permissions.js';
 import type { InputContent, InputIntent } from './input.js';
 import type { DshApprovalRetry } from './dsh-interactions.js';
+import type { DshQuestionRetry } from './dsh-question-replies.js';
 
 export interface SubscribeItem {
   sessionId: string;
@@ -63,6 +64,8 @@ export interface AnswerCommand extends CommandBase {
   sessionId: string;
   questionId: string;
   answer: unknown;
+  /** Explicit recovery of an immutable complete DSH foreground answer batch. */
+  retryOf?: DshQuestionRetry;
   /** Async answers use the same durable input delivery as ordinary messages. */
   intent?: InputIntent;
   expectedTurnId?: string;

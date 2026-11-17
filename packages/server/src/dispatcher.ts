@@ -109,7 +109,7 @@ export class CommandDispatcher {
         }
         case 'answer': {
           const value = await this.manager.answer(command.sessionId, command.questionId, command.answer, command.clientCommandId,
-            { intent: command.intent, expectedTurnId: command.expectedTurnId });
+            { intent: command.intent, expectedTurnId: command.expectedTurnId }, command.retryOf);
           return { ok: true, value };
         }
         case 'interrupt': {
