@@ -55,6 +55,8 @@ import { isDshApprovalAttempt, sameDshApproval } from '@webdcc/protocol';
 
 const TURN_SETTLE_MS = 1_500;
 const hotKey = (turnId: string | null, itemKey: string): string => JSON.stringify([turnId, itemKey]);
+const isSqliteFailure = (error: unknown): boolean => error !== null && typeof error === 'object'
+  && typeof (error as { code?: unknown }).code === 'string' && String((error as { code: string }).code).startsWith('SQLITE_');
 
 export interface HotItem {
   itemKey: string;
@@ -212,7 +214,11 @@ export class SessionManager {
       try { return { envelopeId: this.store.nativeEvents.frame({ sessionId, agent: adapter.id }, frame, true), accepted: true }; }
       catch { return { envelopeId: 0, accepted: false }; }
     } });
-    adapter.onEvent((sessionId, event) => this.handleAdapterEvent(sessionId, event, adapter));
+    adapter.onEvent((sessionId, event) => {
+      const runtime = this.runtimes.get(sessionId);
+      if (runtime === undefined || runtime.adapter !== adapter) this.handleAdapterEvent(sessionId, event, adapter);
+      else this.nativePublication(runtime, () => this.handleAdapterEvent(sessionId, event, adapter));
+    });
     if (adapter.id === 'codex') this.watchdog.start();
   }
 
@@ -1549,7 +1555,16 @@ export class SessionManager {
         : runtime.disposing || !this.store.nativeOwners.current(sessionId, runtime.identity) || mismatch ? 'stale-generation' : 'accepted';
       envelope = this.store.nativeEvents.mapping({ sessionId, agent: source?.id ?? runtime?.adapter.id ?? 'unknown',
         nativeId: runtime?.nativeId, identity: event.runtime ?? runtime?.identity }, event, disposition);
-    } catch { if (runtime !== undefined) this.fenceRuntime(runtime); return; }
+    } catch (error) {
+      // A failed diagnostic write for stale output does not own the current
+      // native writer, even when both frames share the public session ID.
+      if (runtime !== undefined && !runtime.disposing && !mismatch && this.runtimes.get(sessionId) === runtime
+        && (source === undefined || source === runtime.adapter)) {
+        if (isSqliteFailure(error)) this.nativePublication(runtime, () => { throw error; });
+        else this.fenceRuntime(runtime);
+      }
+      return;
+    }
     if (runtime === undefined || disposition !== 'accepted') return;
     if (event.type === 'item.complete' && event.kind === 'notice' && isValidEventData('notice', event.data)
       && event.data.contextReset !== undefined && runtime.adapter.id === 'claude-code') {
@@ -1850,7 +1865,11 @@ export class SessionManager {
     // the public turn active briefly so those frames bind to this turn and a
     // refresh cannot observe a different summary from the live view.
     if (status === 'completed' && reason === undefined && existing === undefined) {
-      runtime.finishAction = followedByNativeTurn => this.finishTurnNow(runtime, status, reason, existing, usage, native, nativeEnvelopeId, followedByNativeTurn);
+      const turnId = runtime.turnId;
+      runtime.finishAction = followedByNativeTurn => {
+        if (runtime.disposing || this.runtimes.get(runtime.sessionId) !== runtime || runtime.turnId !== turnId) return;
+        this.nativePublication(runtime, () => this.finishTurnNow(runtime, status, reason, existing, usage, native, nativeEnvelopeId, followedByNativeTurn));
+      };
       this.armFinishTimer(runtime);
       return;
     }
@@ -2014,6 +2033,29 @@ export class SessionManager {
     runtime.disposing = true;
     runtime.status = 'error';
     void runtime.adapter.dispose(runtime.sessionId).catch(() => undefined);
+  }
+
+  /** A platform SQL failure is not evidence of a native error or terminal.
+   * Non-SQL errors continue through the original Adapter error path. */
+  private nativePublication(runtime: Runtime, publish: () => void): void {
+    const turnId = runtime.turnId;
+    try { publish(); }
+    catch (error) {
+      if (!isSqliteFailure(error)) throw error;
+      if (this.runtimes.get(runtime.sessionId) !== runtime || runtime.disposing) return;
+      this.uncertainSessions.add(runtime.sessionId);
+      if (runtime.finishTimer !== null) clearTimeout(runtime.finishTimer);
+      runtime.finishTimer = null; runtime.finishAction = null;
+      try { if (turnId !== null) this.store.journal.settleInputFailure(turnId, 'uncertain'); } catch { /* DB still unavailable; no durable claim. */ }
+      this.fenceRuntime(runtime);
+      try {
+        const notice = this.store.appendEvent({ sessionId: runtime.sessionId, turnId,
+          itemKey: `native-publication-failed:${runtime.identity.ownerId}:${runtime.identity.generation}`, kind: 'notice',
+          data: { level: 'warning', nativeType: 'runtime-unobserved', text: '原生输出已收到，但 Web 记录未能保存；运行观测已隔离，执行结果需要核对。' } });
+        this.hooks.onEvent(notice);
+        this.updateSessionAndFeed(runtime.sessionId, { status: 'error' }, { status: 'error', queueRevision: Date.now() });
+      } catch { /* Retain committed raw and the in-memory fence when writes fail. */ }
+    }
   }
 
   queueChanged(sessionId: string, committed?: QueueChange): void {
