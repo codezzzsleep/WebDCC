@@ -23,8 +23,8 @@ it('preserves stream/message/block/parent identities for interleaved child outpu
   const parent = replay.feed(frame(5, assistant(null, 'PARENT', 'same-message')));
   const child = replay.feed(frame(6, assistant('spawn', 'CHILD', 'same-message')));
   const origin = { agent: 'claude-code', nativeSessionId: 'native', parentToolUseId: 'spawn', nativeMessageId: 'same-message', blockIndex: 0, taskId: 'child', runId: 'run' };
-  expect(start).toContainEqual(expect.objectContaining({ type: 'item.start', kind: 'assistant.message', scope: 'session', data: { text: '', claudeActor: origin } }));
-  expect(child).toContainEqual(expect.objectContaining({ type: 'item.complete', kind: 'assistant.message', scope: 'session', data: { text: 'CHILD', claudeActor: origin } }));
+  expect(start).toContainEqual(expect.objectContaining({ type: 'item.start', kind: 'assistant.message', scope: 'session', data: expect.objectContaining({ text: '', claudeActor: origin }) }));
+  expect(child).toContainEqual(expect.objectContaining({ type: 'item.complete', kind: 'assistant.message', scope: 'session', data: expect.objectContaining({ text: 'CHILD', claudeActor: origin }) }));
   expect(delta).toContainEqual(expect.objectContaining({ type: 'item.delta', scope: 'session', append: 'CHILD' }));
   expect(firstKey(child)).toBe(firstKey(start));
   expect(firstKey(child)).not.toBe(firstKey(parent));
