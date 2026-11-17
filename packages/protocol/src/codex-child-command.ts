@@ -23,7 +23,7 @@ export function validCodexCommandItem(value: unknown): value is Record<string, u
 }
 
 /** Read the original native status, never infer success from an exit or turn. */
-export function codexSubagentCommandStatus(command: CodexSubagentCommand): NonNullable<EventData['command']['status']> {
+export function codexSubagentCommandStatus(command: CodexSubagentCommand): EventData['tool.call']['status'] {
   switch (command.native?.['status']) {
     case 'inProgress': return 'running';
     case 'completed': return 'completed';
