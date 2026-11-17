@@ -3,6 +3,7 @@ import type { ElicitationForm, ElicitationAction } from './elicitation.js';
 import type { InputContent, InputIntent } from './input.js';
 import type { ClaudeOutputOrigin, ClaudeTaskRuntime } from './claude-tasks.js';
 import type { NativeReasoningPart } from './codex-reasoning.js';
+import type { ClaudeBlockOrigin } from './claude-content.js';
 import type { ClaudeStructuredOutput } from './claude-output.js';
 import type { ClaudeQueryConfiguration } from './claude-configuration.js';
 
@@ -117,9 +118,9 @@ export interface EventData {
   'user.message': { text: string; images?: string[]; contentParts?: InputContent; intent?: InputIntent; clientCommandId?: string };
   /** `phase` is retained for old rows. New translations preserve the native
    * phase in `nativePhase`; the turn reducer is the sole final-answer authority. */
-  'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string; claudeActor?: ClaudeOutputOrigin; incomplete?: boolean };
+  'assistant.message': { text: string; phase?: 'interim' | 'final'; nativePhase?: string; claudeActor?: ClaudeOutputOrigin; claudeBlock?: ClaudeBlockOrigin; incomplete?: boolean };
   'structured.output': ClaudeStructuredOutput;
-  reasoning: { text: string; summary?: boolean; claudeActor?: ClaudeOutputOrigin; incomplete?: boolean;
+  reasoning: { text: string; summary?: boolean; claudeActor?: ClaudeOutputOrigin; claudeBlock?: ClaudeBlockOrigin; incomplete?: boolean;
     nativeContent?: NativeReasoningPart[] };
   command: {
     command: string;
@@ -130,8 +131,9 @@ export interface EventData {
     outputFileId?: string;
     status: 'running' | 'completed' | 'failed';
     claudeActor?: ClaudeOutputOrigin;
+    claudeBlock?: ClaudeBlockOrigin;
   };
-  'file.read': { path: string; label?: string; status?: 'running' | 'completed' | 'failed'; error?: string; claudeActor?: ClaudeOutputOrigin; output?: string };
+  'file.read': { path: string; label?: string; status?: 'running' | 'completed' | 'failed'; error?: string; claudeActor?: ClaudeOutputOrigin; claudeBlock?: ClaudeBlockOrigin; output?: string };
   'file.change': {
     changes: FileChangeEntry[];
     status: 'running' | 'completed' | 'failed';
@@ -140,11 +142,12 @@ export interface EventData {
     /** @deprecated Codex cumulative snapshots use turn.diff. */
     snapshot?: boolean;
     claudeActor?: ClaudeOutputOrigin;
+    claudeBlock?: ClaudeBlockOrigin;
     output?: string;
   };
   /** A cumulative diff emitted by an Agent for the current turn. */
   'turn.diff': { changes: FileChangeEntry[]; status?: 'running' | 'completed' | 'failed' };
-  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown'; claudeActor?: ClaudeOutputOrigin;
+  'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown'; claudeActor?: ClaudeOutputOrigin; claudeBlock?: ClaudeBlockOrigin;
     /** The observed native item notification phase, independent of business success. */
     codexItemPhase?: 'started' | 'completed' };
   /** Structured task steps and native Markdown plans have distinct content.
@@ -184,7 +187,7 @@ export interface EventData {
   };
   usage: UsageData;
   error: { message: string };
-  unknown: { nativeType: string };
+  unknown: { nativeType: string; claudeBlock?: ClaudeBlockOrigin };
   internal: { nativeType: string; claudeTaskRuntime?: ClaudeTaskRuntime; claudeConfiguration?: ClaudeQueryConfiguration };
 }
 

@@ -1,0 +1,237 @@
+{
+  "formatVersion": 1,
+  "issues": [
+    51,
+    84,
+    42
+  ],
+  "behavior": "Native Claude blocks retain query/session/message/parent/position, mixed block order and actor-scoped tool results through UI recovery",
+  "sourceBase": "0b2ca4d6f09d1bd1d27e8b581f27f942c5801304",
+  "committedEquivalentSourceHead": "c01c232a9405145f285fdc996fd273b78c7e4e46",
+  "sourceFingerprint": "78b9171770887c9f0aaf88be08ca444e3ef3fc760089a251a5cee4f1516208f8",
+  "sourceFilesSha256": {
+    "browser-tests/claude-block-identity.spec.ts": "a683f1d19bab820d83ba657c7deb7eb140eb73abffe2ff16fef6b73a01883551",
+    "docs/claude-block-identity.md": "32cd6393569e46f68a00259a58993cb655ff71ab6f2f223825c5acc815f091c1",
+    "packages/adapters/claude/src/adapter.ts": "163b102ccdbeab09b6e0cc7245a1bf640233b722afb81a3d8ad3d0eeccf18cfa",
+    "packages/adapters/claude/src/content.spec.ts": "0bf27dda66e4c48d2ed153e0be2465315883a5e17aeb712d71bc7b3f3289cdfd",
+    "packages/adapters/claude/src/content.ts": "3548d0e971894f030c98ec1d23aa15b4781950226d12a208f47064797bc6bdf9",
+    "packages/adapters/claude/src/handler.spec.ts": "daaa24363a2853f3fa4ea87c5f00f23a26a33f3422691271dc32ec0c040d1945",
+    "packages/adapters/claude/test/block-identity.spec.ts": "ef4a9abc73f2a3d52ce7c218d70c09523674f27925cec0c08d8750bfbd8b609e",
+    "packages/adapters/claude/test/file-failure.spec.ts": "6a0ca86f07184ec7e89d3230d1b31c0ce66f66806fdd99497f9263c1baf95bd9",
+    "packages/adapters/claude/test/task-output-identity.spec.ts": "7dbb999a98df59292b37c02f204c3cad396e0724badb2900725038d9178809d2",
+    "packages/protocol/src/claude-content.spec.ts": "4e024225ffea18e5026697ae61969aadf8a5a40c6d3d448e296a188218d86de1",
+    "packages/protocol/src/claude-content.ts": "8273d56fc484afb2509605b953fc2bfd25a66fe1da0c1aee12b367f76866e5ff",
+    "packages/protocol/src/claude-tasks.ts": "37a0e9ed8856cabc3d2663e4055fee7555d918f20e6026d46445a6645e724928",
+    "packages/protocol/src/events.ts": "c54248cb75a8501464465c36dceb71ac5e700c0ed6cdf7f55798c147fc28f80d",
+    "packages/protocol/src/index.ts": "4a75c4fb1a22c66b7b711a810fde5b8635b09dab50c5d25918a19cab3b9c3eea",
+    "packages/web/src/components/Timeline.tsx": "c6cbda0bed366113586a8ee97ba74f7e6b34db5a7da9c0b526e89dac7e3a1624"
+  },
+  "checkExecution": {
+    "gitHeadAtExecution": "0b2ca4d6f09d1bd1d27e8b581f27f942c5801304",
+    "workingTreeContainsCommittedProductAndTests": true,
+    "committedSourceBytesMatchAuthorChecks": true,
+    "nativeReplayProductFingerprint": "ef206aae1066198ec30681db3b3ebca50f33ccb19c03e3e568f13a6ec44941b3",
+    "fullOrCombinedSourceGate": "independent review window; not executed by author"
+  },
+  "nativeContract": {
+    "sdk": "0.3.322",
+    "cli": "2.1.322",
+    "sdkModuleSha256": "1c70356fe073f6c5423fb7138e2f2f6580a790eb055ad247e5d7927f57b53e8b",
+    "schemaSha256": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f",
+    "binarySha256": "bfb3703ad5380242328459bc62ada4bde8ae7ba57c6e1eeadb9c00e08874c478",
+    "nativeModified": false,
+    "toolResultScope": "query runtime + explicit parent and native session/toolId; absent SDK session accepts one candidate only",
+    "ordering": "Only verified same query/session/message/parent positions; no legacy query inference",
+    "withinMessageRepeatedToolIds": "malformed/ambiguity controlled defense, SDK guarantees unique IDs within one message"
+  },
+  "checks": {
+    "directed": {
+      "passed": 77,
+      "files": 12,
+      "workerLimit": 1
+    },
+    "types": {
+      "passed": [
+        "protocol",
+        "adapter-claude",
+        "web",
+        "server"
+      ],
+      "concurrency": 1
+    },
+    "changedLint": "passed",
+    "sourceBrowser": {
+      "passed": 4,
+      "scope": "1new controlled-SDK source recovery flow;3existing Claude tasks/structured source flows, actual HTTP/Manager/SQLite/WS/Chromium",
+      "refresh": true,
+      "newSocketReconnect": true,
+      "sessionSwitch": true,
+      "reopen": true,
+      "noDuplicateQuery": true
+    },
+    "originalCaptures": {
+      "realNative": {
+        "originalStatus": "FAILED preserved",
+        "frames": 156,
+        "originalMeaningfulItems": 14,
+        "contentExactIgnoringOnlyAddedClaudeBlock": true,
+        "identityChanges": 3,
+        "identityMapSha256": "5e90231b18de998cae3db772439719306d973b786b936b10fe972143993f42c0",
+        "traceSha256": "159efc0462aa075b85a19d5c275dcdee1505c603e755c538a34e786eb1d6e584"
+      },
+      "structured": {
+        "frames": 17,
+        "structuredValueExact": true,
+        "traceSha256": "f2c612dedbc5344fb43047dcf78e8bd4462303f2d8e45a526d450089f0cfd6cc"
+      },
+      "taskSourceButton": {
+        "frames": 80,
+        "tasks": 4,
+        "outputs": 4,
+        "terminalNotificationsRetained": 4,
+        "traceSha256": "81ed5832c0f191c78ff5e0c8c953858bddcf04997998a65c91859ca3424ea8e7"
+      },
+      "mode": "offline parser/recovery replay; no SDK/CLI/model re-execution"
+    }
+  },
+  "evidenceSha256": {
+    "block-before.json": "b5882ddb0c9a4a90ea7c31c298fe5f6246a9a5d6d92b40b2730bc102932d520b",
+    "block-before.log": "b5882ddb0c9a4a90ea7c31c298fe5f6246a9a5d6d92b40b2730bc102932d520b",
+    "block-units-before.log": "e61bbe50b3eb67f46862ab2a745d6282cb17ddb894ff62d42eedb4c5176fb02e",
+    "block-units-current-before.log": "9d6a12ecea8f7520cd4cff69f00af0f4b6175d1e60d616051621daa2ffb4e918",
+    "block-units-first.log": "8b3ec76e88d48cb890b70dd1016bcbde439a76fccd092c2e6f8cd7b238ad51d0",
+    "block-matrix-first.log": "db3ebed323d2ad77c23f7f804b72d4bc9cd18fb11982d37a4ce9839561891bb6",
+    "block-matrix-final.log": "22eb81da48136a29e5d0938f8362fec38c1076c9576e6f61993927ebb7b254f0",
+    "block-protocol-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "block-adapter-claude-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "block-server-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "block-web-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+    "block-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "block-browser-before.log": "eaac48301819b5efb3ace9fd5bcde0670436a79f97b78b92d157650b7ec3d9a5",
+    "block-browser-native-bound-before.log": "d37c7a05627e09218d4e9fd041c88564dfe50934a136f40d158bc90e1d76728b",
+    "block-browser-after.log": "5c6874371aee88d48510f551ac579ea395d37b78a93b6fe6b24fb1bc14cbd1df",
+    "block-existing-browser.log": "68824b8e87d9374e0301ece5870354761fa2196c76ab88f1d8ed0cb378daafca",
+    "block-real-replay-first.log": "271264ec8a48e0f4aafc397d9b319664aa67d8a13f0d3ae5ade0518e0f776efa",
+    "block-real-replay-first.json": "271264ec8a48e0f4aafc397d9b319664aa67d8a13f0d3ae5ade0518e0f776efa",
+    "block-real-replay-first-identities.json": "e98855fdd90760310e2bbbad2983232ab57411047ca4bf2970f4195ce1b6482d",
+    "block-directed-checks.json": "b94d1bea27d59fc0c93b4a683d36083b63c06a2fcf1b0c15e635b2d0c0663319",
+    "block-browser/after/claude-blocks-ME0YIr/report.json": "c6e225035cefbcfa0a1e581c12b963bb4719cfdf025de2e2a59e8b77a7fbf8ce",
+    "block-browser/after/claude-blocks-ME0YIr/recovered.png": "317c36ca9273bc57a83e428c17f8e39d0b82c4bd118d43350cf01f7c82336868"
+  },
+  "failedEvidenceRetained": [
+    {
+      "artifact": "block-before.json",
+      "scope": "4controlled semantic failures in unmodified Handler/listener"
+    },
+    {
+      "artifact": "block-units-before.log",
+      "scope": "8new failures,7existing passes on old base"
+    },
+    {
+      "artifact": "block-units-current-before.log",
+      "scope": "same8fail/7pass on updated main"
+    },
+    {
+      "artifact": "block-browser-before.log",
+      "scope": "Task panel not observed; fixture lacked explicit nativeId-binding witness; block order/recovery NOT_RUN"
+    },
+    {
+      "artifact": "block-browser-native-bound-before.log",
+      "scope": "Actual source main/child results separate, child completion order FAILED; main order/full recovery NOT_RUN"
+    },
+    {
+      "originalRealTrace": "159efc0462aa075b85a19d5c275dcdee1505c603e755c538a34e786eb1d6e584",
+      "scope": "Original capture FAILED remainsFAILED; compatibility replay does not change its original status"
+    }
+  ],
+  "newExecution": {
+    "sdkBusinessRequests": 0,
+    "cliRuns": 0,
+    "modelRequests": 0,
+    "providerRequests": 0,
+    "paidRequests": 0,
+    "targetPlatform": false
+  },
+  "status": {
+    "implementation": "PR author delivered",
+    "independentSourceAcceptance": "pending",
+    "merge": "other window",
+    "deployment": "other window"
+  },
+  "remaining": [
+    "current Provider/model/native effect and121 target verification",
+    "unknown legacy query/message provenance cannot be guessed",
+    "other remaining Claude51/78/84/71 scope audited separately"
+  ],
+  "currentMainIntegration": {
+    "sourceBase": "0ca29ef32d4b459b0ea8cf2b0f3359168cace177",
+    "checkedSourceHead": "b6f6955fffa4fa1bce7101749e9466dd0029531b",
+    "sourceFingerprint": "cec6d37b8c146c86e826c880b26a8e29dd4d2516e447275b373871176caff2ba",
+    "priorDeliveryHead": "133bca3f643dea46f96d02e1d48386662d7dae1a",
+    "scope": "Only necessary integration of main347/348/350; both Claude block metadata and Codex native phase retained, recovered completion cards kept",
+    "directed": {
+      "passed": 84,
+      "files": 13,
+      "includes": "77Claude scope+7publicCodexWebSearch compatibility"
+    },
+    "sourceBrowser": {
+      "passed": 4,
+      "cases": "newClaude completeblock recovery +3Agent publiccompleted SIGKILL/SQLite/HTTP/WS/Chromium"
+    },
+    "types": "4affected packages passed serialized",
+    "changedLint": "passed",
+    "replay": {
+      "status": "passed",
+      "frames": [
+        156,
+        17,
+        80
+      ],
+      "newNativeModelProviderRequests": 0,
+      "sourceProductHashes": {
+        "packages/adapters/claude/src/adapter.ts": "163b102ccdbeab09b6e0cc7245a1bf640233b722afb81a3d8ad3d0eeccf18cfa",
+        "packages/adapters/claude/src/content.ts": "3548d0e971894f030c98ec1d23aa15b4781950226d12a208f47064797bc6bdf9",
+        "packages/protocol/src/claude-content.ts": "8273d56fc484afb2509605b953fc2bfd25a66fe1da0c1aee12b367f76866e5ff",
+        "packages/protocol/src/claude-tasks.ts": "37a0e9ed8856cabc3d2663e4055fee7555d918f20e6026d46445a6645e724928",
+        "packages/protocol/src/events.ts": "42b0e35a3a825a282d3fe20477dcdf1e218977423f9ea71339336f53a45d29f5",
+        "packages/protocol/src/index.ts": "2c15ec0380f4413236d3391dba8dc2779e301a79a3ace49541e916fdb47dae5c",
+        "packages/web/src/components/Timeline.tsx": "d76176519e69a03ea2b795cfd1c16de7778747b70c46b760d211a5deb433ce35"
+      }
+    },
+    "evidenceSha256": {
+      "block-main347-conflict.patch": "1f10aacea0da068ab1d04996ae2ba876667301528a179d5f3b91508ab70d1131",
+      "block-main348350-conflict.patch": "b38c82a574d522a695b65ffd0f9263ca9b716fe3064aa3380e271ce43a77cf0a",
+      "block-current-main-matrix.log": "9ebf6449617dbdcc726134fb0cd0b1f19dc536880fca37f74d0580ce04e19f16",
+      "block-current-main-browser.log": "ee15c3246c7c749b2fded3fd39feebaa0c33b87dc1c0751a0450935130e1da2e",
+      "block-latest-main-matrix.log": "799b0b4c6f2fed7af9f001e9ff290483552d0eb07d17bd560d56002c804d0774",
+      "block-latest-main-protocol-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+      "block-latest-main-adapter-claude-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+      "block-latest-main-web-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+      "block-latest-main-server-types.log": "3074f884c12f5b2f1db23b58f4521c2682623ceb356117414be8cb2b0e765742",
+      "block-latest-main-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "block-latest-main-browser.log": "adf6ecdf5f5666cc4f6b46e2385012670bad13cfac8887b8fb7d0c2d66f65fea",
+      "block-latest-main-replay.log": "3ccf48009b53c7506924026d2658072773185b7a4b12de0315d07844dd5e1af4",
+      "block-latest-main-replay.json": "3ccf48009b53c7506924026d2658072773185b7a4b12de0315d07844dd5e1af4",
+      "block-latest-main-checks.json": "ded7cdf88dcc06382dfb942514866c571a4c39fcc1414bd14f8e488d707a138b"
+    },
+    "sameSourceBeforePublication": true
+  },
+  "currentSourceFingerprint": "cec6d37b8c146c86e826c880b26a8e29dd4d2516e447275b373871176caff2ba",
+  "sourceFilesCurrentSha256": {
+    "browser-tests/claude-block-identity.spec.ts": "a683f1d19bab820d83ba657c7deb7eb140eb73abffe2ff16fef6b73a01883551",
+    "docs/claude-block-identity.md": "32cd6393569e46f68a00259a58993cb655ff71ab6f2f223825c5acc815f091c1",
+    "packages/adapters/claude/src/adapter.ts": "163b102ccdbeab09b6e0cc7245a1bf640233b722afb81a3d8ad3d0eeccf18cfa",
+    "packages/adapters/claude/src/content.spec.ts": "0bf27dda66e4c48d2ed153e0be2465315883a5e17aeb712d71bc7b3f3289cdfd",
+    "packages/adapters/claude/src/content.ts": "3548d0e971894f030c98ec1d23aa15b4781950226d12a208f47064797bc6bdf9",
+    "packages/adapters/claude/src/handler.spec.ts": "daaa24363a2853f3fa4ea87c5f00f23a26a33f3422691271dc32ec0c040d1945",
+    "packages/adapters/claude/test/block-identity.spec.ts": "ef4a9abc73f2a3d52ce7c218d70c09523674f27925cec0c08d8750bfbd8b609e",
+    "packages/adapters/claude/test/file-failure.spec.ts": "6a0ca86f07184ec7e89d3230d1b31c0ce66f66806fdd99497f9263c1baf95bd9",
+    "packages/adapters/claude/test/task-output-identity.spec.ts": "7dbb999a98df59292b37c02f204c3cad396e0724badb2900725038d9178809d2",
+    "packages/protocol/src/claude-content.spec.ts": "4e024225ffea18e5026697ae61969aadf8a5a40c6d3d448e296a188218d86de1",
+    "packages/protocol/src/claude-content.ts": "8273d56fc484afb2509605b953fc2bfd25a66fe1da0c1aee12b367f76866e5ff",
+    "packages/protocol/src/claude-tasks.ts": "37a0e9ed8856cabc3d2663e4055fee7555d918f20e6026d46445a6645e724928",
+    "packages/protocol/src/events.ts": "42b0e35a3a825a282d3fe20477dcdf1e218977423f9ea71339336f53a45d29f5",
+    "packages/protocol/src/index.ts": "2c15ec0380f4413236d3391dba8dc2779e301a79a3ace49541e916fdb47dae5c",
+    "packages/web/src/components/Timeline.tsx": "d76176519e69a03ea2b795cfd1c16de7778747b70c46b760d211a5deb433ce35"
+  }
+}

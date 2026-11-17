@@ -44,7 +44,8 @@ it.each(['codex', 'claude-code', 'dsh'] as const)('%s retries a transient termin
     browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await authenticate(page, ctx);
     await page.addInitScript(() => {
       const scope = window as typeof window & { terminalSockets: WebSocket[] }; const NativeSocket = window.WebSocket; scope.terminalSockets = [];
-      window.WebSocket = class extends NativeSocket { constructor(url: string | URL, protocols?: string | string[]) { super(url, protocols); scope.terminalSockets.push(this); } };
+      Object.defineProperty(window, 'WebSocket', { configurable: true, writable: true,
+        value: class extends NativeSocket { constructor(url: string | URL, protocols?: string | string[]) { super(url, protocols); scope.terminalSockets.push(this); } } });
     });
     let controlledFailure = true; let gets = 0; let snapshots = 0;
     page.on('websocket', socket => socket.on('framereceived', frame => { const message = JSON.parse(String(frame.payload)); if (message.op === 'snapshot' && message.sessionId === ctx.session.id) snapshots++; }));
@@ -76,7 +77,8 @@ it('refreshes a changed native target with an already uncertain turn, rejects it
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : input.toString();
         if (!delayed && url.includes(endpoint)) {
           delayed = true; const response = await originalFetch(input, { ...init, signal: undefined }); const originalJson = response.json.bind(response);
-          response.json = async () => { const value = await originalJson(); scope.terminalBodyParsed = true; return value; };
+          Object.defineProperty(response, 'json', { configurable: true, writable: true,
+            value: async () => { const value = await originalJson(); scope.terminalBodyParsed = true; return value; } });
           await new Promise<void>(resolve => { scope.releaseTerminalBody = resolve; scope.terminalBodyWaiting = true; }); return response;
         }
         return originalFetch(input, init);

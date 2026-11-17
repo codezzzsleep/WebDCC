@@ -1,4 +1,5 @@
 import type { EventKind, StoredEvent } from './events.js';
+import { claudeBlockOrigin, orderClaudeBlocks, type ClaudeBlockOrigin } from './claude-content.js';
 
 /** The spawning tool, native message and block identify a child output. A run
  * is attached only when the native tool-to-task join is unambiguous. */
@@ -278,6 +279,7 @@ export interface ClaudeTaskOutput {
   kind: EventKind;
   text: string;
   origin: ClaudeOutputOrigin;
+  claudeBlock?: ClaudeBlockOrigin;
   live: boolean;
   incomplete?: boolean;
 }
@@ -298,7 +300,9 @@ function taskOutput(item: { itemKey: string; kind: EventKind; data: unknown; nat
     case 'file.change': output = `编辑 ${JSON.stringify(data['changes'] ?? [])}${typeof data['output'] === 'string' ? `\n${data['output']}` : typeof data['error'] === 'string' ? `\n${data['error']}` : ''}`; break;
     default: return undefined;
   }
-  return { itemKey: item.itemKey, kind: item.kind, text: output, origin, live, ...(data['incomplete'] === true ? { incomplete: true } : {}) };
+  const block = claudeBlockOrigin(item);
+  return { itemKey: item.itemKey, kind: item.kind, text: output, origin, live, ...(block === undefined ? {} : { claudeBlock: block }),
+    ...(data['incomplete'] === true ? { incomplete: true } : {}) };
 }
 
 /** Includes previous runs without attributing an ambiguous legacy output to
@@ -311,7 +315,7 @@ export function currentClaudeTaskViews(events: readonly StoredEvent[], live: rea
   for (const item of events) { const output = taskOutput(item, false); if (output !== undefined) outputs.set(item.itemKey, output); }
   for (const item of live) { const output = taskOutput(item, true); if (output !== undefined) outputs.set(item.itemKey, output); }
   const unassignedOutputs: ClaudeTaskOutput[] = [];
-  for (const output of outputs.values()) {
+  for (const output of orderClaudeBlocks([...outputs.values()])) {
     const origin = output.origin;
     const matches = [...runs.values()].filter(task => task.nativeSessionId === origin.nativeSessionId && (origin.taskId === undefined
       ? task.toolUseId === origin.parentToolUseId : task.taskId === origin.taskId && task.runId === origin.runId));

@@ -19,7 +19,11 @@ it('NP-09 completes two text blocks with their own canonical text and original l
     return start.filter(event => event.type === 'item.start');
   });
   const result = completions(replay.feed(complete('message', [{ type: 'text', text: 'first final' }, { type: 'text', text: 'second final' }])));
-  expect(result.map(event => event.data)).toEqual([{ text: 'first final' }, { text: 'second final' }]);
+  expect(result.map(event => event.data)).toMatchObject([{ text: 'first final' }, { text: 'second final' }]);
+  expect(result.map(event => (event.data as { claudeBlock?: unknown }).claudeBlock)).toMatchObject([
+    { nativeSessionId: 'native-session', nativeMessageId: 'message', parentToolUseId: null, blockIndex: 0, queryId: 'replay:replay' },
+    { nativeSessionId: 'native-session', nativeMessageId: 'message', parentToolUseId: null, blockIndex: 1, queryId: 'replay:replay' },
+  ]);
   expect(result.map(event => event.itemKey)).toEqual(starts.map(event => event.itemKey));
 });
 
@@ -51,16 +55,17 @@ it('NP-09 isolates equal block indices across main and child actors', () => {
   const main = completions(replay.feed(complete('same-model-message-id', [{ type: 'text', text: 'main' }], 'main-uuid')));
   expect(child.map(event => event.itemKey)).toEqual([starts[1]]);
   expect(main.map(event => event.itemKey)).toEqual([starts[0]]);
-  expect(child[0]?.data).toEqual({ text: 'child', claudeActor: { agent: 'claude-code', nativeSessionId: 'native-session',
+  expect(child[0]?.data).toMatchObject({ text: 'child', claudeActor: { agent: 'claude-code', nativeSessionId: 'native-session',
     parentToolUseId: 'parent-tool', nativeMessageId: 'same-model-message-id', blockIndex: 0 } });
-  expect(main[0]?.data).toEqual({ text: 'main' });
+  expect(main[0]?.data).toMatchObject({ text: 'main' });
+  expect((main[0]?.data as { claudeActor?: unknown }).claudeActor).toBeUndefined();
 });
 
 it('NP-09 preserves mixed thinking/text without partials, unique messages, and duplicate-delivery identity', () => {
   const replay = ClaudeAdapter.replay();
   const mixed = complete('first', [{ type: 'thinking', thinking: 'thought' }, { type: 'text', text: 'text' }]);
   const first = completions(replay.feed(mixed));
-  expect(first.map(event => event.data)).toEqual([{ text: 'thought' }, { text: 'text' }]);
+  expect(first.map(event => event.data)).toMatchObject([{ text: 'thought' }, { text: 'text' }]);
   expect(completions(replay.feed(mixed))).toHaveLength(0);
   const second = completions(replay.feed(complete('second', [{ type: 'text', text: 'text' }])));
   expect(second).toHaveLength(1);

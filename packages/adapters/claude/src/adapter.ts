@@ -40,7 +40,7 @@ import {
   type UserDialogRequest,
   type UserDialogResult,
 } from '@anthropic-ai/claude-agent-sdk';
-import { buildFileChanges, canStopClaudeTask, claudeOutputOrigin, claudeResultOutput, elicitationUrl, schemaHasSecrets, isValidEventData, isClaudeQueryConfiguration, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
+import { buildFileChanges, canStopClaudeTask, claudeBlockOrigin, claudeOutputOrigin, claudeResultOutput, elicitationUrl, schemaHasSecrets, isValidEventData, isClaudeQueryConfiguration, traceFrame, normalizeQuestionAnswer, nativeAccessMode } from '@webdcc/protocol';
 
 import { ClaudeContentReducer } from './content.js';
 import { encodeClaudeInput, type ClaudeUserContent } from './input.js';
@@ -236,7 +236,7 @@ interface SessionRuntime {
   generationStartedAt: number | null;
   generationMs: number;
   pending: Map<string, PendingInteraction>;
-  toolItems: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
+  toolItems: Map<string, ClaudeToolItem[]>;
   outputOrigins: Map<string, ClaudeOutputOrigin>;
   /** init 消息里的斜杠命令（F8） */
   slashCommands: string[];
@@ -244,6 +244,16 @@ interface SessionRuntime {
   content: ClaudeContentReducer;
   ready: Promise<void>;
   frameSeq: number;
+}
+interface ClaudeToolItem {
+  itemKey: string;
+  toolId: string;
+  nativeSessionId: string;
+  parentToolUseId: string | null;
+  kind: EventKind;
+  data: EventData[EventKind];
+  name: string;
+  input: Record<string, unknown>;
 }
 interface NativePending {
   kind: 'elicitation' | 'dialog';
@@ -356,6 +366,8 @@ export class ClaudeAdapter implements AgentAdapter {
   private emit(sessionId: string, event: AdapterEvent): void {
     const current = this.sessions.get(sessionId);
     if (current !== undefined && (event.type === 'item.start' || event.type === 'item.complete')) {
+      const block = claudeBlockOrigin(event);
+      if (block !== undefined) event = { ...event, data: { ...record(event.data), claudeBlock: { ...block, queryId: current.instanceId } } } as Extract<AdapterEvent, { type: 'item.start' | 'item.complete' }>;
       const origin = claudeOutputOrigin({ data: event.data, native: event.native });
       const previous = current.outputOrigins.get(event.itemKey);
       if (origin !== undefined || previous !== undefined) {
@@ -1324,13 +1336,10 @@ export class ClaudeAdapter implements AgentAdapter {
       }
       case 'assistant': {
         this.finishGeneration(runtime);
-        const content = (message.message?.content ?? []) as unknown as Record<string, unknown>[];
-        const reduced = runtime.content.assistant(message);
-        for (const event of reduced.events) this.emit(sessionId, event);
-        if (reduced.duplicate) return;
-        for (const block of content) {
-          if (block['type'] !== 'tool_use') continue;
+        const reduced = runtime.content.assistant(message, (block, identity) => {
           const toolId = String(block['id'] ?? '');
+          if (toolId === '') return [{ type: 'item.complete', itemKey: `${identity.itemKey}-unknown`, kind: 'unknown',
+            data: { nativeType: 'assistant/content/tool_use/invalid', claudeBlock: identity.claudeBlock }, native: message }];
           const name = String(block['name'] ?? '');
           const mappedKind = toolKind(name);
           const kind = mappedKind === 'question' ? 'tool.call' : mappedKind;
@@ -1342,14 +1351,20 @@ export class ClaudeAdapter implements AgentAdapter {
                 ? { path: String(rawInput['file_path'] ?? rawInput['pattern'] ?? '') }
                 : kind === 'file.change' ? { changes: buildFileChanges(name, rawInput), status: 'running' }
                 : { name, input: rawInput, status: 'running' };
-          runtime.toolItems.set(toolId, { itemKey: `tool-${toolId}`, kind, data, name, input: rawInput });
-          this.emit(sessionId, { type: 'item.start', itemKey: `tool-${toolId}`, kind, data, native: message });
-        }
+          const itemKey = `${identity.itemKey}-tool`;
+          const nativeData = { ...data, claudeBlock: { ...identity.claudeBlock, queryId: runtime.instanceId },
+            ...(identity.claudeActor === undefined ? {} : { claudeActor: identity.claudeActor }) };
+          const target = JSON.stringify([message.session_id, message.parent_tool_use_id ?? null, toolId]);
+          runtime.toolItems.set(target, [...runtime.toolItems.get(target) ?? [], { itemKey, toolId, kind, data: nativeData, name, input: rawInput,
+            nativeSessionId: message.session_id, parentToolUseId: message.parent_tool_use_id ?? null }]);
+          return [{ type: 'item.start', itemKey, kind, data: nativeData, native: message }];
+        });
+        for (const event of reduced.events) this.emit(sessionId, event);
         return;
       }
       case 'user': {
         const content = (message.message?.content ?? []) as unknown as Record<string, unknown>[];
-        for (const block of content) {
+        for (const [blockIndex, block] of content.entries()) {
           if (block['type'] !== 'tool_result') continue;
           const toolId = String(block['tool_use_id'] ?? '');
           const matches = [...runtime.questionGroups].filter(([id, group]) => (group.toolUseID ?? id) === toolId);
@@ -1359,16 +1374,25 @@ export class ClaudeAdapter implements AgentAdapter {
             this.settleQuestionGroup(sessionId, runtime, groupId, !ambiguous && group.submitted && block['is_error'] !== true ? 'answered' : 'skipped', message,
               ambiguous || block['is_error'] === true && !rejected ? 'outcome-unknown' : group.submitted || rejected ? 'native-acknowledged' : 'external');
           }
-          const item = runtime.toolItems.get(toolId);
-          runtime.toolItems.delete(toolId);
+          const calls = [...runtime.toolItems].flatMap(([key, pending]) => pending.map(item => ({ key, item })))
+            .filter(({ item }) => item.toolId === toolId && item.parentToolUseId === (message.parent_tool_use_id ?? null)
+              && (message.session_id === undefined || item.nativeSessionId === message.session_id));
+          if (calls.length !== 1) {
+            if (matches.length === 0) this.emit(sessionId, { type: 'item.complete', itemKey: `claude-tool-result:${runtime.instanceId}:${message.uuid ?? runtime.frameSeq}:${blockIndex}`,
+              kind: 'unknown', data: { nativeType: calls.length === 0 ? 'user/tool_result/unmatched' : 'user/tool_result/ambiguous' }, native: message });
+            continue;
+          }
+          const { key, item } = calls[0]!;
+          const remaining = runtime.toolItems.get(key)!.filter(candidate => candidate !== item);
+          if (remaining.length === 0) runtime.toolItems.delete(key); else runtime.toolItems.set(key, remaining);
           const output = typeof block['content'] === 'string' ? block['content'] : JSON.stringify(block['content']);
-          if (item === undefined) continue;
+          const blockOrigin = claudeBlockOrigin(item);
           const failed = block['is_error'] === true || item.name === 'TaskUpdate' && record(message.tool_use_result)['success'] === false;
           const child = runtime.outputOrigins.has(item.itemKey) || claudeOutputOrigin({ native: message }) !== undefined;
           if (!child && runtime.state.toolResult(item.name, item.input, message.tool_use_result, failed)) this.emitTaskPanel(sessionId, runtime);
           if (!child && item.name === 'TodoWrite' && !failed) {
             const todos = record(message.tool_use_result)['newTodos'];
-            if (Array.isArray(todos)) this.emit(sessionId, { type: 'item.complete', itemKey: `plan-${toolId}`, kind: 'plan', data: {
+            if (Array.isArray(todos)) this.emit(sessionId, { type: 'item.complete', itemKey: `${item.itemKey}-plan`, kind: 'plan', data: {
               items: todos.map(value => record(value)).filter(todo => typeof todo['content'] === 'string' && ['pending', 'in_progress', 'completed'].includes(String(todo['status']))).map(todo => ({ text: todo['content'], status: todo['status'] })),
             }, native: message });
           }
@@ -1389,6 +1413,7 @@ export class ClaudeAdapter implements AgentAdapter {
               itemKey: item.itemKey,
               kind: 'file.change',
               data: { changes: failed ? [] : buildFileChanges(item.name, item.input), status: failed ? 'failed' : 'completed',
+                ...(blockOrigin === undefined ? {} : { claudeBlock: blockOrigin }),
                 ...(failed ? { path: String(item.input['file_path'] ?? item.input['path'] ?? ''), error: output } : {}), ...(child ? { output } : {}) },
               native: message,
             });
