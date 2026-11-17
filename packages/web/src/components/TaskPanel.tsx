@@ -39,7 +39,11 @@ export function TaskPanel({ sessionId }: { sessionId: string }): React.ReactElem
         {subagents.map(child => <details key={child.childId}>
           <summary>{child.agentPath ?? child.childId} · {codexSubagentStatusLabel(child.nativeStatus)}</summary>
           <p>原生线程：{child.childId}<br />父线程：{child.parentThreadId}</p>
-          {child.results.map(result => <pre className="output" key={`${result.nativeTurnId}:${result.itemId}`}>{result.text}</pre>)}
+          {child.results.map(result => <div key={JSON.stringify([result.nativeTurnId ?? null, result.itemId])} data-testid="codex-child-result"
+            data-child-id={child.childId} data-native-turn-id={result.nativeTurnId} data-native-item-id={result.itemId}>
+            {result.incomplete ? <p role="status">正文未完成</p> : null}
+            <pre className="output">{result.text}</pre>
+          </div>)}
           {child.snapshots?.map(snapshot => <details key={codexSubagentSnapshotKey(snapshot)} data-testid="codex-collab-observation"
             data-child-id={child.childId} data-native-call-id={snapshot.callId}>
             <summary>原生 {snapshot.tool} 观测 · {codexSubagentStatusLabel(snapshot.status)}</summary>

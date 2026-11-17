@@ -156,6 +156,8 @@ interface SessionRuntime {
   activeReviewRoot?: string;
   subagents?: Map<string, CodexSubagentIdentity>;
   subagentTurns?: Map<string, Set<string>>;
+  subagentTurnCompletions?: Set<string>;
+  subagentMessageCompletions?: Set<string>;
   collabCalls?: Map<string, { startFrame?: number; completed: boolean }>;
   subagentStateFrames?: Map<string, number>;
   subagentSnapshotStarts?: Map<string, number>;
@@ -177,12 +179,20 @@ interface SessionRuntime {
   started: Set<string>;
 }
 
+function subagentMessageKey(childId: string, nativeTurnId: string | undefined, itemId: string): string {
+  return JSON.stringify([childId, nativeTurnId ?? null, itemId]);
+}
+
 function restoreSubagentState(runtime: SessionRuntime, children: readonly CodexSubagentView[]): void {
   runtime.subagents = new Map(children.map(({ turns: _turns, results: _results, snapshots: _snapshots, ...identity }) => {
     void _turns; void _results; void _snapshots;
     return [identity.childId, identity];
   }));
   runtime.subagentTurns = new Map(children.map(child => [child.childId, new Set(Object.keys(child.turns))]));
+  runtime.subagentTurnCompletions = new Set(children.flatMap(child => Object.entries(child.turns)
+    .filter(([, turn]) => turn.status !== 'inProgress').map(([turnId]) => JSON.stringify([child.childId, turnId]))));
+  runtime.subagentMessageCompletions = new Set(children.flatMap(child => child.results.filter(result => result.incomplete !== true)
+    .map(result => subagentMessageKey(child.childId, result.nativeTurnId, result.itemId))));
   runtime.collabCalls = new Map(children.flatMap(child => (child.snapshots ?? []).filter(snapshot =>
     ['completed', 'failed', 'interrupted'].includes(snapshot.callStatus)).map(snapshot =>
       [codexSubagentSnapshotKey(snapshot), { completed: true }] as const)));
@@ -1468,6 +1478,8 @@ export class CodexAdapter implements AgentAdapter {
     const observed = runtime.subagentTurns ??= new Map();
     const knownTurns = observed.get(actor) ?? new Set<string>();
     observed.set(actor, knownTurns);
+    const completedTurns = runtime.subagentTurnCompletions ??= new Set();
+    const completedMessages = runtime.subagentMessageCompletions ??= new Set();
     if (frame['method'] === 'turn/started' && nativeTurnId !== undefined) {
       if (knownTurns.has(nativeTurnId)) return;
       knownTurns.add(nativeTurnId);
@@ -1476,6 +1488,7 @@ export class CodexAdapter implements AgentAdapter {
         { turn: { id: nativeTurnId, status: turn.status ?? 'inProgress' } });
     } else if (frame['method'] === 'turn/completed' && nativeTurnId !== undefined) {
       knownTurns.add(nativeTurnId);
+      completedTurns.add(JSON.stringify([actor, nativeTurnId]));
       if (child.nativeTurnId === undefined || child.nativeTurnId === nativeTurnId) (runtime.subagentStateFrames ??= new Map()).set(actor, runtime.frameSeq);
       publish({ ...child, ...(child.nativeTurnId === undefined ? { nativeTurnId } : {}),
         ...(child.nativeTurnId === undefined || child.nativeTurnId === nativeTurnId ? { nativeStatus: turn.status ?? 'unknown' } : {}) },
@@ -1487,8 +1500,22 @@ export class CodexAdapter implements AgentAdapter {
         publish({ ...child, nativeStatus: status.activeFlags?.length && status.activeFlags.every(flag => flag === 'waitingOnApproval' || flag === 'waitingOnUserInput') ? 'waiting' : 'running' });
       }
       // Idle/systemError alone is not evidence of a successful/failed task.
-    } else if (frame['method'] === 'item/completed' && item['type'] === 'agentMessage' && typeof item['text'] === 'string') {
-      publish(child, { result: { nativeTurnId: nativeTurnId ?? child.nativeTurnId, itemId: String(item['id']), text: item['text'], nativePhase: item['phase'] } });
+    } else if (frame['method'] === 'item/agentMessage/delta' && nativeTurnId !== undefined && typeof params['itemId'] === 'string'
+      && params['itemId'] !== '' && typeof params['delta'] === 'string') {
+      if (completedTurns.has(JSON.stringify([actor, nativeTurnId])) || completedMessages.has(subagentMessageKey(actor, nativeTurnId, params['itemId']))) return;
+      if (child.nativeTurnId === undefined || child.nativeTurnId === nativeTurnId) (runtime.subagentStateFrames ??= new Map()).set(actor, runtime.frameSeq);
+      publish(child, { resultDelta: { nativeTurnId, itemId: params['itemId'], text: params['delta'] } });
+    } else if ((frame['method'] === 'item/started' || frame['method'] === 'item/completed') && nativeTurnId !== undefined
+      && item['type'] === 'agentMessage' && typeof item['id'] === 'string' && item['id'] !== '' && typeof item['text'] === 'string') {
+      const key = subagentMessageKey(actor, nativeTurnId, item['id']);
+      if (completedMessages.has(key)) return;
+      const result = { nativeTurnId, itemId: item['id'], text: item['text'], nativePhase: item['phase'] };
+      if (frame['method'] === 'item/started') {
+        if (!completedTurns.has(JSON.stringify([actor, nativeTurnId]))) publish(child, { resultStart: result });
+      } else {
+        completedMessages.add(key);
+        publish(child, { result });
+      }
     }
   }
 
