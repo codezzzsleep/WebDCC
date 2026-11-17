@@ -74,10 +74,25 @@ it.each(['codex', 'claude-code', 'dsh'] as const)('%s displays original native t
     await expect.poll(() => page.getByTestId('native-terminal-result').count()).toBe(1);
     await expect.poll(() => page.getByTestId('native-terminal-result').textContent()).toContain('原生已报告失败');
     const currentOutcome = await page.getByTestId('native-terminal-result').getAttribute('data-outcome-id');
+    // A fresh snapshot/native binding can retire the current GET while its
+    // replacement is pending. Observe every displayed identity across the
+    // delayed old response, then require the current read to settle.
+    await page.evaluate(`(() => {
+      window.terminalOutcomeObservations = [];
+      const observe = () => window.terminalOutcomeObservations.push(Array.from(
+        document.querySelectorAll('[data-testid="native-terminal-result"]'), item => item.getAttribute('data-outcome-id')));
+      window.terminalOutcomeObserver = new MutationObserver(observe);
+      window.terminalOutcomeObserver.observe(document.querySelector('[data-testid="timeline"]'),
+        { childList: true, subtree: true, attributes: true, attributeFilter: ['data-outcome-id'] });
+      observe();
+    })()`);
     await page.evaluate(() => (window as Window & { releaseTerminalBody?: () => void }).releaseTerminalBody?.());
     await expect.poll(() => page.evaluate(() => (window as Window & { terminalBodyParsed?: boolean }).terminalBodyParsed)).toBe(true);
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
-    expect(await page.getByTestId('native-terminal-result').count()).toBe(1); expect(await page.getByTestId('native-terminal-result').getAttribute('data-outcome-id')).toBe(currentOutcome);
+    await expect.poll(() => page.getByTestId('native-terminal-result').evaluateAll(items => items.map(item => item.getAttribute('data-outcome-id')))).toEqual([currentOutcome]);
+    const observedOutcomes = await page.evaluate('window.terminalOutcomeObservations') as (string | null)[][];
+    expect(observedOutcomes.every(ids => ids.length === 0 || ids.length === 1 && ids[0] === currentOutcome)).toBe(true);
+    await page.evaluate('window.terminalOutcomeObserver.disconnect()');
     if (evidence !== undefined) await writeFile(join(evidence, `${agent}-late-controlled-response.json`), JSON.stringify({ evidenceKind: 'controlled browser fetch ignoring Abort for one actual HTTP response; not official-native behavior', previous, current, currentOutcome, previousBodyParsed: true, currentResultRetained: true }, null, 2));
     // Missing recovery context cannot become a native success after refresh.
     const target = message.cases[2]!; const rows = ctx.store.nativeEvents.list(target.sessionId, 0, 500); const terminal = rows.find(row => row.channel === 'turn.end')!;
