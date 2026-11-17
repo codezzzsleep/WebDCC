@@ -23,6 +23,7 @@ export * from './subagents.js';
 export * from './dsh-subagents.js';
 export * from './dsh-questions.js';
 export * from './dsh-interactions.js';
+export * from './dsh-question-replies.js';
 export * from './claude-tasks.js';
 export * from './claude-output.js';
 export * from './claude-configuration.js';

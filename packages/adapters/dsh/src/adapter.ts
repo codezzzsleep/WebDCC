@@ -50,9 +50,10 @@ import { dshGoalChange, dshGoalProjection } from './goals.js';
 import { DSH_NATIVE_CONTROLS, dshNativeActionMetadata, dshNativeCall, dshNativeError, dshPublicValue, dshRevision, parseDshNativeAction } from './native.js';
 import { DshWorkspaceBridge } from './workspaces.js';
 import { randomUUID } from 'node:crypto';
-import { sameDshApproval, type DshApprovalAttempt, type DshApprovalDelivery } from '@webdcc/protocol';
+import { sameDshApproval, sameDshQuestionDelivery, isDshQuestionAttempt, type DshApprovalAttempt, type DshApprovalDelivery,
+  type DshQuestionAttempt, type DshQuestionDelivery } from '@webdcc/protocol';
 import { dshSubagentCatalog, dshSubagentAddress, checkDshSubagentPage, dshSubagentSummary, dshSubagentDescriptorSeq, dshSubagentInputHash } from './subagents.js';
-import { dshQuestionSignature, dshQuestionAnswers, dshQuestionResult, sameDshQuestionAnswers, type DshQuestionResult } from './questions.js';
+import { dshQuestionSignature, dshQuestionRecoverySignature, dshQuestionAnswers, dshQuestionResult, sameDshQuestionAnswers, type DshQuestionResult } from './questions.js';
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
 import { dshInputParts, dshInputUnsupported, encodeDshInput, validateDshInputParts, type DshResolvableInput, type DshResolvedAttachment } from './input.js';
 
@@ -252,6 +253,9 @@ interface PendingInteraction {
   approvalItem?: EventData['approval.request'];
   approvalAgentId?: string;
   approvalDeliveryId?: string;
+  questionAgentId?: string;
+  questionDeliveryId?: string;
+  questionSignature?: string;
   transportClosed?: boolean;
   settlement?: DshQuestionResult;
   waitClosers?: Set<() => void>;
@@ -1314,17 +1318,17 @@ export class DshAdapter implements AgentAdapter {
 
   /** 所有 RPC 都经过白名单检查 */
   private async call<T>(client: DshHostClient, endpoint: string, args: Record<string, unknown> = {}, sessionId?: string,
-    inputReference?: { fileIds: string[]; nativeRequestId?: string }, idempotentApproval?: () => boolean): Promise<T> {
+    inputReference?: { fileIds: string[]; nativeRequestId?: string }, replyGuard?: { current: () => boolean; retry: boolean }): Promise<T> {
     if (!isAllowedEndpoint(endpoint)) throw new Error(`dsh: 端点不在白名单内：${endpoint}`);
-    if (idempotentApproval !== undefined && (endpoint !== '$events/result' || !idempotentApproval()))
-      throw Object.assign(dshNativeError('原审批投递已变化，请重新核对', 409), { nativeAdmission: 'not-submitted' });
+    if (replyGuard !== undefined && (endpoint !== '$events/result' || !replyGuard.current()))
+      throw Object.assign(dshNativeError('原生交互投递已变化，请重新核对', 409), { nativeAdmission: 'not-submitted' });
     const request = (args['request'] ?? {}) as Record<string, unknown>;
     const address = (request['address'] ?? {}) as Record<string, unknown>;
     const nativeId = args['agentId'] ?? args['sessionId'] ?? request['sessionId'] ?? (address['kind'] === 'session' ? address['sessionId'] : undefined);
     const matches = typeof nativeId === 'string' && nativeId !== '' ? [...this.sessions].filter(([, runtime]) => runtime.nativeId === nativeId) : [];
     const owner = sessionId ?? (matches.length === 1 ? matches[0]![0] : '');
     const readonly = DSH_READ_RPC_ENDPOINTS.has(endpoint);
-    if (!readonly && this.rpcWritesBlocked && idempotentApproval === undefined) throw Object.assign(new Error('DSH native transport capture is incomplete; reconcile before another write'), { code: 'uncertain' });
+    if (!readonly && this.rpcWritesBlocked && replyGuard?.retry !== true) throw Object.assign(new Error('DSH native transport capture is incomplete; reconcile before another write'), { code: 'uncertain' });
     // Preserve the pre-existing intent durability gate. Actual transport
     // admission below records the independently generated native rpcId.
     let intentAccepted = false;
@@ -1356,7 +1360,7 @@ export class DshAdapter implements AgentAdapter {
         if (!persistedAttachmentInput) { this.rpcWritesBlocked = true; if (!readonly) accepted = false; }
       }
       if (!accepted) this.rpcWritesBlocked = true;
-      return accepted && (idempotentApproval === undefined || idempotentApproval());
+      return accepted && (replyGuard === undefined || replyGuard.current());
     });
   }
 
@@ -1698,7 +1702,7 @@ export class DshAdapter implements AgentAdapter {
       clientId,
       eventId: decision.approvalId,
       outcome: { kind: 'result', value: decision.optionId },
-    }, sessionId, undefined, recovery === undefined ? undefined : current);
+    }, sessionId, undefined, recovery === undefined ? undefined : { current, retry: true });
     if (this.sessions.get(sessionId) !== runtime || this.client !== client || this.clientId !== clientId
       || this.muxGeneration !== generation || this.hostEpoch !== epoch || pending.transportClosed || runtime.pending.get(decision.approvalId) !== pending)
       throw Object.assign(dshNativeError('审批回执属于已结束的原生交互或旧连接，本次回应结果待核对', 503), { code: 'uncertain' });
@@ -1725,7 +1729,52 @@ export class DshAdapter implements AgentAdapter {
     }
   }
 
-  async answer(sessionId: string, questionId: string, answer: unknown): Promise<AnswerSubmission> {
+  private questionRevision(runtime: SessionRuntime, pending: PendingInteraction, hostId: string, hostFingerprint: string): string {
+    return dshRevision({ hostId, hostFingerprint, clientId: this.clientId, epoch: this.hostEpoch, generation: this.muxGeneration,
+      runtime: runtime.identity, delivery: pending.questionDeliveryId });
+  }
+
+  async dshQuestionDelivery(sessionId: string, questionId: string): Promise<DshQuestionDelivery | undefined> {
+    const client = await this.ensureSidecar(); const runtime = this.require(sessionId);
+    const pending = [...runtime.pending.values()].find(item => item.kind === 'question'
+      && (item.eventId === questionId || item.questionIds?.some(id => `${item.eventId}:${id}` === questionId)));
+    if (pending?.kind !== 'question' || !pending.callId || pending.questionAgentId !== runtime.nativeId || !pending.questionDeliveryId
+      || !pending.questionSignature || pending.questionItems?.some(item => item.isSecret) || pending.continued || pending.sent || pending.sending
+      || pending.transportClosed || pending.generation !== this.muxGeneration || this.clientId === '') return undefined;
+    const epoch = this.hostEpoch; const generation = this.muxGeneration; const clientId = this.clientId;
+    const host = await this.hostIdentity().catch(() => undefined);
+    if (host?.status !== 'verified' || host.fingerprint === undefined || this.client !== client || this.clientId !== clientId
+      || this.hostEpoch !== epoch || this.muxGeneration !== generation || this.sessions.get(sessionId) !== runtime
+      || runtime.pending.get(pending.eventId) !== pending || pending.continued || pending.sent || pending.sending || pending.transportClosed) return undefined;
+    const hostId = dshRevision({ endpoint: host.url });
+    return { nativeId: runtime.nativeId, agentId: pending.questionAgentId, eventId: pending.eventId, callId: pending.callId,
+      itemIds: [...pending.questionIds ?? []], signature: pending.questionSignature, timed: pending.timed === true,
+      hostId, hostFingerprint: host.fingerprint, clientId, revision: this.questionRevision(runtime, pending, hostId, host.fingerprint) };
+  }
+
+  async prepareDshQuestionAnswer(sessionId: string, questionId: string, answer: unknown): Promise<DshQuestionAttempt | undefined> {
+    const delivery = await this.dshQuestionDelivery(sessionId, questionId);
+    if (delivery === undefined) return undefined;
+    const pending = this.require(sessionId).pending.get(delivery.eventId)!;
+    const id = questionId === delivery.eventId ? delivery.itemIds[0]! : questionId.slice(delivery.eventId.length + 1);
+    const { selected, custom } = normalizeQuestionAnswer(answer); const answers = new Map(pending.answers);
+    answers.set(id, { id, selected: [...selected], ...(custom === undefined || custom === '' ? {} : { custom }) });
+    const attempt = { delivery, answers: [...answers.values()] };
+    return isDshQuestionAttempt(attempt) ? structuredClone(attempt) : undefined;
+  }
+
+  async retryDshQuestion(sessionId: string, questionId: string, attempt: DshQuestionAttempt, revision: string): Promise<AnswerSubmission> {
+    const current = await this.dshQuestionDelivery(sessionId, questionId);
+    if (!isDshQuestionAttempt(attempt) || current === undefined || current.revision !== revision || !sameDshQuestionDelivery(attempt.delivery, current))
+      throw Object.assign(dshNativeError('原问题组身份或投递已变化，不能重发旧回答', 409), { nativeAdmission: 'not-submitted' });
+    return this.replyQuestion(sessionId, questionId, undefined, { delivery: current, answers: structuredClone(attempt.answers) }, true);
+  }
+
+  async answer(sessionId: string, questionId: string, answer: unknown, prepared?: DshQuestionAttempt): Promise<AnswerSubmission> {
+    return this.replyQuestion(sessionId, questionId, answer, prepared);
+  }
+
+  private async replyQuestion(sessionId: string, questionId: string, answer: unknown, prepared?: DshQuestionAttempt, retry = false): Promise<AnswerSubmission> {
     const client = await this.ensureSidecar();
     const runtime = this.require(sessionId);
     const entry = [...runtime.pending].find(([eventId, pending]) => pending.kind === 'question' && (questionId === eventId || pending.questionIds?.some(id => `${eventId}:${id}` === questionId)));
@@ -1735,9 +1784,19 @@ export class DshAdapter implements AgentAdapter {
     if (pending.generation !== this.muxGeneration || !pending.continued && this.clientId === '') throw Object.assign(new Error('DSH 问题需要重新同步'), { statusCode: 409 });
     if (pending.transportClosed && !pending.continued) throw dshNativeError('DSH 问题的转发已结束，等待原生结果确认', 409);
     const id = questionId === eventId ? pending.questionIds?.[0] ?? questionId : questionId.slice(eventId.length + 1);
-    const { selected, custom } = normalizeQuestionAnswer(answer);
-    pending.answers ??= new Map();
-    pending.answers.set(id, { id, selected, ...(custom === undefined || custom === '' ? {} : { custom }) });
+    if (prepared !== undefined) {
+      const delivery = await this.dshQuestionDelivery(sessionId, questionId);
+      if (delivery === undefined || delivery.revision !== prepared.delivery.revision || !sameDshQuestionDelivery(prepared.delivery, delivery))
+        throw Object.assign(dshNativeError('问题在原回答保存后已变化，未提交', 409), { nativeAdmission: 'not-submitted' });
+    }
+    const nextAnswers = retry ? new Map(prepared!.answers.map(item => [item.id, structuredClone(item)])) : new Map(pending.answers);
+    if (!retry) {
+      const { selected, custom } = normalizeQuestionAnswer(answer);
+      nextAnswers.set(id, { id, selected: [...selected], ...(custom === undefined || custom === '' ? {} : { custom }) });
+    }
+    if (prepared !== undefined && JSON.stringify([...nextAnswers.values()]) !== JSON.stringify(prepared.answers))
+      throw Object.assign(dshNativeError('原问题组答案已变化，未提交', 409), { nativeAdmission: 'not-submitted' });
+    pending.answers = nextAnswers;
     if (pending.answers.size < (pending.questionIds?.length ?? 1)) return { submitted: false };
     const clientId = this.clientId; const generation = this.muxGeneration; const epoch = this.hostEpoch; const nativeId = runtime.nativeId;
     const continuedAtDispatch = pending.continued === true; let continuedAccepted = false;
@@ -1750,13 +1809,16 @@ export class DshAdapter implements AgentAdapter {
       && pending.answerAttempt === attempt && (runtime.pending.get(eventId) === pending || runtime.pending.get(eventId) === undefined && pending.settlement !== undefined);
     const nativeConfirmed = (): boolean => continuedAtDispatch && continuedAccepted && currentIdentity()
       && pending.settlement?.kind === 'answered' && sameDshQuestionAnswers(pending.settlement.answers, answers);
+    const replyGuard = prepared === undefined ? undefined : { retry, current: (): boolean => currentIdentity()
+      && runtime.pending.get(eventId) === pending && !pending.sent && !pending.continued && !pending.transportClosed
+      && this.questionRevision(runtime, pending, prepared.delivery.hostId, prepared.delivery.hostFingerprint) === prepared.delivery.revision };
     try {
       if (continuedAtDispatch && pending.callId !== undefined) {
         const accepted = await this.call<boolean>(client, 'userQuestions/answer', { agentId: nativeId, callId: pending.callId, answer: { answers: [...answers.values()] } }, sessionId);
         if (accepted !== true) throw dshNativeError('The native continued question has ended', 409);
         if (!currentIdentity()) throw Object.assign(dshNativeError('继续回答的接收回执属于旧原生连接，本次结果待核对', 503), { code: 'uncertain' });
         continuedAccepted = true; pending.acceptedReply = true;
-      } else await this.call(client, '$events/result', { clientId, eventId, outcome: { kind: 'result', value: { answers: [...answers.values()] } } }, sessionId);
+      } else await this.call(client, '$events/result', { clientId, eventId, outcome: { kind: 'result', value: { answers: [...answers.values()] } } }, sessionId, undefined, replyGuard);
       // The business result may arrive before the HTTP reply. It belongs to
       // this original call; returning its receipt never mutates a new pending.
       if (nativeConfirmed()) return reply(true);
@@ -2432,7 +2494,8 @@ export class DshAdapter implements AgentAdapter {
       const signature = dshQuestionSignature(questions);
       const calls = signature === undefined ? [] : [...runtime.toolCalls].filter(([, call]) => call.name === 'ask_user_question' && dshQuestionSignature(call.input['questions']) === signature);
       const callId = typeof wait?.callId === 'string' && wait.callId !== '' ? wait.callId : calls.length === 1 ? calls[0]?.[0] : undefined;
-      const pending: PendingInteraction = { kind: 'question', eventId, questionIds: ids, generation: this.muxGeneration, callId, timed: wait?.timed === true };
+      const pending: PendingInteraction = { kind: 'question', eventId, questionIds: ids, generation: this.muxGeneration, callId, timed: wait?.timed === true,
+        questionAgentId: agentId, questionDeliveryId: randomUUID(), questionSignature: dshQuestionRecoverySignature(questions) };
       const previous = runtime.pending.get(eventId);
       if (previous !== undefined) this.releaseQuestionWaits(previous);
       runtime.pending.set(eventId, pending);

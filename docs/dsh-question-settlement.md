@@ -6,9 +6,9 @@
 
 WebDCC 保留原始 waterfall `eventId`、每一道题的 `id` 及原生 `callId`。旧版 `ask_user_question` 的 waterfall 没有 `wait.callId` 时，只能用无歧义的已记录 live 调用核对完整问题集；原生工具把 `multi_select` 转换为客户端 `multiSelect`，其他题目、选项和答案字节保留。含糊身份、缺少完整答案或未知结果不会被计作成功。旧连接的 HTTP 返回不会删除当前重新获得的问题。
 
-答案结果到达时，匹配此次本地提交的完整答案记为原生确认；其他原生答案收敛为 external。原生明确的 `ASK_CANCELLED`/`ASK_ABORTED` 结果收敛为取消，其他失败保留结果未确认。业务结果与 HTTP 返回的先后顺序不改变问题终态。
+答案结果到达时，完整 batch 记为 native-resolved，保留实际原生已回答终态；它不提供回答 Client 的身份。只有 continued 回答的当前 `true` 业务回执和匹配结果才确认本地尝试，见[接收来源合同](dsh-question-provenance.md)。原生明确的 `ASK_CANCELLED`/`ASK_ABORTED` 结果收敛为取消，其他失败保留结果未确认。业务结果与 HTTP 返回的先后顺序不改变问题终态。
 
-实际命令入口也使用该业务证据：完整匹配的原生答案先到时，即使随后HTTP失败也可返回confirmed；外部不同答案/取消先到时，后来的void ACK不能把本地回答命令记作完成。前后原失败与回执仍可分别核查，旧回调只提供原命令的证据，不改当前pending。
+实际命令入口也使用该业务证据：前台完整原生答案先到时，随后 HTTP 失败或 void ACK 仍不证明本地接收；continued 的确认还需同一当前连接的 true 业务回执。外部答案/取消先到时，后来的 void ACK 不能把本地回答命令记作完成。前后原失败与回执仍可分别核查，旧回调只提供原命令的证据，不改当前 pending。[完整前台原回答恢复](dsh-question-original-retry.md)使用同一 event 的明确重试，保留该边界。
 
 [选取的原生协议信封](../fixtures/dsh/question-settlement.json) 来自一次实际固定原生执行和 loopback scripted model 的历史采集，带原 capture/Host 哈希和原始身份；这是实际原生受控模型证据的有限回放，不是 live Provider 验证。定向 HTTP/Chromium 测试驱动受控原生帧，验证当前生产 adapter/manager/界面的确认和刷新语义，未执行新的原生或模型任务。原失败报告保留。
 

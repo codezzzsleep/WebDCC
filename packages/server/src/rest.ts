@@ -453,6 +453,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return manager.dshApprovalRecovery(id, approvalId);
   });
 
+  app.get('/api/sessions/:id/dsh/question-recovery', async request => {
+    const { id } = request.params as { id: string };
+    const questionId = (request.query as { questionId?: unknown }).questionId;
+    if (typeof questionId !== 'string' || !questionId || questionId.length > 2048) throw badRequest('问题身份无效');
+    return manager.dshQuestionRecovery(id, questionId);
+  });
+
   app.put('/api/sessions/:id/draft', async (request): Promise<DraftDto> => {
     const { id } = request.params as { id: string };
     if (store.getSession(id) === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });

@@ -1,5 +1,6 @@
 /** Question identity and settlement come from the native call, not HTTP ACKs. */
-export interface DshQuestionAnswer { id: string; selected: string[]; custom?: string }
+import type { DshQuestionAnswer } from '@webdcc/protocol';
+export type { DshQuestionAnswer } from '@webdcc/protocol';
 export type DshQuestionResult = { kind: 'answered'; answers: DshQuestionAnswer[] }
   | { kind: 'continued' | 'cancelled' | 'unknown' };
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -18,6 +19,14 @@ export function dshQuestionSignature(value: unknown): string | undefined {
       detail: question['detail'] ?? null, intent: question['intent'] ?? null });
   }
   return JSON.stringify(questions);
+}
+
+/** Recovery additionally binds the original sensitive-field flags. */
+export function dshQuestionRecoverySignature(value: unknown): string | undefined {
+  const signature = dshQuestionSignature(value);
+  if (signature === undefined || !Array.isArray(value)) return undefined;
+  const questions = JSON.parse(signature) as Record<string, unknown>[];
+  return JSON.stringify(questions.map((question, index) => ({ ...question, isSecret: object(value[index])['isSecret'] === true })));
 }
 
 export function dshQuestionAnswers(value: unknown): DshQuestionAnswer[] | undefined {
