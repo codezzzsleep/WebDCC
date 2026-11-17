@@ -39,7 +39,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
 import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents } from '@webdcc/protocol';
-import { TurnTracker } from './turn-tracker.js';
+import { TurnTracker, type TurnAssignment } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import type { ModelRecording } from './model-recording.js';
@@ -100,7 +100,7 @@ export class SessionManager {
   readonly watchdog: CodexWatchdog;
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly runtimes = new Map<string, Runtime>();
-  private readonly turns = new TurnTracker();
+  private readonly turns: TurnTracker;
   private readonly activations = new Map<string, Promise<Runtime>>();
   private readonly activationStops = new Set<string>();
   private readonly controls = new Map<string, Promise<unknown>>();
@@ -130,6 +130,7 @@ export class SessionManager {
       files?: FileStore;
     },
   ) {
+    this.turns = new TurnTracker(10_000, this.store.nativeHistory);
     this.files = options.files;
     const recoverable = new Set(this.store.nativeOwners.recoverableSessions());
     this.store.journal.recover([...recoverable]);
@@ -1569,7 +1570,8 @@ export class SessionManager {
     }
     if (envelope.duplicate || envelope.unverified) {
       if (event.type === 'item.complete') {
-        const assigned = this.turns.assignment(sessionId, event);
+        const assigned = this.assignTurn(runtime, event, false);
+        if (assigned === undefined) return;
         runtime.hot.delete(hotKey(assigned.turnId, event.itemKey));
       }
       return;
@@ -1661,7 +1663,8 @@ export class SessionManager {
     if (nativeEffort !== undefined && this.store.getSession(sessionId)?.reasoningEffort !== nativeEffort) {
       this.updateSessionAndFeed(sessionId, { reasoningEffort: nativeEffort }, { reasoningEffort: nativeEffort });
     }
-    const assignment = this.turns.observe(sessionId, event);
+    const assignment = this.assignTurn(runtime, event);
+    if (assignment === undefined) return;
     const turnId = assignment.turnId;
     if ('nativeTurnId' in event && event.nativeTurnId !== undefined && turnId === null && event.scope !== 'session') return;
     // Keep extending the settle window while frames for the pending turn are
@@ -1962,6 +1965,26 @@ export class SessionManager {
   private bindControlRuntime(runtime: Runtime): void {
     const scope = this.controlRuntime.getStore();
     if (scope?.sessionId === runtime.sessionId && scope.runtime === undefined) scope.runtime = runtime;
+  }
+
+  private assignTurn(runtime: Runtime, event: AdapterEvent, observe = true): TurnAssignment | undefined {
+    try {
+      const assigned = observe ? this.turns.observe(runtime.sessionId, event)
+        : this.turns.assignment(runtime.sessionId, event, Date.now(), false);
+      const nativeTurnId = 'nativeTurnId' in event ? event.nativeTurnId : 'turnId' in event ? event.turnId : undefined;
+      if (observe && assigned.turnId !== null && assigned.turnId === runtime.turnId && nativeTurnId !== undefined && nativeTurnId !== '') {
+        this.store.nativeOwners.observe(runtime.sessionId, runtime.identity, nativeTurnId);
+      }
+      return assigned;
+    } catch {
+      // Raw is already committed. Do not publish a memory-only binding or
+      // treat a persistence failure as evidence of the native outcome.
+      this.uncertainSessions.add(runtime.sessionId);
+      try { if (runtime.turnId !== null) this.store.journal.inputState(runtime.turnId, 'uncertain'); } catch { /* storage unavailable */ }
+      this.fenceRuntime(runtime);
+      try { this.updateSessionAndFeed(runtime.sessionId, { status: 'error' }, { status: 'error' }); } catch { /* raw retained */ }
+      return undefined;
+    }
   }
 
   private fenceRuntime(runtime: Runtime): void {
