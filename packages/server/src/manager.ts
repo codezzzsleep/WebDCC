@@ -2043,11 +2043,15 @@ export class SessionManager {
     catch (error) {
       if (!isSqliteFailure(error)) throw error;
       if (this.runtimes.get(runtime.sessionId) !== runtime || runtime.disposing) return;
+      let owns: boolean | undefined;
+      try { owns = this.store.nativeOwners.current(runtime.sessionId, runtime.identity); } catch { /* ownership unavailable */ }
+      if (owns === false) return;
       this.uncertainSessions.add(runtime.sessionId);
       if (runtime.finishTimer !== null) clearTimeout(runtime.finishTimer);
       runtime.finishTimer = null; runtime.finishAction = null;
-      try { if (turnId !== null) this.store.journal.settleInputFailure(turnId, 'uncertain'); } catch { /* DB still unavailable; no durable claim. */ }
+      try { if (owns === true && turnId !== null) this.store.journal.settleInputFailure(turnId, 'uncertain'); } catch { /* DB still unavailable; no durable claim. */ }
       this.fenceRuntime(runtime);
+      if (owns !== true) return; // Do not update session state without a verified owner.
       try {
         const notice = this.store.appendEvent({ sessionId: runtime.sessionId, turnId,
           itemKey: `native-publication-failed:${runtime.identity.ownerId}:${runtime.identity.generation}`, kind: 'notice',

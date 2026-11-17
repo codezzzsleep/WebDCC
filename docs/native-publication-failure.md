@@ -18,6 +18,10 @@ Writes for an old generation or another Adapter do not own the current writer,
 including when the raw evidence insertion itself fails. An obsolete completion
 action also checks its captured public turn before changing anything. These
 guards preserve current work when a late callback has the same Web session ID.
+The persisted owner must still match before updating inputs or session state;
+an old runtime left in the local map does not certify that ownership. If the
+owner cannot be read, only the local observation is fenced, with no new durable
+input or session claim.
 
 When SQLite remains unwritable, the in-memory fence blocks new sends. The
 manager cannot claim to have persisted uncertain state or a warning if those

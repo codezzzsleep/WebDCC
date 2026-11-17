@@ -100,6 +100,20 @@ it.each(['cancelled', 'completed'] as const)('%s input cannot be overwritten unc
   } finally { await ctx.close(); }
 });
 
+it('a replaced persisted owner remains unchanged when the old local runtime cannot record a stale frame', async () => {
+  const ctx = await fixture();
+  try {
+    ctx.store.nativeOwners.release(ctx.session.id, ctx.runtime.identity, true);
+    const identity = ctx.store.nativeOwners.acquire('new executor', ctx.session.id, 'codex', ctx.session.nativeId);
+    ctx.store.nativeOwners.activate(ctx.session.id, identity, ctx.session.nativeId!);
+    const before = { owner: ctx.store.nativeOwners.get(ctx.session.id), queue: ctx.store.journal.queue(ctx.session.id), command: ctx.store.journal.get(ctx.commandId) };
+    ctx.db.exec("CREATE TRIGGER reject_publication BEFORE INSERT ON native_event_envelopes BEGIN SELECT RAISE(ABORT, 'raw unavailable'); END");
+    ctx.emit(complete); const after = { owner: ctx.store.nativeOwners.get(ctx.session.id), queue: ctx.store.journal.queue(ctx.session.id), command: ctx.store.journal.get(ctx.commandId) };
+    await evidence('persisted-new-owner', { before, after, disposing: ctx.runtime.disposing, rawNotRecorded: true });
+    expect(after).toEqual(before); expect(ctx.disposed).not.toHaveBeenCalled(); expect(ctx.runtime.disposing).toBe(false);
+  } finally { await ctx.close(); }
+});
+
 it('late native admission cannot change an input back from uncertain after its output publication failed', async () => {
   const db = openDb(':memory:'); const store = new Store(db); const manager = new SessionManager(store, { idleDisposeMin: 0 }); const adapter = new FakeAdapter({ id: 'claude-code' });
   let callback!: (id: string, event: AdapterEvent) => void; let release!: () => void; let entered!: () => void;
