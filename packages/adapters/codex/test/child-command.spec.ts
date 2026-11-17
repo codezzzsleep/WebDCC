@@ -126,7 +126,7 @@ it('continues a restored partial stream, restores terminal fences and keeps pass
   expect(restored.commands()).toEqual(next.commands());
   expect(restored.events.every(event => 'kind' in event && event.kind === 'internal')).toBe(true);
   expect(next.events.filter(event => event.type === 'item.complete' && event.kind === 'tool.call')
-    .every(event => !Object.hasOwn((event.data as { input: object }).input, 'commands'))).toBe(true);
+    .every(event => event.type === 'item.complete' && event.kind === 'tool.call' && !Object.hasOwn((event.data as { input: object }).input, 'commands'))).toBe(true);
   expect(next.events.some(event => event.type === 'turn.start' || event.type === 'turn.end')).toBe(false);
 });
 
@@ -144,7 +144,8 @@ it('keeps two identical output chunks as progress even when a caller snapshot sa
   expect(f.children()[0]).toMatchObject({ nativeStatus: 'completed', turns: {} });
   const progress = f.events.filter(event => event.type === 'item.complete' && event.kind === 'tool.call'
     && (event.data as { output?: { commandDelta?: unknown } }).output?.commandDelta !== undefined);
-  expect(progress).toHaveLength(2); expect(progress.every(event => (event.data as { status: string }).status === 'running')).toBe(true);
+  expect(progress).toHaveLength(2); expect(progress.every(event => event.type === 'item.complete' && event.kind === 'tool.call'
+    && (event.data as { status: string }).status === 'running')).toBe(true);
 });
 
 it('keeps unknown lineage and malformed command identities in raw records and preserves ordinary parent commands', () => {

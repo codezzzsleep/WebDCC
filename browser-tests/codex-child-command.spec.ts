@@ -24,14 +24,16 @@ async function fixture() {
     const workspace = ctx.store.createWorkspace('Controlled native child command', ctx.dataDir);
     const session = await ctx.manager.createSession({ workspaceId: workspace.id, agent: 'codex' });
     await ctx.manager.send(session.id, { text: 'Controlled native notifications only' }, 'child-command-source');
-    const replay = CodexAdapter.replay(session.id, session.nativeId); let seq = 0;
+    const nativeId = session.nativeId;
+    if (typeof nativeId !== 'string' || nativeId === '') throw new Error('Missing original native session identity');
+    const replay = CodexAdapter.replay(session.id, nativeId); let seq = 0;
     const feed = (method: string, params: Record<string, unknown>) => {
-      const frame = { i: ++seq, t: seq, dir: 'in' as const, ch: 'rpc', frame: { method, params: { threadId: session.nativeId, ...params } } };
+      const frame = { i: ++seq, t: seq, dir: 'in' as const, ch: 'rpc', frame: { method, params: { threadId: nativeId, ...params } } };
       const receipt = opts.nativeEvents!.record(frame);
       for (const event of replay.feed(frame)) emit(session.id, { ...event, runtime: opts.runtime, nativeEnvelopeId: receipt.envelopeId });
     };
     const spawn = (childId: string, completedSnapshot = false) => feed('item/completed', { turnId: 'parent-turn', item: {
-      type: 'collabAgentToolCall', id: 'spawn-' + childId, tool: 'spawnAgent', status: 'completed', senderThreadId: session.nativeId,
+      type: 'collabAgentToolCall', id: 'spawn-' + childId, tool: 'spawnAgent', status: 'completed', senderThreadId: nativeId,
       receiverThreadIds: [childId], prompt: null, model: null, reasoningEffort: null,
       agentsStates: completedSnapshot ? { [childId]: { status: 'completed', message: null } } : {},
     } satisfies ThreadItem });
