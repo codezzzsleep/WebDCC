@@ -22,9 +22,12 @@ coverage. Corrupt, missing, restricted and unsupported source stays explicit.
 A recorded conversation reset excludes earlier actual public turns; unknown
 conversation membership cannot be guessed from receipt time or current state.
 
-The component retains request and session/conversation identity fences and
-aborts superseded reads. Refresh and newly uncertain Web input states trigger a
-fresh read; stream deltas do not trigger extra GET requests. Ordinary browser
+The component fences requests by session, conversation, native binding and
+connection recovery identity and aborts superseded reads. The actual uncertain
+turn set and recovered envelope watermark also trigger a fresh read, even when
+an older turn remains uncertain. A transient read failure recovers after a
+WebSocket reconnect without resending an input. Stream deltas do not trigger
+extra GET requests. Ordinary browser
 refresh checks use actual HTTP and WebSocket responses. A separate controlled
 fetch race delays one actual HTTP body while ignoring Abort to test the request
 identity fence; it does not change official native behavior or prove network

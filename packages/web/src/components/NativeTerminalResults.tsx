@@ -7,16 +7,21 @@ import { store } from '../lib/store.js';
 export function NativeTerminalResults({ sessionId }: { sessionId: string }): React.ReactElement | null {
   useStoreVersion();
   const conversation = store.getSession(sessionId)?.conversation?.uuid;
-  const uncertain = store.getTurns(sessionId).some(turn => turn.commandState === 'uncertain');
-  const [view, setView] = useState<{ sessionId: string; conversation: string | undefined; result?: NativeTerminalResultsResponse; failed?: true }>();
+  const nativeId = store.getSession(sessionId)?.nativeId;
+  const uncertainTurns = JSON.stringify(store.getTurns(sessionId).filter(turn => turn.commandState === 'uncertain').map(turn => turn.turnId).sort());
+  const throughEnvelopeId = Math.max(store.getHotRecovery(sessionId)?.throughEnvelopeId ?? 0, store.getCompletedRecovery(sessionId)?.throughEnvelopeId ?? 0);
+  const scope = JSON.stringify([sessionId, conversation ?? null, nativeId ?? null, uncertainTurns, throughEnvelopeId, store.lastReconnectAt]);
+  const connectionState = store.connectionState;
+  const [view, setView] = useState<{ scope: string; result?: NativeTerminalResultsResponse; failed?: true }>();
   useEffect(() => {
+    if (connectionState !== 'online') return;
     let current = true; const controller = new AbortController();
     void api.nativeTerminalResults(sessionId, controller.signal).then(result => {
-      if (current) setView({ sessionId, conversation, result });
-    }).catch(() => { if (current && !controller.signal.aborted) setView({ sessionId, conversation, failed: true }); });
+      if (current) setView({ scope, result });
+    }).catch(() => { if (current && !controller.signal.aborted) setView({ scope, failed: true }); });
     return () => { current = false; controller.abort(); };
-  }, [sessionId, conversation, uncertain]);
-  if (view?.sessionId !== sessionId || view.conversation !== conversation) return null;
+  }, [sessionId, scope, connectionState]);
+  if (view?.scope !== scope) return null;
   if (view.failed) return <div className="timeline-inner" role="status">原生轮次结果暂时无法读取，请稍后刷新。</div>;
   const result = view.result; if (result === undefined || result.outcomes.length === 0 && result.recovery.coverage === 'complete') return null;
   return <div className="timeline-inner">
