@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { EventData, NativeHistoryRecord, StoredEvent } from '@webdcc/protocol';
 import { findUserEcho, resolveAnswer, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
@@ -70,7 +71,14 @@ export class NativeHistoryStore {
         const native = JSON.stringify(record.native);
         const previous = this.db.prepare('SELECT native FROM native_history_records WHERE session_id = ? AND native_id = ? AND native_seq = ?').get(sessionId, nativeId, record.nativeSeq) as { native: string } | undefined;
         if (previous !== undefined) {
-          if (previous.native !== native) throw new Error('同一原生历史身份内容发生冲突');
+          let same = previous.native === native;
+          if (!same) {
+            // Compare serialized JSON values without changing retained raw
+            // bytes. Malformed saved evidence cannot certify a duplicate.
+            try { same = isDeepStrictEqual(JSON.parse(previous.native), JSON.parse(native)); }
+            catch { /* Preserve the existing explicit collision below. */ }
+          }
+          if (!same) throw new Error('同一原生历史身份内容发生冲突');
           continue;
         }
         this.db.prepare('INSERT INTO native_history_records (session_id, native_id, native_seq, at, native) VALUES (?, ?, ?, ?, ?)').run(sessionId, nativeId, record.nativeSeq, record.at, native);
