@@ -19,7 +19,7 @@ import type {
   QueueSnapshot,
   QueuedInput,
 } from '@webdcc/protocol';
-import { initialPermissions, ulid } from '@webdcc/protocol';
+import { initialPermissions, isClaudeQueryConfiguration, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { CommandJournal } from './command-journal.js';
 import { NativeHistoryStore } from './native-history.js';
@@ -579,6 +579,11 @@ export class Store {
     };
     const sanitized = { ...data };
     for (const field of contentFields[input.kind] ?? []) if (field in data) sanitized[field] = this.nativeEvents.redact(data[field]);
+    if (input.kind === 'internal' && isClaudeQueryConfiguration(data['claudeConfiguration'])) {
+      const configuration = data['claudeConfiguration']; const outputFormat = configuration.options.outputFormat;
+      if (outputFormat !== undefined) sanitized['claudeConfiguration'] = { ...configuration, options: { ...configuration.options,
+        outputFormat: { ...outputFormat, schema: this.nativeEvents.redact(outputFormat.schema) } } };
+    }
     if ((input.kind === 'file.change' || input.kind === 'turn.diff') && Array.isArray(data['changes'])) sanitized['changes'] = data['changes'].map((change: Record<string, unknown>) => ({
       ...change, ...('diff' in change ? { diff: this.nativeEvents.redact(change['diff']) } : {}), ...('note' in change ? { note: this.nativeEvents.redact(change['note']) } : {}),
     }));
