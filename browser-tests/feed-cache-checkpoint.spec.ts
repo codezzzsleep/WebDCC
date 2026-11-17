@@ -82,10 +82,19 @@ it('actual IndexedDB session abort and own Chromium SIGKILL cannot checkpoint fe
     expect(restoredHello[0]?.feedAfter).toBe(0);
     for (const session of sessions) await expect.poll(() => reopened.locator(`a[href="/s/${session.id}"]`).count()).toBeGreaterThan(0);
     await expect.poll(async () => ((await reopened.evaluate(readCache)) as { sessions: unknown[] }).sessions.length).toBe(3);
-    const finalCache = await reopened.evaluate(readCache) as { sessions: { id: string; agent: string; nativeId: string; title: string }[]; feedSeq: number };
-    for (const session of sessions) expect(finalCache.sessions.find(cached => cached.id === session.id)).toMatchObject({ ...session, title: `Current ${session.agent}` });
+    const finalCache = await reopened.evaluate(readCache) as { sessions: { id: string; agent: string; nativeId?: string; title: string; permissions?: unknown }[]; feedSeq: number };
+    for (const session of sessions) {
+      const cached = finalCache.sessions.find(value => value.id === session.id);
+      expect(cached).toMatchObject({ id: session.id, agent: session.agent, title: `Current ${session.agent}` });
+      const source = frames.filter((value): value is { sessionId: string; patch: Record<string, unknown> } => typeof value === 'object' && value !== null && 'sessionId' in value && value.sessionId === session.id && 'patch' in value);
+      const permissions = source.findLast(value => value.patch['permissions'] !== undefined)?.patch['permissions'];
+      expect(cached?.permissions).toEqual(permissions);
+      // Native IDs remain the backend's original identities. This creation
+      // feed does not transmit them; the cache must not fabricate one.
+      expect(cached?.nativeId).toBeUndefined();
+    }
     expect(sessions.every(session => ctx.store.journal.queue(session.id).length === 0)).toBe(true);
     expect(sessions.map(session => ctx.manager.getRuntime(session.id)?.identity)).toEqual(before.owners.map(owner => ({ ownerId: owner!.ownerId, generation: owner!.generation, hostId: owner!.hostId })));
-    if (evidence !== undefined) await writeFile(join(evidence, 'passed.json'), JSON.stringify({ actualChromiumSIGKILL: true, version, finalCache, scopes: ['actual IndexedDB abort', 'actualSourceWS same-page reconnect', 'threecontrolledAgent session metadata/nativeId', 'persistentProfile reopen'], newOfficialNativeCalls: 0, newPaidCalls: 0 }, null, 2));
+    if (evidence !== undefined) await writeFile(join(evidence, 'passed.json'), JSON.stringify({ actualChromiumSIGKILL: true, version, finalCache, scopes: ['actual IndexedDB abort', 'actualSourceWS same-page reconnect', 'threecontrolledAgent transmitted metadata/permissions', 'persistentProfile reopen'], nativeIdScope: 'backend identities retained; creation feed does not transmit nativeId; provided nativeId replay is covered by controlled AppStore regression', newOfficialNativeCalls: 0, newPaidCalls: 0 }, null, 2));
   } finally { await context?.close().catch(() => undefined); await ctx.close(); await rm(directory, { recursive: true, force: true }); }
 });
