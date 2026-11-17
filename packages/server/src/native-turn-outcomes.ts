@@ -1,4 +1,5 @@
-import { isValidEventData, type NativeEnvelopeDetail, type NativeEnvelopeSummary } from '@webdcc/protocol';
+import { isValidEventData, type NativeEnvelopeDetail, type NativeEnvelopeSummary, type RuntimeIdentity } from '@webdcc/protocol';
+import type { NativeProjectionContext, ProjectionContextLookup } from './native-projection-context.js';
 import { jsonValueEqual } from './json-value-equal.js';
 import { stableJsonDigest } from './stable-json-digest.js';
 
@@ -9,12 +10,15 @@ export interface NativeTurnOutcomeSource {
   restricted(sessionId: string): boolean;
   diagnosticValue(value: unknown): unknown;
   publicTurn(sessionId: string, nativeId: string, nativeTurnId: string): string | undefined;
+  context?(envelopeId: number): ProjectionContextLookup;
 }
 export interface NativeTurnOutcomeOptions { sessionId?: string; after?: number; limit?: number; maxBytes?: number }
 export interface RebuiltNativeTurnOutcome {
-  scopeId: string; outcomeId: string; sessionId: string; publicTurnId: string; nativeId: string; nativeTurnId: string;
+  scopeId: string; outcomeId: string; sessionId: string; publicTurnId: string; nativeId: string; nativeTurnId: string | null;
   status: 'completed' | 'failed' | 'interrupted'; usage?: unknown;
   origins: NativeEnvelopeDetail[];
+  identity?: RuntimeIdentity;
+  assignments?: { envelopeId: number; contextDigest: string; late: boolean; turnEnded: boolean }[];
 }
 type RecordStatus = 'rebuilt' | 'duplicate' | 'conflict' | 'raw-only' | 'unverified' | 'unsupported' | 'unavailable';
 export interface NativeTurnOutcomes {
@@ -38,6 +42,29 @@ function terminal(payload: unknown): { status: RebuiltNativeTurnOutcome['status'
   return { status: data['status'] as RebuiltNativeTurnOutcome['status'], ...(data['usage'] === undefined ? {} : { usage: data['usage'] }) };
 }
 
+type TurnAssignment = { publicTurnId: string; context?: NativeProjectionContext }
+  | { status: 'unverified' | 'unavailable' | 'unsupported'; reason: string };
+function turnAssignment(source: NativeTurnOutcomeSource, row: NativeEnvelopeSummary, runtime: unknown): TurnAssignment {
+  let lookup: ProjectionContextLookup | undefined;
+  try { lookup = source.context?.(row.id); } catch { return { status: 'unavailable', reason: 'projection-context-read-failed' }; }
+  // A recorded but invalid assignment cannot be hidden behind a legacy
+  // association. Only absent context may use the original witness contract.
+  if (lookup !== undefined && lookup.status !== 'missing') {
+    if (lookup.status !== 'recorded') return { status: lookup.status, reason: lookup.reason };
+    const context = lookup.context;
+    if (!jsonValueEqual(context.source, row) || context.identity.ownerId !== row.ownerId || context.identity.generation !== row.generation
+      || runtime !== undefined && !jsonValueEqual(runtime, context.identity)) return { status: 'unverified', reason: 'projection-context-runtime-conflict' };
+    if (context.ignoredReason !== undefined) return { status: 'unverified', reason: context.ignoredReason };
+    if (context.turnId === null) return { status: 'unsupported', reason: 'native-terminal-public-turn-not-recorded' };
+    const legacy = row.nativeTurnId === null ? undefined : source.publicTurn(row.sessionId, row.nativeId!, row.nativeTurnId);
+    if (legacy !== undefined && legacy !== context.turnId) return { status: 'unverified', reason: 'native-public-turn-context-conflict' };
+    return { publicTurnId: context.turnId, context };
+  }
+  if (!row.nativeTurnId) return { status: 'unverified', reason: lookup?.reason ?? 'native-source-identity-incomplete' };
+  const publicTurnId = source.publicTurn(row.sessionId, row.nativeId!, row.nativeTurnId);
+  return publicTurnId ? { publicTurnId } : { status: 'unverified', reason: 'public-turn-binding-not-verified' };
+}
+
 /** Independent evidence artifact; never applies outcomes to a live writer,
  * command, queue or UI projection. Contradictory outcomes remain unresolved. */
 export function rebuildNativeTurnOutcomes(source: NativeTurnOutcomeSource, options: NativeTurnOutcomeOptions = {}): NativeTurnOutcomes {
@@ -51,11 +78,12 @@ export function rebuildNativeTurnOutcomes(source: NativeTurnOutcomeSource, optio
   const byOutcome = new Map<string, RebuiltNativeTurnOutcome>();
   for (const row of page.slice(0, limit)) {
     let entry: NativeTurnOutcomes['records'][number]; let detail: NativeEnvelopeDetail | undefined; let candidate: RebuiltNativeTurnOutcome | undefined;
+    let context: NativeProjectionContext | undefined;
     if (row.source !== 'mapping' || row.direction !== 'in' || !['turn.end', 'item.complete'].includes(row.channel)) entry = { id: row.id, status: 'raw-only', reason: 'outside-native-terminal-scope' };
     else if (!['accepted', 'duplicate-projection'].includes(row.disposition)) entry = { id: row.id, status: 'unverified', reason: 'source-not-accepted' };
     else if (row.schemaHash !== source.schemaHash) entry = { id: row.id, status: 'unsupported', reason: 'source-schema-not-supported' };
     else if (row.payloadCoverage !== 'redacted' || source.restricted(row.sessionId)) entry = { id: row.id, status: 'unavailable', reason: 'source-payload-not-available' };
-    else if (!['codex', 'claude-code', 'dsh'].includes(row.agent) || !row.nativeId || !row.nativeTurnId || !row.ownerId
+    else if (!['codex', 'claude-code', 'dsh'].includes(row.agent) || !row.nativeId || !row.ownerId || !row.nativeTurnId && source.context === undefined
       || !Number.isSafeInteger(row.generation) || Number(row.generation) < 1) entry = { id: row.id, status: 'unverified', reason: 'native-source-identity-incomplete' };
     else {
       try { detail = source.get(row.id); } catch { /* Invalid saved source stays explicit. */ }
@@ -63,26 +91,31 @@ export function rebuildNativeTurnOutcomes(source: NativeTurnOutcomeSource, optio
       if (detail === undefined) entry = { id: row.id, status: 'unavailable', reason: 'source-payload-missing-or-invalid' };
       else if (!jsonValueEqual(Object.fromEntries(Object.entries(detail).filter(([key]) => key !== 'payload')), row)) entry = { id: row.id, status: 'unverified', reason: 'source-metadata-conflict' };
       else if (event === undefined || event['scope'] === 'session' || result === undefined) entry = { id: row.id, status: 'unsupported', reason: 'mapping-not-supported' };
-      else if (event['nativeTurnId'] !== row.nativeTurnId || event['runtime'] !== undefined && (runtime === undefined || runtime['ownerId'] !== row.ownerId
+      else if ((event['nativeTurnId'] ?? null) !== row.nativeTurnId || event['nativeTurnId'] !== undefined && (typeof event['nativeTurnId'] !== 'string' || event['nativeTurnId'] === '')
+        || event['runtime'] !== undefined && (runtime === undefined || runtime['ownerId'] !== row.ownerId
         || runtime['generation'] !== row.generation || typeof runtime['hostId'] !== 'string' || runtime['hostId'] === '')
         || event['nativeSeq'] !== undefined && (!Number.isSafeInteger(event['nativeSeq']) || Number(event['nativeSeq']) < 0)
         || row.nativeSeq !== null && event['nativeSeq'] !== undefined && event['nativeSeq'] !== row.nativeSeq) entry = { id: row.id, status: 'unverified', reason: 'mapping-source-identity-conflict' };
       else if (incomplete(event) || !jsonValueEqual(source.diagnosticValue(event), event)) entry = { id: row.id, status: 'unavailable', reason: 'mapping-content-incomplete-or-sensitive' };
       else {
-        const publicTurnId = source.publicTurn(row.sessionId, row.nativeId, row.nativeTurnId);
-        if (!publicTurnId) entry = { id: row.id, status: 'unverified', reason: 'public-turn-binding-not-verified' };
+        const assignment = turnAssignment(source, row, event['runtime']);
+        if ('status' in assignment) entry = { id: row.id, ...assignment };
         else {
-          const scopeId = stableJsonDigest({ scheme: 'native-turn-scope-1', sessionId: row.sessionId, agent: row.agent, nativeId: row.nativeId,
+          const { publicTurnId } = assignment; context = assignment.context;
+          const scopeId = stableJsonDigest({ scheme: context === undefined ? 'native-turn-scope-1' : 'native-contextual-turn-scope-1', sessionId: row.sessionId, agent: row.agent, nativeId: row.nativeId,
             nativeTurnId: row.nativeTurnId, publicTurnId, actorId: row.actorId, parentToolUseId: row.parentToolUseId, hostId: runtime?.['hostId'] ?? null });
-          const outcomeId = stableJsonDigest({ scheme: 'native-turn-outcome-1', scopeId, ...result });
+          const contextualScope = context === undefined ? scopeId : stableJsonDigest({ scheme: 'native-contextual-turn-owner-1', scopeId, identity: context.identity });
+          const outcomeId = stableJsonDigest({ scheme: 'native-turn-outcome-1', scopeId: contextualScope, ...result });
           candidate = byOutcome.get(outcomeId);
-          entry = { id: row.id, status: candidate === undefined ? 'rebuilt' : 'duplicate', scopeId, outcomeId };
-          candidate ??= { scopeId, outcomeId, sessionId: row.sessionId, publicTurnId, nativeId: row.nativeId, nativeTurnId: row.nativeTurnId, ...result, origins: [] };
+          entry = { id: row.id, status: candidate === undefined ? 'rebuilt' : 'duplicate', scopeId: contextualScope, outcomeId };
+          candidate ??= { scopeId: contextualScope, outcomeId, sessionId: row.sessionId, publicTurnId, nativeId: row.nativeId, nativeTurnId: row.nativeTurnId, ...result, origins: [],
+            ...(context === undefined ? {} : { identity: context.identity, assignments: [] }) };
         }
       }
     }
     if (candidate !== undefined && detail !== undefined) {
       candidate.origins.push(detail); if (entry.status === 'rebuilt') report.outcomes.push(candidate);
+      if (context !== undefined) candidate.assignments!.push({ envelopeId: row.id, contextDigest: context.contextDigest, late: context.late, turnEnded: context.turnEnded });
     }
     report.records.push(entry); report.next = row.id;
     // Include potential conflict annotations before enforcing the output cap.
@@ -94,7 +127,7 @@ export function rebuildNativeTurnOutcomes(source: NativeTurnOutcomeSource, optio
       ? { ...record, status: 'conflict', reason: 'contradictory-native-outcomes' } : record);
     const size = Buffer.byteLength(JSON.stringify({ ...report, conflicts, records: annotated(report.records) })) + 1;
     if (size > maxBytes) {
-      report.records.pop(); if (candidate !== undefined) { candidate.origins.pop(); if (entry.status === 'rebuilt') report.outcomes.pop(); }
+      report.records.pop(); if (candidate !== undefined) { candidate.origins.pop(); candidate.assignments?.pop(); if (entry.status === 'rebuilt') report.outcomes.pop(); }
       report.next = report.records.at(-1)?.id ?? after; report.hasMore = true;
       const excluded = { id: row.id, status: 'unavailable' as const, reason: 'rebuild-output-size-limit' };
       report.records.push(excluded);
