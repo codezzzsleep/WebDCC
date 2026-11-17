@@ -45,3 +45,4 @@ export { codexReviewItem, type CodexReviewItem } from './codex-review.js';
 export const PROTOCOL_VERSION = 1;
 export { failedFileOperation, fileOperationError, nativeOperationDeclined } from './file-operation.js';
 export * from './codex-tool-call.js';
+export * from './codex-child-command.js';

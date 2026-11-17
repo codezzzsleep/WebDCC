@@ -1,4 +1,5 @@
 import type { EventData, StoredEvent } from './events.js';
+import { observeCodexSubagentCommand, type CodexSubagentCommand } from './codex-child-command.js';
 
 /** A passive projection of native Codex tasks, never a WebDCC turn admission. */
 export interface CodexSubagentIdentity {
@@ -19,6 +20,8 @@ export interface CodexSubagentView extends CodexSubagentIdentity {
   results: { nativeTurnId?: string; itemId: string; text: string; nativePhase?: string | null; incomplete?: boolean }[];
   /** The native caller's observations, independent of the child's own turns. */
   snapshots?: CodexSubagentSnapshot[];
+  /** Native child command output does not admit a command into its parent. */
+  commands?: CodexSubagentCommand[];
 }
 
 export interface CodexSubagentSnapshot {
@@ -90,10 +93,16 @@ export function currentCodexSubagents(events: readonly StoredEvent[]): CodexSuba
     const previous = children.get(identity.childId);
     const child: CodexSubagentView = { ...previous, ...identity, turns: previous?.turns ?? {}, results: previous?.results ?? [] };
     const output = data.output as { turn?: { id: string; status: string; error?: unknown }; result?: CodexSubagentView['results'][number];
-      resultStart?: unknown; resultDelta?: unknown; collabSnapshot?: unknown } | undefined;
+      resultStart?: unknown; resultDelta?: unknown; collabSnapshot?: unknown;
+      commandStart?: unknown; commandDelta?: unknown; command?: unknown } | undefined;
     if (output?.turn !== undefined) child.turns[output.turn.id] = { status: output.turn.status, ...(output.turn.error == null ? {} : { error: output.turn.error }) };
     observeChildText(child, output?.resultStart, false);
     observeChildText(child, output?.resultDelta, true);
+    for (const [value, phase] of [[output?.commandStart, 'started'], [output?.commandDelta, 'delta'], [output?.command, 'completed']] as const) {
+      if (value === undefined) continue;
+      const commands = observeCodexSubagentCommand(child.commands ?? [], child.turns, value, phase);
+      if (commands.length > 0 || child.commands !== undefined) child.commands = [...commands];
+    }
     if (output?.result !== undefined) {
       const result = output.result;
       child.results = child.results.filter(item => item.itemId !== result.itemId || item.nativeTurnId !== result.nativeTurnId);
