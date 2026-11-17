@@ -35,7 +35,7 @@ import type {
 import { traceFrame } from '@webdcc/protocol';
 import { isValidEventData } from '@webdcc/protocol';
 import { normalizeQuestionAnswer } from '@webdcc/protocol';
-import { nativeAccessMode, schemaHasSecrets, codexSubagentSnapshotKey, codexCollabCallStatus } from '@webdcc/protocol';
+import { nativeAccessMode, schemaHasSecrets, codexSubagentSnapshotKey, codexCollabCallStatus, codexNativeToolStatus } from '@webdcc/protocol';
 import { codexPermissionObservation } from './permissions.js';
 import { JsonRpcStdio, type Frame } from './rpc.js';
 import { nativeRequest, nativeSettingsNotification, validateNativeResult, validateNativeServerParams, type NativeParams } from './controls.js';
@@ -472,6 +472,11 @@ export function mapItemData(item: Record<string, unknown>): EventData[EventKind]
         ...(typeof item['aggregatedOutput'] === 'string' ? { outputTail: item['aggregatedOutput'].split('\n').slice(-200).join('\n') } : {}),
         status: item['status'] === 'failed' || item['status'] === 'declined' ? 'failed' : item['status'] === 'inProgress' ? 'running' : 'completed',
       };
+    case 'mcpToolCall':
+    case 'dynamicToolCall': {
+      const data: EventData['tool.call'] = { name: type, input: item, status: 'unknown' };
+      return { ...data, status: codexNativeToolStatus(data) ?? 'unknown' };
+    }
     case 'exec': {
       const input = item['input'] ?? item['source'] ?? '';
       return {
