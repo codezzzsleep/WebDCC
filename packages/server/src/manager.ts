@@ -1686,7 +1686,27 @@ export class SessionManager {
     const assignment = this.assignTurn(runtime, event);
     if (assignment === undefined) return;
     const turnId = assignment.turnId;
-    if ('nativeTurnId' in event && event.nativeTurnId !== undefined && turnId === null && event.scope !== 'session') return;
+    const ignoredReason = 'nativeTurnId' in event && event.nativeTurnId !== undefined && turnId === null && event.scope !== 'session' ? 'unknown-native-turn' as const : undefined;
+    try {
+      const key = 'itemKey' in event ? hotKey(turnId, event.itemKey) : undefined;
+      const item = key === undefined ? undefined : runtime.hot.get(key);
+      this.store.projectionContexts.record(envelope.id, { sessionId, identity: runtime.identity, turnId, late: assignment.late,
+        turnEnded: turnId !== null && this.turns.ended(turnId),
+        ...(ignoredReason === undefined ? {} : { ignoredReason }),
+        ...(key === undefined ? {} : { hot: { present: item !== undefined, closed: runtime.completedItems?.has(key) ?? false,
+          ...(item === undefined ? {} : { kind: item.kind }) } }) });
+    } catch {
+      // Raw is durable; keep the native pump and report missing recovery context.
+      const itemKey = `projection-context-unavailable:${runtime.identity.ownerId}:${runtime.identity.generation}`;
+      try {
+        if (!this.store.allEvents(sessionId).some(stored => stored.itemKey === itemKey)) {
+          const notice = this.store.appendEvent({ sessionId, turnId, itemKey, kind: 'notice', data: { level: 'warning',
+            nativeType: 'projection-context-unavailable', text: '部分原生输出的恢复信息未能保存；原件保留，重连后需要核对。' } });
+          this.hooks.onEvent(notice);
+        }
+      } catch { /* Retain raw evidence when projection storage is unavailable. */ }
+    }
+    if (ignoredReason !== undefined) return;
     // Keep extending the settle window while frames for the pending turn are
     // still arriving. This is a quiet-period debounce, so a long Codex diff
     // stream settles without leaking a partial terminal view.

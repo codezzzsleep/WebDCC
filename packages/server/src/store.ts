@@ -26,6 +26,7 @@ import { NativeHistoryStore } from './native-history.js';
 import { InteractionStore } from './interactions.js';
 import { NativeOwnerStore } from './native-owners.js';
 import { NativeEventStore } from './native-events.js';
+import { NativeProjectionContexts } from './native-projection-context.js';
 import { NativeReconciliationStore } from './native-reconciliation.js';
 import { NativeActionStore } from './native-actions.js';
 import { InputAdmissionStore } from './input-admission.js';
@@ -221,12 +222,14 @@ export class Store {
   readonly interactions: InteractionStore;
   readonly nativeOwners: NativeOwnerStore;
   readonly nativeEvents: NativeEventStore;
+  readonly projectionContexts: NativeProjectionContexts;
   readonly reconciliations: NativeReconciliationStore;
   readonly nativeActions: NativeActionStore;
   readonly inputAdmissions: InputAdmissionStore;
   constructor(private readonly db: Db) {
     this.journal = new CommandJournal(db); this.nativeHistory = new NativeHistoryStore(db, this); this.interactions = new InteractionStore(db);
     this.nativeOwners = new NativeOwnerStore(db); this.nativeEvents = new NativeEventStore(db); this.reconciliations = new NativeReconciliationStore(db, this); this.nativeActions = new NativeActionStore(db);
+    this.projectionContexts = new NativeProjectionContexts(db, this.nativeEvents, this.nativeOwners);
     this.inputAdmissions = new InputAdmissionStore(db, this);
     this.restoreLegacyConversations();
   }
