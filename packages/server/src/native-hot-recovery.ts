@@ -2,8 +2,9 @@ import { isValidEventData, type EventData, type EventKind, type HotRecovery, typ
 import type { NativeEventStore } from './native-events.js';
 import type { NativeProjectionContexts } from './native-projection-context.js';
 import { jsonValueEqual } from './json-value-equal.js';
+import type { CompletedSnapshot } from './native-completed-snapshot.js';
 
-export interface HotSnapshot { items: SnapshotItem[]; recovery?: HotRecovery }
+export interface HotSnapshot extends Partial<CompletedSnapshot> { items: SnapshotItem[]; recovery?: HotRecovery }
 export interface HotRecoveryOptions { maxRecords?: number; maxBytes?: number; identity?: RuntimeIdentity }
 const object = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 const key = (turnId: string | null, itemKey: string) => JSON.stringify([turnId, itemKey]);

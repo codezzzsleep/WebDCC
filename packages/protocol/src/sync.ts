@@ -6,6 +6,7 @@ import type { InputContent, InputIntent } from './input.js';
 import type { DshApprovalRetry } from './dsh-interactions.js';
 import type { DshQuestionRetry } from './dsh-question-replies.js';
 import type { HotObservation, HotRecovery } from './hot-recovery.js';
+import type { CompletedRecovery, RecoveredCompletion } from './completed-recovery.js';
 
 export interface SubscribeItem {
   sessionId: string;
@@ -203,6 +204,8 @@ export interface SnapshotMessage {
   /** Last stored event actually replayed to this subscriber; not a cursor instruction. */
   throughSeq?: number;
   recovery?: HotRecovery;
+  completed?: RecoveredCompletion[];
+  completedRecovery?: CompletedRecovery;
 }
 
 export interface DeltaMessage {
