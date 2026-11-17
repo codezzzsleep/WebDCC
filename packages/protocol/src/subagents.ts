@@ -17,6 +17,41 @@ export interface CodexSubagentIdentity {
 export interface CodexSubagentView extends CodexSubagentIdentity {
   turns: Record<string, { status: string; error?: unknown }>;
   results: { nativeTurnId?: string; itemId: string; text: string; nativePhase?: string }[];
+  /** The native caller's observations, independent of the child's own turns. */
+  snapshots?: CodexSubagentSnapshot[];
+}
+
+export interface CodexSubagentSnapshot {
+  callId: string;
+  senderThreadId: string;
+  /** Originating caller turn, never an inferred child turn. */
+  nativeTurnId?: string;
+  tool: string;
+  callStatus: string;
+  status: string;
+  message: string | null;
+  /** Whether this observation was used for the current projected child state. */
+  applied: boolean;
+}
+
+export function codexSubagentSnapshotKey(value: Pick<CodexSubagentSnapshot, 'callId' | 'senderThreadId' | 'nativeTurnId'>): string {
+  return JSON.stringify([value.senderThreadId, value.nativeTurnId ?? null, value.callId]);
+}
+
+function codexSubagentSnapshot(value: unknown): CodexSubagentSnapshot | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const snapshot = value as Partial<CodexSubagentSnapshot>;
+  if (!['callId', 'senderThreadId', 'tool', 'callStatus', 'status', 'message', 'applied'].every(key => Object.hasOwn(value, key))
+    || typeof snapshot.callId !== 'string' || typeof snapshot.senderThreadId !== 'string'
+    || typeof snapshot.tool !== 'string' || typeof snapshot.callStatus !== 'string' || typeof snapshot.status !== 'string'
+    || snapshot.message !== null && typeof snapshot.message !== 'string' || typeof snapshot.applied !== 'boolean'
+    || snapshot.nativeTurnId !== undefined && typeof snapshot.nativeTurnId !== 'string') return undefined;
+  return snapshot as CodexSubagentSnapshot;
+}
+
+export function codexSubagentStatusLabel(status: string): string {
+  return ({ completed: '已完成', failed: '失败', errored: '失败', interrupted: '已中断', shutdown: '已关闭',
+    notFound: '原生线程未找到', pendingInit: '等待初始化', waiting: '等待原生交互', running: '运行中' } as Record<string, string>)[status] ?? '状态待确认';
 }
 
 export function codexSubagentIdentity(data: EventData['tool.call']): CodexSubagentIdentity | undefined {
@@ -36,12 +71,18 @@ export function currentCodexSubagents(events: readonly StoredEvent[]): CodexSuba
     if (identity === undefined) continue;
     const previous = children.get(identity.childId);
     const child: CodexSubagentView = { ...previous, ...identity, turns: previous?.turns ?? {}, results: previous?.results ?? [] };
-    const output = data.output as { turn?: { id: string; status: string; error?: unknown }; result?: CodexSubagentView['results'][number] } | undefined;
+    const output = data.output as { turn?: { id: string; status: string; error?: unknown }; result?: CodexSubagentView['results'][number]; collabSnapshot?: unknown } | undefined;
     if (output?.turn !== undefined) child.turns[output.turn.id] = { status: output.turn.status, ...(output.turn.error == null ? {} : { error: output.turn.error }) };
     if (output?.result !== undefined) {
       const result = output.result;
       child.results = child.results.filter(item => item.itemId !== result.itemId || item.nativeTurnId !== result.nativeTurnId);
       child.results.push(result);
+    }
+    const snapshot = codexSubagentSnapshot(output?.collabSnapshot);
+    if (snapshot !== undefined) {
+      const key = codexSubagentSnapshotKey(snapshot);
+      child.snapshots = (previous?.snapshots ?? []).filter(value => codexSubagentSnapshotKey(value) !== key);
+      child.snapshots.push(snapshot);
     }
     children.set(identity.childId, child);
   }
