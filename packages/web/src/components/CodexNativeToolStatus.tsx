@@ -1,10 +1,10 @@
 import type { EventData } from '@webdcc/protocol';
-import { codexNativeToolStatus, codexNativeToolStatusLabel } from '@webdcc/protocol';
+import { codexNativeToolStatus, codexNativeToolStatusLabel, codexNativeImageStatus } from '@webdcc/protocol';
 import { store } from '../lib/store.js';
 
 export function CodexNativeToolStatus({ sessionId, data }: { sessionId: string; data: EventData['tool.call'] }): React.ReactElement | null {
   if (store.getSession(sessionId)?.agent !== 'codex') return null;
-  const status = codexNativeToolStatus(data);
+  const status = codexNativeImageStatus(data) ?? codexNativeToolStatus(data);
   if (status === undefined) return null;
   const input = data.input as Record<string, unknown>;
   const prefix = data.name === 'mcpToolCall' ? input['server'] : input['namespace'];
