@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { CURRENT_SCHEMA_VERSION } from './db.js';
 import { NativeEventStore } from './native-events.js';
+import { readNativeProjectionContext } from './native-projection-context.js';
 import { rebuildNativeTurnOutcomes, type NativeTurnOutcomeOptions, type NativeTurnOutcomes } from './native-turn-outcomes.js';
 
 /** No migration, source writes, Adapter calls, or live outcome application. */
@@ -13,6 +14,7 @@ export function readNativeTurnOutcomes(databasePath: string, options: NativeTurn
     return db.transaction(() => rebuildNativeTurnOutcomes({ schemaHash: native.schemaHash,
       list: (session, after, limit) => native.list(session, after, limit), get: id => native.get(id),
       restricted: session => native.restricted(session), diagnosticValue: value => native.diagnosticValue(value),
+      context: id => readNativeProjectionContext(db, native, id),
       // The legacy binding table does not include native session identity.
       // Require a committed public event with its original accepted envelope
       // to certify that association, rather than guessing from current state.
