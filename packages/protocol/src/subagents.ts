@@ -16,7 +16,7 @@ export interface CodexSubagentIdentity {
 
 export interface CodexSubagentView extends CodexSubagentIdentity {
   turns: Record<string, { status: string; error?: unknown }>;
-  results: { nativeTurnId?: string; itemId: string; text: string; nativePhase?: string }[];
+  results: { nativeTurnId?: string; itemId: string; text: string; nativePhase?: string | null; incomplete?: boolean }[];
   /** The native caller's observations, independent of the child's own turns. */
   snapshots?: CodexSubagentSnapshot[];
 }
@@ -61,6 +61,24 @@ export function codexSubagentIdentity(data: EventData['tool.call']): CodexSubage
     && typeof input.nativeStatus === 'string' ? input as CodexSubagentIdentity : undefined;
 }
 
+/** Streaming observations are append-only evidence, not completed native items. */
+function observeChildText(child: CodexSubagentView, value: unknown, append: boolean): void {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return;
+  const part = value as Partial<CodexSubagentView['results'][number]>;
+  if (typeof part.nativeTurnId !== 'string' || part.nativeTurnId === '' || typeof part.itemId !== 'string' || part.itemId === ''
+    || typeof part.text !== 'string' || part.nativePhase !== undefined && part.nativePhase !== null && typeof part.nativePhase !== 'string') return;
+  const previous = child.results.find(result => result.nativeTurnId === part.nativeTurnId && result.itemId === part.itemId);
+  const turn = child.turns[part.nativeTurnId];
+  if (previous !== undefined && previous.incomplete !== true || turn !== undefined && turn.status !== 'inProgress') return;
+  if (previous !== undefined && !append && (previous.nativePhase !== undefined || part.nativePhase === undefined)) return;
+  const result: CodexSubagentView['results'][number] = previous === undefined
+    ? { nativeTurnId: part.nativeTurnId, itemId: part.itemId, text: part.text, incomplete: true,
+      ...(part.nativePhase === undefined ? {} : { nativePhase: part.nativePhase }) }
+    : append ? { ...previous, text: previous.text + part.text } : { ...previous, nativePhase: part.nativePhase };
+  child.results = child.results.filter(item => item.itemId !== result.itemId || item.nativeTurnId !== result.nativeTurnId);
+  child.results.push(result);
+}
+
 /** Rebuilt from persisted events after refresh/restart, including earlier turns/results. */
 export function currentCodexSubagents(events: readonly StoredEvent[]): CodexSubagentView[] {
   const children = new Map<string, CodexSubagentView>();
@@ -71,8 +89,11 @@ export function currentCodexSubagents(events: readonly StoredEvent[]): CodexSuba
     if (identity === undefined) continue;
     const previous = children.get(identity.childId);
     const child: CodexSubagentView = { ...previous, ...identity, turns: previous?.turns ?? {}, results: previous?.results ?? [] };
-    const output = data.output as { turn?: { id: string; status: string; error?: unknown }; result?: CodexSubagentView['results'][number]; collabSnapshot?: unknown } | undefined;
+    const output = data.output as { turn?: { id: string; status: string; error?: unknown }; result?: CodexSubagentView['results'][number];
+      resultStart?: unknown; resultDelta?: unknown; collabSnapshot?: unknown } | undefined;
     if (output?.turn !== undefined) child.turns[output.turn.id] = { status: output.turn.status, ...(output.turn.error == null ? {} : { error: output.turn.error }) };
+    observeChildText(child, output?.resultStart, false);
+    observeChildText(child, output?.resultDelta, true);
     if (output?.result !== undefined) {
       const result = output.result;
       child.results = child.results.filter(item => item.itemId !== result.itemId || item.nativeTurnId !== result.nativeTurnId);
