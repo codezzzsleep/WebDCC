@@ -146,6 +146,16 @@ export const cache = {
     return database.getAll('sessions');
   },
 
+  async getFeedCheckpoint(): Promise<{ sessions: CachedSession[]; feedSeq: unknown; checkpoint: unknown }> {
+    const database = await db();
+    const tx = database.transaction(['sessions', 'meta'], 'readonly');
+    const sessions = tx.objectStore('sessions').getAll();
+    const sequence = tx.objectStore('meta').get('feedSeq');
+    const checkpoint = tx.objectStore('meta').get('feedCheckpoint');
+    const [values, feedSeq, marker] = await Promise.all([sessions, sequence, checkpoint, tx.done]);
+    return { sessions: values, feedSeq, checkpoint: marker };
+  },
+
   async setMeta(key: string, value: unknown): Promise<void> {
     const database = await db();
     await database.put('meta', value, key);

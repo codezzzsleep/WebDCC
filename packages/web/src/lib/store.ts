@@ -198,10 +198,11 @@ export class AppStore {
 
   async init(): Promise<void> {
     performance.mark('wdcc:init-start');
-    const cached = await cache.getSessions().catch(() => [] as CachedSession[]);
+    const snapshot = await cache.getFeedCheckpoint().catch(() => ({ sessions: [] as CachedSession[], feedSeq: undefined, checkpoint: undefined }));
+    const cached = snapshot.sessions;
     for (const session of cached) this.sessions.set(session.id, session as SessionMeta);
-    const [sequence, checkpoint] = await Promise.all([cache.getMeta<number>('feedSeq').catch(() => undefined),
-      cache.getMeta<{ formatVersion?: unknown; feedSeq?: unknown }>('feedCheckpoint').catch(() => undefined)]);
+    const sequence = snapshot.feedSeq;
+    const checkpoint = snapshot.checkpoint as { formatVersion?: unknown; feedSeq?: unknown } | undefined;
     if (checkpoint?.formatVersion === 1 && checkpoint.feedSeq === sequence && (sequence === 0 || cached.length > 0)) this.feedCheckpoint.restore(sequence);
     this.feedSeq = Math.max(this.feedSeq, this.feedCheckpoint.cursor());
     this.notify();

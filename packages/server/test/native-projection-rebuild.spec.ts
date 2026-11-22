@@ -7,8 +7,9 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import type { AdapterEvent, NativeEnvelopeDetail } from '@webdcc/protocol';
-import { openDb, type Db } from '../src/db.js';
+import { CURRENT_SCHEMA_VERSION, openDb, type Db } from '../src/db.js';
 import { Store } from '../src/store.js';
+import { NativeEventStore } from '../src/native-events.js';
 import { readNativeProjection } from '../src/native-projection-reader.js';
 import { rebuildNativeProjection } from '../src/native-projection-rebuild.js';
 
@@ -60,6 +61,49 @@ it('ten captured repeats retain every origin and rebuild once across a new owner
     expect(report.items).toHaveLength(1); expect(report.items[0]?.origins.map(row => row.id)).toEqual(rawIds);
     expect(report.records.filter(row => row.status === 'duplicate')).toHaveLength(9); expect(report.complete).toBe(true);
     expect(report.items[0]?.origins.map(row => row.generation)).toEqual([1, 1, 1, 1, 1, 2, 2, 2, 2, 2]);
+  } finally { db.close(); }
+});
+
+it.each(['***重点***', 'before\n\n***\n\nafter', 'before\n\n* * *\n\nafter', '**bold** and *italic*'])('restores complete Markdown %j after semantic publication fails', text => {
+  const db = openDb(':memory:');
+  try {
+    const { store, context, event } = setup(db);
+    const markdown = { ...event, data: { text, nativePhase: 'final' } } as Completion;
+    const raw = store.nativeEvents.mapping(context, markdown, 'accepted');
+    expect(store.nativeEvents.get(raw.id)?.payloadRedacted).toBe(false);
+    db.exec("CREATE TEMP TRIGGER refuse_markdown BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'semantic publication failed'); END");
+    expect(() => store.appendEvent({ sessionId: context.sessionId, turnId: 'public-turn', itemKey: event.itemKey, kind: event.kind, data: markdown.data })).toThrow('semantic publication failed');
+    const before = dump(db); const report = rebuildNativeProjection(store.nativeEvents);
+    expect(report.complete).toBe(true);
+    expect(report.items[0]?.data).toEqual(markdown.data);
+    expect(dump(db)).toEqual(before);
+  } finally { db.close(); }
+});
+
+it.each(['abc', 'synthetic-private-value'])('genuinely masked %j stays unavailable after the reader loses its in-memory secret list', secret => {
+  const db = openDb(':memory:');
+  try {
+    const { store, context, event } = setup(db);
+    store.nativeEvents.addSecret(secret);
+    const raw = store.nativeEvents.mapping(context, { ...event, data: { text: secret } }, 'accepted');
+    expect(store.nativeEvents.get(raw.id)).toMatchObject({ payloadRedacted: true, payload: { data: { text: '*'.repeat(secret.length) } } });
+    const before = dump(db); db.pragma('query_only = 1');
+    const report = rebuildNativeProjection(new NativeEventStore(db));
+    expect(report.items).toEqual([]); expect(report.complete).toBe(false);
+    expect(dump(db)).toEqual(before);
+  } finally { db.close(); }
+});
+
+it.each(['***重点***', 'before\n\n***\n\nafter', '***********************'])('legacy asterisk content %j remains unavailable without original redaction evidence', text => {
+  const db = openDb(':memory:');
+  try {
+    const { store, context, event } = setup(db);
+    const raw = store.nativeEvents.mapping(context, { ...event, data: { text } }, 'accepted');
+    db.prepare('UPDATE native_event_envelopes SET payload_redacted = NULL WHERE id = ?').run(raw.id);
+    expect(store.nativeEvents.get(raw.id)?.payloadRedacted).toBeUndefined();
+    const before = dump(db); const report = rebuildNativeProjection(store.nativeEvents);
+    expect(report.items).toEqual([]); expect(report.complete).toBe(false);
+    expect(dump(db)).toEqual(before);
   } finally { db.close(); }
 });
 
@@ -233,7 +277,7 @@ it('the real CLI produces byte-stable private artifacts and refuses future schem
     expect(createHash('sha256').update(await readFile(path)).digest('hex')).toBe(before);
     for (const target of [path, `${path}-wal`, `${path}-shm`, `${path}-journal`]) await expect(execute(process.execPath, ['--import', 'tsx', cli, '--database', path, '--output', target])).rejects.toThrow();
     await evidence('cli', { first: JSON.parse(one.stdout), second: JSON.parse(two.stdout), report: JSON.parse(await readFile(first, 'utf8')), databaseHash: before });
-    const future = openDb(path); future.pragma('user_version = 16'); future.close(); const futureHash = createHash('sha256').update(await readFile(path)).digest('hex');
-    expect(() => readNativeProjection(path)).toThrow('requires database schema 15'); expect(createHash('sha256').update(await readFile(path)).digest('hex')).toBe(futureHash);
+    const future = openDb(path); future.pragma(`user_version = ${CURRENT_SCHEMA_VERSION + 1}`); future.close(); const futureHash = createHash('sha256').update(await readFile(path)).digest('hex');
+    expect(() => readNativeProjection(path)).toThrow(`requires database schema ${CURRENT_SCHEMA_VERSION}`); expect(createHash('sha256').update(await readFile(path)).digest('hex')).toBe(futureHash);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

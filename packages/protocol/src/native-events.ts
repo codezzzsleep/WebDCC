@@ -24,5 +24,7 @@ export interface NativeEnvelopeSummary {
   disposition: string; schemaHash: string; rawEnvelopeId: number | null;
   nativeSeq: number | null; nativeTurnId: string | null; nativeRequestId: string | number | null;
   actorId: string | null; parentToolUseId: string | null; payloadCoverage: 'redacted' | 'restricted' | 'oversize' | 'unavailable';
+  /** Absent for legacy captures whose redaction completeness is unknown. */
+  payloadRedacted?: boolean;
 }
 export interface NativeEnvelopeDetail extends NativeEnvelopeSummary { payload: unknown }

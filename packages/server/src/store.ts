@@ -28,7 +28,7 @@ import { NativeOwnerStore } from './native-owners.js';
 import { NativeEventStore } from './native-events.js';
 import { NativeProjectionContexts } from './native-projection-context.js';
 import { recoverNativeTerminalResults, type NativeTerminalResultsOptions } from './native-terminal-results.js';
-import { storedNativeTurnOutcomeSource } from './native-turn-outcome-reader.js';
+import { storedNativeTerminalEvents, storedNativeTurnOutcomeSource } from './native-turn-outcome-reader.js';
 import { recoverNativeHot, type HotSnapshot } from './native-hot-recovery.js';
 import { recoverCompletedSnapshot } from './native-completed-snapshot.js';
 import { NativeReconciliationStore } from './native-reconciliation.js';
@@ -242,7 +242,7 @@ export class Store {
     return this.db.transaction(() => {
       const session = this.getSession(sessionId);
       if (session === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
-      return recoverNativeTerminalResults(storedNativeTurnOutcomeSource(this.db), session, this.allEvents(sessionId), options);
+      return recoverNativeTerminalResults(storedNativeTurnOutcomeSource(this.db), session, storedNativeTerminalEvents(this.db, sessionId), options);
     })();
   }
 

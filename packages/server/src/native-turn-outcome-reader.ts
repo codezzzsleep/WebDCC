@@ -3,6 +3,19 @@ import { CURRENT_SCHEMA_VERSION, type Db } from './db.js';
 import { NativeEventStore } from './native-events.js';
 import { readNativeProjectionContext } from './native-projection-context.js';
 import { rebuildNativeTurnOutcomes, type NativeTurnOutcomeOptions, type NativeTurnOutcomes, type NativeTurnOutcomeSource } from './native-turn-outcomes.js';
+import type { NativeTerminalEventSource } from './native-terminal-results.js';
+
+/** Query only the witnesses needed by a bounded terminal read. Historical
+ * message and native bodies never enter the JavaScript heap. */
+export function storedNativeTerminalEvents(db: Db, sessionId: string): NativeTerminalEventSource {
+  return {
+    latestTurnSequence: turnId => (db.prepare(`SELECT seq FROM events
+      WHERE session_id = ? AND turn_id = ? ORDER BY seq DESC LIMIT 1`).get(sessionId, turnId) as { seq: number } | undefined)?.seq,
+    publishedTerminal: (turnId, envelopeId) => db.prepare(`SELECT json_extract(data, '$.status') AS status FROM events
+      WHERE session_id = ? AND turn_id = ? AND kind = 'turn.completed' AND native_envelope_id = ?
+      ORDER BY seq ASC LIMIT 1`).get(sessionId, turnId, envelopeId) as { status: unknown } | undefined,
+  };
+}
 
 /** No migration, source writes, Adapter calls, or live outcome application. */
 export function readNativeTurnOutcomes(databasePath: string, options: NativeTurnOutcomeOptions = {}): NativeTurnOutcomes {

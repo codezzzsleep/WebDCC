@@ -23,11 +23,12 @@ export interface NativeProjectionRebuild {
   records: { id: number; status: 'rebuilt' | 'duplicate' | 'raw-only' | 'unavailable' | 'unverified' | 'unsupported'; reason?: string; projectionId?: string }[];
 }
 const object = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-function omitted(value: unknown, depth = 0): boolean {
+function omitted(value: unknown, payloadRedacted?: boolean, depth = 0): boolean {
   if (depth > 64) return true;
-  if (typeof value === 'string') return value.includes('<redacted>') || value.includes('<unserializable>') || /\*{3,}/.test(value);
+  if (typeof value === 'string') return value.includes('<redacted>') || value.includes('<unserializable>')
+    || payloadRedacted !== false && /\*{3,}/.test(value);
   if (value === null || typeof value !== 'object') return false;
-  return Object.hasOwn(value, 'omitted') || Object.values(value).some(child => omitted(child, depth + 1));
+  return Object.hasOwn(value, 'omitted') || Object.values(value).some(child => omitted(child, payloadRedacted, depth + 1));
 }
 function immutable(event: Completion): boolean {
   return ['assistant.message', 'reasoning', 'file.read'].includes(event.kind)
@@ -69,8 +70,8 @@ export function rebuildNativeProjection(source: NativeProjectionSource, options:
       if (detail === undefined) entry = { id: summary.id, status: 'unavailable', reason: 'source-payload-missing-or-invalid' };
       else if (!jsonValueEqual(Object.fromEntries(Object.entries(detail).filter(([key]) => key !== 'payload')), summary)) entry = { id: summary.id, status: 'unverified', reason: 'source-metadata-conflict' };
       else if (event === undefined || !immutable(event)) entry = { id: summary.id, status: 'unsupported', reason: 'mapping-not-supported' };
-      else if (object(event.data)?.['incomplete'] === true || event.kind === 'file.read' && object(event.data)?.['status'] === 'running'
-        || omitted(event.data) || omitted(event.native) || !jsonValueEqual(source.diagnosticValue(event.data), event.data)
+      else if (summary.payloadRedacted === true || object(event.data)?.['incomplete'] === true || event.kind === 'file.read' && object(event.data)?.['status'] === 'running'
+        || omitted(event.data, summary.payloadRedacted) || omitted(event.native, summary.payloadRedacted) || !jsonValueEqual(source.diagnosticValue(event.data), event.data)
         || !jsonValueEqual(source.diagnosticValue(event.native), event.native)) entry = { id: summary.id, status: 'unavailable', reason: 'mapping-content-incomplete-or-sensitive' };
       else {
         const runtime = object(event.runtime);
