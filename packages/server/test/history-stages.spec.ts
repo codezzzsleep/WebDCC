@@ -132,6 +132,7 @@ it('claimed v15 missing its stage table is rejected without modifying retained e
   try {
     const store = new Store(db); const workspace = store.createWorkspace('missing stage schema', directory); const session = store.createSession({ workspaceId: workspace.id, agent: 'dsh' });
     const before = store.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'kept', kind: 'notice', data: { level: 'info', text: 'kept' } });
+    db.pragma('user_version = 15');
     db.exec('DROP TABLE native_history_partial_items');
     expect(() => openDb(path)).toThrow('v15'); expect(store.allEvents(session.id)).toEqual([before]);
     expect(db.pragma('user_version', { simple: true })).toBe(15);
