@@ -5,6 +5,7 @@ import type { Db } from './db.js';
 import inventory from './native-inventory.json' with { type: 'json' };
 import { committedNativeProjection, nativeProjectionDigest } from './native-projection-match.js';
 import { nativeEnvelopeIdentity } from './native-envelope-identity.js';
+import { jsonValueEqual } from './json-value-equal.js';
 
 interface Row {
   id: number; session_id: string; agent: string; native_id: string | null;
@@ -12,7 +13,7 @@ interface Row {
   source: NativeEnvelopeSummary['source']; direction: 'in' | 'out'; channel: string;
   disposition: string; schema_hash: string; raw_envelope_id: number | null;
   native_seq: number | null; native_turn_id: string | null; native_request_id: string | null;
-  actor_id: string | null; parent_tool_use_id: string | null; payload_coverage: NativeEnvelopeSummary['payloadCoverage']; payload: string;
+  actor_id: string | null; parent_tool_use_id: string | null; payload_coverage: NativeEnvelopeSummary['payloadCoverage']; payload_redacted: number | null; payload: string;
 }
 interface Context { sessionId: string; agent: string; nativeId?: string; identity?: RuntimeIdentity }
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -51,7 +52,8 @@ function summary(row: Row): NativeEnvelopeSummary {
     direction: row.direction, channel: row.channel, disposition: row.disposition, schemaHash: row.schema_hash,
     rawEnvelopeId: row.raw_envelope_id, nativeSeq: row.native_seq, nativeTurnId: row.native_turn_id,
     nativeRequestId: row.native_request_id === null ? null : JSON.parse(row.native_request_id) as string | number,
-    actorId: row.actor_id, parentToolUseId: row.parent_tool_use_id, payloadCoverage: row.payload_coverage };
+    actorId: row.actor_id, parentToolUseId: row.parent_tool_use_id, payloadCoverage: row.payload_coverage,
+    ...(row.payload_redacted === 0 || row.payload_redacted === 1 ? { payloadRedacted: row.payload_redacted === 1 } : {}) };
 }
 
 /** Transport objects and adapter mappings have separate provenance. Missing
@@ -85,18 +87,20 @@ export class NativeEventStore {
     const dshTransport = dshMetadata(root['dshTransport']);
     const rpcCoverage = dshTransport?.coverage;
     if (coverage !== 'restricted' && ['oversize', 'invalid-json', 'transport-error', 'http-auth-rejected'].includes(String(rpcCoverage))) coverage = rpcCoverage === 'oversize' ? 'oversize' : 'unavailable';
+    const safe = coverage === 'restricted' ? undefined : redactDiagnosticValue(value, [...this.secrets]);
+    const payloadRedacted = coverage === 'restricted' || !jsonValueEqual(safe, value);
     let payload = coverage === 'restricted' ? JSON.stringify({ omitted: !restricted && !knownRestricted && sessionRestricted ? 'sensitive-session-native-payload' : 'sensitive-native-request',
-      ...(stdio === undefined ? {} : { stdio }), ...(dshTransport === undefined ? {} : { dshTransport }) }) : JSON.stringify(redactDiagnosticValue(value, [...this.secrets]));
+      ...(stdio === undefined ? {} : { stdio }), ...(dshTransport === undefined ? {} : { dshTransport }) }) : JSON.stringify(safe);
     if (Buffer.byteLength(payload) > 1024 * 1024) { coverage = 'oversize'; payload = JSON.stringify({ omitted: 'native-envelope-size-limit', bytes: Buffer.byteLength(payload) }); }
     const seq = root['nativeSeq'] ?? event['seq'] ?? object(native['value'])['seq'] ?? native['seq'];
     const turnId = root['nativeTurnId'] ?? params['turnId'] ?? object(params['turn'])['id'] ?? event['turnId'];
     const result = this.db.prepare(`INSERT INTO native_event_envelopes (session_id, agent, native_id, owner_id, generation, received_at,
-      source, direction, channel, disposition, schema_hash, raw_envelope_id, native_seq, native_turn_id, native_request_id, actor_id, parent_tool_use_id, payload_coverage, payload)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      source, direction, channel, disposition, schema_hash, raw_envelope_id, native_seq, native_turn_id, native_request_id, actor_id, parent_tool_use_id, payload_coverage, payload, payload_redacted)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(context.sessionId, context.agent, scope.nativeId ?? (context.nativeId || null), context.identity?.ownerId ?? null, context.identity?.generation ?? null,
         new Date().toISOString(), source, direction, channel, disposition, this.schemaHash, rawEnvelopeId ?? null,
         Number.isSafeInteger(seq) ? seq : null, text(turnId), requestId === null ? null : JSON.stringify(requestId),
-        scope.actorId, scope.parentToolUseId, coverage, payload);
+        scope.actorId, scope.parentToolUseId, coverage, payload, payloadRedacted ? 1 : 0);
     return Number(result.lastInsertRowid);
   }
   frame(context: Context, frame: TraceFrame, accepted: boolean): number {
@@ -134,7 +138,7 @@ export class NativeEventStore {
     this.db.prepare('UPDATE native_event_projections SET event_seq = ? WHERE envelope_id = ? AND event_seq IS NULL').run(seq, envelopeId);
   }
   list(sessionId?: string, after = 0, limit = 50): NativeEnvelopeSummary[] {
-    const columns = 'id, session_id, agent, native_id, owner_id, generation, received_at, source, direction, channel, disposition, schema_hash, raw_envelope_id, native_seq, native_turn_id, native_request_id, actor_id, parent_tool_use_id, payload_coverage';
+    const columns = 'id, session_id, agent, native_id, owner_id, generation, received_at, source, direction, channel, disposition, schema_hash, raw_envelope_id, native_seq, native_turn_id, native_request_id, actor_id, parent_tool_use_id, payload_coverage, payload_redacted';
     const rows = (sessionId === undefined ? this.db.prepare(`SELECT ${columns} FROM native_event_envelopes WHERE id > ? ORDER BY id LIMIT ?`).all(after, limit)
       : this.db.prepare(`SELECT ${columns} FROM native_event_envelopes WHERE session_id = ? AND id > ? ORDER BY id LIMIT ?`).all(sessionId, after, limit)) as Row[];
     return rows.map(summary);

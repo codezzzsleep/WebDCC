@@ -64,6 +64,16 @@ it('two real concurrent Node processes reopen the initialized SQLite without los
   }
 }, 20_000);
 
+it('v16 without capture redaction metadata is refused without rewriting the original database', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-redaction-schema-refusal-')); const file = join(directory, 'db.sqlite');
+  try {
+    const db = openDb(file); db.exec('ALTER TABLE native_event_envelopes DROP COLUMN payload_redacted'); db.close();
+    const before = createHash('sha256').update(await readFile(file)).digest('hex');
+    expect(() => openDb(file)).toThrow('原生删节证据不完整');
+    expect(createHash('sha256').update(await readFile(file)).digest('hex')).toBe(before);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 it('future or incomplete schemas remain refused without rewriting the original database', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-db-refusal-')); const file = join(directory, 'db.sqlite');
   try {

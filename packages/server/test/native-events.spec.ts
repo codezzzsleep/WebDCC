@@ -10,6 +10,26 @@ import { openDb, CURRENT_SCHEMA_VERSION } from '../src/db.js';
 import { Store } from '../src/store.js';
 import { createTestApp, seedWorkspaceAndSession } from './helpers.js';
 
+it('v15 migration preserves original native rows without certifying their unknown redaction provenance', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wdcc-native-redaction-migration-'));
+  const path = join(directory, 'db.sqlite'); let db = openDb(path);
+  try {
+    let store = new Store(db);
+    const context = { sessionId: 'legacy', agent: 'codex' };
+    const frame = { i: 1, t: 0, dir: 'in' as const, ch: 'rpc', frame: { text: '***重点***', opaque: 1 } };
+    const id = store.nativeEvents.frame(context, frame, true);
+    db.exec('ALTER TABLE native_event_envelopes DROP COLUMN payload_redacted');
+    db.pragma('user_version = 15');
+    const original = db.prepare('SELECT * FROM native_event_envelopes WHERE id = ?').get(id) as Record<string, unknown>;
+    db.close(); db = openDb(path); store = new Store(db);
+    expect(db.pragma('user_version', { simple: true })).toBe(CURRENT_SCHEMA_VERSION);
+    expect(db.prepare('SELECT * FROM native_event_envelopes WHERE id = ?').get(id)).toEqual({ ...original, payload_redacted: null });
+    expect(store.nativeEvents.get(id)?.payloadRedacted).toBeUndefined();
+    const current = store.nativeEvents.frame(context, frame, true);
+    expect(store.nativeEvents.get(current)).toMatchObject({ payloadRedacted: false, payload: frame.frame });
+  } finally { db.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 it('NP-05 host-wide RPC records keep verified Host and transport identity without impersonating a Web session', async () => {
   const ctx = await createTestApp();
   let sink: NativeFrameSink | undefined;

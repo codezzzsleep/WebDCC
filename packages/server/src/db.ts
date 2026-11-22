@@ -5,7 +5,8 @@ import { dirname } from 'node:path';
 export type Db = Database.Database;
 // v12 scopes input/drafts; v13 keeps file name/MIME identity separate from
 // shared content bytes, without changing any existing file ID.
-export const CURRENT_SCHEMA_VERSION = 15;
+// v16 records whether native capture redaction changed each saved payload.
+export const CURRENT_SCHEMA_VERSION = 16;
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -79,6 +80,9 @@ export function openDb(file: string): Db {
       db.close(); throw new Error('数据库 schema v15 的历史部分阶段证据不完整，拒绝启动');
     }
   }
+  if (schemaVersion >= 16 && !(db.prepare('PRAGMA table_info(native_event_envelopes)').all() as { name: string }[]).some(column => column.name === 'payload_redacted')) {
+    db.close(); throw new Error('数据库 schema v16 的原生删节证据不完整，拒绝启动');
+  }
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
@@ -113,6 +117,10 @@ export function openDb(file: string): Db {
       projection_version INTEGER NOT NULL, event_key TEXT NOT NULL, envelope_id INTEGER NOT NULL, event_seq INTEGER,
       PRIMARY KEY (projection_version, event_key)
     );`);
+    const envelopeColumns = db.prepare('PRAGMA table_info(native_event_envelopes)').all() as { name: string }[];
+    // NULL preserves the unknown provenance of legacy rows. Only the original
+    // capture can certify that redaction left its payload unchanged.
+    if (!envelopeColumns.some(column => column.name === 'payload_redacted')) db.exec('ALTER TABLE native_event_envelopes ADD COLUMN payload_redacted INTEGER CHECK (payload_redacted IN (0, 1))');
     db.exec(`CREATE INDEX IF NOT EXISTS native_event_projection_envelope ON native_event_projections(envelope_id, projection_version);
       CREATE INDEX IF NOT EXISTS events_native_item ON events(session_id, kind, item_key, native_seq);`);
     const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
