@@ -65,6 +65,17 @@ it('the Store recovery method operates while SQLite is query-only without insert
   finally { ctx.db.close(); }
 });
 
+it('checks read budgets before decoding unrelated semantic history', () => {
+  const ctx = fixture();
+  try {
+    ctx.db.prepare('UPDATE events SET data = ?, native = ? WHERE session_id = ?').run('{invalid-unused-body', '{invalid-unused-native', ctx.session.id);
+    expect(() => ctx.store.nativeTerminalResults(ctx.session.id, { maxRecords: 0 })).toThrow('Invalid native terminal read budget');
+    expect(() => ctx.store.nativeTerminalResults(ctx.session.id, { maxBytes: 0 })).toThrow('Invalid native terminal read budget');
+    ctx.record();
+    expect(ctx.read().outcomes[0]?.publicTurnId).toBe('original-public');
+  } finally { ctx.db.close(); }
+});
+
 it('the independent HTTP result route keeps existing auth/session boundaries and never activates an Adapter', async () => {
   const ctx = await createTestApp();
   try {
