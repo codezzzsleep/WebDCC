@@ -5,7 +5,8 @@ vi.mock('./connection.js', () => ({ SyncConnection: class {
   constructor(options: SyncConnectionOptions) { mocks.options.push(options); } start = mocks.start; subscribe() {} unsubscribe() {} sendCommand() {}
 } }));
 vi.mock('./api.js', () => ({ api: {} }));
-vi.mock('./db.js', () => ({ cache: { putSession: mocks.putSession, setMeta: mocks.setMeta, putFeedCheckpoint: mocks.putFeedCheckpoint, getSessions: mocks.getSessions, getMeta: mocks.getMeta } }));
+vi.mock('./db.js', () => ({ cache: { putSession: mocks.putSession, setMeta: mocks.setMeta, putFeedCheckpoint: mocks.putFeedCheckpoint, getSessions: mocks.getSessions, getMeta: mocks.getMeta,
+  getFeedCheckpoint: async () => ({ sessions: await mocks.getSessions(), feedSeq: await mocks.getMeta('feedSeq'), checkpoint: await mocks.getMeta('feedCheckpoint') }) } }));
 import { AppStore } from './store.js';
 
 it('a received feed patch cannot become the reconnect checkpoint before its session state commits', async () => {
