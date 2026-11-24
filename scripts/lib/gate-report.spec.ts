@@ -38,3 +38,21 @@ describe('NP-15 evidence gates', () => {
     expect(parseRatchetBaseline({ plain: 'passed' })).toEqual({ plain: 'passed' });
   });
 });
+
+it('rejects missing, malformed and different target/native environments in reports and repeated passes', () => {
+  const actual = { ...identity, environment: { os: 'linux', arch: 'x64', node: 'v26.13.0', nativeVersions: { codex: 'codex-cli 0.172.0', claude: '2.1.322 (Claude Code)', dsh: '0.2.2-rc.1' } } };
+  const good = { ...report(), identity: actual };
+  expect(gateIssues(good, actual, ['plain'])).toEqual([]);
+  for (const environment of [undefined, null, [], {}, { ...actual.environment, nativeVersions: null }, { ...actual.environment, node: '' }, { ...actual.environment, nativeVersions: { codex: 'unknown' } }]) {
+    expect(gateIssues({ ...good, identity: { ...actual, environment } }, actual, ['plain'])).toContain('invalid-environment');
+    expect(passSetIssues([{ identity: { ...actual, environment } as RunIdentity, results: good.results }], actual, ['plain'], 1)).toContain('invalid-environment:pass:1');
+  }
+  for (const [key, value, expected] of [['os', 'darwin', 'different-os'], ['arch', 'arm64', 'different-arch'], ['node', 'v24.0.0', 'different-node'], ['nativeVersions', { ...actual.environment.nativeVersions, codex: 'codex-cli 0.999.0' }, 'different-native-versions']] as const) {
+    const changed = { ...actual, environment: { ...actual.environment, [key]: value } };
+    expect(gateIssues({ ...good, identity: changed }, actual, ['plain'])).toContain(expected);
+    expect(passSetIssues([{ identity: changed, results: good.results }], actual, ['plain'], 1)).toContain(`${expected}:pass:1`);
+  }
+  expect(gateIssues({ ...good, identity: { ...actual, environment: { ...actual.environment, nativeVersions: {} } } }, actual, ['plain'])).toContain('different-native-versions');
+  expect(passSetIssues([{ identity: { ...actual, schemaFingerprint: 'stale' }, results: good.results }], actual, ['plain'], 1)).toContain('stale-pass:1');
+  expect(passSetIssues([{ identity: actual, results: [{ id: 'plain', status: 'not-triggered' }] }], actual, ['plain'], 1)).toContain('not-triggered:pass:1:plain');
+});

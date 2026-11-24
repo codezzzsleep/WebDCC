@@ -1,0 +1,41 @@
+import { chromium, type Browser } from '@playwright/test';
+import { expect, it, vi } from 'vitest';
+import type { ImportedProvider } from '../packages/server/src/provider-import.js';
+import { createSourceTestApp } from './helpers.js';
+const source = vi.hoisted(() => ({ candidates: [] as ImportedProvider[] }));
+vi.mock('../packages/server/src/provider-import.js', () => ({ scanLocalProviders: async () => source.candidates }));
+it('rotation defaults and explicit update/ignore work in the actual UI; bound Provider deletion preserves session identity', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  const candidate: ImportedProvider = { name: 'Original native', source: 'codex-config', sourceKey: 'fixture', baseUrl: 'https://fixture.invalid', protocols: ['openai-responses'], models: ['old-model'], apiKey: 'sk-wdcc-test-old', nativeDefault: true, nativeDefaultModel: 'old-model' };
+  source.candidates = [candidate];
+  try {
+    const headers = { cookie: ctx.cookie };
+    await ctx.app.inject({ method: 'POST', url: '/api/providers/scan', headers });
+    const old = ctx.store.listProviders()[0]!;
+    await ctx.app.inject({ method: 'PATCH', url: `/api/providers/${old.id}`, headers, payload: { name: 'My edited provider' } });
+    const ws = ctx.store.createWorkspace('fixture', ctx.dataDir); const session = ctx.store.createSession({ workspaceId: ws.id, agent: 'codex', providerId: old.id });
+    source.candidates = [{ ...candidate, name: 'Current native', apiKey: 'sk-wdcc-test-new', models: ['new-model'], nativeDefaultModel: 'new-model' }];
+    await ctx.app.listen({ host: '127.0.0.1', port: 0 }); const address = ctx.app.server.address(); if (!address || typeof address === 'string') throw new Error('Missing listener'); const base = `http://127.0.0.1:${address.port}`;
+    browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    const dialogs: string[] = []; page.on('dialog', dialog => { dialogs.push(dialog.message()); void dialog.accept(); });
+    await page.goto(`${base}/settings/providers`);
+    const oldCard = page.getByTestId(`provider-${old.id}`);
+    await expect.poll(() => oldCard.textContent()).toContain('本机配置已变化');
+    await oldCard.locator('.provider-tree-head').click(); const notice = oldCard.getByTestId('provider-local-change');
+    await notice.getByRole('button', { name: '忽略', exact: true }).click(); await expect.poll(() => notice.textContent()).toContain('已忽略');
+    await page.reload(); await oldCard.locator('.provider-tree-head').click(); await expect.poll(() => notice.textContent()).toContain('已忽略');
+    await oldCard.getByRole('button', { name: '删除', exact: true }).first().click();
+    await expect.poll(() => oldCard.getByRole('alert').textContent()).toContain('无法删除');
+    expect(ctx.store.getSession(session.id)?.providerId).toBe(old.id); expect(dialogs.at(-1)).toContain('已有会话');
+    await page.goto(`${base}/new?agent=codex`); await expect.poll(() => page.getByTestId('model-menu').getAttribute('data-model')).toBe('new-model');
+    await page.getByTestId('model-menu').click();
+    await page.getByTestId('model-option').filter({ hasText: 'old-model' }).click();
+    await page.reload(); await expect.poll(() => page.getByTestId('model-menu').getAttribute('data-provider')).toBe('My edited provider');
+    await page.goto(`${base}/settings/providers`); await oldCard.locator('.provider-tree-head').click();
+    await notice.getByRole('button', { name: '更新', exact: true }).click(); await expect.poll(() => notice.count()).toBe(0);
+    expect(dialogs.at(-1)).toContain('已有会话下次启动'); expect(ctx.store.getProvider(old.id)?.name).toBe('My edited provider');
+    expect(ctx.store.getSession(session.id)?.providerId).toBe(old.id);
+    expect(JSON.stringify(await page.request.get(`${base}/api/providers`).then(response => response.json()))).not.toContain('sk-wdcc-test-');
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
