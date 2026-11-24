@@ -712,9 +712,18 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     }
     const models = deps.providers.modelsFor(agent, providerId);
     const details = deps.providers.get(providerId)?.modelDetails ?? [];
+    const provider = deps.providers.runtimeConfig(providerId);
+    const adapter = manager.adaptersList().find(item => item.id === agent);
+    // Read the same native Provider configuration used for session creation.
+    // Legacy Provider rows may only contain model names, not capabilities.
+    const nativeModels = agent === 'codex' && models.length > 0 && provider !== null && adapter !== undefined
+      ? await adapter.listModels(providerId, provider).catch(() => []) : [];
     return { models, options: models.map(id => {
       const detail = details.find(model => model.id === id);
-      return { id, label: detail?.name ?? id, ...(detail?.reasoningEfforts === undefined ? {} : { reasoningEfforts: detail.reasoningEfforts }), source: 'provider-config' };
+      const native = nativeModels.find(model => model.id === id);
+      return { ...native, id, label: detail?.name ?? native?.label ?? id,
+        ...(detail?.reasoningEfforts === undefined ? {} : { reasoningEfforts: detail.reasoningEfforts }),
+        source: detail?.reasoningEfforts !== undefined || native === undefined ? 'provider-config' : native.source ?? 'codex:model/list' };
     }) };
   });
 

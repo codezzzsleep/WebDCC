@@ -13,6 +13,7 @@ import type {
   LaunchSpec,
   ModelOption,
   ProbeResult,
+  ProviderRuntimeConfig,
   UserInput,
   InputSkillPart,
   TraceSink,
@@ -706,9 +707,10 @@ export class CodexAdapter implements AgentAdapter {
     };
   }
 
-  async listModels(): Promise<ModelOption[]> {
+  async listModels(providerId: string | null = null, provider?: ProviderRuntimeConfig | null): Promise<ModelOption[]> {
+    if ((provider?.id ?? null) !== providerId) throw new Error('模型目录的 Provider 身份与运行配置不一致');
     const version = await this.requireCompatibleVersion();
-    const spec = this.buildLaunchSpec({ sessionId: 'model-catalog', cwd: process.cwd(), providerId: null });
+    const spec = this.buildLaunchSpec({ sessionId: 'model-catalog', cwd: process.cwd(), providerId, provider });
     let frameIndex = 0;
     const rpc = JsonRpcStdio.start({ command: spec.command!, nativeVersion: version, args: spec.args, env: { ...(this.options.env ?? process.env), ...spec.env },
       onFrame: (dir, frame) => traceFrame(this.options.traceSink, { i: ++frameIndex, t: 0, dir, ch: 'rpc-catalog', frame }) });
