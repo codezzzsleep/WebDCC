@@ -34,6 +34,8 @@ it('initializes only missing vault, serializes concurrent registries and saves p
   const { dir, store, registry } = await fixture(); await registry.init();
   const other = new ProviderRegistry(store, dir); await other.init();
   const providers = await Promise.all(Array.from({ length: 20 }, (_, i) => (i % 2 ? registry : other).create({ ...input, apiKey: `sk-wdcc-test-${i}` })));
+  expect(providers.map(p => registry.runtimeConfig(p.id)?.apiKey)).toEqual(Array.from({ length: 20 }, (_, i) => `sk-wdcc-test-${i}`));
+  expect(providers.map(p => other.runtimeConfig(p.id)?.apiKey)).toEqual(Array.from({ length: 20 }, (_, i) => `sk-wdcc-test-${i}`));
   const restarted = new ProviderRegistry(store, dir); await restarted.init();
   expect(providers.map(p => restarted.runtimeConfig(p.id)?.apiKey)).toEqual(Array.from({ length: 20 }, (_, i) => `sk-wdcc-test-${i}`));
   expect((await stat(join(dir, 'secrets.json'))).mode & 0o777).toBe(0o600);
@@ -71,7 +73,7 @@ it('read IO failure after init fails closed and leaves existing SQL/key state in
   const { dir, store, registry } = await fixture(); await registry.init(); const p = await registry.create(input);
   await rm(join(dir, 'secrets.json'));
   await expect(registry.update(p.id, { name: 'changed' })).rejects.toThrow('无法读取');
-  expect(store.getProvider(p.id)?.name).toBe('fixture'); expect(registry.runtimeConfig(p.id)?.apiKey).toBe('sk-wdcc-test-key-one');
+  expect(store.getProvider(p.id)?.name).toBe('fixture'); expect(() => registry.runtimeConfig(p.id)).toThrow('拒绝使用过期凭据');
 });
 
 it('DELETE rejects bound Providers before removing key, keeps session route/history and permits unused deletion', async () => {

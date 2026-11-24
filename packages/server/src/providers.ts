@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { ImportedProvider } from './provider-import.js';
 import { readFile, open, rename, rm, mkdir } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -52,7 +53,6 @@ function sourceIdentity(source: string, sourceKey: string | null | undefined): s
 export class ProviderRegistry {
   private readonly secretsPath: string;
   private readonly ignoredPath: string;
-  private secrets: Record<string, string> = {};
   private ignored: string[] = [];
 
   constructor(
@@ -66,7 +66,7 @@ export class ProviderRegistry {
   async init(): Promise<void> {
     await mkdir(dirname(this.secretsPath), { recursive: true });
     await this.exclusive(async () => {
-      this.secrets = await this.readSecrets(true);
+      await this.readSecrets(true);
     });
     this.ignored = await this.readIgnored();
   }
@@ -116,12 +116,25 @@ export class ProviderRegistry {
       // eslint-disable-next-line preserve-caught-error -- Do not attach potentially secret-bearing IO diagnostics.
       throw new Error('无法读取 Provider 凭据；原文件已保留');
     }
+    return this.parseSecrets(raw);
+  }
+
+  private parseSecrets(raw: string): Record<string, string> {
     try {
       const value: unknown = JSON.parse(raw);
       if (value === null || typeof value !== 'object' || Array.isArray(value)
         || Object.entries(value).some(([key, secret]) => key === '' || ['__proto__', 'constructor', 'prototype'].includes(key) || typeof secret !== 'string')) throw new Error();
       return value as Record<string, string>;
     } catch { throw new Error('Provider 凭据文件格式无效；原文件已保留'); }
+  }
+
+  /** Resolve a fresh atomic snapshot. Another Registry/process may have
+   * switched SQL references since startup; stale caches must not lose its key. */
+  private currentSecrets(): Record<string, string> {
+    let raw: string;
+    try { raw = readFileSync(this.secretsPath, 'utf8'); }
+    catch { throw new Error('无法读取 Provider 凭据；拒绝使用过期凭据启动新执行器'); }
+    return this.parseSecrets(raw);
   }
 
   private async atomicWrite(path: string, value: unknown): Promise<void> {
@@ -255,6 +268,7 @@ export class ProviderRegistry {
     const nativeDefaults = Object.fromEntries(Object.entries(states).flatMap(([source, item]) => item.currentId === row.id && item.nativeDefault && item.nativeDefaultModel !== undefined
       ? [[source.startsWith('codex-config:') ? 'codex' : source === 'claude-settings' ? 'claude-code' : source, item.nativeDefaultModel]] : []));
     const localChange = state?.changes[row.id];
+    const secrets = this.currentSecrets();
     return {
       ...(Object.keys(nativeDefaults).length === 0 ? {} : { nativeDefaults }),
       ...(state === undefined ? {} : { nativeDefault: state.nativeDefault && state.currentId === row.id, ...(state.currentId !== row.id || state.nativeDefaultModel === undefined ? {} : { nativeDefaultModel: state.nativeDefaultModel }) }),
@@ -270,8 +284,8 @@ export class ProviderRegistry {
       ...(row.endpoints === null ? {} : { endpoints: JSON.parse(row.endpoints) as Record<string, string> }),
       ...(row.sourceKey === null ? {} : { sourceKey: row.sourceKey }),
       ...(row.codexCatalogPath === null ? {} : { codexCatalogPath: row.codexCatalogPath }),
-      hasKey: this.secrets[row.secretRef] !== undefined,
-      ...(this.secrets[row.secretRef] === undefined ? {} : { keyHint: (this.secrets[row.secretRef] ?? '').slice(-4) }),
+      hasKey: secrets[row.secretRef] !== undefined,
+      ...(secrets[row.secretRef] === undefined ? {} : { keyHint: (secrets[row.secretRef] ?? '').slice(-4) }),
       ...(row.note === null ? {} : { note: row.note }),
       createdAt: row.createdAt,
     };
@@ -299,7 +313,6 @@ export class ProviderRegistry {
         endpoints: input.endpoints === undefined ? null : JSON.stringify(input.endpoints),
         note: input.missingKeyReason ?? null,
       });
-      this.secrets = next;
       return this.get(id) as ProviderDto;
     });
   }
@@ -324,7 +337,6 @@ export class ProviderRegistry {
         ...(patch.modelDetails === undefined ? {} : { modelDetails: patch.modelDetails }),
         ...(patch.codexCatalogPath === undefined ? {} : { codexCatalogPath: patch.codexCatalogPath }),
       });
-      this.secrets = next;
       return this.get(id);
     });
   }
@@ -346,7 +358,6 @@ export class ProviderRegistry {
       this.ignored = nextIgnored;
       delete next[row.secretRef];
       await this.persist(next);
-      this.secrets = next;
     });
   }
 
@@ -355,7 +366,7 @@ export class ProviderRegistry {
     if (id === null || id === undefined) return null;
     const row = this.store.getProvider(id);
     if (row === undefined) return null;
-    const apiKey = this.secrets[row.secretRef];
+    const apiKey = this.currentSecrets()[row.secretRef];
     return {
       id: row.id,
       name: row.name,
