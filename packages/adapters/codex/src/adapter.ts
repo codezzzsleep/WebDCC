@@ -53,7 +53,7 @@ import type { ThreadTurnsListResponse } from './schema/v2/ThreadTurnsListRespons
 import type { InitializeResponse } from './schema/InitializeResponse.js';
 import { codexNativeCatalog, codexNativeState, executeCodexNativeControl, parseCodexNativeAction } from './native.js';
 
-import { PINNED_VERSION, isSupportedCodexVersion, CODEX_COMPATIBILITY_LABEL } from './versions.js';
+import { PINNED_VERSION, SUPPORTED_CODEX_VERSIONS, isSupportedCodexVersion, CODEX_COMPATIBILITY_LABEL } from './versions.js';
 import { codexAsyncQuestions, codexAsyncQuestionEvents, nativeAsyncReplies } from './async-questions.js';
 export { PINNED_VERSION } from './versions.js';
 
@@ -700,6 +700,7 @@ export class CodexAdapter implements AgentAdapter {
       version,
       pinnedVersion: PINNED_VERSION,
       compatible: isSupportedCodexVersion(version),
+      supportedVersions: SUPPORTED_CODEX_VERSIONS,
       auth: 'unknown',
       notes: isSupportedCodexVersion(version) ? [] : [`版本 ${version} 不在已审核兼容范围 ${CODEX_COMPATIBILITY_LABEL} 内`],
     };
@@ -709,7 +710,7 @@ export class CodexAdapter implements AgentAdapter {
     const version = await this.requireCompatibleVersion();
     const spec = this.buildLaunchSpec({ sessionId: 'model-catalog', cwd: process.cwd(), providerId: null });
     let frameIndex = 0;
-    const rpc = JsonRpcStdio.start({ command: spec.command!, args: spec.args, env: { ...(this.options.env ?? process.env), ...spec.env },
+    const rpc = JsonRpcStdio.start({ command: spec.command!, nativeVersion: version, args: spec.args, env: { ...(this.options.env ?? process.env), ...spec.env },
       onFrame: (dir, frame) => traceFrame(this.options.traceSink, { i: ++frameIndex, t: 0, dir, ch: 'rpc-catalog', frame }) });
     try {
       await this.handshake(rpc);
@@ -751,13 +752,14 @@ export class CodexAdapter implements AgentAdapter {
   /** 访问模式来自 app-server 的 permissionProfile/list（MODE-codex-01） */
   async listAccessModes(): Promise<AccessModeOption[]> {
     const unavailable = (reason: string): AccessModeOption[] => ACCESS_MODES.map(option => ({ ...option, allowed: false, reason, source: 'permissionProfile/list' }));
-    if ((await this.probe()).compatible === false) return unavailable('原生版本不兼容，权限目录未确认');
+    const probe = await this.probe();
+    if (probe.compatible === false) return unavailable('原生版本不兼容，权限目录未确认');
     const labels: Record<string, string> = {
       ':read-only': '只读',
       ':workspace': '工作区可写',
       ':danger-full-access': '完全访问',
     };
-    const rpc = JsonRpcStdio.start({ command: this.options.command ?? 'codex', args: ['app-server', ...(this.options.configOverrides ?? []).flatMap(override => ['-c', override])], env: { ...(this.options.env ?? process.env) } });
+    const rpc = JsonRpcStdio.start({ command: this.options.command ?? 'codex', nativeVersion: probe.version, args: ['app-server', ...(this.options.configOverrides ?? []).flatMap(override => ['-c', override])], env: { ...(this.options.env ?? process.env) } });
     try {
       await nativeRequest(rpc, 'initialize', { clientInfo: { name: 'webdcc', title: 'WebDCC', version: '0.1.0' }, capabilities: null });
       rpc.notify('initialized');
@@ -821,7 +823,7 @@ export class CodexAdapter implements AgentAdapter {
 
   private startProcess(sessionId: string, opts: CreateOpts, nativeVersion: string): SessionRuntime {
     const spec = this.buildLaunchSpec(opts);
-    const nativeHelp = process.platform !== 'win32' && ['0.168.0', '0.169.0'].includes(nativeVersion)
+    const nativeHelp = process.platform !== 'win32' && ['0.168.0', '0.169.0', '0.172.0'].includes(nativeVersion)
       ? spawnSync(spec.command ?? 'codex', ['app-server', '--help'], { env: { ...(this.options.env ?? process.env), ...spec.env }, encoding: 'utf8', timeout: 1500 }) : undefined;
     const directory = nativeHelp?.status === 0 && nativeHelp.stdout.includes('unix://') ? mkdtempSync(join(tmpdir(), 'wdcc-codex-peer-')) : undefined;
     const socketPath = directory === undefined ? undefined : join(directory, 'host.sock');
@@ -830,6 +832,7 @@ export class CodexAdapter implements AgentAdapter {
     const runtimeRef: { current?: SessionRuntime } = {};
     const rpc = JsonRpcStdio.start({
       command: spec.command ?? 'codex',
+      nativeVersion,
       args: [...(spec.args ?? []), ...(socketPath === undefined ? [] : ['--listen', `unix://${socketPath}`])],
       unixSocketPath: socketPath,
       cwd: opts.cwd,
@@ -912,7 +915,7 @@ export class CodexAdapter implements AgentAdapter {
     const nativeVersion = await this.requireCompatibleVersion();
     const spec = this.buildLaunchSpec({ sessionId: opts.sessionId, cwd: opts.cwd, providerId: null });
     let index = 0;
-    const rpc = JsonRpcStdio.start({ command: spec.command!, args: spec.args, cwd: opts.cwd,
+    const rpc = JsonRpcStdio.start({ command: spec.command!, nativeVersion, args: spec.args, cwd: opts.cwd,
       env: { ...(this.options.env ?? process.env), ...spec.env },
       onFrame: (dir, frame) => opts.nativeEvents?.record({ i: ++index, t: 0, dir, ch: 'rpc-observation', frame }).accepted,
     });
@@ -1084,8 +1087,8 @@ export class CodexAdapter implements AgentAdapter {
       if (this.sessions.get(sessionId!) !== runtime || runtime.rpc.isClosed) throw Object.assign(new Error('模式目录属于旧运行实例'), { statusCode: 409 });
       return { modes: result.data.flatMap(preset => preset.mode === 'plan' || preset.mode === 'default' ? [{ id: preset.mode, label: preset.mode === 'plan' ? '计划' : '默认' }] : []), observedMode: runtime.observedMode ?? null };
     }
-    await this.requireCompatibleVersion();
-    const rpc = JsonRpcStdio.start({ command: this.options.command ?? 'codex',
+    const nativeVersion = await this.requireCompatibleVersion();
+    const rpc = JsonRpcStdio.start({ command: this.options.command ?? 'codex', nativeVersion,
       args: ['app-server', ...(this.options.configOverrides ?? []).flatMap(value => ['-c', value])], env: { ...(this.options.env ?? process.env) } });
     try {
       await this.handshake(rpc, true);
@@ -1386,7 +1389,7 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   private acceptReview(sessionId: string, runtime: SessionRuntime, value: unknown): void {
-    validateNativeResult('review/start', value);
+    validateNativeResult('review/start', value, runtime.nativeVersion);
     const accepted = value as ReviewStartResponse;
     if (accepted.reviewThreadId !== runtime.nativeId) throw Object.assign(new Error('原生 Review 接受结果属于其他会话，需核对'), { statusCode: 409, code: 'uncertain' });
     this.beginReview(sessionId, runtime, accepted, 'accepted');
@@ -2015,7 +2018,7 @@ export class CodexAdapter implements AgentAdapter {
       case 'internal': {
         if (method === 'thread/settings/updated' && params['threadId'] === runtime.nativeId) {
           try {
-            const { threadSettings } = nativeSettingsNotification(params);
+            const { threadSettings } = nativeSettingsNotification(params, runtime.nativeVersion);
             this.observeMode(runtime, { model: threadSettings.model, reasoningEffort: threadSettings.effort, collaborationMode: threadSettings.collaborationMode });
           } catch { /* Keep malformed observations in the native ledger without claiming a mode. */ }
         }
@@ -2048,7 +2051,7 @@ export class CodexAdapter implements AgentAdapter {
     const id = frame['id'];
     if (typeof id !== 'string' && typeof id !== 'number') throw Object.assign(new Error('Invalid native request ID'), { code: -32600 });
     if (runtime !== undefined && (method === 'mcpServer/elicitation/request' || method === 'item/permissions/requestApproval')) {
-      validateNativeServerParams(method, frame['params']);
+      validateNativeServerParams(method, frame['params'], runtime.nativeVersion);
       const params = frame['params'] as McpServerElicitationRequestParams | PermissionsRequestApprovalParams;
       if (params.threadId !== runtime.nativeId) throw Object.assign(new Error('Reverse request belongs to another native thread'), { code: -32602 });
       const approvalId = `${runtime.processToken}:${typeof id}:${id}`;

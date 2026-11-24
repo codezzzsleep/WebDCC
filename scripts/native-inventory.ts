@@ -9,10 +9,12 @@ const require = createRequire(import.meta.url);
 const codexPath = 'packages/adapters/codex/src/json-schema/codex_app_server_protocol.schemas.json';
 const codexQuestionPath = 'packages/adapters/codex/src/schema-experimental/question-modes.schemas.json';
 const codexCompatibilityPath = 'packages/adapters/codex/src/json-schema/compatibility-0.169.0.schemas.json';
+const codexCompatibility172Path = 'packages/adapters/codex/src/json-schema/compatibility-0.172.0.schemas.json';
 const dshPath = 'fixtures/dsh/host-api-catalog.json';
 const sdkPath = join(dirname(require.resolve('@anthropic-ai/claude-agent-sdk')), 'sdk.d.ts');
 const [codexText, dshText, sdkText, codexQuestionText] = await Promise.all([readFile(codexPath, 'utf8'), readFile(dshPath, 'utf8'), readFile(sdkPath, 'utf8'), readFile(codexQuestionPath, 'utf8')]);
 const codexCompatibilityText = await readFile(codexCompatibilityPath, 'utf8');
+const codexCompatibility172Text = await readFile(codexCompatibility172Path, 'utf8');
 type Entry = { agent: string; method: string; role: 'action' | 'observation' | 'internal'; capabilityId: string; reason?: string };
 const entries: Entry[] = [];
 const hash = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -48,7 +50,7 @@ const inventory = {
   formatVersion: 1,
   baseline: { codex: '0.167.0', 'claude-code': '0.3.322', claudeCli: '2.1.322', dsh: '0.2.2-rc.1', os: 'linux' },
   compatibleVersions: { codex: SUPPORTED_CODEX_VERSIONS },
-  sources: { codex: { path: codexPath, sha256: hash(codexText) }, codexCompatibility: { nativeVersion: '0.169.0', path: codexCompatibilityPath, sha256: hash(codexCompatibilityText) }, codexQuestionModes: { path: codexQuestionPath, sha256: hash(codexQuestionText) }, dsh: { path: dshPath, sha256: hash(dshText) }, claude: { path: '@anthropic-ai/claude-agent-sdk/sdk.d.ts', sha256: hash(sdkText) } },
+  sources: { codex: { path: codexPath, sha256: hash(codexText) }, codexCompatibility: { nativeVersion: '0.169.0', path: codexCompatibilityPath, sha256: hash(codexCompatibilityText) }, codexCompatibility172: { nativeVersion: '0.172.0', path: codexCompatibility172Path, sha256: hash(codexCompatibility172Text) }, codexQuestionModes: { path: codexQuestionPath, sha256: hash(codexQuestionText) }, dsh: { path: dshPath, sha256: hash(dshText) }, claude: { path: '@anthropic-ai/claude-agent-sdk/sdk.d.ts', sha256: hash(sdkText) } },
   entries: entries.sort((a, b) => `${a.agent}:${a.method}`.localeCompare(`${b.agent}:${b.method}`)),
 };
 const output = JSON.stringify(inventory, null, 2) + '\n';

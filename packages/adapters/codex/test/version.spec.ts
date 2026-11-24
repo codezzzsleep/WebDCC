@@ -12,6 +12,6 @@ it('NP-01/46 incompatible native versions cannot create or resume a process', as
 });
 
 it('accepts reviewed releases while rejecting unknown, prerelease and older versions', () => {
-  for (const version of ['0.167.0', '0.168.0', '0.169.0']) expect(isSupportedCodexVersion(version)).toBe(true);
-  for (const version of [undefined, 'unknown', '0.166.0', '0.170.0', '0.169.1', '0.169.0-beta.1']) expect(isSupportedCodexVersion(version)).toBe(false);
+  for (const version of ['0.167.0', '0.168.0', '0.169.0', '0.172.0']) expect(isSupportedCodexVersion(version)).toBe(true);
+  for (const version of [undefined, 'unknown', '0.166.0', '0.170.0', '0.171.0', '0.173.0', '0.172.1', '0.169.1', '0.172.0-beta.1']) expect(isSupportedCodexVersion(version)).toBe(false);
 });

@@ -12,7 +12,7 @@
 | pnpm | **12.18.0** | `pnpm -v` | `packageManager` 字段已锁定；`onlyBuiltDependencies: [esbuild]` |
 | TypeScript | **5.9.3** | `npx tsc -v` | 未用 7.0.2：`typescript-eslint@8.72.2` 明确拒绝 TS 7（`typescript-eslint does not support TS 7.0`） |
 | DeepSeek Harness（DSH） | **0.2.2-rc.1** | `dsh --version` | 与 SPEC 中【已实测】结论对应的版本 |
-| Codex CLI | **0.167.0–0.169.0** | `codex --version` | 原始协议/fixtures 基线为 0.167.0；响应兼容 schema 从 0.169.0 原生导出；未知版本及预发布仍受限 |
+| Codex CLI | **0.167.0–0.169.0、0.172.0** | `codex --version` | 原始协议/fixtures 基线为 0.167.0；响应按实际版本选择 0.169.0 或 0.172.0 官方导出合同；其他版本及预发布仍受限 |
 | Claude Code | **2.1.322** | `claude --version` | 我们只通过 Agent SDK 驱动，不直接调 `claude -p` |
 | Claude Agent SDK | **0.3.322** | `node -p "require('@anthropic-ai/claude-agent-sdk/package.json').version"` | `@webdcc/adapter-claude` 的依赖 |
 | Vitest | **3.2.7** | `npx vitest --version` | 不能用 5.x：它依赖 rolldown 原生二进制，本机 Xeon 6266C 无 AVX2，直接 `Illegal instruction (core dumped)` |
