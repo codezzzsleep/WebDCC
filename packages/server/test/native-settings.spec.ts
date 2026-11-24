@@ -45,6 +45,18 @@ it('NP-12 stale browser revisions and changed Host identity return 409 without n
   expect((await patch({ ...input, expectedRevision: view.providerRevision + 1, maxTokens: 444 })).statusCode).toBe(409);
   expect(host.calls.filter(call => call.method === 'settings/mutate')).toEqual([]);
 });
+it('binds native configuration previews to the current runtime contract and refuses upgrades before saving', async () => {
+  const { host, input, patch, ctx } = await setup();
+  host.changeRuntime('0.2.2-rc.5', 'rc5-fixture');
+  expect((await patch({ ...input, maxTokens: 444 })).statusCode).toBe(409);
+  expect(host.calls.filter(call => call.method === 'settings/mutate')).toHaveLength(0);
+  const current = (await ctx.app.inject({ url: '/api/dsh/provider', headers: { cookie: ctx.cookie } })).json<DshSettingsView>();
+  expect(current.target).toMatchObject({ nativeVersion: '0.2.2-rc.5', hostFingerprint: expect.any(String), contractHash: expect.any(String) });
+  expect((await patch({ ...input, targetId: current.target.id, maxTokens: 444 })).statusCode).toBe(200);
+  host.changeRuntime('unknown', 'unknown-fixture');
+  expect((await patch({ ...input, targetId: current.target.id, expectedRevision: 2, maxTokens: 555 })).statusCode).toBe(409);
+  expect(host.calls.filter(call => call.method === 'settings/mutate')).toHaveLength(1);
+});
 
 it('NP-12 concurrent native writes use the reviewed revision and a native CAS refusal returns 409', async () => {
   const { host, input, patch } = await setup();

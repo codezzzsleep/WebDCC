@@ -8,6 +8,7 @@ export interface NativeDshRpcCaptureMetadata {
   byteLength?: number;
   coverage: 'complete' | 'oversize' | 'invalid-json' | 'transport-error' | 'http-auth-rejected';
   verifiedHostFingerprint?: string; hostEpoch: number; muxGeneration: number;
+  nativeVersion?: string; contractHash?: string;
 }
 /** A capture marker never contains the omitted transport bytes or their hash. */
 export interface NativeStdioCaptureMetadata {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { dshBaseUrl } from './host.js';
-
-export const DSH_BASELINE_VERSION = '0.2.2-rc.1';
+import { DshHostClient, dshBaseUrl, type DshHostOptions } from './host.js';
+import { isSupportedDshVersion, dshRuntimeSummary, DSH_BASELINE_VERSION } from './runtime.js';
+export { DSH_BASELINE_VERSION } from './runtime.js';
 export interface DshHostIdentity {
   url: string;
   version?: string;
@@ -11,6 +11,7 @@ export interface DshHostIdentity {
   status: 'verified' | 'unknown' | 'incompatible';
   source: 'native-bootstrap';
   reason?: string;
+  contract?: ReturnType<typeof dshRuntimeSummary>;
   /** The native API does not expose the profile directory/name. */
   profile: { scope: 'current-host-profile'; identity: 'unavailable-in-api' };
 }
@@ -40,8 +41,8 @@ export function identityFromDshBootstrap(endpoint: string | number, html: string
   const commit = typeof graph.release.commit === 'string' ? graph.release.commit : undefined;
   return { ...identity, version, ...(commit === undefined ? {} : { commit }), manifestRevision: graph.rev,
     fingerprint: createHash('sha256').update(JSON.stringify({ release: graph.release, rev: graph.rev, entries: graph.entries })).digest('hex'),
-    status: version === DSH_BASELINE_VERSION ? 'verified' : 'incompatible',
-    ...(version === DSH_BASELINE_VERSION ? {} : { reason: `Host ${version} differs from baseline ${DSH_BASELINE_VERSION}` }),
+    status: isSupportedDshVersion(version) ? 'verified' : 'incompatible',
+    ...(isSupportedDshVersion(version) ? { contract: dshRuntimeSummary(version) } : { reason: `Host ${version} has no reviewed DSH contract (baseline ${DSH_BASELINE_VERSION})` }),
   };
 }
 
@@ -68,5 +69,16 @@ export async function readDshHostIdentity(endpoint: string | number, browserCook
 }
 
 export function requireDshBaseline(identity: DshHostIdentity): void {
-  if (identity.status !== 'verified') throw Object.assign(new Error(identity.reason ?? 'DSH Host version is unverified'), { statusCode: 409, code: 'dsh-host-version-blocked' });
+  if (identity.status !== 'verified') throw Object.assign(new Error(identity.reason ?? 'DSH Host version is unverified'), { statusCode: 409, code: 'dsh-host-version-blocked', nativeAdmission: 'not-submitted' });
+}
+
+/** Temporary clients must bind the actual authenticated Host, just like the
+ * adapter's persistent connection. Local CLI labels do not identify a Host. */
+export async function verifiedDshHostClient(endpoint: string | number, credentials: { cookie: string; browserCookie?: string }, options: DshHostOptions = {}) {
+  const cookie = credentials.browserCookie ?? credentials.cookie;
+  const identity = await readDshHostIdentity(endpoint, cookie);
+  requireDshBaseline(identity);
+  const client = new DshHostClient(endpoint, { ...options, nativeVersion: identity.version });
+  client.useCookie(cookie);
+  return { client, identity };
 }

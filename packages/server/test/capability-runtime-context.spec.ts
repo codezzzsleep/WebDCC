@@ -5,14 +5,14 @@ import type { CapabilitySnapshot } from '@webdcc/protocol';
 import { CapabilityRegistry } from '../src/capability-registry.js';
 import { createTestApp } from './helpers.js';
 
-async function host() {
+async function host(version = '0.2.2-rc.1') {
   let manifest = 'release-one';
   let missing = false;
   const methods: string[] = [];
   const server = createServer((request, response) => {
     methods.push(request.method ?? '');
     response.setHeader('content-type', 'text/html');
-    response.end(missing ? '<html>No bootstrap</html>' : `<script>globalThis.__DSH_BOOT__ = ${JSON.stringify({ rev: manifest, release: { version: '0.2.2-rc.1', commit: 'fixture-commit' }, entries: [] })}</script>`);
+    response.end(missing ? '<html>No bootstrap</html>' : `<script>globalThis.__DSH_BOOT__ = ${JSON.stringify({ rev: manifest, release: { version, commit: 'fixture-commit' }, entries: [] })}</script>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
@@ -32,6 +32,23 @@ const dsh = (snapshot: CapabilitySnapshot) => {
   if (!runtime) throw new Error('Missing DSH runtime');
   return runtime;
 };
+it('publishes the actual version inventory and schema hash while keeping experimental and verification limits explicit', async () => {
+  const rc5 = await host('0.2.2-rc.5'); const alpha = await host('0.2.3-alpha.2'); const ctx = await createTestApp();
+  try {
+    const registry = new CapabilityRegistry(ctx.store, ctx.manager);
+    ctx.manager.registerAdapter(rc5.adapter());
+    const current = await registry.snapshot();
+    expect(current.inventory.some(entry => entry.agent === 'dsh' && entry.method === 'web/listProviders')).toBe(true);
+    expect(current.inventory.some(entry => entry.agent === 'dsh' && entry.method === 'account/getUnnotifiedBonuses')).toBe(false);
+    expect(dsh(current).schemaHash).toBe(dsh(current).runtimeContext?.protocol?.schemaHash);
+    ctx.manager.registerAdapter(alpha.adapter());
+    const experimental = await registry.snapshot();
+    expect(experimental.inventory.some(entry => entry.agent === 'dsh' && entry.method === 'pluginEvents/follow')).toBe(true);
+    expect(experimental.inventory.some(entry => entry.agent === 'dsh' && entry.method === 'forgePanel/branches')).toBe(false);
+    expect(experimental.capabilities.filter(capability => capability.agent === 'dsh' && capability.apiExposure !== 'unsupported-in-api').every(capability => capability.apiExposure === 'experimental' && !capability.structuredVerified && !capability.fallbackVerified)).toBe(true);
+    expect(experimental.revision).not.toBe(current.revision);
+  } finally { await ctx.close(); await rc5.close(); await alpha.close(); }
+});
 
 it('binds the capability snapshot to the actual configured Host without claiming local OS or profile identity', async () => {
   const firstHost = await host();

@@ -5,8 +5,7 @@ import { Readable } from 'node:stream';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import websocket from '@fastify/websocket';
 import WebSocket, { type RawData } from 'ws';
-import { dshBaseUrl, readDshHostIdentity, requireDshBaseline, validateDshArgs, type DshHostIdentity } from '@webdcc/adapter-dsh';
-import catalog from './native-inventory.json' with { type: 'json' };
+import { dshBaseUrl, dshRuntimeContract, readDshHostIdentity, requireDshBaseline, validateDshArgs, type DshHostIdentity } from '@webdcc/adapter-dsh';
 
 export interface DshSurfaceConnection { url: string; browserCookie?: string; connectedAt: string }
 export interface DshSurfaceRpc {
@@ -39,17 +38,17 @@ function origin(value: string): string {
   return parsed.origin;
 }
 const STREAMS = new Set(['$events', 'session/events', 'session/follow', 'session/control', 'session/observeEvent', 'session/observeState', 'session/observeProjections', 'workspace/follow', 'job/list', 'job/follow', 'speech/follow', 'forgePanel/follow', 'remoteAccess/follow', 'account/watch', 'account/watchExpiry', 'toolResults/watch', 'workspaceFiles/changes', 'userQuestions/attachWait', 'terminal/attach', 'terminal/retain']);
+// Independently reviewed passive streams in the newer published contracts.
+for (const method of ['pluginEvents/follow', 'mcpManager/watch', 'terminal/watch', 'sessionStatus/follow', 'connectorAccounts/watch']) STREAMS.add(method);
 const READ_RPC = new Set(['session/list', 'session/search', 'session/page', 'session/state', 'session/projections', 'session/modelCatalog', 'session/canOpenWorkspacePath', 'session/workspacePathApplications', 'agentPresets/list', 'agentPresets/read', 'settings/describe', 'credentials/describe', 'commands/list', 'skills/list', 'permissionPresets/catalog', 'directoryPicker/list', 'workspaceFiles/list', 'workspaceFiles/stat', 'workspaceFiles/read', 'workspaceFiles/readBytes', 'fileReferences/list', 'llm/listProviders', 'llm/listConfigurableProviders', 'pluginInventory/list', 'pluginManager/listBundles', 'pluginManager/listPlugins', 'pluginManager/listVersionExemptions', 'pluginManager/listVersions', 'pluginManager/readBundleDetail', 'pluginManager/registries', 'pluginMarket/listIndexes', 'pluginMarket/search', 'pluginMarket/readEntryDetail', 'goals/get', 'schedule/catalog', 'schedule/list', 'schedule/view', 'schedule/history', 'schedule/deliveryLimits', 'speech/catalog', 'cotTranslation/limits', 'forgePanel/branches', 'forgePanel/localDiff', 'forgePanel/localText', 'forgePanel/changeRequestDiff', 'forgePanel/changeRequestText', 'forgePanel/changeRequestChecks', 'forgePanel/changeRequestStates', 'liveshareShares/list', 'liveshareShares/capabilities', 'liveshareShares/identity', 'messageFeedback/list', 'sessionReferenceResolver/candidates', 'terminal/list', 'terminal/shells', 'terminal/environment', 'dynamicCordisRunner/inventory', 'dynamicCordisRunner/getClientCode', 'pluginRecommendations/describe', 'account/getState', 'account/getProfile', 'account/getBalance', 'account/getUnnotifiedBonuses', 'account/hasRunningAccountTasks', 'productAnalytics/enabled']);
-// Resource routes verified in the same 0.2.2-rc.1 source as the RPC catalog.
+for (const method of ['account/getNotifications', 'account/getNotificationContent', 'cuaAccess/applications', 'cuaAccess/applicationIcons', 'cuaAccess/ptcConfiguration', 'cuaAccess/systemStatus', 'deepseekChatImport/limits', 'forgePanel/changeRequestCommits', 'forgePanel/diffBases', 'forgePanel/localCommits', 'forgePanel/reviewerCandidates', 'web/listProviders', 'workspaceFiles/search', 'forgePanel/extensions', 'forgePanel/reviewChecks', 'forgePanel/reviewCommits', 'forgePanel/reviewCount', 'forgePanel/reviewDescription', 'forgePanel/reviewDiff', 'forgePanel/reviewLists', 'forgePanel/reviewReviewerCandidates', 'forgePanel/reviewText', 'forgePanel/reviewThreads', 'forgePanel/reviewViewed', 'forgePanel/worktreeBases', 'remoteConnection/status', 'remoteConnection/pairingRequests']) READ_RPC.add(method);
+// These resource routes are retained by all three reviewed releases.
 const FETCH_ROUTES: Record<string, readonly string[]> = {
   '/api/file': ['GET', 'HEAD'], '/api/plugin-manager/detail-file': ['GET'], '/api/plugin-market/detail-file': ['GET'],
   '/api/present.host': ['GET'], '/api/present.open': ['GET', 'POST'], '/api/changes.summary': ['GET'], '/api/changes.diff': ['GET'], '/api/changes.open': ['GET', 'POST'],
   '/api/session/uploadFileBinary': ['POST'],
   '/api/session.export': ['GET', 'HEAD'], '/api/session.markdown': ['GET', 'HEAD'],
 };
-// Native inventory is an independent fixed manifest. Transport validation uses
-// the actual frozen catalog's request schemas from adapter-dsh.
-const NATIVE_ENDPOINTS = new Set(catalog.entries.filter(value => value.agent === 'dsh').map(value => value.method));
 
 function cookies(header: string | undefined): Record<string, string> {
   return Object.fromEntries((header ?? '').split(';').flatMap(part => { const split = part.indexOf('='); return split < 1 ? [] : [[part.slice(0, split).trim(), part.slice(split + 1).trim()]]; }));
@@ -66,11 +65,11 @@ function route(rawUrl: string): { path: string; query: string } {
 function resourceAllowed(path: string): boolean {
   return path === '/' || path === '/index.html' || path === '/favicon.ico' || path.startsWith('/plugins/') || path === '/plugins' || path.startsWith('/assets/') || path.startsWith('/icons/') || /^\/[a-zA-Z0-9_.-]+\.(?:js|css|json|webmanifest|png|svg|ico|woff2?|gz)$/.test(path);
 }
-function rpcEnvelope(endpoint: string, body: unknown): { commandId: string; args: Record<string, unknown> } {
+function rpcEnvelope(endpoint: string, body: unknown, nativeVersion: string): { commandId: string; args: Record<string, unknown> } {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) throw fail('Native RPC requires a JSON envelope', 400);
   const value = body as { type?: unknown; rpcId?: unknown; method?: unknown; payload?: { args?: unknown } };
   if (value.type !== 'client-request' || typeof value.rpcId !== 'string' || value.rpcId.length < 1 || value.rpcId.length > 256 || value.method !== endpoint) throw fail('Native RPC identity does not match its registered route', 400);
-  try { validateDshArgs(endpoint, value.payload?.args); } catch { throw fail('Native RPC arguments violate the frozen Host contract', 400); }
+  try { validateDshArgs(endpoint, value.payload?.args, nativeVersion); } catch { throw fail('Native RPC arguments violate the current Host contract', 400); }
   return { commandId: value.rpcId, args: value.payload!.args as Record<string, unknown> };
 }
 async function boundedHtml(response: Response): Promise<string> {
@@ -142,17 +141,19 @@ export class DshNativeSurface {
     this.app.get('/api/remote.mux', { websocket: true }, (socket, request) => { void this.bridgeSocket(socket, request); });
     this.app.route({ method: ['GET', 'HEAD', 'POST'], url: '/*', handler: async (request, reply) => {
       const { binding, admission } = await this.admit(request);
+      const contract = dshRuntimeContract(binding.host.version);
       const target = route(request.raw.url ?? '/');
       const endpoint = target.path.startsWith('/api/') ? target.path.slice(5) : undefined;
       const fixedFetch = FETCH_ROUTES[target.path];
       if (fixedFetch !== undefined) {
         if (!fixedFetch.includes(request.method)) throw fail('Native resource method is unavailable', 405);
       } else if (endpoint !== undefined) {
-        if (request.method !== 'POST' || !(NATIVE_ENDPOINTS.has(endpoint) || endpoint === '$events/result')) throw fail('Native RPC route is outside the fixed catalog', 404);
+        if (request.method !== 'POST' || !(Object.hasOwn(contract.endpoints, endpoint) || endpoint === '$events/result')) throw fail('Native RPC route is outside the current Host catalog', 404);
+        if (contract.endpoints[endpoint]?.mode === 'stream') throw fail('Native streaming methods require the mux transport', 400);
       } else if (!['GET', 'HEAD'].includes(request.method) || !resourceAllowed(target.path)) throw fail('Native resource is outside the fixed routes', 404);
       let rpc: DshSurfaceRpc | undefined;
       if (endpoint !== undefined && fixedFetch === undefined) {
-        const parsed = rpcEnvelope(endpoint, request.body);
+        const parsed = rpcEnvelope(endpoint, request.body, contract.version);
         rpc = { ...parsed, endpoint, binding: binding.key };
         if (!READ_RPC.has(endpoint)) await this.authorizeWrite(rpc);
       } else if (request.method === 'POST') {
@@ -161,7 +162,12 @@ export class DshNativeSurface {
         await this.authorizeWrite(rpc);
       }
       const execute = () => this.fetchNative(binding, target, request);
-      const guardedExecute = () => { this.assertCurrent(binding, admission); return execute(); };
+      const guardedExecute = async () => {
+        // Authorization or durable admission can yield while a Host upgrades.
+        // Re-read its identity before submitting any mutation under old schemas.
+        if (rpc !== undefined && !READ_RPC.has(rpc.endpoint)) await this.currentBinding(true);
+        this.assertCurrent(binding, admission); return execute();
+      };
       this.assertCurrent(binding, admission);
       const response = rpc !== undefined && !READ_RPC.has(rpc.endpoint) ? await this.options.dispatchRpc!(rpc, guardedExecute) : await guardedExecute();
       if (!this.stillCurrent(binding) || admission.expiresAt <= Date.now()) throw fail('Native Host changed while the response was in flight', 401);
@@ -317,7 +323,9 @@ export class DshNativeSurface {
           if (typeof value.streamId !== 'string' || value.streamId.length < 1 || value.streamId.length > 256) throw fail('Invalid native stream identity');
           if (value.type === 'open') {
             if (typeof value.endpoint !== 'string' || !STREAMS.has(value.endpoint)) throw fail('Native mux endpoint is outside the fixed stream catalog');
-            validateDshArgs(value.endpoint, value.payload?.args);
+            const contract = dshRuntimeContract(binding.host.version);
+            if (value.endpoint !== '$events' && (contract.endpoints[value.endpoint] === undefined || contract.endpoints[value.endpoint]?.mode === 'unary')) throw fail('Native stream is absent from the current Host contract');
+            validateDshArgs(value.endpoint, value.payload?.args, contract.version);
             const follow = value.payload?.args?.['request'] as { activate?: boolean } | undefined;
             if (value.endpoint === 'session/follow' && follow?.activate === true && !this.httpWritable()) follow.activate = false;
             else if (value.endpoint === 'terminal/retain' || value.endpoint === 'session/follow' && follow?.activate === true || value.endpoint === 'userQuestions/attachWait') throw fail('Native stream mutations need a durable stream dispatcher', 409);

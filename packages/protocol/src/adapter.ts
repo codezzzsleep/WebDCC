@@ -35,6 +35,8 @@ export interface NativeRuntimeContext {
   os?: string;
   profile: { scope: string; identity?: string; status: 'observed' | 'unverified' | 'unavailable-in-api' };
   connectionRevision: string;
+  /** Independently captured schema inventory, not proof that each plugin is active. */
+  protocol?: { nativeVersion: string; schemaHash: string; experimental: boolean; methods: string[]; cardIdentity: 'callId' | 'cardId'; pluginEvents: 'sse' | 'mux'; systemMessages: 'whole' | 'sections' };
 }
 
 export interface ProbeResult {

@@ -3,6 +3,10 @@ export interface DshSettingsTarget {
   url: string;
   scope: 'host-profile';
   applies: 'live';
+  connectionRevision?: string;
+  nativeVersion?: string;
+  hostFingerprint?: string;
+  contractHash?: string;
 }
 
 export interface DshSettingsView {

@@ -189,7 +189,9 @@ export interface EventData {
   usage: UsageData;
   error: { message: string };
   unknown: { nativeType: string; claudeBlock?: ClaudeBlockOrigin };
-  internal: { nativeType: string; claudeTaskRuntime?: ClaudeTaskRuntime; claudeConfiguration?: ClaudeQueryConfiguration };
+  internal: { nativeType: string; claudeTaskRuntime?: ClaudeTaskRuntime; claudeConfiguration?: ClaudeQueryConfiguration;
+    dshContext?: { text: string; source: unknown };
+    dshSystemSections?: { format: 'whole' | 'sections'; sections: { name: string; order: number; text: string }[]; complete: boolean; needsRebuild: boolean } };
 }
 
 export interface StoredEvent<K extends EventKind = EventKind> {

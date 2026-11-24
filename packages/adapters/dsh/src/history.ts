@@ -1,4 +1,5 @@
 import { validateDshResult, type DshHistoryRecord, type DshPage, type DshPageRequest } from './contracts.js';
+import { DSH_BASELINE_VERSION } from './runtime.js';
 
 export interface DshOpening extends DshPage {
   type: 'snapshot';
@@ -32,6 +33,7 @@ export class DshHistoryBridge {
     private readonly publish: (record: DshHistoryRecord, historical: boolean) => void,
     private readonly ready: (opening: DshOpening) => void,
     private readonly fail: (error: Error) => void,
+    private readonly nativeVersion: () => string = () => DSH_BASELINE_VERSION,
   ) {}
 
   invalidate(): void { this.generation++; this.syncing = false; this.blocked = true; this.buffered = []; }
@@ -49,7 +51,7 @@ export class DshHistoryBridge {
     this.blocked = false;
     try {
       if (opening.header?.id !== this.nativeId || !Number.isSafeInteger(opening.cursor) || opening.cursor < -1 || opening.cursor < this.lastSeq) throw new Error('DSH Host 会话身份或历史水位发生变化');
-      validateDshResult('session/page', opening);
+      validateDshResult('session/page', opening, this.nativeVersion());
       validateRecords(opening.records, opening.cursor);
       const first = opening.records[0]?.event.seq ?? opening.cursor + 1;
       if (!opening.hasMore || first <= this.lastSeq + 1) {
@@ -75,7 +77,7 @@ export class DshHistoryBridge {
       if (pageCount >= 1000 || count > 100_000) throw new Error('DSH 历史恢复超过单次限制，需要重新分页同步');
       const page = await this.page({ address: { kind: 'session', sessionId: this.nativeId }, throughSeq: opening.cursor, beforeSeq, maxMessages: 200 });
       if (generation !== this.generation) return;
-      validateDshResult('session/page', page);
+      validateDshResult('session/page', page, this.nativeVersion());
       validateRecords(page.records, opening.cursor);
       const first = page.records[0]?.event.seq;
       const last = page.records.at(-1)?.event.seq;

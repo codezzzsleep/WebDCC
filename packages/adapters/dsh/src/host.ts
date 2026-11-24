@@ -12,6 +12,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import WebSocket from 'ws';
 import { validateDshArgs, validateDshResult } from './contracts.js';
+import { dshRuntimeContract, DSH_BASELINE_VERSION } from './runtime.js';
 
 export function dshBaseUrl(value: string | number): string {
   const url = new URL(typeof value === 'number' ? `http://127.0.0.1:${value}/` : value);
@@ -153,6 +154,7 @@ export async function attachToDshCredentials(endpoint: string | number, token: s
 }
 
 export interface DshHostOptions {
+  nativeVersion?: string;
   reconnectDelayMs?: number;
   maxReconnectDelayMs?: number;
   connectTimeoutMs?: number;
@@ -229,6 +231,17 @@ export class DshHostClient {
   constructor(endpoint: string | number, private readonly options: DshHostOptions = {}) {
     this.base = dshBaseUrl(endpoint);
     this.websocketBase = this.base.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+    this.version = dshRuntimeContract(options.nativeVersion ?? DSH_BASELINE_VERSION).version;
+  }
+
+  private version: string;
+  private pendingRpcs = 0;
+  get nativeVersion(): string { return this.version; }
+  bindNativeVersion(version: string): void {
+    dshRuntimeContract(version);
+    if (version === this.version) return;
+    if (this.streams.size > 0 || this.pendingRpcs > 0) throw Object.assign(new Error('DSH 运行时合同已变化，请重新连接 Host'), { code: 'dsh-host-version-changed', statusCode: 409, nativeAdmission: 'not-submitted' });
+    this.version = version;
   }
 
   useCookie(cookie: string): void {
@@ -328,52 +341,60 @@ export class DshHostClient {
 
   async rpc<T = unknown>(endpoint: string, args: Record<string, unknown> = {}, observer?: DshRpcFrameObserver, admitRpc?: DshRpcAdmission): Promise<T> {
     if (!/^(?:[\w-]+\/[\w-]+|\$events\/result)$/.test(endpoint)) throw new Error('Invalid DSH RPC endpoint');
-    validateDshArgs(endpoint, args);
-    const rpcId = randomUUID();
-    const body = JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args } });
-    const capture = observer !== undefined || this.options.onRpcFrame !== undefined || admitRpc !== undefined || this.options.admitRpc !== undefined;
-    if (capture) {
-      const request = this.rpcObservation('out', endpoint, rpcId, { serialized: body });
-      this.observeRpc(request, observer);
-      for (const admit of [this.options.admitRpc, admitRpc]) {
-        if (admit === undefined) continue;
-        let accepted = false;
-        try { accepted = admit(request); } catch { /* Failure precedes the HTTP dispatch. */ }
-        if (!accepted) throw Object.assign(new Error('DSH native RPC request was not durably admitted; no HTTP request was dispatched'), { code: 'uncertain' });
+    const nativeVersion = this.version;
+    if (dshRuntimeContract(nativeVersion).endpoints[endpoint]?.mode === 'stream') throw Object.assign(new Error('DSH streaming method requires openStream()'), { nativeAdmission: 'not-submitted' });
+    validateDshArgs(endpoint, args, nativeVersion);
+    this.pendingRpcs++;
+    try {
+      const rpcId = randomUUID();
+      const body = JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args } });
+      const capture = observer !== undefined || this.options.onRpcFrame !== undefined || admitRpc !== undefined || this.options.admitRpc !== undefined;
+      if (capture) {
+        const request = this.rpcObservation('out', endpoint, rpcId, { serialized: body });
+        this.observeRpc(request, observer);
+        for (const admit of [this.options.admitRpc, admitRpc]) {
+          if (admit === undefined) continue;
+          let accepted = false;
+          try { accepted = admit(request); } catch { /* Failure precedes the HTTP dispatch. */ }
+          if (!accepted) throw Object.assign(new Error('DSH native RPC request was not durably admitted; no HTTP request was dispatched'), { code: 'uncertain' });
+        }
       }
-    }
-    let response: Response;
-    try { response = await fetch(`${this.base}api/${endpoint}`, {
-      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(this.options.rpcTimeoutMs ?? 30_000),
-      headers: { 'content-type': 'application/json', cookie: this.cookie },
-      body,
-    }); } catch (error) {
-      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'transport-error' }), observer);
-      throw error;
-    }
-    if ([401, 403].includes(response.status)) {
-      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'http-auth-rejected' }, response.status), observer);
-      this.authenticationLost();
-      throw Object.assign(new Error('DSH 认证已失效，请重新连接目标 Host'), { code: 'dsh-needs-link', statusCode: 401 });
-    }
-    let value: unknown;
-    try { value = await response.json(); } catch {
-      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'invalid-json' }, response.status), observer);
-      throw new Error(`${endpoint} 返回非 JSON（HTTP ${response.status}）`);
-    }
-    if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { json: value }, response.status), observer);
-    const envelope = value as { type?: string; rpcId?: string; result?: { ok?: boolean; value?: unknown; error?: RpcError } } | null;
-    if (envelope?.type !== 'server-response' || envelope.rpcId !== rpcId || envelope.result === undefined || envelope.result === null || typeof envelope.result.ok !== 'boolean') throw new Error(`${endpoint} 响应身份或信封不匹配`);
-    if (!response.ok && envelope.result.ok) throw new Error(`${endpoint} HTTP ${response.status} 未成功`);
-    if (envelope.result.ok !== true) throw new DshRpcError(envelope.result.error ?? { code: 'unknown', message: 'Native request failed' });
-    validateDshResult(endpoint, envelope.result.value);
-    return envelope.result.value as T;
+      let response: Response;
+      try { response = await fetch(`${this.base}api/${endpoint}`, {
+        method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(this.options.rpcTimeoutMs ?? 30_000),
+        headers: { 'content-type': 'application/json', cookie: this.cookie },
+        body,
+      }); } catch (error) {
+        if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'transport-error' }), observer);
+        throw error;
+      }
+      if ([401, 403].includes(response.status)) {
+        if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'http-auth-rejected' }, response.status), observer);
+        this.authenticationLost();
+        throw Object.assign(new Error('DSH 认证已失效，请重新连接目标 Host'), { code: 'dsh-needs-link', statusCode: 401 });
+      }
+      let value: unknown;
+      try { value = await response.json(); } catch {
+        if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { coverage: 'invalid-json' }, response.status), observer);
+        throw new Error(`${endpoint} 返回非 JSON（HTTP ${response.status}）`);
+      }
+      if (capture) this.observeRpc(this.rpcObservation('in', endpoint, rpcId, { json: value }, response.status), observer);
+      const envelope = value as { type?: string; rpcId?: string; result?: { ok?: boolean; value?: unknown; error?: RpcError } } | null;
+      if (envelope?.type !== 'server-response' || envelope.rpcId !== rpcId || envelope.result === undefined || envelope.result === null || typeof envelope.result.ok !== 'boolean') throw new Error(`${endpoint} 响应身份或信封不匹配`);
+      if (!response.ok && envelope.result.ok) throw new Error(`${endpoint} HTTP ${response.status} 未成功`);
+      if (envelope.result.ok !== true) throw new DshRpcError(envelope.result.error ?? { code: 'unknown', message: 'Native request failed' });
+      validateDshResult(endpoint, envelope.result.value, nativeVersion);
+      if (nativeVersion !== this.version) throw Object.assign(new Error('DSH RPC 返回时运行时合同已变化，结果待核对'), { code: 'uncertain' });
+      return envelope.result.value as T;
+    } finally { this.pendingRpcs--; }
   }
 
   /** Read one authoritative opening from a native snapshot stream, then
    * release only this subscription. Never mistake a streaming RPC for unary. */
   async snapshot<T = unknown>(endpoint: string, args: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<T> {
+    const nativeVersion = this.version;
     await this.connect();
+    if (nativeVersion !== this.version) throw Object.assign(new Error('DSH snapshot runtime changed; reopen the Host'), { code: 'dsh-host-version-changed', nativeAdmission: 'not-submitted' });
     return new Promise<T>((resolve, reject) => {
       const cancel = () => {
         clearTimeout(timer);
@@ -386,7 +407,7 @@ export class DshHostClient {
         this.pendingSnapshots.delete(cancel);
         this.closeStream(streamId);
         if (frame.type !== 'item') { reject(new Error(`DSH ${endpoint} snapshot ended before its baseline`)); return; }
-        try { validateDshResult(endpoint, frame.value); resolve(frame.value as T); } catch (error) { reject(error); }
+        try { validateDshResult(endpoint, frame.value, nativeVersion); resolve(frame.value as T); } catch (error) { reject(error); }
       });
       const timer = setTimeout(() => { this.pendingSnapshots.delete(cancel); this.closeStream(streamId); reject(new Error(`DSH ${endpoint} snapshot timed out`)); }, timeoutMs);
       this.pendingSnapshots.add(cancel);
@@ -478,7 +499,8 @@ export class DshHostClient {
   }
 
   openStream(endpoint: string, args: Record<string, unknown>, handler: (frame: StreamFrame) => void): string {
-    validateDshArgs(endpoint, args);
+    if (dshRuntimeContract(this.version).endpoints[endpoint]?.mode === 'unary') throw Object.assign(new Error('DSH unary method requires rpc()'), { nativeAdmission: 'not-submitted' });
+    validateDshArgs(endpoint, args, this.version);
     if (!this.isConnected) throw new Error('先调用 connect()');
     const streamId = `s${++this.counter}`;
     const stream = { endpoint, args: structuredClone(args), handler };
@@ -489,7 +511,10 @@ export class DshHostClient {
 
   updateStreamArgs(streamId: string, args: Record<string, unknown>): void {
     const stream = this.streams.get(streamId);
-    if (stream !== undefined) stream.args = structuredClone(args);
+    if (stream !== undefined) {
+      validateDshArgs(stream.endpoint, args, this.version);
+      stream.args = structuredClone(args);
+    }
   }
 
   closeStream(streamId: string): void {

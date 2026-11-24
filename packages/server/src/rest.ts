@@ -22,7 +22,7 @@ import type {
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
 import { parseDshLink, type DshConnectionStore } from './dsh-connection.js';
-import { attachToDshCredentials, DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
+import { attachToDshCredentials, verifiedDshHostClient, type DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
 import { DshSettingsService } from './native-settings.js';
 import type { FileStore } from './files.js';
 import type { LiveHub } from './hub.js';
@@ -62,11 +62,10 @@ function badRequest(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
 
-function dshClient(deps: RouteDeps): DshHostClient {
+async function dshClient(deps: RouteDeps): Promise<DshHostClient> {
   const connection = deps.dsh.connection;
   if (connection === null) throw Object.assign(new Error('DSH 尚未连接'), { statusCode: 503 });
-  const client = new DshHostClient(connection.url);
-  client.useCookie(connection.cookie);
+  const { client } = await verifiedDshHostClient(connection.url, connection);
   return client;
 }
 
@@ -603,7 +602,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     // settings page says "已连接" while the first real RPC fails with 401.
     if (connection !== null) {
       try {
-        const client = dshClient(deps);
+        const client = await dshClient(deps);
         dshEndpoint('session/modelCatalog');
         await client.rpc('session/modelCatalog', {});
       } catch {

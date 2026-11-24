@@ -9,6 +9,7 @@ import { JsonRpcStdio } from '../../adapters/codex/src/rpc.js';
 import { openDb, CURRENT_SCHEMA_VERSION } from '../src/db.js';
 import { Store } from '../src/store.js';
 import { createTestApp, seedWorkspaceAndSession } from './helpers.js';
+import { dshRuntimeContract } from '@webdcc/adapter-dsh';
 
 it('v15 migration preserves original native rows without certifying their unknown redaction provenance', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wdcc-native-redaction-migration-'));
@@ -49,6 +50,19 @@ it('NP-05 host-wide RPC records keep verified Host and transport identity withou
         coverage: 'http-auth-rejected', httpStatus: 401, hostEpoch: 1, muxGeneration: 1 },
     } });
     expect(ctx.store.nativeEvents.get(failure.envelopeId)).toMatchObject({ nativeRequestId: 'auth-failure', payloadCoverage: 'unavailable' });
+  } finally { await ctx.close(); }
+});
+it('retains the audited runtime binding even when native payloads are restricted', async () => {
+  const ctx = await createTestApp();
+  try {
+    const contractHash = dshRuntimeContract('0.2.3-alpha.2').schemaHash;
+    const id = ctx.store.nativeEvents.frame({ sessionId: 'bound-host', agent: 'dsh' }, { i: 1, t: 0, dir: 'in', ch: 'rpc:credentials/describe', frame: {
+      frame: { type: 'server-response', rpcId: 'bound-request', result: { ok: true, value: { schema: { format: 'password' }, privateValue: 'keep restricted' } } },
+      dshTransport: { endpoint: 'credentials/describe', rpcId: 'bound-request', coverage: 'complete', hostEpoch: 2, muxGeneration: 3,
+        verifiedHostFingerprint: 'a'.repeat(64), nativeVersion: '0.2.3-alpha.2', contractHash },
+    } }, true);
+    expect(ctx.store.nativeEvents.get(id)).toMatchObject({ payloadCoverage: 'restricted', payload: { dshTransport: { nativeVersion: '0.2.3-alpha.2', contractHash } } });
+    expect(JSON.stringify(ctx.store.nativeEvents.get(id))).not.toContain('keep restricted');
   } finally { await ctx.close(); }
 });
 
