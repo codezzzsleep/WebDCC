@@ -50,12 +50,29 @@ export function createRunIdentity(runId: string = randomUUID()): RunIdentity {
   };
 }
 
+/** Evidence is tied to the actual runtime that executed it. This gate accepts
+ * exact environments; compatibility must be certified in a separate report. */
+export function environmentIssues(value: unknown, current: RunIdentity['environment']): string[] {
+  const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const declared = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '' && !['unknown', 'unverified'].includes(value.trim().toLowerCase());
+  if (!object(value) || !declared(value['os']) || !declared(value['arch']) || !declared(value['node']) || !object(value['nativeVersions'])
+    || Object.values(value['nativeVersions']).some(version => !declared(version))) return ['invalid-environment'];
+  const issues: string[] = [];
+  if (value['os'] !== current.os) issues.push('different-os');
+  if (value['arch'] !== current.arch) issues.push('different-arch');
+  if (value['node'] !== current.node) issues.push('different-node');
+  const versions = value['nativeVersions'];
+  if (Object.keys(versions).length !== Object.keys(current.nativeVersions).length
+    || Object.entries(current.nativeVersions).some(([agent, version]) => !declared(version) || versions[agent] !== version)) issues.push('different-native-versions');
+  return issues;
+}
+
 export function gateIssues(value: unknown, current: RunIdentity, expectedIds: string[]): string[] {
   if (value === null || typeof value !== 'object') return ['unsupported-report-format'];
   const report = value as GateReport;
   if (report.formatVersion !== 1 || report.identity === undefined || report.identity === null || !Array.isArray(report.issues) || !Array.isArray(report.results) || !Array.isArray(report.expectedIds) || !Array.isArray(report.steps)) return ['unsupported-report-format'];
   if (report.results.some(result => result === null || typeof result.id !== 'string' || typeof result.status !== 'string') || report.steps.some(step => step === null || typeof step.name !== 'string')) return ['invalid-report-data'];
-  const issues = [...report.issues];
+  const issues = [...report.issues, ...environmentIssues(report.identity.environment, current.environment)];
   if (report.identity.commit !== current.commit) issues.push('stale-commit');
   if (report.identity.sourceFingerprint !== current.sourceFingerprint) issues.push('stale-source');
   if (report.identity.schemaFingerprint !== current.schemaFingerprint) issues.push('stale-schema');
@@ -84,7 +101,10 @@ export function passSetIssues(passes: { identity?: RunIdentity; results: GateCas
   for (const [index, pass] of passes.entries()) {
     const ids = pass.results.map(result => result.id);
     if (ids.length !== new Set(ids).size || ids.length !== expectedIds.length || expectedIds.some(id => !ids.includes(id))) issues.push(`different-pass-ids:${index + 1}`);
-    if (pass.identity?.runId !== current.runId || pass.identity?.sourceFingerprint !== current.sourceFingerprint || pass.identity?.commit !== current.commit) issues.push(`stale-pass:${index + 1}`);
+    if (pass.identity?.runId !== current.runId || pass.identity?.sourceFingerprint !== current.sourceFingerprint || pass.identity?.commit !== current.commit
+      || pass.identity?.schemaFingerprint !== current.schemaFingerprint || pass.identity?.configurationFingerprint !== current.configurationFingerprint) issues.push(`stale-pass:${index + 1}`);
+    for (const issue of environmentIssues(pass.identity?.environment, current.environment)) issues.push(`${issue}:pass:${index + 1}`);
+    for (const result of pass.results) if (result.status !== 'passed') issues.push(`${result.status}:pass:${index + 1}:${result.id}`);
   }
   return issues;
 }

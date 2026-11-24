@@ -184,9 +184,10 @@ export const api = {
   }) => request<ProviderDto>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),
   updateProvider: (id: string, patch: Record<string, unknown>) =>
     request<ProviderDto>(`/api/providers/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  providerLocalChange: (id: string, action: 'update' | 'ignore') => request<ProviderDto>(`/api/providers/${id}/local-change`, { method: 'POST', body: JSON.stringify({ action }) }),
   providerScan: () => request<{ imported: number; skipped: number }>('/api/providers/scan', { method: 'POST', body: '{}' }),
   providerRestore: () => request<{ imported: number; skipped: number }>('/api/providers/restore-ignored', { method: 'POST', body: '{}' }),
-  deleteProvider: (id: string) => fetch(`/api/providers/${id}`, { method: 'DELETE', credentials: 'same-origin' }),
+  deleteProvider: (id: string) => request<void>(`/api/providers/${id}`, { method: 'DELETE' }),
   dshStatus: () => request<{ mode: string; url: string | null; connected: boolean; version?: string }>('/api/dsh'),
   dshConnect: (link: string) => request<{ ok: boolean; url: string }>('/api/dsh/connect', { method: 'POST', body: JSON.stringify({ link }) }),
   dshDisconnect: () => request<{ ok: boolean }>('/api/dsh', { method: 'DELETE' }),

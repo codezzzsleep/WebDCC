@@ -694,6 +694,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return updated;
   });
 
+  app.post('/api/providers/:id/local-change', async request => {
+    const { id } = request.params as { id: string };
+    const { action } = (request.body ?? {}) as { action?: unknown };
+    if (action !== 'update' && action !== 'ignore') throw badRequest('需要 update 或 ignore');
+    const provider = await deps.providers.resolveLocalChange(id, action);
+    if (provider === undefined) throw Object.assign(new Error('Provider 不存在'), { statusCode: 404 });
+    return provider;
+  });
+
   app.delete('/api/providers/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     await deps.providers.remove(id);

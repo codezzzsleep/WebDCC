@@ -1,5 +1,5 @@
 import type { EventKind, StoredEvent } from './events.js';
-import { claudeBlockOrigin, orderClaudeBlocks, type ClaudeBlockOrigin } from './claude-content.js';
+import { claudeBlockOrigin, isIncompleteClaudeOutput, orderClaudeBlocks, type ClaudeBlockOrigin } from './claude-content.js';
 
 /** The spawning tool, native message and block identify a child output. A run
  * is attached only when the native tool-to-task join is unambiguous. */
@@ -293,6 +293,9 @@ function taskOutput(item: { itemKey: string; kind: EventKind; data: unknown; nat
   const data = object(item.data);
   let output: string;
   switch (item.kind) {
+    case 'unknown':
+      if (!isIncompleteClaudeOutput(item)) return undefined;
+      output = '原生不透明内容未完成（原文保留在轨迹）'; break;
     case 'assistant.message': case 'reasoning': output = String(data['text'] ?? ''); break;
     case 'command': output = `$ ${String(data['command'] ?? '')}\n${String(data['outputTail'] ?? '')}`; break;
     case 'tool.call': output = `${String(data['name'] ?? '')}\n${typeof data['output'] === 'string' ? data['output'] : JSON.stringify(data['output'] ?? data['input'])}`; break;
@@ -302,7 +305,7 @@ function taskOutput(item: { itemKey: string; kind: EventKind; data: unknown; nat
   }
   const block = claudeBlockOrigin(item);
   return { itemKey: item.itemKey, kind: item.kind, text: output, origin, live, ...(block === undefined ? {} : { claudeBlock: block }),
-    ...(data['incomplete'] === true ? { incomplete: true } : {}) };
+    ...(isIncompleteClaudeOutput(item) ? { incomplete: true } : {}) };
 }
 
 /** Includes previous runs without attributing an ambiguous legacy output to

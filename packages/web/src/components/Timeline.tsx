@@ -23,7 +23,7 @@ import { OlderHistoryRecovery } from './OlderHistoryRecovery.js';
 import { CodexNativeToolStatus } from './CodexNativeToolStatus.js';
 import { HotRecoveryNotice, RecoveredHotItem } from './RecoveredHot.js';
 import { NativeTerminalResults } from './NativeTerminalResults.js';
-import { orderClaudeBlocks } from '@webdcc/protocol';
+import { isIncompleteClaudeOutput, orderClaudeBlocks } from '@webdcc/protocol';
 import { CompletedRecoveryNotice, RecoveredCompletionCard } from './RecoveredCompletion.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
@@ -489,6 +489,7 @@ function StepRow({
     return <div className="render-fallback">这条内容无法显示 · 在轨迹中查看</div>;
   }
   const toggle = (): void => setOpen((value) => !value);
+  const claudeIncomplete = store.getSession(event.sessionId)?.agent === 'claude-code' && isIncompleteClaudeOutput(event);
 
   switch (event.kind) {
     case 'assistant.message': {
@@ -496,6 +497,7 @@ function StepRow({
       return (
         <div className={`${className} assistant`} id={`e-${event.seq}`} data-testid="assistant-message" data-raw-text={data.text}>
           <Markdown text={data.text} />
+          {claudeIncomplete ? <small className="muted" role="status" data-testid="claude-incomplete-output">原生输出未完成</small> : null}
         </div>
       );
     }
@@ -505,6 +507,7 @@ function StepRow({
       return (
         <div className={className}>
           <StepLine icon="sparkle" label="思考" onClick={toggle} open={open} />
+          {claudeIncomplete ? <small className="muted" role="status" data-testid="claude-incomplete-output">原生思考未完成</small> : null}
           {open ? <div className="step-detail">{data.text}<NativeReasoningContent item={event} /></div> : null}
         </div>
       );
@@ -602,6 +605,7 @@ function StepRow({
             data-native-call-id={typeof toolInput?.['id'] === 'string' ? toolInput['id'] : undefined}>
             原生 {typeof toolInput?.['tool'] === 'string' ? toolInput['tool'] : data.name} 调用 · {codexCollabCallStatusLabel(collabStatus)}
           </p>}
+          {claudeIncomplete ? <p className="muted" role="status" data-testid="claude-incomplete-tool">原生工具输入未完成，执行状态待核对</p> : null}
           {open ? (
             <pre className="output">
               {JSON.stringify(data.input, null, 2)}
@@ -668,6 +672,7 @@ function StepRow({
       return (
         <div className={className} data-testid="unknown-card">
           <StepLine icon="help" label="未知事件" detail={data.nativeType} onClick={toggle} open={open} />
+          {claudeIncomplete ? <small className="muted" role="status" data-testid="claude-incomplete-output">原生不透明内容未完成，原文保留在轨迹</small> : null}
           {open ? <pre className="output">{JSON.stringify(event.native ?? event.data, null, 2)}</pre> : null}
         </div>
       );

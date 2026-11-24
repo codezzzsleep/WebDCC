@@ -1,3 +1,4 @@
+import { storedRecoveryEvents } from '../src/native-recovery-events.js';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ async function fixture(agent: AgentId = 'codex') {
   const workspace = store.createWorkspace('hot recovery', tmpdir()); const session = await manager.createSession({ workspaceId: workspace.id, agent });
   const sent = await manager.send(session.id, { text: 'original input' }); const identity = manager.getRuntime(session.id)!.identity;
   return { db, store, manager, session, sent, identity, emit: (event: AdapterEvent) => callback(session.id, { ...event, runtime: event.runtime ?? identity }),
-    read: (options: HotRecoveryOptions = {}) => recoverNativeHot(store.nativeEvents, store.projectionContexts, store.getSession(session.id)!, store.allEvents(session.id), { identity, ...options }),
+    read: (options: HotRecoveryOptions = {}) => recoverNativeHot(store.nativeEvents, store.projectionContexts, store.getSession(session.id)!, storedRecoveryEvents(db, session.id), { identity, ...options }),
     close: async () => { await manager.disposeAll(); db.close(); } };
 }
 const start = (patch: object = {}): Extract<AdapterEvent, { type: 'item.start' }> => ({ type: 'item.start', itemKey: 'hot', kind: 'assistant.message', data: { text: '' }, ...patch });

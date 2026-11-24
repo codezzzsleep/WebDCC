@@ -454,7 +454,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   const pickModel = (providerId: string | null, model: string): void => {
     setMenu(null);
-    if (model !== '') rememberModel(agent, providerId, model);
+    rememberModel(agent, providerId, model);
     if (mode.kind === 'new') {
       const { reasoningEffort, ...choice } = mode.choice;
       const supportsPreviousEffort = agent !== 'dsh' && agent !== 'codex' || providerId === currentProviderId && modelOptions.find(option => option.id === model)?.reasoningEfforts?.includes(reasoningEffort ?? '') === true;
@@ -819,7 +819,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                           data-provider-name={group.providerId === null ? '' : group.title}
                           data-model={model}
                         >
-                          {model}
+                          {model === '' ? '沿用本机默认模型' : model}
                           {checked ? <Icon name="check" size={15} strokeWidth={2.2} className="check" /> : null}
                         </button>
                       );

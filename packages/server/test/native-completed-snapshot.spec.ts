@@ -1,3 +1,4 @@
+import { storedRecoveryEvents } from '../src/native-recovery-events.js';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,7 +17,7 @@ async function fixture(agent: AgentId) {
   const commandId = 'original-input'; store.journal.claim({ op: 'send', clientCommandId: commandId, sessionId: session.id, text: 'original input' }); store.journal.acquire(commandId);
   const sent = await manager.send(session.id, { text: 'original input' }, commandId); const identity = manager.getRuntime(session.id)!.identity;
   return { db, store, manager, session, sent, identity, sends: () => sends, emit: (event: AdapterEvent) => callback(session.id, { ...event, runtime: event.runtime ?? identity }),
-    read: (options: CompletedSnapshotOptions = {}) => recoverCompletedSnapshot(store.nativeEvents, store.projectionContexts, store.getSession(session.id)!, store.allEvents(session.id), { identity, ...options }),
+    read: (options: CompletedSnapshotOptions = {}) => recoverCompletedSnapshot(store.nativeEvents, store.projectionContexts, store.getSession(session.id)!, storedRecoveryEvents(db, session.id), { identity, ...options }),
     close: async () => { db.exec('DROP TRIGGER IF EXISTS reject_completion'); await manager.disposeAll(); db.close(); } };
 }
 const complete: Extract<AdapterEvent, { type: 'item.complete' }> = { type: 'item.complete', itemKey: 'original-answer', kind: 'assistant.message', data: { text: 'original completed answer', nativePhase: 'final_answer' },
@@ -143,5 +144,17 @@ it('owner acquisition between manager selection and the store read cannot produc
     };
     const snapshot = ctx.manager.hotSnapshot(ctx.session.id); await evidence('owner-race', { snapshot, owner: ctx.store.nativeOwners.get(ctx.session.id), queue: ctx.store.journal.queue(ctx.session.id) });
     expect(snapshot).toEqual({ items: [] }); expect(ctx.store.nativeOwners.get(ctx.session.id)?.state).toBe('active');
+  } finally { await ctx.close(); }
+});
+
+it('semantic witnesses are bounded even when many old publications share a candidate identity', async () => {
+  const ctx = await fixture('codex');
+  try {
+    const published = record(ctx); record(ctx);
+    const insert = ctx.db.prepare('INSERT INTO events(session_id,seq,turn_id,item_key,kind,data,native_envelope_id,at) VALUES(?,?,?,?,?,?,?,?)');
+    const first = ctx.store.lastSeq(ctx.session.id) + 1;
+    ctx.db.transaction(() => { for (let i = 0; i < 50; i++) insert.run(ctx.session.id, first + i, ctx.sent.turnId, complete.itemKey, complete.kind, JSON.stringify(complete.data), published, new Date(0).toISOString()); ctx.db.prepare('UPDATE sessions SET last_seq = ? WHERE id = ?').run(first + 49, ctx.session.id); })();
+    const result = ctx.read({ maxRecords: 20 });
+    expect(result).toMatchObject({ completed: [], completedRecovery: { coverage: 'partial', hasMore: true, issues: expect.arrayContaining([expect.objectContaining({ reason: 'completed-semantic-witness-limit' })]) } });
   } finally { await ctx.close(); }
 });

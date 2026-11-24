@@ -12,6 +12,13 @@ export interface ClaudeBlockOrigin {
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown): boolean => typeof value === 'string' && value !== '';
 
+/** Legacy rows retain the SDK's abort flag even without normalized metadata. */
+export function isIncompleteClaudeOutput(item: { data?: unknown; native?: unknown }): boolean {
+  const native = object(item.native);
+  return object(item.data)['incomplete'] === true && claudeBlockOrigin(item) !== undefined
+    || native['type'] === 'assistant' && native['aborted'] === true;
+}
+
 export function claudeBlockOrigin(item: { data?: unknown; claudeBlock?: unknown }): ClaudeBlockOrigin | undefined {
   const origin = object(item.claudeBlock ?? object(item.data)['claudeBlock']);
   if (origin['agent'] !== 'claude-code' || !text(origin['nativeSessionId']) || !Number.isSafeInteger(origin['blockIndex']) || Number(origin['blockIndex']) < 0

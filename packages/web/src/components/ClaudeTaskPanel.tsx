@@ -14,7 +14,8 @@ function TaskOutput({ run }: { run: ClaudeTaskRun }): React.ReactElement {
     })}
     {run.outputs.map(output => <div className="claude-task-output" key={output.itemKey} data-testid="claude-task-output">
       <small>{output.kind === 'reasoning' ? '任务思考' : output.kind === 'assistant.message' ? '任务输出' : '任务工具'}
-        {output.live ? ' · 正在输出' : output.incomplete ? ' · 已保留部分输出' : ''}</small>
+        {output.live ? ' · 正在输出' : output.incomplete ? ' · 已保留部分输出' : ''}
+        {output.incomplete && output.kind === 'tool.call' ? ' · 执行状态待确认' : ''}</small>
       <pre className="output">{output.text}</pre>
     </div>)}
   </>;
@@ -56,6 +57,7 @@ export function ClaudeTaskPanel({ sessionId, view }: { sessionId: string; view: 
     <ul className="claude-task-list">{claudeTaskTree(view.tasks).map(node => <TaskNode key={claudeTaskKey(node.task)} node={node} sessionId={sessionId} snapshot={snapshot} />)}</ul>
     {view.unassignedOutputs.length === 0 ? null : <details open data-testid="claude-task-unassigned"><summary>子任务输出（任务身份待确认）</summary>
       {view.unassignedOutputs.map(output => <div key={output.itemKey}><p className="claude-task-source">来源工具：<code>{output.origin.parentToolUseId}</code></p>
+        {output.incomplete ? <small>已保留部分输出{output.kind === 'tool.call' ? ' · 执行状态待确认' : ''}</small> : null}
         <pre className="output">{output.text}</pre></div>)}
     </details>}
     </div></details>

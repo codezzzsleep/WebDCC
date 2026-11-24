@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { CodexAdapter } from '../packages/adapters/codex/src/adapter.ts';
 import { ClaudeAdapter } from '../packages/adapters/claude/src/adapter.ts';
 import { DshAdapter } from '../packages/adapters/dsh/src/adapter.ts';
+import { claudeReplayContexts } from './lib/claude-replay-context.ts';
 import { createRunIdentity } from './lib/gate-report.ts';
 
 const path = process.argv[2];
@@ -66,9 +67,22 @@ const mapped = rows.filter(row => row.source === 'mapped').map(row => row.value)
 assert(native.length > 0 && mapped.length > 0, 'Both independent official frames and mapped production events are required');
 const handlers = { codex: CodexAdapter, 'claude-code': ClaudeAdapter, dsh: DshAdapter };
 assert(handlers[report.agent], 'Unknown native Agent');
-const replay = handlers[report.agent].replay(report.sessionId, report.nativeId);
+let queryContexts, queryContextFailure;
+try { if (report.agent === 'claude-code') queryContexts = claudeReplayContexts(rows); }
+catch (error) { queryContextFailure = error instanceof Error ? error.message : String(error); }
+const replay = queryContextFailure ? undefined : report.agent === 'claude-code' ? ClaudeAdapter.replay(report.sessionId, queryContexts[0]) : handlers[report.agent].replay(report.sessionId, report.nativeId);
 const replayed = [];
-for (const frame of native) {
+let currentQuery;
+for (const [index, frame] of (queryContextFailure ? [] : native).entries()) {
+  if (queryContexts !== undefined) {
+    const seq = replayRows[index].seq;
+    const query = queryContexts.find(context => context.evidenceSequence < seq && seq <= context.throughSequence);
+    assert(query, 'Missing preceding Claude query lifecycle identity');
+    if (currentQuery !== query.queryId) {
+      replay.feed({ i: frame.i, t: frame.t, dir: 'in', ch: 'claude-query-runtime', frame: query });
+      currentQuery = query.queryId;
+    }
+  }
   replayed.push(...replay.feed(frame));
   await Promise.resolve();
 }
@@ -101,7 +115,7 @@ const result = {
   deployment: report.deployment, nativeVersions: report.nativeVersions, provider: report.provider,
   replayIdentity: createRunIdentity(),
   additionalModelRequests: 0, originalStatus: report.status, nativeFrames: native.length,
-  originalNativeFrames: nativeRows.length, ...(hostContext === undefined ? {} : { hostContext }),
+  originalNativeFrames: nativeRows.length, ...(queryContexts === undefined ? {} : { queryContext: { records: queryContexts, evidenceSha256: hash(JSON.stringify(queryContexts)), source: 'Captured independent runtime-start lifecycle records; output identities are not inferred or rewritten' } }), ...(hostContext === undefined ? {} : { hostContext }),
   originalProjection: projection(mapped), replayProjection: projection(replayed),
   identityNormalization: 'none; native tool/item/call IDs and event sequence are retained',
   excludedTimingFields: [...timingFields],
@@ -109,6 +123,7 @@ const result = {
   status: 'failed', verifiedAt: new Date().toISOString(),
 };
 try {
+  if (queryContextFailure) throw new Error(queryContextFailure);
   const calls = new Map(), outcomes = new Map();
   for (const observation of native) {
     const frame = observation.frame;

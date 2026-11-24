@@ -1,3 +1,4 @@
+import { storedRecoveryEvents } from './native-recovery-events.js';
 import type {
   DraftDto,
   EventData,
@@ -252,7 +253,7 @@ export class Store {
       const owner = this.nativeOwners.get(sessionId);
       if (session === undefined) return { items: [] };
       if (owner !== undefined && ['opening', 'active', 'closing'].includes(owner.state)) return { items: [] };
-      const events = this.allEvents(sessionId);
+      const events = storedRecoveryEvents(this.db, sessionId);
       const options = owner === undefined ? {} : { identity: { ownerId: owner.ownerId, generation: owner.generation, hostId: owner.hostId } };
       return { ...recoverNativeHot(this.nativeEvents, this.projectionContexts, session, events, options),
         ...recoverCompletedSnapshot(this.nativeEvents, this.projectionContexts, session, events, options) };
@@ -550,10 +551,11 @@ export class Store {
 
   updateProvider(
     id: string,
-    patch: { name?: string; baseUrl?: string; endpoints?: string | null; protocols?: string[]; models?: string[]; modelDetails?: NonNullable<ProviderDto['modelDetails']>; codexCatalogPath?: string | null },
+    patch: { secretRef?: string; name?: string; baseUrl?: string; endpoints?: string | null; protocols?: string[]; models?: string[]; modelDetails?: NonNullable<ProviderDto['modelDetails']>; codexCatalogPath?: string | null },
   ): ProviderRecord | undefined {
     const sets: string[] = [];
     const values: unknown[] = [];
+    if (patch.secretRef !== undefined) { sets.push('secret_ref = ?'); values.push(patch.secretRef); }
     if (patch.name !== undefined) { sets.push('name = ?'); values.push(patch.name); }
     if (patch.baseUrl !== undefined) { sets.push('base_url = ?'); values.push(patch.baseUrl); }
     if (patch.endpoints !== undefined) { sets.push('endpoints = ?'); values.push(patch.endpoints); }
@@ -579,10 +581,24 @@ export class Store {
     return row.title_source === 'user' ? 'user' : 'native';
   }
 
+  providerLocalState(): string | undefined {
+    return (this.db.prepare("SELECT value FROM app_settings WHERE key = 'provider-local-state-v1'").get() as { value: string } | undefined)?.value;
+  }
+
+  saveProviderLocalState(value: string): void {
+    this.db.prepare("INSERT INTO app_settings(key,value) VALUES ('provider-local-state-v1',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(value);
+  }
+
+  assertProviderUnused(id: string): void {
+    const row = this.db.prepare('SELECT COUNT(*) AS count FROM sessions WHERE provider_id = ?').get(id) as { count: number };
+    if (row.count > 0) throw Object.assign(new Error(`此 Provider 仍被 ${row.count} 个会话使用，无法删除；请保留原会话的连接配置`), { statusCode: 409 });
+  }
+
   deleteProvider(id: string): void {
-    // sessions.provider_id 有外键引用：先解绑再删（PRV-03）
-    this.db.prepare('UPDATE sessions SET provider_id = NULL WHERE provider_id = ?').run(id);
-    this.db.prepare('DELETE FROM providers WHERE id = ?').run(id);
+    this.db.transaction(() => {
+      this.assertProviderUnused(id);
+      this.db.prepare('DELETE FROM providers WHERE id = ?').run(id);
+    })();
   }
 
   // ---------- events ----------

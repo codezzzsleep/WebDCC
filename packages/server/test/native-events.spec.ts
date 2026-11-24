@@ -190,7 +190,7 @@ it('NP-05/47 v6 migration preserves old events and marks absent native evidence 
     let store = new Store(db); const workspace = store.createWorkspace('migration', directory);
     const session = store.createSession({ workspaceId: workspace.id, agent: 'codex' });
     const event = store.appendEvent({ sessionId: session.id, turnId: null, itemKey: 'legacy', kind: 'unknown', data: { nativeType: 'legacy' } });
-    db.exec('DROP TABLE native_event_projections; DROP TABLE native_event_envelopes; DROP TABLE native_owners; ALTER TABLE events DROP COLUMN native_envelope_id');
+    db.exec('DROP INDEX IF EXISTS events_native_publication; DROP INDEX IF EXISTS events_semantic_witness; DROP TABLE native_event_projections; DROP TABLE native_event_envelopes; DROP TABLE native_owners; ALTER TABLE events DROP COLUMN native_envelope_id');
     db.pragma('user_version = 6'); db.close(); db = openDb(join(directory, 'db.sqlite')); store = new Store(db);
     expect(db.pragma('user_version', { simple: true })).toBe(CURRENT_SCHEMA_VERSION);
     expect(store.allEvents(session.id)).toEqual([event]);

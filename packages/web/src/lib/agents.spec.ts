@@ -48,6 +48,12 @@ describe('新会话默认选择', () => {
     });
   });
 
+  it('clearing an explicit model choice restores the native inherited default without promoting a companion model', () => {
+    const providers = [{ id: 'p', name: 'p', baseUrl: 'https://fixture.invalid', source: 'claude-settings', protocols: ['anthropic-messages'], models: ['custom', 'fast'], nativeDefault: true, nativeDefaultModel: '', hasKey: true, createdAt: '' }];
+    rememberModel('claude-code', 'p', 'custom'); expect(defaultChoice('claude-code', undefined, providers).model).toBe('custom');
+    rememberModel('claude-code', 'p', ''); expect(defaultChoice('claude-code', undefined, providers)).toMatchObject({ providerId: 'p', model: '' });
+  });
+
   it('已删除的模型回退到仍可用的默认模型', () => {
     const providers = [{ id: 'claude-one', name: 'one', baseUrl: 'https://one', protocols: ['anthropic-messages'], models: ['claude-sonnet'], hasKey: true, createdAt: '' }];
     rememberModel('claude-code', 'removed', 'claude-opus');
