@@ -1,3 +1,4 @@
+import { captureProcess, processState } from './process-identity.js';
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -7,6 +8,15 @@ export type Db = Database.Database;
 // shared content bytes, without changing any existing file ID.
 // v16 records whether native capture redaction changed each saved payload.
 export const CURRENT_SCHEMA_VERSION = 16;
+
+/** Optional indexes must not hold the shared writer lock over a large scan
+ * while another executor still needs to publish native output. Unknown process
+ * provenance defers the work; lease expiry never proves process exit. */
+function foreignExecutorMayBeAlive(db: Db): boolean {
+  const machine = captureProcess(process.pid)?.machineId;
+  const rows = db.prepare("SELECT DISTINCT server_pid,server_boot,server_start FROM native_owners WHERE state <> 'released' AND server_pid <> ?").all(process.pid) as { server_pid: number; server_boot: string; server_start: string }[];
+  return rows.some(row => machine === undefined || processState({ pid: row.server_pid, bootId: row.server_boot, startTicks: row.server_start, machineId: machine, profilePath: null }) !== 'exited');
+}
 
 /** SPEC 11.2 的表结构 */
 const SCHEMA = `
@@ -127,7 +137,7 @@ export function openDb(file: string): Db {
     if (!eventColumns.some(column => column.name === 'native_envelope_id')) db.exec('ALTER TABLE events ADD COLUMN native_envelope_id INTEGER');
     // Derived covering indexes are optional for schema 16 readers/rollback.
     // Create them during normal DB open, never inside read-only recovery.
-    db.exec(`CREATE INDEX IF NOT EXISTS events_native_publication ON events(session_id, native_envelope_id, seq, kind, turn_id, item_key) WHERE native_envelope_id IS NOT NULL;
+    if (!foreignExecutorMayBeAlive(db)) db.exec(`CREATE INDEX IF NOT EXISTS events_native_publication ON events(session_id, native_envelope_id, seq, kind, turn_id, item_key) WHERE native_envelope_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS events_semantic_witness ON events(session_id, turn_id, kind, item_key, seq, native_envelope_id) WHERE native_envelope_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS events_terminal_witness ON events(session_id, turn_id) WHERE kind = 'turn.completed';`);
     db.exec(`CREATE TABLE IF NOT EXISTS interactions (

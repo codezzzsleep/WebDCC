@@ -1,7 +1,8 @@
 # November 24 audit repairs
 
 Source implementation, source acceptance and deployment are separate. Issues
-#374, #368, #376, #375, #358, #364 and #369 track this batch. The original audit
+#374, #368, #376, #375, #358, #364 and #369 track the audit repairs;
+#378 tracks safe index admission discovered before deployment. The original audit
 failures remain retained outside the repository.
 
 Provider vault and session routing rules are described in
@@ -23,7 +24,8 @@ publication identity and semantic-envelope comparisons retain their original
 meaning. Semantic witness lists are bounded; truncation is an explicit partial
 result and cannot select a misleading output prefix. The reader stays inside a
 read transaction and never activates an adapter. Optional covering indexes are
-created at normal database open; schema 16 and older-artifact rollback remain
+created at normal database open after foreign executors have exited/released;
+live or unverifiable process identity defers this optional DDL. Schema 16 and older-artifact rollback remain
 compatible, and recovery does not create indexes. In the same isolated
 2,000-message/8,240,000-byte reproduction, historical body parses fell from
 2,000 to zero; one heap-delta measurement fell from 15,927,352 to 67,320 bytes.
