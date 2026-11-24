@@ -23,3 +23,13 @@ it('old captures require an independent native generation witness and cannot inv
   const witness: CapturedRow = { runId: 'capture', seq: 3, source: 'native', value: { i: 3, t: 3, dir: 'in', ch: 'canUseTool', frame: { queryGeneration: 7 } } };
   expect(claudeReplayContexts([old, native(2), witness])[0]?.generation).toBe(7);
 });
+
+it('the production replay handler resets query-local state at a recorded boundary while preserving source block identity', () => {
+  const replay = ClaudeAdapter.replay('web', { queryId: 'first-real-query', generation: 2 });
+  const first = replay.feed({ i: 1, t: 1, dir: 'in', ch: 'sdk', frame: message });
+  replay.feed({ i: 2, t: 2, dir: 'in', ch: 'claude-query-runtime', frame: { queryId: 'next-real-query', generation: 7 } });
+  const second = replay.feed({ i: 3, t: 3, dir: 'in', ch: 'sdk', frame: message });
+  expect(first).toContainEqual(expect.objectContaining({ itemKey: expect.stringMatching(/^msg-2-/), kind: 'assistant.message', data: expect.objectContaining({ claudeBlock: expect.objectContaining({ queryId: 'first-real-query' }) }) }));
+  expect(second).toContainEqual(expect.objectContaining({ itemKey: expect.stringMatching(/^msg-7-/), kind: 'assistant.message', data: expect.objectContaining({ claudeBlock: expect.objectContaining({ queryId: 'next-real-query', nativeMessageId: 'original-message' }) }) }));
+  expect(() => replay.feed({ i: 4, t: 4, dir: 'in', ch: 'claude-query-runtime', frame: { queryId: 'next-real-query', generation: 8 } })).toThrow('Conflicting');
+});

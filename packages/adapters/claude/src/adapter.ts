@@ -313,16 +313,17 @@ export class ClaudeAdapter implements AgentAdapter {
   static replay(sessionId = 'replay', queryContext?: { queryId: string; generation: number }): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: ClaudeAdapter; decisions: PermissionResult[] } {
     const adapter = new ClaudeAdapter();
     const decisions: PermissionResult[] = [];
-    const runtime: SessionRuntime = {
-      instanceId: queryContext?.queryId ?? `replay:${sessionId}`,
-      generation: queryContext?.generation ?? 1, permissionRequestIds: new Set(),
+    const newRuntime = (context?: { queryId: string; generation: number }): SessionRuntime => ({
+      instanceId: context?.queryId ?? `replay:${sessionId}`,
+      generation: context?.generation ?? 1, permissionRequestIds: new Set(),
       stdio: { enabled: false, failed: false },
       nativeOptions: {}, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
       pump: Promise.resolve(), turnActive: false, backgroundTasks: new Map(), hasBackgroundSnapshot: false, taskStopAffordance: false, turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
       pending: new Map(), toolItems: new Map(), outputOrigins: new Map(),
-      slashCommands: [], terminalSlashCommands: [], content: new ClaudeContentReducer(queryContext?.generation ?? 1), ready: Promise.resolve(), frameSeq: 0,
-    };
+      slashCommands: [], terminalSlashCommands: [], content: new ClaudeContentReducer(context?.generation ?? 1), ready: Promise.resolve(), frameSeq: 0,
+    });
+    let runtime = newRuntime(queryContext);
     adapter.sessions.set(sessionId, runtime);
     runtime.state.taskProjection.runtime({ id: runtime.instanceId, state: 'started' });
     let events: AdapterEvent[] = [];
@@ -333,11 +334,11 @@ export class ClaudeAdapter implements AgentAdapter {
       if (frame.dir === 'in' && frame.ch === 'claude-query-runtime') {
         if (typeof raw['queryId'] !== 'string' || raw['queryId'] === '' || !Number.isSafeInteger(raw['generation']) || Number(raw['generation']) < 1) throw new Error('Invalid Claude replay query context');
         if (runtime.instanceId !== raw['queryId']) {
-          runtime.instanceId = raw['queryId']; runtime.generation = Number(raw['generation']);
-          runtime.content = new ClaudeContentReducer(runtime.generation);
-          runtime.toolItems.clear(); runtime.outputOrigins.clear();
+          if (Number(raw['generation']) <= runtime.generation) throw new Error('Claude replay query generation did not advance');
+          runtime = newRuntime({ queryId: raw['queryId'], generation: Number(raw['generation']) });
+          adapter.sessions.set(sessionId, runtime);
           runtime.state.taskProjection.runtime({ id: runtime.instanceId, state: 'started' });
-        }
+        } else if (runtime.generation !== raw['generation']) throw new Error('Conflicting Claude replay query generation');
       } else if (frame.dir === 'in' && frame.ch === 'sdk') adapter.onSdkMessage(sessionId, raw as unknown as SDKMessage);
       else if (frame.dir === 'in' && frame.ch === 'canUseTool') {
         if (Number.isSafeInteger(raw['queryGeneration']) && Number(raw['queryGeneration']) > 0) runtime.generation = Number(raw['queryGeneration']);
