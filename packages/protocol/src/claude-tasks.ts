@@ -293,6 +293,9 @@ function taskOutput(item: { itemKey: string; kind: EventKind; data: unknown; nat
   const data = object(item.data);
   let output: string;
   switch (item.kind) {
+    case 'unknown':
+      if (!isIncompleteClaudeOutput(item)) return undefined;
+      output = '原生不透明内容未完成（原文保留在轨迹）'; break;
     case 'assistant.message': case 'reasoning': output = String(data['text'] ?? ''); break;
     case 'command': output = `$ ${String(data['command'] ?? '')}\n${String(data['outputTail'] ?? '')}`; break;
     case 'tool.call': output = `${String(data['name'] ?? '')}\n${typeof data['output'] === 'string' ? data['output'] : JSON.stringify(data['output'] ?? data['input'])}`; break;

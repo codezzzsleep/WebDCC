@@ -138,8 +138,8 @@ export class ClaudeContentReducer {
       const previous = state.blocks.get(index);
       const text = kind === 'reasoning' ? raw.thinking ?? '' : raw.text ?? '';
       const block: Block = { itemKey: previous?.itemKey ?? this.key(state, index), kind, text, completed: true, incomplete: message.aborted === true };
-      state.blocks.set(index, block);
       if (previous?.completed && previous.kind === kind && previous.text === text && (!previous.incomplete || message.aborted === true)) continue;
+      state.blocks.set(index, block);
       events.push({ type: 'item.complete', itemKey: block.itemKey, kind, data: { ...this.data(state, index, text), ...(message.aborted === true ? { incomplete: true } : {}) }, native: message, ...(state.origin === undefined ? {} : { scope: 'session' as const }) });
     }
     if (message.message?.stop_reason != null) state.ended = true;

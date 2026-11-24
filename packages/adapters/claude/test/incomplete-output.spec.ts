@@ -63,3 +63,11 @@ it('a later canonical native delivery can verify a previously truncated tool wit
   expect(items(replay.feed(frame(3, { type: 'user', session_id: 'native', parent_tool_use_id: null, message: { content: [{ type: 'tool_result', tool_use_id: 'tool', content: 'executed' }] } }))))
     .toMatchObject([{ itemKey: partial.itemKey, kind: 'command', data: { status: 'completed', outputTail: 'executed' } }]);
 });
+
+it('opaque interrupted child blocks preserve their original envelope and remain explicitly incomplete', () => {
+  const native = assistant('opaque', [{ type: 'redacted_thinking', data: 'opaque-original' }], 'spawn');
+  const output = items(ClaudeAdapter.replay().feed(frame(1, native)))[0]!;
+  expect(output).toMatchObject({ kind: 'unknown', native });
+  const stored: StoredEvent[] = [{ sessionId: 'web', turnId: null, seq: 1, at: new Date(0).toISOString(), itemKey: output.itemKey, kind: output.kind, data: output.data as never, native }];
+  expect(currentClaudeTaskViews(stored).unassignedOutputs).toMatchObject([{ itemKey: output.itemKey, incomplete: true }]);
+});

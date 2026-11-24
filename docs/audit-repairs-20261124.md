@@ -20,7 +20,9 @@ loading all semantic data/native bodies. Reset boundaries, turn completion,
 publication identity and semantic-envelope comparisons retain their original
 meaning. Semantic witness lists are bounded; truncation is an explicit partial
 result and cannot select a misleading output prefix. The reader stays inside a
-read transaction and never activates an adapter. In the same isolated
+read transaction and never activates an adapter. Optional covering indexes are
+created at normal database open; schema 16 and older-artifact rollback remain
+compatible, and recovery does not create indexes. In the same isolated
 2,000-message/8,240,000-byte reproduction, historical body parses fell from
 2,000 to zero; one heap-delta measurement fell from 15,927,352 to 67,320 bytes.
 These are isolated server measurements, not a claim about browser crashes.

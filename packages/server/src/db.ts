@@ -125,6 +125,11 @@ export function openDb(file: string): Db {
       CREATE INDEX IF NOT EXISTS events_native_item ON events(session_id, kind, item_key, native_seq);`);
     const eventColumns = db.prepare('PRAGMA table_info(events)').all() as { name: string }[];
     if (!eventColumns.some(column => column.name === 'native_envelope_id')) db.exec('ALTER TABLE events ADD COLUMN native_envelope_id INTEGER');
+    // Derived covering indexes are optional for schema 16 readers/rollback.
+    // Create them during normal DB open, never inside read-only recovery.
+    db.exec(`CREATE INDEX IF NOT EXISTS events_native_publication ON events(session_id, native_envelope_id, seq, kind, turn_id, item_key) WHERE native_envelope_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS events_semantic_witness ON events(session_id, turn_id, kind, item_key, seq, native_envelope_id) WHERE native_envelope_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS events_terminal_witness ON events(session_id, turn_id) WHERE kind = 'turn.completed';`);
     db.exec(`CREATE TABLE IF NOT EXISTS interactions (
       session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       kind TEXT NOT NULL, id TEXT NOT NULL, group_id TEXT NOT NULL,

@@ -672,6 +672,7 @@ function StepRow({
       return (
         <div className={className} data-testid="unknown-card">
           <StepLine icon="help" label="未知事件" detail={data.nativeType} onClick={toggle} open={open} />
+          {claudeIncomplete ? <small className="muted" role="status" data-testid="claude-incomplete-output">原生不透明内容未完成，原文保留在轨迹</small> : null}
           {open ? <pre className="output">{JSON.stringify(event.native ?? event.data, null, 2)}</pre> : null}
         </div>
       );
