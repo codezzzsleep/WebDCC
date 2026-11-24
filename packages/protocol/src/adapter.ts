@@ -168,7 +168,8 @@ export interface AgentAdapter {
   /** 测试钩子用：列出本 adapter 启动的进程 */
   debugProcesses?(): AgentProcessInfo[];
   probe(): Promise<ProbeResult>;
-  listModels(providerId: string | null): Promise<ModelOption[]>;
+  /** A resolved Provider allows native discovery in the selected configuration. */
+  listModels(providerId: string | null, provider?: ProviderRuntimeConfig | null): Promise<ModelOption[]>;
   accessModes(): AccessModeOption[];
   /** 运行时可用的访问模式（Codex 从 permissionProfile/list 读，MODE-codex-01） */
   listAccessModes?(): Promise<AccessModeOption[]>;

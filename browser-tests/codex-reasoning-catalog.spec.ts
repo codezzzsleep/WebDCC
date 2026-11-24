@@ -45,7 +45,7 @@ it('Codex native efforts include ultra, submit it unchanged and follow the exist
   } finally { await browser?.close(); await ctx.close(); }
 }, 60_000);
 
-it('Codex new sessions preserve a declared ultra preference, clear it on model switch and omit inherited effort on creation', async () => {
+it.each([false, true])('Codex new sessions preserve native ultra preferences with stored metadata=%s, clear on switch and omit inherited effort', async (withMetadata) => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
   try {
     const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' }); const starts: CreateOpts[] = [];
@@ -54,7 +54,7 @@ it('Codex new sessions preserve a declared ultra preference, clear it on model s
     ctx.manager.registerAdapter(adapter);
     const provider = await ctx.app.inject({ method: 'POST', url: '/api/providers', headers: { cookie: ctx.cookie }, payload: {
       name: 'Configured catalog', baseUrl: 'https://fixture.invalid', protocols: ['openai-responses'], models: ['thinking', 'limited', 'plain'],
-      modelDetails: models.map(model => ({ id: model.id, name: model.label, reasoningEfforts: model.reasoningEfforts })),
+      ...(withMetadata ? { modelDetails: models.map(model => ({ id: model.id, name: model.label, reasoningEfforts: model.reasoningEfforts })) } : {}),
     } });
     expect(provider.statusCode).toBe(200);
     const workspace = ctx.store.createWorkspace('new catalog', ctx.dataDir);
