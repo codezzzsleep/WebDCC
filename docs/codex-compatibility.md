@@ -1,7 +1,7 @@
-# Codex 0.167.0–0.169.0 compatibility
+# Codex 0.167.0–0.169.0 and 0.172.0 compatibility
 
 WebDCC keeps its original 0.167.0 request/schema baseline and accepts the
-reviewed 0.167.0, 0.168.0 and 0.169.0 releases. Older releases, future versions,
+reviewed 0.167.0, 0.168.0, 0.169.0 and 0.172.0 releases. Other releases,
 unknown versions and prereleases are rejected before launching a session.
 Extending this list requires protocol review and native behavior verification.
 
@@ -10,7 +10,8 @@ The 0.169.0 response schema is the unmodified output of
 `96ad5012f080b182a7ecfe2a0179ef04a8f9be80ff5e680f28afb37d9b4cf995`.
 The native inventory records this file, its hash and the runtime version list.
 Outgoing requests retain the earlier strict contract; incoming results and
-reverse requests use the compatible export. The experimental question-mode
+reverse requests use the export selected by the actual executable version.
+The experimental question-mode
 definitions used by this client are unchanged in 0.169.0.
 
 Compared with the 0.167.0 baseline, the 0.169.0 stable method catalog removes
@@ -20,6 +21,33 @@ moderation, an additional error category and the `input_audio.file_id` output
 form. The 0.168.0 official schema was also checked against the newer catalog.
 This compatibility work does not claim every newly introduced upstream feature
 has a structured WebDCC interface.
+
+## 0.172.0 protocol review
+
+The unmodified installed official 0.172.0 stable schema is retained separately
+as `compatibility-0.172.0.schemas.json`, SHA-256
+`88f541c50da39797a301e606fc3b40ec6fa4f97926fb89bfdda2336780333a61`.
+The existing frozen schema and 0.169.0 compatibility export are retained.
+The native inventory binds both incoming contracts and the exact runtime list;
+0.170.0 and 0.171.0 have not been admitted by this review.
+
+No existing stable client requests, reverse requests or notifications were
+removed. The additions are `modelProvider/default/set` and
+`thread/search/partial`. MCP responses and elicitation requests add an optional
+`environmentId`; model discovery adds Daybreak availability. The moderation
+display changes from an `action` object to a versioned `show`/`hide`/`block`
+union, and Project responses drop `position`. These changes require a separate
+incoming validator rather than treating the new export as an old-version
+contract. Validators are cached by contract and method, including temporary
+catalog/observation processes; outgoing requests remain pinned. The existing
+experimental collaboration-mode definitions are unchanged in the actual
+0.172.0 export.
+
+The adapter probes the actual help for the official Unix transport on 0.172.0,
+preserving the existing native CLI peer path. Probe metadata publishes the exact
+supported versions, so the browser does not describe the frozen request schema
+as the only installable runtime. Compatibility checks do not establish account
+availability, full upstream feature parity or deployment acceptance.
 
 Runtime process records, model-source labels, native catalog responses and
 terminal targets report the actual executable version. Native history written

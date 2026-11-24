@@ -44,6 +44,7 @@ export interface ProbeResult {
   auth: 'ok' | 'missing' | 'unknown';
   notes?: string[];
   compatible?: boolean;
+  supportedVersions?: readonly string[];
   runtimeContext?: NativeRuntimeContext;
 }
 

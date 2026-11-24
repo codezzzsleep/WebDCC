@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultAccessMode, defaultChoice, isAccessModeSelectable, rememberAccessMode, rememberedAccessMode, rememberModel, rememberReasoning } from './agents.js';
+import { agentStatusLine, defaultAccessMode, defaultChoice, isAccessModeSelectable, rememberAccessMode, rememberedAccessMode, rememberModel, rememberReasoning } from './agents.js';
+import type { MetaResponse } from '@webdcc/protocol';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -16,6 +17,14 @@ function makeStorage(): Storage {
 }
 
 describe('新会话默认选择', () => {
+  it('shows the audited version list and keeps a fallback for other native runtimes', () => {
+    const info = { installed: true, version: '0.173.0', pinnedVersion: '0.167.0', compatible: false,
+      supportedVersions: ['0.167.0', '0.168.0', '0.169.0', '0.172.0'] };
+    const meta = { agents: { codex: info } } as unknown as MetaResponse;
+    expect(agentStatusLine('codex', meta, [])).toBe('版本不兼容：0.173.0（支持 0.167.0、0.168.0、0.169.0、0.172.0）');
+    expect(agentStatusLine('codex', { agents: { codex: { ...info, supportedVersions: undefined } } } as unknown as MetaResponse, []))
+      .toBe('版本不兼容：0.173.0（支持 0.167.0）');
+  });
   beforeEach(() => {
     vi.stubGlobal('window', { localStorage: makeStorage() });
   });

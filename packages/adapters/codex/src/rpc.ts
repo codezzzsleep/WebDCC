@@ -11,6 +11,8 @@ export type Frame = Record<string, unknown>;
 
 export interface StartOptions {
   command: string;
+  /** Executable version selects the reviewed incoming protocol contract. */
+  nativeVersion?: string;
   args?: string[];
   env?: NodeJS.ProcessEnv;
   cwd?: string;
@@ -117,6 +119,10 @@ export class JsonRpcStdio {
 
   get isClosed(): boolean {
     return this.closed;
+  }
+
+  get nativeVersion(): string | undefined {
+    return this.options.nativeVersion;
   }
 
   /** 收到的原始帧（供 fixtures 使用） */

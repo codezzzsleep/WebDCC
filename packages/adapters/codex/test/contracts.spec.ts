@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CodexAdapter, buildThreadStartParams, buildTurnStartParams } from '../src/adapter.js';
-import { validateNativeParams, validateNativeResult } from '../src/controls.js';
+import { nativeRequest, validateNativeParams, validateNativeResult, validateNativeServerParams } from '../src/controls.js';
+import type { JsonRpcStdio } from '../src/rpc.js';
 
 describe('NP-02/07 pinned Codex contracts', () => {
   it('uses distinct thread and turn policies and preserves text bytes', () => {
@@ -38,6 +39,32 @@ describe('NP-02/07 pinned Codex contracts', () => {
     expect(() => validateNativeResult('thread/turns/list', response)).not.toThrow();
     response.data[0]!.items[0]!.moderation.moderated = 'invalid' as unknown as boolean;
     expect(() => validateNativeResult('thread/turns/list', response)).toThrow('Invalid');
+  });
+
+  it('selects the actual native version for changed moderation responses without reusing an older validator', async () => {
+    const item = { type: 'agentMessage', id: 'item', text: 'answer', moderation: { moderated: true,
+      display: { version: 1, mode: 'hide', replacement: { kind: 'wellbeingPromptHelpline' } } } };
+    const response = { data: [{ id: 'turn', status: 'completed', items: [item] }], nextCursor: null, backwardsCursor: null };
+    const rpc = { nativeVersion: '0.172.0', request: async () => response } as unknown as JsonRpcStdio;
+    await expect(nativeRequest(rpc, 'thread/turns/list', { threadId: 'thread' })).resolves.toBe(response);
+    expect(() => validateNativeResult('thread/turns/list', response, '0.169.0')).toThrow('Invalid');
+    item.moderation.display.version = 2;
+    await expect(nativeRequest(rpc, 'thread/turns/list', { threadId: 'thread' })).rejects.toThrow('Invalid');
+    const old = { ...response, data: [{ id: 'turn', status: 'completed', items: [{ ...item,
+      moderation: { moderated: true, display: { action: 'hide' } } }] }] };
+    expect(() => validateNativeResult('thread/turns/list', old, '0.169.0')).not.toThrow();
+    expect(() => validateNativeResult('thread/turns/list', old, '0.172.0')).toThrow('Invalid');
+  });
+
+  it('checks the new MCP environment identity on results and reverse requests', () => {
+    const response = { data: [{ id: 'turn', status: 'completed', items: [{ type: 'mcpToolCall', id: 'item',
+      server: 'server', tool: 'tool', arguments: {}, status: 'completed', environmentId: 'environment' }] }], nextCursor: null, backwardsCursor: null };
+    expect(() => validateNativeResult('thread/turns/list', response, '0.172.0')).not.toThrow();
+    response.data[0]!.items[0]!.environmentId = 42 as unknown as string;
+    expect(() => validateNativeResult('thread/turns/list', response, '0.172.0')).toThrow('Invalid');
+    const params = { threadId: 'thread', serverName: 'server', mode: 'form', message: 'question', requestedSchema: { type: 'object', properties: {} }, environmentId: 'environment' };
+    expect(() => validateNativeServerParams('mcpServer/elicitation/request', params, '0.172.0')).not.toThrow();
+    expect(() => validateNativeServerParams('mcpServer/elicitation/request', { ...params, environmentId: 42 }, '0.172.0')).toThrow('Invalid');
   });
 
   it('NP-12 provider names, model IDs and catalog paths cannot escape their quoted native values', () => {

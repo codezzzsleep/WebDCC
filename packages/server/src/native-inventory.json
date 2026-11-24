@@ -11,7 +11,8 @@
     "codex": [
       "0.167.0",
       "0.168.0",
-      "0.169.0"
+      "0.169.0",
+      "0.172.0"
     ]
   },
   "sources": {
@@ -23,6 +24,11 @@
       "nativeVersion": "0.169.0",
       "path": "packages/adapters/codex/src/json-schema/compatibility-0.169.0.schemas.json",
       "sha256": "96ad5012f080b182a7ecfe2a0179ef04a8f9be80ff5e680f28afb37d9b4cf995"
+    },
+    "codexCompatibility172": {
+      "nativeVersion": "0.172.0",
+      "path": "packages/adapters/codex/src/json-schema/compatibility-0.172.0.schemas.json",
+      "sha256": "88f541c50da39797a301e606fc3b40ec6fa4f97926fb89bfdda2336780333a61"
     },
     "codexQuestionModes": {
       "path": "packages/adapters/codex/src/schema-experimental/question-modes.schemas.json",
