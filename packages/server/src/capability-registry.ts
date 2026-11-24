@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { hostname, platform } from 'node:os';
 import type { Capability, CapabilityRuntime, CapabilitySnapshot, NativeMethodInventoryEntry, ProbeResult } from '@webdcc/protocol';
 import nativeInventory from './native-inventory.json' with { type: 'json' };
+import { dshRuntimeSummary, isSupportedDshVersion } from '@webdcc/adapter-dsh';
 import type { SessionManager } from './manager.js';
 import type { Store } from './store.js';
 
@@ -29,6 +30,7 @@ export class CapabilityRegistry {
     if (workspaceId !== null && this.store.getWorkspace(workspaceId) === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
     const runtimes: CapabilityRuntime[] = [];
     const capabilities: Capability[] = [];
+    let inventory: NativeMethodInventoryEntry[] = [...frozenNativeInventory];
     const providers = this.store.listProviders().map(provider => ({
       id: provider.id, models: provider.models, details: provider.modelDetails,
       baseUrl: provider.baseUrl, endpoints: provider.endpoints, protocols: provider.protocols,
@@ -41,17 +43,23 @@ export class CapabilityRegistry {
       const compatibility = runtimeCompatibility(probe, kind, expected);
       const source = nativeInventory.sources[adapter.id === 'claude-code' ? 'claude' : adapter.id];
       const context = probe.runtimeContext;
+      const dshProtocol = adapter.id === 'dsh' && isSupportedDshVersion(probe.version) ? dshRuntimeSummary(probe.version) : undefined;
+      const currentInventory: NativeMethodInventoryEntry[] = dshProtocol === undefined
+        ? frozenNativeInventory.filter(entry => entry.agent === adapter.id)
+        : [...dshProtocol.methods.map(method => ({ agent: 'dsh' as const, method, role: 'action' as const, capabilityId: `dsh.${method.split('/')[0]}` })),
+          { agent: 'dsh', method: 'native-web-surface', role: 'action', capabilityId: 'dsh.native-web' }];
+      if (dshProtocol !== undefined) inventory = [...inventory.filter(entry => entry.agent !== 'dsh'), ...currentInventory];
       runtimes.push({
         agent: adapter.id,
         hostId: context?.hostId ?? fingerprint({ hostname: hostname(), agent: adapter.id }).slice(0, 24),
         os: context === undefined ? platform() : context.os ?? 'unknown',
         profile: context === undefined ? 'native-default' : context.profile.identity ?? context.profile.scope,
-        probe, adapterKind: kind, compatibility, schemaHash: source.sha256,
-        configurationFingerprint: fingerprint({ providers, workspaceId }), pluginStatus: 'unverified',
+        probe, adapterKind: kind, compatibility, schemaHash: context?.protocol?.schemaHash ?? dshProtocol?.schemaHash ?? source.sha256,
+        configurationFingerprint: fingerprint({ providers, workspaceId, ...(context === undefined ? {} : { hostFingerprint: context.hostFingerprint, connectionRevision: context.connectionRevision }) }), pluginStatus: 'unverified',
         ...(context === undefined ? {} : { runtimeContext: context }),
       });
       const groups = new Map<string, NativeMethodInventoryEntry[]>();
-      for (const entry of frozenNativeInventory.filter(entry => entry.agent === adapter.id && entry.role !== 'internal')) {
+      for (const entry of currentInventory.filter(entry => entry.role !== 'internal')) {
         const group = groups.get(entry.capabilityId) ?? [];
         group.push(entry);
         groups.set(entry.capabilityId, group);
@@ -61,13 +69,14 @@ export class CapabilityRegistry {
         const suffix = id.split('.').slice(1).join('.');
         capabilities.push({ id, agent: adapter.id, title: titles[suffix] ?? `原生 ${suffix} 能力`, methods: entries.map(entry => entry.method),
           nativeAvailability: !probe.installed || probe.auth === 'missing' ? 'environment-blocked' : compatibility === 'compatible' ? 'available' : 'unknown',
-          apiExposure: surface ? 'unsupported-in-api' : compatibility === 'compatible' ? 'public' : 'unverified',
+          apiExposure: surface ? 'unsupported-in-api' : compatibility === 'compatible' ? dshProtocol?.experimental === true ? 'experimental' : 'public' : 'unverified',
           structuredImplemented: false, structuredVerified: false, fallbackVerified: false,
           reason: compatibility === 'incompatible' ? [`实际原生运行时未通过兼容检查（探测版本 ${probe.version}，协议基线 ${expected}）`, ...(probe.notes ?? [])].join('；') : surface ? '原生入口待实现与同会话验证' : '已列入原生库存；结构化操作与配置/插件状态须逐项验证', evidence: [],
         });
       }
     }
-    const content = { formatVersion: 1 as const, workspaceId, runtimes, capabilities, inventory: frozenNativeInventory };
+    inventory.sort((a, b) => `${a.agent}:${a.method}`.localeCompare(`${b.agent}:${b.method}`));
+    const content = { formatVersion: 1 as const, workspaceId, runtimes, capabilities, inventory };
     const snapshot = { ...content, revision: fingerprint(content), observedAt: new Date().toISOString() };
     this.store.saveCapabilitySnapshot(workspaceId ?? '*', snapshot.revision, snapshot);
     return snapshot;

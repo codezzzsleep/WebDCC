@@ -1,5 +1,5 @@
 import { Ajv, type ValidateFunction } from 'ajv';
-import catalog from '../../../../fixtures/dsh/host-api-catalog.json' with { type: 'json' };
+import { dshRuntimeContract, DSH_BASELINE_VERSION } from './runtime.js';
 
 export type DshSessionAddress = { kind: 'session'; sessionId: string }
   | { kind: 'subagent'; parentSessionId: string; childSessionId: string; mode: 'one-shot' | 'continuable' | 'unknown' };
@@ -20,8 +20,6 @@ export interface DshSubagentPrompt {
 }
 export interface DshSubagentInterrupt { childSessionId: string }
 
-interface Descriptor { parameters: { name: string; jsonSchema?: object }[]; result?: object }
-const endpoints = catalog.endpoints as Record<string, Descriptor>;
 const ajv = new Ajv({ strict: false, allErrors: true });
 const requests = new Map<string, ValidateFunction>();
 const responses = new Map<string, ValidateFunction>();
@@ -41,8 +39,10 @@ const eventsResult = {
 
 /** Validate the frozen Host catalog at the transport boundary. Remote event
  * forwarding has a separate envelope because it is not a catalog endpoint. */
-export function validateDshArgs(endpoint: string, args: unknown): void {
-  let validate = requests.get(endpoint);
+export function validateDshArgs(endpoint: string, args: unknown, nativeVersion: string = DSH_BASELINE_VERSION): void {
+  const { endpoints } = dshRuntimeContract(nativeVersion);
+  const key = `${nativeVersion}:${endpoint}`;
+  let validate = requests.get(key);
   if (validate === undefined) {
     const descriptor = endpoints[endpoint];
     if (endpoint === '$events/result') validate = ajv.compile(eventsResult);
@@ -53,19 +53,22 @@ export function validateDshArgs(endpoint: string, args: unknown): void {
         if (parameter.jsonSchema === undefined) throw new Error(`DSH parameter schema unavailable: ${endpoint}.${parameter.name}`);
         return [parameter.name, parameter.jsonSchema];
       }));
-      validate = ajv.compile({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+      validate = ajv.compile({ type: 'object', properties,
+        required: descriptor.parameters.filter(parameter => parameter.acceptsUndefined !== true).map(parameter => parameter.name), additionalProperties: false });
     }
-    requests.set(endpoint, validate);
+    requests.set(key, validate);
   }
   if (!validate(args)) throw new Error(`Invalid DSH ${endpoint} args: ${ajv.errorsText(validate.errors)}`);
 }
 
-export function validateDshResult(endpoint: string, result: unknown): void {
+export function validateDshResult(endpoint: string, result: unknown, nativeVersion: string = DSH_BASELINE_VERSION): void {
+  const { endpoints } = dshRuntimeContract(nativeVersion);
   const schema = endpoints[endpoint]?.result;
   // Native dictionaries with unconstrained JSON do not have an exported
   // result schema. Preserve that limitation rather than inventing a schema.
   if (schema === undefined || 'spec' in schema) return;
-  let validate = responses.get(endpoint);
-  if (validate === undefined) { validate = ajv.compile(schema); responses.set(endpoint, validate); }
+  const key = `${nativeVersion}:${endpoint}`;
+  let validate = responses.get(key);
+  if (validate === undefined) { validate = ajv.compile(schema); responses.set(key, validate); }
   if (!validate(result)) throw new Error(`Invalid DSH ${endpoint} result: ${ajv.errorsText(validate.errors)}`);
 }

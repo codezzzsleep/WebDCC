@@ -67,10 +67,14 @@ const mapped = rows.filter(row => row.source === 'mapped').map(row => row.value)
 assert(native.length > 0 && mapped.length > 0, 'Both independent official frames and mapped production events are required');
 const handlers = { codex: CodexAdapter, 'claude-code': ClaudeAdapter, dsh: DshAdapter };
 assert(handlers[report.agent], 'Unknown native Agent');
+const recordedDshVersion = report.nativeHost?.version ?? report.nativeVersions?.dsh?.version ?? (typeof report.nativeVersions?.dsh === 'string' ? report.nativeVersions.dsh : undefined);
+if (report.agent === 'dsh') assert.equal(typeof recordedDshVersion, 'string', 'Captured DSH runtime version is required; it cannot be inferred from the current local CLI');
 let queryContexts, queryContextFailure;
 try { if (report.agent === 'claude-code') queryContexts = claudeReplayContexts(rows); }
 catch (error) { queryContextFailure = error instanceof Error ? error.message : String(error); }
-const replay = queryContextFailure ? undefined : report.agent === 'claude-code' ? ClaudeAdapter.replay(report.sessionId, queryContexts[0]) : handlers[report.agent].replay(report.sessionId, report.nativeId);
+const replay = queryContextFailure ? undefined : report.agent === 'claude-code' ? ClaudeAdapter.replay(report.sessionId, queryContexts[0])
+  : report.agent === 'dsh' ? DshAdapter.replay(report.sessionId, report.nativeId, recordedDshVersion)
+  : handlers[report.agent].replay(report.sessionId, report.nativeId);
 const replayed = [];
 let currentQuery;
 for (const [index, frame] of (queryContextFailure ? [] : native).entries()) {

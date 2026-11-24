@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { validateDshArgs } from './contracts.js';
-import catalog from '../../../../fixtures/dsh/host-api-catalog.json' with { type: 'json' };
+import { dshRuntimeContract, DSH_BASELINE_VERSION } from './runtime.js';
 
 export interface DshGoalRef { id: string; revision: number }
 export type DshTiming =
@@ -34,7 +34,7 @@ export type DshNativeControl =
   | { type: 'child-prompt'; childSessionId: string; text: string; delivery: 'queue' | 'steer'; requestId: string }
   | { type: 'child-interrupt'; childSessionId: string }
   | { type: 'job-kill'; jobId: string }
-  | { type: 'card-dismiss'; callId: string }
+  | ({ type: 'card-dismiss' } & ({ callId: string; cardId?: never } | { cardId: string; callId?: never }))
   | { type: 'forge-worktree'; from: string | null }
   | { type: 'forge-cancel' | 'forge-restore' | 'forge-retry' | 'forge-stop' | 'forge-refresh' };
 export type DshNativeAction = DshNativeControl & { revision: string };
@@ -44,12 +44,12 @@ const fields: Record<DshNativeControl['type'], readonly string[]> = {
   'settings-mutate': ['ns', 'ops', 'expectedRevision'], 'goal-create': ['objective', 'maxGoalRounds'], 'goal-edit': ['ref', 'objective', 'maxGoalRounds'],
   'goal-pause': ['ref'], 'goal-resume': ['ref'], 'goal-complete': ['ref'], 'goal-clear': ['ref'],
   'schedule-create': ['request'], 'schedule-edit': ['request'], 'schedule-run': ['id'],
-  'child-prompt': ['childSessionId', 'text', 'delivery', 'requestId'], 'child-interrupt': ['childSessionId'], 'job-kill': ['jobId'], 'card-dismiss': ['callId'],
+  'child-prompt': ['childSessionId', 'text', 'delivery', 'requestId'], 'child-interrupt': ['childSessionId'], 'job-kill': ['jobId'], 'card-dismiss': ['callId', 'cardId'],
   'forge-worktree': ['from'], 'forge-cancel': [], 'forge-restore': [], 'forge-retry': [], 'forge-stop': [], 'forge-refresh': [],
 };
 export const DSH_NATIVE_CONTROLS = Object.keys(fields) as DshNativeControl['type'][];
 export function dshNativeError(message: string, statusCode = 400): Error { return Object.assign(new Error(message), { statusCode }); }
-export function parseDshNativeAction(value: unknown): DshNativeAction {
+export function parseDshNativeAction(value: unknown, nativeVersion: string = DSH_BASELINE_VERSION): DshNativeAction {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw dshNativeError('DSH action must be an object');
   const action = value as Record<string, unknown>;
   const type = action['type'];
@@ -57,10 +57,14 @@ export function parseDshNativeAction(value: unknown): DshNativeAction {
   if (typeof action['revision'] !== 'string' || action['revision'].length === 0 || action['revision'].length > 512) throw dshNativeError('DSH action requires a state revision');
   if (Object.keys(action).some(key => !['type', 'revision', ...fields[type as DshNativeControl['type']]].includes(key))) throw dshNativeError('Unknown DSH action field');
   const result = structuredClone(action) as DshNativeAction;
+  if (result.type === 'card-dismiss') {
+    const identity = dshRuntimeContract(nativeVersion).cardIdentity;
+    if (Object.hasOwn(action, identity === 'cardId' ? 'callId' : 'cardId')) throw dshNativeError('卡片身份不属于当前 DSH 运行时，请刷新原生目录', 409);
+  }
   // Bind identities only after validation. The UI never supplies an endpoint,
   // parentSessionId or agentId that can escape the retained Session.
-  const call = dshNativeCall(result, 'bound-session');
-  try { validateDshArgs(call.endpoint, call.args); } catch (error) { throw dshNativeError(error instanceof Error ? error.message : 'Invalid DSH action'); }
+  const call = dshNativeCall(result, 'bound-session', nativeVersion);
+  try { validateDshArgs(call.endpoint, call.args, nativeVersion); } catch (error) { throw dshNativeError(error instanceof Error ? error.message : 'Invalid DSH action'); }
   if (result.type === 'pin' && typeof result.pinned !== 'boolean' || result.type === 'archive' && (typeof result.archived !== 'boolean' || result.stopActivity !== undefined && typeof result.stopActivity !== 'boolean')) throw dshNativeError('DSH organization flags must be booleans');
   if (result.type === 'child-prompt' && !['queue', 'steer'].includes(result.delivery)) throw dshNativeError('Unknown child delivery');
   if (result.type === 'settings-mutate' && (!Number.isSafeInteger(result.expectedRevision) || result.expectedRevision < 0 || result.ops.length === 0)) throw dshNativeError('Settings require a native revision and at least one operation');
@@ -98,7 +102,7 @@ export function validateDshTiming(timing: DshTiming): void {
   if (timing.kind === 'weekly' && (timing.weekly.weekdays.length === 0 || new Set(timing.weekly.weekdays).size !== timing.weekly.weekdays.length || timing.weekly.weekdays.some(day => !Number.isSafeInteger(day) || day < 1 || day > 7))) throw dshNativeError('Weekly weekdays must be unique ISO weekdays');
 }
 
-export function dshNativeCall(action: DshNativeControl, nativeId: string): { endpoint: string; args: Record<string, unknown> } {
+export function dshNativeCall(action: DshNativeControl, nativeId: string, nativeVersion: string = DSH_BASELINE_VERSION): { endpoint: string; args: Record<string, unknown> } {
   const request = (endpoint: string, value: unknown) => ({ endpoint, args: { request: value } });
   switch (action.type) {
     case 'model': return request('session/selectModel', { sessionId: nativeId, provider: action.provider, model: action.model, ...(action.reasoningEffort === undefined ? {} : { reasoningEffort: action.reasoningEffort }) });
@@ -118,7 +122,10 @@ export function dshNativeCall(action: DshNativeControl, nativeId: string): { end
     case 'child-prompt': return request('subagents/prompt', { requestId: action.requestId, childSessionId: action.childSessionId, delivery: action.delivery, content: [{ type: 'text', text: action.text }] });
     case 'child-interrupt': return { endpoint: 'subagents/interruptByUser', args: { childSessionId: action.childSessionId } };
     case 'job-kill': return request('job/kill', { sessionId: nativeId, jobId: action.jobId });
-    case 'card-dismiss': return { endpoint: 'actionCards/act', args: { agentId: nativeId, callId: action.callId, verb: 'dismiss', payload: {} } };
+    case 'card-dismiss': {
+      const identity = dshRuntimeContract(nativeVersion).cardIdentity;
+      return { endpoint: 'actionCards/act', args: { agentId: nativeId, [identity]: action[identity], verb: 'dismiss', payload: {} } };
+    }
     case 'forge-worktree': return { endpoint: 'forgePanel/requestWorktree', args: { sessionId: nativeId, from: action.from } };
     case 'forge-cancel': case 'forge-restore': case 'forge-retry': case 'forge-stop': case 'forge-refresh': {
       const methods = { 'forge-cancel': 'cancelWorktree', 'forge-restore': 'restoreWorktree', 'forge-retry': 'retryWorktree', 'forge-stop': 'stopCreation', 'forge-refresh': 'refresh' };
@@ -142,32 +149,35 @@ const required: Partial<Record<DshNativeControl['type'], string[]>> = {
   'goal-create': ['objective'], 'goal-edit': ['ref'], 'goal-pause': ['ref'], 'goal-resume': ['ref'], 'goal-complete': ['ref'], 'goal-clear': ['ref'],
   'schedule-create': ['request'], 'schedule-edit': ['request'], 'schedule-run': ['id'], 'child-prompt': ['childSessionId', 'text', 'delivery', 'requestId'], 'child-interrupt': ['childSessionId'], 'job-kill': ['jobId'], 'card-dismiss': ['callId'], 'forge-worktree': ['from'],
 };
-const parameter = (endpoint: string, name: string): Record<string, unknown> => {
-  const endpoints = catalog.endpoints as Record<string, { parameters: { name: string; jsonSchema?: object }[] }>;
+const parameter = (endpoint: string, name: string, nativeVersion: string): Record<string, unknown> => {
+  const { endpoints } = dshRuntimeContract(nativeVersion);
   return structuredClone(endpoints[endpoint]?.parameters.find(value => value.name === name)?.jsonSchema ?? { type: 'string' }) as Record<string, unknown>;
 };
-const objectProperties = (endpoint: string, name = 'request') => (parameter(endpoint, name)['properties'] ?? {}) as Record<string, Record<string, unknown>>;
-function property(type: DshNativeControl['type'], key: string): Record<string, unknown> {
+function property(type: DshNativeControl['type'], key: string, nativeVersion: string): Record<string, unknown> {
+  const objectProperties = (endpoint: string, name = 'request') => (parameter(endpoint, name, nativeVersion)['properties'] ?? {}) as Record<string, Record<string, unknown>>;
+  const nativeParameter = (endpoint: string, name: string) => parameter(endpoint, name, nativeVersion);
   if (type === 'model') return objectProperties('session/selectModel')[key] ?? { type: 'string' };
-  if (type.startsWith('goal-')) return key === 'ref' ? { ...parameter('goals/edit', 'ref'), readOnly: true, entitySource: 'goal' } : objectProperties('goals/create')[key] ?? { type: 'string' };
-  if (type === 'settings-mutate') return { ...parameter('settings/mutate', key), ...(key === 'expectedRevision' ? { readOnly: true, entitySource: 'settings.revision' } : {}) };
-  if (type === 'schedule-create') return parameter('schedule/create', 'request');
-  if (type === 'schedule-edit') return { ...parameter('schedule/edit', 'request'), entitySource: 'schedules', nativeCasField: 'expectedUpdatedAt' };
+  if (type.startsWith('goal-')) return key === 'ref' ? { ...nativeParameter('goals/edit', 'ref'), readOnly: true, entitySource: 'goal' } : objectProperties('goals/create')[key] ?? { type: 'string' };
+  if (type === 'settings-mutate') return { ...nativeParameter('settings/mutate', key), ...(key === 'expectedRevision' ? { readOnly: true, entitySource: 'settings.revision' } : {}) };
+  if (type === 'schedule-create') return nativeParameter('schedule/create', 'request');
+  if (type === 'schedule-edit') return { ...nativeParameter('schedule/edit', 'request'), entitySource: 'schedules', nativeCasField: 'expectedUpdatedAt' };
   if (key === 'pinned' || key === 'archived' || key === 'stopActivity' || key === 'allowMigration') return { type: 'boolean' };
   if (key === 'atSeq') return { type: 'integer', minimum: 0, entitySource: 'history' };
   if (key === 'from') return { oneOf: [{ type: 'string' }, { type: 'null' }] };
   if (key === 'delivery') return { type: 'string', enum: ['queue', 'steer'] };
   if (key === 'requestId') return { type: 'string', readOnly: true, generated: 'commandId' };
-  if (key === 'agentPreset') return parameter('agentPresets/select', 'agentPreset');
-  return { type: 'string', ...(key === 'childSessionId' ? { entitySource: 'children' } : key === 'jobId' ? { entitySource: 'jobs' } : key === 'callId' ? { entitySource: 'projections.actionCards' } : {}) };
+  if (key === 'agentPreset') return nativeParameter('agentPresets/select', 'agentPreset');
+  return { type: 'string', ...(key === 'childSessionId' ? { entitySource: 'children' } : key === 'jobId' ? { entitySource: 'jobs' } : key === 'callId' || key === 'cardId' ? { entitySource: 'projections.actionCards' } : {}) };
 }
 /** Finite forms for the shared UI; type/revision stay in the dispatch envelope.
  * Entity-owned native CAS fields are selected from authoritative objects. */
-export function dshNativeActionMetadata(compatible: boolean, deployment: Record<string, unknown> = {}) {
+export function dshNativeActionMetadata(compatible: boolean, deployment: Record<string, unknown> = {}, nativeVersion: string = DSH_BASELINE_VERSION) {
+  const contract = dshRuntimeContract(nativeVersion);
   const available = (name: string): boolean => (deployment[name] as { unavailable?: boolean } | undefined)?.unavailable !== true;
   return DSH_NATIVE_CONTROLS.map(type => {
     const section = type === 'model' ? 'models' : type === 'preset' ? 'presets' : type.startsWith('goal-') ? 'goal' : type.startsWith('schedule-') ? 'schedules' : type.startsWith('forge-') ? 'forge' : type === 'job-kill' ? 'jobs' : type === 'settings-mutate' ? 'settings' : 'commands';
-    const properties = Object.fromEntries(fields[type].map(key => [key, property(type, key)]));
+    const keys = type === 'card-dismiss' ? [contract.cardIdentity] : fields[type];
+    const properties = Object.fromEntries(keys.map(key => [key, property(type, key, nativeVersion)]));
     const groups = (deployment['models'] as { groups?: { id: string; models?: { id: string }[] }[] } | undefined)?.groups ?? [];
     if (type === 'model') { properties['provider'] = { type: 'string', enum: groups.map(group => group.id) }; properties['model'] = { type: 'string', enum: [...new Set(groups.flatMap(group => group.models?.map(model => model.id) ?? []))] }; }
     if (type === 'preset') properties['agentPreset'] = { type: 'string', enum: (deployment['presets'] as { presets?: { id: string; broken?: string }[] } | undefined)?.presets?.filter(preset => preset.broken === undefined).map(preset => preset.id) ?? [] };
@@ -186,10 +196,11 @@ export function dshNativeActionMetadata(compatible: boolean, deployment: Record<
     const objectAvailable = type === 'compact' ? commands.some(command => command.name === 'compact' || command.name === '/compact')
       : type.startsWith('goal-') && type !== 'goal-create' ? goal?.id !== undefined
       : type === 'model' ? groups.length > 0 : true;
-    return { type, label: labels[type], supported: compatible && available(section) && objectAvailable && forgeAvailable && (!requiresBlankSession || blankConfirmed) && (type !== 'preset' || session?.state?.active === true), scope: type === 'settings-mutate' || type.startsWith('schedule-') ? 'host' : 'session',
+    const endpointPresent = Object.hasOwn(contract.endpoints, dshNativeCall({ type } as DshNativeControl, 'catalog-session', nativeVersion).endpoint);
+    return { type, label: labels[type], supported: compatible && endpointPresent && available(section) && objectAvailable && forgeAvailable && (!requiresBlankSession || blankConfirmed) && (type !== 'preset' || session?.state?.active === true), scope: type === 'settings-mutate' || type.startsWith('schedule-') ? 'host' : 'session',
       requiresIdle: type === 'preset' || type === 'compact' || type === 'forge-worktree' || type === 'forge-cancel' || type === 'forge-restore', requiresBlankSession,
       sensitive: ['settings-mutate', 'child-prompt', 'goal-create', 'goal-edit', 'schedule-create', 'schedule-edit'].includes(type),
-      schema: { type: 'object', properties, required: required[type] ?? [], additionalProperties: false },
+      schema: { type: 'object', properties, required: type === 'card-dismiss' ? [contract.cardIdentity] : required[type] ?? [], additionalProperties: false },
     };
   });
 }

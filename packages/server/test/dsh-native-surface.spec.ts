@@ -13,8 +13,8 @@ async function unusedPort() {
   const server = createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const port = (server.address() as { port: number }).port; await new Promise<void>(resolve => server.close(() => resolve())); return port;
 }
-async function fixture(options: { writable?: boolean; identityRefreshMs?: number; noDispatcher?: boolean; authorizationGate?: Promise<void>; dispatchGate?: Promise<void>; upgradeGate?: Promise<void> } = {}) {
-  let version = '0.2.2-rc.1';
+async function fixture(options: { nativeVersion?: string; writable?: boolean; identityRefreshMs?: number; noDispatcher?: boolean; authorizationGate?: Promise<void>; dispatchGate?: Promise<void>; upgradeGate?: Promise<void> } = {}) {
+  let version = options.nativeVersion ?? '0.2.2-rc.1';
   const requests: { url: string; cookie?: string; origin?: string; body: string }[] = [];
   const frames: unknown[] = [];
   const nativeSockets: WebSocket[] = [];
@@ -26,7 +26,7 @@ async function fixture(options: { writable?: boolean; identityRefreshMs?: number
       await new Promise(resolve => setTimeout(resolve, 10)); response.setHeader('content-type', 'text/html'); response.setHeader('set-cookie', 'native-secret=must-not-leave-server'); response.end(boot(version)); return;
     }
     if (request.url?.startsWith('/dsh/plugins/')) { response.setHeader('content-type', 'text/javascript'); response.end('globalThis.nativeLoaded=true'); return; }
-    if (request.url === '/dsh/api/settings/describe' || request.url === '/dsh/api/commands/execute' || request.url === '/dsh/api/$events/result') {
+    if (request.url === '/dsh/api/settings/describe' || request.url === '/dsh/api/commands/execute' || request.url === '/dsh/api/$events/result' || request.url === '/dsh/api/web/listProviders' || request.url === '/dsh/api/actionCards/act') {
       const envelope = JSON.parse(body) as { rpcId: string }; response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ type: 'server-response', rpcId: envelope.rpcId, result: { ok: true, value: 'native-receipt' } })); return;
     }
@@ -129,6 +129,30 @@ it('registered JSON RPCs are validated, fenced and journaled; arbitrary proxies 
   expect(invalid.statusCode).toBe(400); expect(f.authorized).toBe(1);
   for (const url of ['/proxy?target=https://evil.test', '/?token=secret', '/%2e%2e/api/commands/execute', '//evil.test/', '/api/not-known']) expect((await f.surface.app.inject({ url, headers: { ...f.headers, cookie } })).statusCode).not.toBe(200);
   expect((await f.surface.app.inject({ url: '/', headers: { ...f.headers, host: new URL(mainOrigin).host, cookie } })).statusCode).toBe(403);
+});
+it('uses the current published card schema and exposes new rc.5 methods without stale rc.1 routing', async () => {
+  const f = await fixture({ nativeVersion: '0.2.3-alpha.2' }); const { cookie } = await f.login();
+  const headers = { ...f.headers, cookie, origin: f.publicOrigin };
+  const make = (method: string, args: object) => ({ type: 'client-request', rpcId: 'current-runtime', method, payload: { args } });
+  const card = make('actionCards/act', { agentId: 'native', cardId: 'card-1', verb: 'dismiss' });
+  const accepted = await f.surface.app.inject({ method: 'POST', url: '/api/actionCards/act', headers, payload: card });
+  expect(accepted.statusCode).toBe(200); expect(JSON.parse(f.requests.at(-1)!.body)).toEqual(card);
+  const stale = await f.surface.app.inject({ method: 'POST', url: '/api/actionCards/act', headers, payload: make('actionCards/act', { agentId: 'native', callId: 'old-call', verb: 'dismiss' }) });
+  expect(stale.statusCode).toBe(400); expect(f.authorized).toBe(1);
+  expect((await f.surface.app.inject({ method: 'POST', url: '/api/web/listProviders', headers, payload: make('web/listProviders', {}) })).statusCode).toBe(200);
+  expect(f.authorized).toBe(1);
+  const stream = await f.surface.app.inject({ method: 'POST', url: '/api/pluginEvents/follow', headers, payload: make('pluginEvents/follow', {}) });
+  expect(stream.statusCode).toBe(400);
+});
+it('rechecks a Host upgrade after authorization before submitting a queued mutation', async () => {
+  let release!: () => void; const authorizationGate = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture({ authorizationGate }); const { cookie } = await f.login();
+  const pending = f.surface.app.inject({ method: 'POST', url: '/api/commands/execute', headers: { ...f.headers, cookie, origin: f.publicOrigin },
+    payload: { type: 'client-request', rpcId: 'upgrade-race', method: 'commands/execute', payload: { args: { agentId: 'native', line: '/help', submittedAttachments: [] } } } });
+  await vi.waitFor(() => expect(f.authorized).toBe(1));
+  f.changeVersion(); release();
+  expect((await pending).statusCode).not.toBe(200);
+  expect(f.requests.some(request => request.url === '/dsh/api/commands/execute')).toBe(false);
 });
 it.each(['/api/session.export', '/api/session.markdown'])('authenticated native %s preserves GET/HEAD bytes, query, headers and errors without a writer', async path => {
   const f = await fixture({ writable: false }); const { cookie } = await f.login('native-session');

@@ -27,6 +27,7 @@ it('NP-12 a rejected remote Host settings write never changes the local DSH home
   await ctx.dsh.save({ url: 'http://remote.example', cookie: 'test-remote-cookie', connectedAt: new Date().toISOString() });
   const methods: string[] = [];
   vi.stubGlobal('fetch', async (_url: unknown, init: RequestInit) => {
+    if (init.method !== 'POST') return new Response(`<script>globalThis["__DSH_BOOT__"] = ${JSON.stringify({ rev: 'remote-fixture', release: { version: '0.2.2-rc.1' }, entries: [] })}</script>`);
     const request = JSON.parse(String(init.body)) as { rpcId: string; method: string };
     methods.push(request.method);
     const value = { writable: true, namespaces: [{ ns: 'llm-pi-ai', revision: 1, value: { providers: { target: { baseURL: 'https://old.example/v1', models: [{ id: 'a' }, { id: 'b' }] } } } }, { ns: 'agent-default-model', revision: 1, value: { provider: 'target', model: 'a' } }] };

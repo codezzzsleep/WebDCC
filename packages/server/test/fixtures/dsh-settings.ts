@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
 
 /** A local Host contract fixture; it never runs DSH or accesses user config. */
-export async function settingsHost() {
+export async function settingsHost(options: { nativeVersion?: string } = {}) {
+  let nativeVersion = options.nativeVersion ?? '0.2.2-rc.1';
+  let manifestRevision = 'settings-fixture';
   const provider = { baseURL: 'https://fixture.example/v1', apiKeyEnv: 'FIXTURE_KEY', reasoning: 'high', models: [
     { id: 'a', name: 'Model A', reasoningEfforts: { high: 'high' }, contextWindow: 111, unknown: 'keep A' },
     { id: 'b', name: 'Model B', reasoningEfforts: { low: 'low', high: 'high' }, maxTokens: 222, unknown: 'keep B' },
@@ -17,6 +19,11 @@ export async function settingsHost() {
   let beforeWrite: (() => void) | undefined;
   let normalizeWrite: ((value: Record<string, unknown>) => void) | undefined;
   const server = createServer(async (request, response) => {
+    if (request.method === 'GET' && request.url === '/dsh/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(`<html><script>globalThis["__DSH_BOOT__"] = ${JSON.stringify({ rev: manifestRevision, release: { version: nativeVersion, commit: 'settings-fixture' }, entries: [] })}</script></html>`);
+      return;
+    }
     let text = '';
     for await (const chunk of request) text += String(chunk);
     const message = JSON.parse(text) as { rpcId: string; method: string; payload: { args: Record<string, unknown> } };
@@ -58,6 +65,7 @@ export async function settingsHost() {
   const address = server.address();
   if (address === null || typeof address === 'string') throw new Error('Missing fixture address');
   return { url: `http://127.0.0.1:${address.port}/dsh/`, state, calls, credentials,
+    changeRuntime(version: string, revision = manifestRevision) { nativeVersion = version; manifestRevision = revision; },
     rejectCredentials(value: boolean) { rejectCredentials = value; },
     beforeCredentialSet(callback: () => Promise<void>) { beforeCredentialSet = callback; },
     rejectWrites(value: boolean) { rejectWrites = value; }, ignoreWrites(value: boolean) { ignoreWrites = value; }, beforeWrite(callback: () => void) { beforeWrite = callback; },

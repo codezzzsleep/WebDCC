@@ -44,6 +44,8 @@ import { DshHistoryBridge, type DshOpening } from './history.js';
 import { DshAssistantBridge, failedDshAttemptDetails } from './assistant.js';
 import { DshRetryDisplay } from './retry.js';
 import { readDshHostIdentity, requireDshBaseline, type DshHostIdentity } from './identity.js';
+import { DSH_BASELINE_VERSION, dshRuntimeContract, dshRuntimeSummary, isSupportedDshVersion, SUPPORTED_DSH_VERSIONS } from './runtime.js';
+import { DshSystemMessages } from './system-messages.js';
 import slashCatalog from './slash-catalog.json' with { type: 'json' };
 import { dshCommandAliases, mapDshCommands, type DshCommandDescriptor } from './commands.js';
 import { dshGoalChange, dshGoalProjection } from './goals.js';
@@ -57,7 +59,7 @@ import { dshQuestionSignature, dshQuestionRecoverySignature, dshQuestionAnswers,
 import { dshInputCapabilities, dshInputRoute, type DshInputModality } from './input-capabilities.js';
 import { dshInputParts, dshInputUnsupported, encodeDshInput, validateDshInputParts, type DshResolvableInput, type DshResolvedAttachment } from './input.js';
 
-export const PINNED_VERSION = '0.2.2-rc.1';
+export const PINNED_VERSION = DSH_BASELINE_VERSION;
 
 export interface DshAdapterOptions {
   port?: number;
@@ -280,6 +282,7 @@ interface SessionRuntime {
   history?: DshHistoryBridge;
   historyRecord?: NativeHistoryRecord;
   historyRecords?: NativeHistoryRecord[];
+  systemMessages?: DshSystemMessages;
   nativeTurnId?: string;
   toolCalls: Map<string, { itemKey: string; kind: EventKind; data: EventData[EventKind]; name: string; input: Record<string, unknown> }>;
   /** callId → 工具入参：审批请求里只有 toolName 和 callId，标题需要从工具调用取命令（F11） */
@@ -385,7 +388,8 @@ export class DshAdapter implements AgentAdapter {
       dshTransport: { endpoint: observation.endpoint, rpcId: observation.rpcId, coverage: observation.capture.coverage,
         ...(observation.httpStatus === undefined ? {} : { httpStatus: observation.httpStatus }),
         ...(observation.dir !== 'out' || observation.capture.jsonBytes === undefined ? {} : { byteLength: observation.capture.jsonBytes }),
-        ...(host?.status !== 'verified' || host.fingerprint === undefined ? {} : { verifiedHostFingerprint: host.fingerprint }), hostEpoch: epoch, muxGeneration: generation } satisfies NativeDshRpcCaptureMetadata,
+        ...(host?.status !== 'verified' || host.fingerprint === undefined ? {} : { verifiedHostFingerprint: host.fingerprint }),
+        ...(!isSupportedDshVersion(host?.version) ? {} : { nativeVersion: host.version, contractHash: dshRuntimeContract(host.version).schemaHash }), hostEpoch: epoch, muxGeneration: generation } satisfies NativeDshRpcCaptureMetadata,
     };
     const transport = { i: ++this.traceSeq, t: 0, dir: observation.dir, ch: `rpc:${observation.endpoint}`, frame };
     const receipt = sink?.record(transport);
@@ -395,8 +399,10 @@ export class DshAdapter implements AgentAdapter {
   }
 
   /** Recorded mux frames pass through the live stream and event handlers. */
-  static replay(sessionId = 'replay', nativeId = ''): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: DshAdapter; replies: unknown[] } {
+  static replay(sessionId = 'replay', nativeId = '', nativeVersion = DSH_BASELINE_VERSION): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: DshAdapter; replies: unknown[] } {
+    dshRuntimeContract(nativeVersion);
     const adapter = new DshAdapter();
+    adapter.replaying = true;
     const runtime: SessionRuntime = {
       nativeId, workspaceId: '', followStream: null, lastSeq: 0, turnStartedAt: 0,
       pending: new Map(), children: new Map(), approvals: new Map(), toolCalls: new Map(), toolInputs: new Map(), assistantKey: '', assistantText: '',
@@ -404,7 +410,7 @@ export class DshAdapter implements AgentAdapter {
     };
     adapter.sessions.set(sessionId, runtime);
     const replies: unknown[] = [];
-    adapter.client = { connect: async () => undefined, rpc: async (endpoint: string, args: unknown) => { replies.push({ endpoint, args }); return { accepted: true }; } } as unknown as DshHostClient;
+    adapter.client = { nativeVersion, connect: async () => undefined, rpc: async (endpoint: string, args: unknown) => { replies.push({ endpoint, args }); return { accepted: true }; } } as unknown as DshHostClient;
     let events: AdapterEvent[] = [];
     adapter.onEvent((_id, event) => events.push(event));
     const requests = new Map<string, { endpoint: string; args: Record<string, unknown>; context: string }>();
@@ -452,12 +458,13 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private replayTime?: number;
+  private replaying = false;
   private now(): number { return this.replayTime ?? Date.now(); }
 
   private nativeRevision(runtime: SessionRuntime): string {
     return dshRevision({ host: this.observedHost?.fingerprint, hostEpoch: this.hostEpoch, muxGeneration: this.muxGeneration,
       runtime: runtime.identity, nativeId: runtime.nativeId, workspaceId: runtime.workspaceId,
-      projections: runtime.projections, state: runtime.controlState, selected: runtime.modelObservation, organization: this.workspaceState.organization(runtime.nativeId) });
+      contract: this.observedHost?.contract?.schemaHash, projections: runtime.projections, state: runtime.controlState, selected: runtime.modelObservation, organization: this.workspaceState.organization(runtime.nativeId) });
   }
 
   async nativeState(sessionId: string): Promise<unknown> {
@@ -478,6 +485,7 @@ export class DshAdapter implements AgentAdapter {
       transport: client.isConnected ? 'live' : 'reconnecting', state: dshPublicValue(state), projections: dshPublicValue(runtime.projections), selected: dshPublicValue(selected),
       credentialMode: this.options.attachBrowserCookie !== undefined || (this.options.mode ?? 'spawn') === 'spawn' ? 'native-browser-shared-peer' : 'native-operator-single-socket',
       organization: this.workspaceState.organization(runtime.nativeId),
+      systemSections: this.systemMessages(runtime).snapshot(),
       capture: { writesBlocked: this.rpcWritesBlocked, status: this.rpcWritesBlocked ? 'incomplete' : 'observing' },
       children: [...runtime.children].map(([nativeId, mode]) => ({ nativeId, mode, parentSessionId: runtime.nativeId, continuable: mode === 'continuable' })),
       interactions: [...runtime.pending].map(([requestId, pending]) => ({ requestId, kind: pending.kind, callId: pending.callId, durableId: pending.durableId,
@@ -505,7 +513,8 @@ export class DshAdapter implements AgentAdapter {
     if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw dshNativeError('DSH runtime was replaced', 409);
     const catalog = Object.fromEntries(results.map((result, index) => [names[index]!, result.status === 'fulfilled' ? dshPublicValue(result.value) : { unavailable: true, reason: 'Native endpoint is unavailable in this Host composition' }]));
     return { ...catalog, revision: this.nativeRevision(runtime), nativeId: runtime.nativeId, workspaceId: runtime.workspaceId, host: state.host, selected: state.selected, workspaces: structuredClone(this.workspaceState.snapshot),
-      actions: dshNativeActionMetadata(state.host.status === 'verified', { ...catalog, session: { state: runtime.controlState, projections: runtime.projections } }),
+      contract: dshRuntimeSummary(client.nativeVersion),
+      actions: dshNativeActionMetadata(state.host.status === 'verified', { ...catalog, session: { state: runtime.controlState, projections: runtime.projections } }, client.nativeVersion),
       controls: state.host.status === 'verified' ? DSH_NATIVE_CONTROLS : [],
       unsupported: { profileIdentity: 'The API does not identify the current profile directory/name',
         dynamicPlugins: 'isolated-native-surface-required', mcp: 'native composition/plugin surface; no frozen generic MCP administration RPC',
@@ -519,12 +528,12 @@ export class DshAdapter implements AgentAdapter {
   async executeNativeControl(sessionId: string, value: unknown): Promise<unknown> {
     let nativeDispatched = false;
     try {
-      const action = parseDshNativeAction(value);
+      const client = await this.ensureSidecar();
+      const action = parseDshNativeAction(value, client.nativeVersion);
       const runtime = this.require(sessionId);
       const state = await this.nativeState(sessionId) as { revision: string; host: DshHostIdentity };
       requireDshBaseline(state.host);
       if (state.revision !== action.revision) throw dshNativeError('DSH state changed; refresh before submitting this action', 409);
-      const client = await this.ensureSidecar();
       if (action.type === 'child-prompt' || action.type === 'child-interrupt') this.requireChild(sessionId, action.childSessionId);
       if (action.type === 'model') {
         const catalog = await this.modelCatalog(client);
@@ -568,7 +577,7 @@ export class DshAdapter implements AgentAdapter {
       const freshHost = await this.hostIdentity();
       requireDshBaseline(freshHost);
       if (freshHost.fingerprint === undefined || freshHost.fingerprint !== state.host.fingerprint || this.sessions.get(sessionId) !== runtime || this.client !== client || this.nativeRevision(runtime) !== action.revision) throw dshNativeError('DSH Host or Session changed during control preflight', 409);
-      const call = dshNativeCall(action, runtime.nativeId);
+      const call = dshNativeCall(action, runtime.nativeId, client.nativeVersion);
       nativeDispatched = true;
       let result: unknown;
       try { result = await this.call<unknown>(client, call.endpoint, call.args, sessionId); }
@@ -721,11 +730,15 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async probe(): Promise<ProbeResult> {
-    if ((this.options.mode ?? 'spawn') === 'attach') {
-      const identity = await this.hostIdentity().catch(() => undefined);
+    if ((this.options.mode ?? 'spawn') === 'attach' || this.client !== null && this.sidecar !== null) {
+      let needsReconnect = false;
+      const identity = await this.hostIdentity().catch(error => {
+        if ((error as { code?: string }).code === 'dsh-host-version-changed') { needsReconnect = true; return this.observedHost; }
+        return undefined;
+      });
       return { installed: identity !== undefined, ...(identity?.version === undefined ? {} : { version: identity.version }), pinnedVersion: PINNED_VERSION,
-        auth: this.options.attachCookie ? 'ok' : 'missing', compatible: identity?.status === 'verified',
-        notes: identity?.status === 'verified' ? [] : [identity?.reason ?? '目标 DSH Host 身份尚未验证'],
+        auth: this.client?.cookieHeader || this.options.attachCookie ? 'ok' : 'missing', compatible: identity?.status === 'verified' && !needsReconnect, supportedVersions: SUPPORTED_DSH_VERSIONS,
+        notes: needsReconnect ? ['DSH 运行时已变化，请重新连接 Host 后使用对应合同'] : identity?.status === 'verified' ? [] : [identity?.reason ?? '目标 DSH Host 身份尚未验证'],
         runtimeContext: this.capabilityContext(identity) };
     }
     if ((this.options.mode ?? 'spawn') === 'spawn') {
@@ -750,7 +763,8 @@ export class DshAdapter implements AgentAdapter {
       version,
       pinnedVersion: PINNED_VERSION,
       auth: 'ok',
-      notes: version === PINNED_VERSION ? [] : [`版本 ${version} 与锁定版本 ${PINNED_VERSION} 不一致`],
+      compatible: isSupportedDshVersion(version), supportedVersions: SUPPORTED_DSH_VERSIONS,
+      notes: isSupportedDshVersion(version) ? [] : [`DSH ${version} 没有已审核的运行时合同`],
     };
   }
 
@@ -865,7 +879,6 @@ export class DshAdapter implements AgentAdapter {
   }
 
   private async ensureSidecar(): Promise<DshHostClient> {
-    if (this.client !== null) { await this.client.connect(); return this.client; }
     // Metadata/model discovery and session creation can arrive concurrently.
     // A process started by this adapter belongs to the pending boot, rather
     // than being an unrelated host using the same native home.
@@ -873,6 +886,10 @@ export class DshAdapter implements AgentAdapter {
       await this.booting;
       if (this.client !== null) return this.client;
       throw new Error('dsh: 侧车启动失败');
+    }
+    if (this.client !== null) {
+      if (!this.replaying) requireDshBaseline(await this.hostIdentity());
+      await this.client.connect(); return this.client;
     }
     const epoch = this.hostEpoch;
     const boot = (async () => {
@@ -895,10 +912,13 @@ export class DshAdapter implements AgentAdapter {
           client = this.newHost(sidecar.port);
           await client.authenticate(sidecar.tokenUrl);
         }
-        await client.connect();
         if (epoch !== this.hostEpoch) throw new Error('DSH 连接启动已取消');
         this.client = client;
         this.sidecar = sidecar;
+        const identity = await this.hostIdentity();
+        requireDshBaseline(identity);
+        client.bindNativeVersion(identity.version ?? DSH_BASELINE_VERSION);
+        await client.connect();
         this.spawnedConnectionAt = sidecar === null ? '' : new Date().toISOString();
         client.openStream('$events', {}, frame => { if (this.client === client) this.onEventFrame('', frame); });
         this.openControl(client);
@@ -944,6 +964,7 @@ export class DshAdapter implements AgentAdapter {
       // The pinned native bootstrap exposes neither OS nor a profile name/path.
       profile: { scope: 'current-host-profile', status: identity?.status === 'verified' ? 'unavailable-in-api' : 'unverified' },
       connectionRevision: dshRevision({ adapter: this.capabilityGeneration, hostEpoch: this.hostEpoch, muxGeneration: this.muxGeneration }),
+      ...(identity?.status !== 'verified' || identity.version === undefined ? {} : { protocol: dshRuntimeSummary(identity.version) }),
     };
   }
   async hostIdentity(): Promise<DshHostIdentity> {
@@ -953,6 +974,7 @@ export class DshAdapter implements AgentAdapter {
     const identity = await readDshHostIdentity(endpoint, cookie);
     if (epoch !== this.hostEpoch) throw dshNativeError('DSH Host was replaced during identity verification', 409);
     this.observedHost = structuredClone(identity);
+    if (identity.status === 'verified' && identity.version !== undefined) this.client?.bindNativeVersion(identity.version);
     return identity;
   }
   private openControl(client: DshHostClient): void {
@@ -1000,6 +1022,7 @@ export class DshAdapter implements AgentAdapter {
       this.observeModelSelection(sessionId, runtime, selected, 'session/projections:modelSelection.next');
     }
     runtime.children.clear();
+    this.systemMessages(runtime).baseline(baseline.values['systemSections']);
     const children = baseline.values['subagentCatalog'];
     if (Array.isArray(children)) for (const entry of children as Record<string, unknown>[]) {
       const id = entry['childSessionId'] ?? entry['sessionId'] ?? entry['id'];
@@ -1016,6 +1039,12 @@ export class DshAdapter implements AgentAdapter {
     for (const change of value['changes'] as { key: string; val?: unknown }[]) values[change.key] = change.val;
     this.applyProjections(sessionId, runtime, { asOfSeq: value['seq'], values }, false, source, value,
       (value['changes'] as { key: string }[]).some(change => change.key === 'goal'));
+  }
+
+  private systemMessages(runtime: SessionRuntime): DshSystemMessages {
+    const format = dshRuntimeContract(this.client?.nativeVersion ?? DSH_BASELINE_VERSION).systemMessages;
+    if (runtime.systemMessages === undefined || runtime.systemMessages.snapshot().format !== format) runtime.systemMessages = new DshSystemMessages(format);
+    return runtime.systemMessages;
   }
 
   private projectGoal(sessionId: string, runtime: SessionRuntime, data: EventData['goal'], throughSeq: number, native: unknown, projection = false, replace = false): void {
@@ -1219,7 +1248,7 @@ export class DshAdapter implements AgentAdapter {
       if (!Number.isSafeInteger(state.cursor) || state.cursor < -1) throw dshNativeError('子 Agent 输入水位待确认', 409);
       const args: DshSubagentPrompt = { request: { requestId: options.requestId, childSessionId, delivery: options.delivery, content: [{ type: 'text', text }],
         ...(options.clientTimeZone === undefined ? {} : { clientTimeZone: options.clientTimeZone }) } };
-      validateDshArgs('subagents/prompt', args);
+      validateDshArgs('subagents/prompt', args, client.nativeVersion);
       const freshHost = await this.hostIdentity(); requireDshBaseline(freshHost);
       if (context.client !== client || host.fingerprint === undefined || freshHost.fingerprint !== host.fingerprint) throw dshNativeError('DSH Host 在子消息核对期间已变化', 409);
       context.guard(); target?.guard?.(); options.beforeDispatch?.(state.cursor);
@@ -1501,6 +1530,7 @@ export class DshAdapter implements AgentAdapter {
         for (const frame of buffered) this.acceptAssistantFrame(sessionId, runtime, frame);
       },
       error => { runtime.historyRecords = []; runtime.historyRecord = undefined; this.emit(sessionId, { type: 'item.complete', itemKey: `dsh-history-error-${++runtime.frameSeq}`, kind: 'error', data: { message: error.message } }); },
+      () => this.client?.nativeVersion ?? DSH_BASELINE_VERSION,
     );
   }
 
@@ -1841,7 +1871,12 @@ export class DshAdapter implements AgentAdapter {
     if (this.sessions.size > 0 && (currentUrl === undefined || dshBaseUrl(url) !== dshBaseUrl(currentUrl))) throw Object.assign(new Error('存在已关联会话，不能切换到不同 DSH Host'), { statusCode: 409 });
     const candidate = this.newHost(url);
     candidate.useCookie(browserCookie ?? cookie);
-    try { await candidate.connect(); await persist?.(); }
+    try {
+      const identity = await readDshHostIdentity(url, browserCookie ?? cookie);
+      requireDshBaseline(identity);
+      candidate.bindNativeVersion(identity.version ?? DSH_BASELINE_VERSION);
+      await candidate.connect(); await persist?.();
+    }
     catch (error) { await candidate.close(); throw error; }
     await this.shutdown();
     this.options = { ...this.options, mode: 'attach', attachUrl: dshBaseUrl(url), attachCookie: cookie, attachBrowserCookie: browserCookie };
@@ -2271,9 +2306,24 @@ export class DshAdapter implements AgentAdapter {
       }
       case 'user/message': {
         const source = (data['source'] ?? {}) as { kind?: string; rpcId?: string; callId?: string };
-        if (source.kind !== 'user') { complete(`internal-user-${nativeSeq}`, 'internal', { nativeType: `user/message:${source.kind ?? 'unknown'}` }); return; }
+        if (source.kind !== 'user') {
+          const content = Array.isArray(data['content']) ? data['content'] as { type?: string; text?: string }[] : [];
+          complete(`internal-user-${nativeSeq}`, 'internal', { nativeType: `user/message:${source.kind ?? 'unknown'}`,
+            ...(source.kind !== 'agent-message' ? {} : { dshContext: { text: content.filter(part => part.type === 'text').map(part => part.text ?? '').join(''), source: structuredClone(source) } }) });
+          return;
+        }
         const content = Array.isArray(data['content']) ? data['content'] as { type?: string; text?: string }[] : [];
         complete(`user-native-${String(data['id'] ?? nativeSeq)}`, 'user.message', { text: content.filter(part => part.type === 'text').map(part => part.text ?? '').join(''), ...(typeof source.rpcId === 'string' ? { clientCommandId: source.rpcId } : {}) });
+        return;
+      }
+      case 'system/message': {
+        const state = this.systemMessages(runtime).accept(type, data);
+        complete(`internal-${type}-${nativeSeq}`, 'internal', { nativeType: type, ...(state.format !== 'sections' ? {} : { dshSystemSections: state }) });
+        return;
+      }
+      case 'compaction/summary': {
+        this.systemMessages(runtime).accept(type, data);
+        complete(`internal-${type}-${nativeSeq}`, 'internal', { nativeType: type });
         return;
       }
       default: {

@@ -20,6 +20,8 @@ import { closeVerifiedServer, finalizeVerifiedServer } from './deployed-native-c
 const [configPath, agent, flag] = process.argv.slice(2);
 assert(['codex', 'claude-code', 'dsh'].includes(agent), 'Select one of all three Agents');
 const config = JSON.parse(await readFile(resolve(configPath), 'utf8'));
+const acceptanceScope = config.acceptanceScope ?? 'target-deployment';
+assert(['target-deployment', 'source-native'].includes(acceptanceScope), 'Select an explicit source or target acceptance scope');
 const live = flag === '--live';
 const selected = config.agents[agent];
 assert(selected && selected.credentialFile && selected.model && selected.upstream);
@@ -58,9 +60,10 @@ async function atomic(path, value) {
 }
 const report = {
   formatVersion: 1, runId, agent, live, pid: process.pid, startedAt: new Date().toISOString(),
-  deployment: { release, commit: manifest.commit, sourceFingerprint: manifest.sourceFingerprint },
+  acceptanceScope,
+  deployment: { release, commit: manifest.commit, sourceFingerprint: manifest.sourceFingerprint, role: acceptanceScope === 'source-native' ? 'source-candidate' : 'target-release' },
   provider: { upstream: selected.upstream, model: selected.model, protocol: selected.protocol },
-  nativeBehavior: 'official deployed CLI/SDK/Host; production server and UI bundle; no injected adapter or modified model bodies',
+  nativeBehavior: `official CLI/SDK/Host; ${acceptanceScope === 'source-native' ? 'source-candidate' : 'deployed production'} server and UI bundle; no injected adapter or modified model bodies`,
   validatorSha256: hash(await readFile(new URL(import.meta.url))),
   isolation: 'dedicated native profile, workspace and database on target host; not personal production sessions',
   status: 'admitted', requests: [], userCommands: [], browserErrors: [], checks: {}, pending: [],
@@ -229,6 +232,8 @@ try {
   if (agent === 'dsh') {
     const adapter = server.manager.adaptersList().find(adapter => adapter.id === 'dsh');
     const host = await adapter.ensureSidecar();
+    const identity = await adapter.hostIdentity();
+    if (selected.nativeVersion !== undefined) assert.equal(identity.version, selected.nativeVersion, 'Official Host version differs from the admitted native target');
     let description = await host.rpc('settings/describe', {});
     const llm = description.namespaces.find(namespace => namespace.ns === 'llm-pi-ai');
     await host.rpc('settings/mutate', { ns: llm.ns, expectedRevision: llm.revision, ops: [{ op: 'set', path: ['providers', 'acceptance-real'], value: {

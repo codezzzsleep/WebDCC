@@ -6,6 +6,7 @@ import inventory from './native-inventory.json' with { type: 'json' };
 import { committedNativeProjection, nativeProjectionDigest } from './native-projection-match.js';
 import { nativeEnvelopeIdentity } from './native-envelope-identity.js';
 import { jsonValueEqual } from './json-value-equal.js';
+import { dshRuntimeContract, isSupportedDshVersion } from '@webdcc/adapter-dsh';
 
 interface Row {
   id: number; session_id: string; agent: string; native_id: string | null;
@@ -32,9 +33,11 @@ function dshMetadata(value: unknown): NativeDshRpcCaptureMetadata | undefined {
     || !['complete', 'oversize', 'invalid-json', 'transport-error', 'http-auth-rejected'].includes(String(data['coverage']))
     || !Number.isSafeInteger(data['hostEpoch']) || Number(data['hostEpoch']) < 0 || !Number.isSafeInteger(data['muxGeneration']) || Number(data['muxGeneration']) < 0) return undefined;
   const host = data['verifiedHostFingerprint']; const status = data['httpStatus']; const bytes = data['jsonBytes']; const requestBytes = data['byteLength'];
+  const version = data['nativeVersion']; const contractHash = data['contractHash'];
   return { endpoint: data['endpoint'], rpcId: data['rpcId'], coverage: data['coverage'] as NativeDshRpcCaptureMetadata['coverage'],
     hostEpoch: Number(data['hostEpoch']), muxGeneration: Number(data['muxGeneration']),
     ...(typeof host === 'string' && /^[0-9a-f]{64}$/.test(host) ? { verifiedHostFingerprint: host } : {}),
+    ...(isSupportedDshVersion(typeof version === 'string' ? version : undefined) && contractHash === dshRuntimeContract(String(version)).schemaHash ? { nativeVersion: String(version), contractHash: String(contractHash) } : {}),
     ...(Number.isSafeInteger(status) && Number(status) >= 100 && Number(status) <= 599 ? { httpStatus: Number(status) } : {}),
     ...(Number.isSafeInteger(bytes) && Number(bytes) >= 0 ? { jsonBytes: Number(bytes) } : {}),
     ...(Number.isSafeInteger(requestBytes) && Number(requestBytes) >= 0 ? { byteLength: Number(requestBytes) } : {}) };

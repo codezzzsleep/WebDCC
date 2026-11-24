@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { startSidecar, DshHostClient, attachToDshCredentials, waitUntil } from '../src/host.js';
 import type WebSocket from 'ws';
-import { readDshHostIdentity } from '../src/identity.js';
+import { readDshHostIdentity, requireDshBaseline } from '../src/identity.js';
+import { dshRuntimeContract } from '../src/runtime.js';
 import { DshAdapter } from '../src/adapter.js';
 
 const root = await mkdtemp(join(tmpdir(), 'wdcc-dsh-native-smoke-'));
@@ -17,9 +18,10 @@ let operator: DshHostClient | undefined;
 let browser: DshHostClient | undefined;
 let adapter: DshAdapter | undefined;
 let stage = 'launch';
+let nativeVersion: string | undefined;
 let report: Record<string, unknown> = {};
 const reportFile = resolve(process.env['WDCC_DSH_SMOKE_REPORT'] ?? '.artifacts/dsh-native-smoke.json');
-const sourceFiles = ['src/index.ts', 'src/contracts.ts', 'src/translator.ts', 'src/adapter.ts', 'src/host.ts', 'src/history.ts', 'src/identity.ts', 'src/assistant.ts', 'src/native.ts', 'src/workspaces.ts'];
+const sourceFiles = ['src/index.ts', 'src/contracts.ts', 'src/translator.ts', 'src/adapter.ts', 'src/host.ts', 'src/history.ts', 'src/identity.ts', 'src/assistant.ts', 'src/native.ts', 'src/workspaces.ts', 'src/runtime.ts', 'src/system-messages.ts'];
 const fingerprint = async () => createHash('sha256').update(Buffer.concat(await Promise.all(sourceFiles.map(file => readFile(new URL(`../${file}`, import.meta.url)))))).digest('hex');
 const sourceFingerprint = await fingerprint();
 const initialCommit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
@@ -33,14 +35,17 @@ try {
   stage = 'authentication';
   const { cookie: operatorCookie, browserCookie } = await attachToDshCredentials(endpoint, sidecar.token);
   const host = await readDshHostIdentity(endpoint, browserCookie);
+  requireDshBaseline(host); nativeVersion = host.version;
+  if (process.env['WDCC_DSH_EXPECT_VERSION'] !== undefined && nativeVersion !== process.env['WDCC_DSH_EXPECT_VERSION']) throw new Error('Native Host version differs from admitted version');
   stage = 'catalogs-and-global-snapshots';
-  operator = new DshHostClient(endpoint); operator.useCookie(operatorCookie); await operator.connect();
-  browser = new DshHostClient(endpoint); browser.useCookie(browserCookie); await browser.connect();
+  operator = new DshHostClient(endpoint, { nativeVersion }); operator.useCookie(operatorCookie); await operator.connect();
+  browser = new DshHostClient(endpoint, { nativeVersion }); browser.useCookie(browserCookie); await browser.connect();
   const [sessions, presets, models, control, workspaces] = await Promise.all([
     operator.rpc<{ items: unknown[] }>('session/list', { _request: {} }), operator.rpc<{ presets: unknown[] }>('agentPresets/list'),
     operator.rpc<{ groups: unknown[] }>('session/modelCatalog'), operator.snapshot<{ type: string }>('session/control'), operator.snapshot<{ type: string }>('workspace/follow'),
   ]);
   const response = await fetch(endpoint, { redirect: 'manual', headers: { cookie: browserCookie } });
+  const plugins = dshRuntimeContract(nativeVersion).pluginEvents === 'mux' ? await browser.snapshot<{ type: string }>('pluginEvents/follow') : undefined;
   await operator.close(); await browser.close();
   let closedOperatorRejected = false;
   try { await operator.rpc('session/list', { _request: {} }); } catch (error) { closedOperatorRejected = (error as { statusCode?: number }).statusCode === 401; }
@@ -63,7 +68,8 @@ try {
   await waitUntil(() => runtimeClient.isConnected, 8000, 'native browser peer reconnect');
   const after = await adapter.readNativeHistory('isolated-smoke', { limit: 100 }) as { nativeId: string; records: unknown[] };
   report = { status: 'passed', modelCalls: 0, isolatedHome: true, hostVersion: host.version ?? null, nativeCommit: host.commit ?? null, hostIdentityStatus: host.status,
-    identitySource: host.source, manifestFingerprint: host.fingerprint ?? null, operatorApi: true, browserIndex: response.status,
+    identitySource: host.source, manifestFingerprint: host.fingerprint ?? null, contractHash: dshRuntimeContract(nativeVersion).schemaHash,
+    pluginTransport: dshRuntimeContract(nativeVersion).pluginEvents, ...(plugins === undefined ? {} : { pluginsBaseline: plugins.type }), operatorApi: true, browserIndex: response.status,
     sessions: sessions.items.length, presets: presets.presets.length, modelGroups: models.groups.length, controlBaseline: control.type, workspaceBaseline: workspaces.type,
     blankSessionCreated: created.nativeId.startsWith('session-'), blankSessionWorkflows: workflows, recoveredNativeRecords: history.records.length,
     closedOperatorRejected, reconnectCredential: 'native-browser-shared-peer',
@@ -80,10 +86,11 @@ try {
 } finally {
   await adapter?.shutdown(); await operator?.close(); await browser?.close(); await sidecar?.stop(); await rm(root, { recursive: true, force: true });
   const finalFingerprint = await fingerprint();
-  const catalog = await readFile(new URL('../../../../fixtures/dsh/host-api-catalog.json', import.meta.url));
+  const catalogPath = nativeVersion === undefined || nativeVersion === '0.2.2-rc.1' ? 'host-api-catalog.json' : `compatibility-${nativeVersion}.catalog.json`;
+  const catalog = await readFile(new URL(`../../../../fixtures/dsh/${catalogPath}`, import.meta.url));
   report = { ...report, testedAt: new Date().toISOString(), commit: initialCommit, sourceFingerprint, sourceChangedDuringRun: finalFingerprint !== sourceFingerprint,
     catalogFingerprint: createHash('sha256').update(catalog).digest('hex'), catalogEndpointCount: Object.keys((JSON.parse(catalog.toString()) as { endpoints: object }).endpoints).length,
-    scenarioFingerprint, nativeBaseline: '0.2.2-rc.1', platform: process.platform, node: process.version,
+    scenarioFingerprint, admittedNativeVersion: process.env['WDCC_DSH_EXPECT_VERSION'] ?? null, nativeVersion: nativeVersion ?? null, platform: process.platform, node: process.version,
     cleanup: { operatorClosed: true, browserClosed: true, sidecarStopped: true, isolatedHomeRemoved: true },
     evidenceScope: 'real isolated native Host, authentication, APIs and blank-session organization controls; no model/production/surface claims' };
   if (finalFingerprint !== sourceFingerprint) { report['status'] = 'failed'; report['category'] = 'source-changed-during-run'; process.exitCode = 1; }

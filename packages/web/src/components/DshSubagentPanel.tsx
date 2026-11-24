@@ -159,7 +159,7 @@ function DshHistoryRecord({ record, ownDescriptorSeq }: { record: DshSubagentRec
     if (text === '' && reasoning === '') return null;
     const source = object(data['source']); const kind = source['kind'];
     if (type === 'user/message' && kind !== 'user' && kind !== 'retry') return <details className="dsh-child-message" data-native-seq={seq} data-native-role={role}>
-      <summary>{kind === 'runtime-context' ? '运行上下文' : kind === 'time-context' ? '时间上下文' : kind === 'agent' ? 'Agent 消息' : '原生上下文'}</summary><pre className="output">{text}</pre>
+      <summary>{kind === 'runtime-context' ? '运行上下文' : kind === 'time-context' ? '时间上下文' : kind === 'agent-message' ? 'Agent 委派消息' : kind === 'agent' ? 'Agent 消息' : '原生上下文'}</summary><pre className="output">{text}</pre>
     </details>;
     return <article className="dsh-child-message" data-native-seq={seq} data-native-role={role}>
       <strong>{role === 'context' ? '已有上下文 · ' : ''}{type === 'user/message' ? '用户' : role === 'child' ? '子 Agent' : '会话中的助手'}</strong>

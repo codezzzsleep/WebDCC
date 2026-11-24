@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { DshHostClient } from '@webdcc/adapter-dsh';
+import { readDshHostIdentity, verifiedDshHostClient, type DshHostClient, type DshHostIdentity } from '@webdcc/adapter-dsh';
 import type { DshCredentialUpdate, DshDefaultModelUpdate, DshProviderCreate, DshSettingsPreview, DshSettingsTarget, DshSettingsView } from '@webdcc/protocol';
 import type { DshConnection, DshConnectionStore } from './dsh-connection.js';
 import { dshCapabilities, OFFICIAL_DSH_PROVIDERS } from './dsh-capabilities.js';
@@ -25,7 +25,14 @@ function includesDeclared(actual: unknown, expected: unknown): boolean {
     && Object.entries(record(expected)).every(([key, item]) => Object.hasOwn(actual, key) && includesDeclared(record(actual)[key], item));
   return equal(actual, expected);
 }
-const targetOf = (connection: DshConnection): DshSettingsTarget => ({ id: createHash('sha256').update(JSON.stringify([connection.url, connection.connectedAt])).digest('hex'), url: connection.url, scope: 'host-profile', applies: 'live' });
+const connectionRevision = (connection: DshConnection): string => createHash('sha256').update(JSON.stringify([connection.url, connection.connectedAt])).digest('hex');
+const targetOf = (connection: DshConnection, host: DshHostIdentity): DshSettingsTarget => ({
+  id: createHash('sha256').update(JSON.stringify([connectionRevision(connection), host.fingerprint, host.contract?.schemaHash])).digest('hex'),
+  url: connection.url, scope: 'host-profile', applies: 'live', connectionRevision: connectionRevision(connection),
+  ...(host.version === undefined ? {} : { nativeVersion: host.version }),
+  ...(host.fingerprint === undefined ? {} : { hostFingerprint: host.fingerprint }),
+  ...(host.contract === undefined ? {} : { contractHash: host.contract.schemaHash }),
+});
 
 function validate(value: unknown, fields: string[], required = ['providerKey', 'model', 'targetId']): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw error('需要配置变更对象');
@@ -51,18 +58,19 @@ export class DshSettingsService {
 
   private assertTarget(target: DshSettingsTarget): void {
     const current = this.connections.connection;
-    if (current === null || targetOf(current).id !== target.id) throw error('目标 DSH Host 已变化，请刷新配置后重试', 409, 'settings-target-changed');
+    if (current === null || connectionRevision(current) !== target.connectionRevision) throw error('目标 DSH Host 已变化，请刷新配置后重试', 409, 'settings-target-changed');
   }
 
   private async context(targetId?: string): Promise<Context> {
     const connection = this.connections.connection;
     if (connection === null) throw error('DSH 尚未连接', 503);
-    const target = targetOf(connection);
+    const { client, identity } = await verifiedDshHostClient(connection.url, connection);
+    const target = targetOf(connection, identity);
     if (targetId !== undefined && target.id !== targetId) throw error('目标 DSH Host 已变化，请刷新配置后重试', 409, 'settings-target-changed');
-    const client = new DshHostClient(connection.url);
-    client.useCookie(connection.cookie);
     const description = await client.rpc<Description>('settings/describe', {});
     this.assertTarget(target);
+    const current = await readDshHostIdentity(connection.url, connection.browserCookie ?? connection.cookie);
+    if (current.status !== 'verified' || current.fingerprint !== target.hostFingerprint) throw error('目标 DSH Host 已变化，请刷新配置后重试', 409, 'settings-target-changed');
     return { client, description, target };
   }
 
@@ -183,7 +191,9 @@ export class DshSettingsService {
     }
     // Re-read the same Host; a replacement connection must not supply the
     // supposed result of the prior Host's mutation.
-    const context = await this.context(plan.context.target.id);
+    const context = await this.context();
+    this.assertTarget(plan.context.target);
+    if (context.target.nativeVersion !== plan.context.target.nativeVersion || context.target.contractHash !== plan.context.target.contractHash) throw error('保存后 DSH 运行时已变化，请核对原生配置', 409, 'settings-target-changed');
     const namespace = this.namespace(context, plan.namespace.ns);
     for (const op of plan.ops) {
       const actual = op.path.reduce<unknown>((node, part) => Array.isArray(node) ? node[Number(part)] : record(node)[part], namespace.value);

@@ -13,6 +13,11 @@
       "0.168.0",
       "0.169.0",
       "0.172.0"
+    ],
+    "dsh": [
+      "0.2.2-rc.1",
+      "0.2.2-rc.5",
+      "0.2.3-alpha.2"
     ]
   },
   "sources": {
@@ -38,6 +43,18 @@
       "path": "fixtures/dsh/host-api-catalog.json",
       "sha256": "7657ac04ba463fa9a64b9a1cdbbb3b6ce8c93afad6ea074c66097f6963ea3384"
     },
+    "dshCompatibility": [
+      {
+        "nativeVersion": "0.2.2-rc.5",
+        "path": "fixtures/dsh/compatibility-0.2.2-rc.5.catalog.json",
+        "sha256": "8b5c9608ea6c0c9abeaeb7102a3946eee72b5b4a9794231d28d7c089d92e2387"
+      },
+      {
+        "nativeVersion": "0.2.3-alpha.2",
+        "path": "fixtures/dsh/compatibility-0.2.3-alpha.2.catalog.json",
+        "sha256": "e9ec3a550ab4b84646327058dd0f4a9cc90b35d2ddb274227c28e3fd8ca29983"
+      }
+    ],
     "claude": {
       "path": "@anthropic-ai/claude-agent-sdk/sdk.d.ts",
       "sha256": "c228b60931a217ea96e222ef41f47a0a83bee0a394d1735e3eb668e3f8838b2f"
