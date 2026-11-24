@@ -13,7 +13,9 @@ update/ignore; scans preserve names and custom model settings. Explicit update
 copies current native address/key and merges models, while retaining custom
 labels/levels. Existing browser choices take precedence. An unavailable fresh
 scan cannot apply a cached credential. Native configuration files are never
-written. Shared address/key imports retain each Harness's observed default.
+written. Shared address/key imports retain each Harness's observed default. Claude
+companion model settings are never promoted to the main model; without an
+explicit environment model the launch continues to inherit native settings.
 
 Hot and immutable-completion recovery use SQL metadata witnesses rather than
 loading all semantic data/native bodies. Reset boundaries, turn completion,

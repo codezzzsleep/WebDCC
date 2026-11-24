@@ -102,7 +102,9 @@ export async function importFromClaude(): Promise<ImportedProvider[]> {
       source: 'claude-settings',
       sourceKey: baseUrl,
       nativeDefault: true,
-      ...(models[0] === undefined ? {} : { nativeDefaultModel: models[0] }),
+      // Companion fast/Opus/Haiku models do not identify the main default.
+      // Without an explicit environment model, omit the model launch override.
+      nativeDefaultModel: env['ANTHROPIC_MODEL'] ?? '',
     },
   ];
 }

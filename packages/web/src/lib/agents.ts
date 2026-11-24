@@ -140,8 +140,8 @@ export function rememberedModel(agent: string): ModelPreference | undefined {
 }
 
 export function rememberModel(agent: string, providerId: string | null, model: string): void {
-  if (model.trim() === '') return;
   try {
+    if (model.trim() === '') { window.localStorage.removeItem(MODEL_DEFAULT_PREFIX + agent); return; }
     window.localStorage.setItem(MODEL_DEFAULT_PREFIX + agent, JSON.stringify({ providerId, model } satisfies ModelPreference));
   } catch {
     // Browser storage may be unavailable; the current session still works.

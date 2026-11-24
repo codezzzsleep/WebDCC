@@ -374,6 +374,6 @@ export class ProviderRegistry {
     if (row === undefined) return [];
     if (!isCompatible(agent, row.protocols)) return [];
     const dto = this.toDto(row); const model = dto.nativeDefaults?.[agent] ?? (row.source === (agent === 'codex' ? 'codex-config' : 'claude-settings') ? dto.nativeDefaultModel : undefined);
-    return [...new Set([...row.models, ...(model === undefined ? [] : [model])])];
+    return [...new Set([...row.models, ...(model === undefined || model === '' ? [] : [model])])];
   }
 }
