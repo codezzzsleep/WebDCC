@@ -123,6 +123,12 @@ export interface ProviderDto {
   baseUrl: string;
   /** manual / codex-config / claude-settings / dsh / paste */
   source?: string;
+  sourceKey?: string;
+  /** Last successfully observed native default, independent of saved user choices. */
+  nativeDefault?: boolean;
+  nativeDefaults?: Record<string, string>;
+  nativeDefaultModel?: string;
+  localChange?: { status: 'changed' | 'ignored'; replacementId: string };
   endpoints?: ProviderEndpointMap;
   protocols: string[];
   models: string[];

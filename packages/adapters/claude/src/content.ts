@@ -4,7 +4,7 @@ import type { AdapterEvent, ClaudeBlockOrigin, ClaudeOutputOrigin } from '@webdc
 
 type ContentEvent = Exclude<AdapterEvent, { type: 'history' }>;
 type Kind = 'assistant.message' | 'reasoning';
-interface Block { itemKey: string; kind: Kind; text: string; completed: boolean }
+interface Block { itemKey: string; kind: Kind; text: string; completed: boolean; incomplete?: boolean }
 interface Slot { type: string; toolId?: string; completed: boolean }
 export interface ClaudeBlockIdentity { itemKey: string; blockIndex: number; claudeBlock: ClaudeBlockOrigin; claudeActor?: ClaudeOutputOrigin }
 interface Message {
@@ -124,7 +124,7 @@ export class ClaudeContentReducer {
     for (const [position, raw] of content.entries()) {
       const index = this.index(state, raw, position, content.length);
       const slot = state.slots.get(index);
-      state.slots.set(index, { type: raw.type, ...(typeof raw['id'] === 'string' ? { toolId: raw['id'] } : {}), completed: true });
+      state.slots.set(index, { type: raw.type, ...(typeof raw['id'] === 'string' ? { toolId: raw['id'] } : {}), completed: slot?.completed === true || message.aborted !== true });
       if (raw.type !== 'text' && raw.type !== 'thinking') {
         if (slot?.completed && slot.type === raw.type && (raw.type !== 'tool_use' || slot.toolId === raw['id'])) continue;
         const identity = this.identity(state, index);
@@ -137,10 +137,10 @@ export class ClaudeContentReducer {
       const kind: Kind = raw.type === 'thinking' ? 'reasoning' : 'assistant.message';
       const previous = state.blocks.get(index);
       const text = kind === 'reasoning' ? raw.thinking ?? '' : raw.text ?? '';
-      const block: Block = { itemKey: previous?.itemKey ?? this.key(state, index), kind, text, completed: true };
+      const block: Block = { itemKey: previous?.itemKey ?? this.key(state, index), kind, text, completed: true, incomplete: message.aborted === true };
       state.blocks.set(index, block);
-      if (previous?.completed && previous.kind === kind && previous.text === text) continue;
-      events.push({ type: 'item.complete', itemKey: block.itemKey, kind, data: this.data(state, index, text), native: message, ...(state.origin === undefined ? {} : { scope: 'session' as const }) });
+      if (previous?.completed && previous.kind === kind && previous.text === text && (!previous.incomplete || message.aborted === true)) continue;
+      events.push({ type: 'item.complete', itemKey: block.itemKey, kind, data: { ...this.data(state, index, text), ...(message.aborted === true ? { incomplete: true } : {}) }, native: message, ...(state.origin === undefined ? {} : { scope: 'session' as const }) });
     }
     if (message.message?.stop_reason != null) state.ended = true;
     return { events, duplicate: false };

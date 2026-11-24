@@ -8,6 +8,7 @@ import { nativePlanText } from './plans.js';
 import { claudeStructuredOutputs, type ClaudeStructuredOutputView } from './claude-output.js';
 import type { HotObservation } from './hot-recovery.js';
 import type { RecoveredCompletion } from './completed-recovery.js';
+import { isIncompleteClaudeOutput } from './claude-content.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -246,7 +247,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     commands: steps.filter((event) => event.kind === 'command' && !nativeOperationDeclined(event)).length,
     reads: steps.filter((event) => event.kind === 'file.read' && !failedFileOperation(event)).length,
     edits: steps.filter((event) => (event.kind === 'file.change' || event.kind === 'turn.diff') && !failedFileOperation(event)).length,
-    tools: steps.filter((event) => event.kind === 'tool.call' && codexReviewItem(event) === undefined).length,
+    tools: steps.filter((event) => event.kind === 'tool.call' && codexReviewItem(event) === undefined && !isIncompleteClaudeOutput(event)).length,
   };
   const startedAt = started?.at ?? userEvent?.at ?? first?.at ?? new Date(0).toISOString();
   return {

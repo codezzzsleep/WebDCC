@@ -12,6 +12,8 @@ import type { ProviderInput } from './providers.js';
 export interface ImportedProvider extends ProviderInput {
   source: 'codex-config' | 'claude-settings' | 'dsh';
   sourceKey: string;
+  nativeDefault?: boolean;
+  nativeDefaultModel?: string;
 }
 
 export async function codexConfigRead(cwd = process.cwd()): Promise<Record<string, unknown> | null> {
@@ -60,6 +62,8 @@ export async function importFromCodex(): Promise<ImportedProvider[]> {
       ...(key === undefined ? {} : { apiKey: key }),
       source: 'codex-config',
       sourceKey: id,
+      nativeDefault: topProvider === id,
+      ...(topProvider === id && topModel !== undefined ? { nativeDefaultModel: topModel } : {}),
       ...(typeof provider['model_catalog_json'] === 'string' ? { codexCatalogPath: provider['model_catalog_json'] } : {}),
     });
     if (key === undefined && envKey !== undefined) {
@@ -97,6 +101,8 @@ export async function importFromClaude(): Promise<ImportedProvider[]> {
       ...(key === undefined || key === '' ? { missingKeyReason: '缺少 Key（本机 settings.json 未提供）' } : { apiKey: key }),
       source: 'claude-settings',
       sourceKey: baseUrl,
+      nativeDefault: true,
+      ...(models[0] === undefined ? {} : { nativeDefaultModel: models[0] }),
     },
   ];
 }

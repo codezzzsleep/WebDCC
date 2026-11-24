@@ -157,6 +157,7 @@ export function modelGroups(agent: string, meta: AgentMeta | undefined, provider
     const compatible = isCompatible(agent, provider);
     if (!compatible) continue;
     const notes: string[] = [sourceLabel(provider.source)];
+    if (provider.localChange?.status === 'changed') notes.push('本机配置已变化；此选项保留原配置');
     if (provider.note !== undefined) notes.push(provider.note);
     if (agent === 'codex' && compatible && provider.codexCatalogPath === undefined && !provider.models.some((model) => model.startsWith('gpt-'))) {
       notes.push('需要模型目录，否则工具可能不可用');
@@ -166,7 +167,7 @@ export function modelGroups(agent: string, meta: AgentMeta | undefined, provider
       providerId: provider.id,
       title: provider.name,
       note: notes.join(' · '),
-      models: provider.models,
+      models: [...new Set([...provider.models, ...(provider.nativeDefaults?.[agent] === undefined && provider.nativeDefaultModel === undefined ? [] : [provider.nativeDefaults?.[agent] ?? provider.nativeDefaultModel!])])],
       disabled: false,
     });
   }
@@ -193,6 +194,8 @@ export function defaultChoice(agent: string, meta: AgentMeta | undefined, provid
   const storedModelId = storedModel?.model;
   const rememberedProvider = storedModelId === undefined ? undefined : compatible.find((provider) => provider.id === storedModel?.providerId && provider.models.includes(storedModelId));
   if (rememberedProvider !== undefined && storedModelId !== undefined) return { providerId: rememberedProvider.id, model: storedModelId, ...withDefaultReasoning };
+  const nativeDefault = compatible.find(provider => provider.nativeDefaults?.[agent] !== undefined) ?? compatible.find(provider => provider.nativeDefault === true && provider.source === sameSource);
+  if (nativeDefault !== undefined) return { providerId: nativeDefault.id, model: nativeDefault.nativeDefaults?.[agent] ?? nativeDefault.nativeDefaultModel ?? nativeDefault.models[0] ?? '', ...withDefaultReasoning };
   const preferred =
     compatible.find((provider) => provider.source === sameSource && provider.models.length > 0) ?? compatible.find((provider) => provider.models.length > 0);
   if (preferred !== undefined) return { providerId: preferred.id, model: preferred.models[0] ?? '', ...withDefaultReasoning };

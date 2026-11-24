@@ -1,3 +1,4 @@
+import { recoveryEvents, type RecoveryEventSource } from './native-recovery-events.js';
 import { isValidEventData, type EventData, type EventKind, type HotRecovery, type RuntimeIdentity, type SessionDto, type SnapshotItem, type StoredEvent } from '@webdcc/protocol';
 import type { NativeEventStore } from './native-events.js';
 import type { NativeProjectionContexts } from './native-projection-context.js';
@@ -18,7 +19,7 @@ function omitted(value: unknown, depth = 0): boolean {
 /** Reconstruct a lost observation, never a writer or native execution result.
  * Incomplete input fails closed: a missing later cancel must not revive an item. */
 export function recoverNativeHot(native: NativeEventStore, contexts: NativeProjectionContexts, session: SessionDto,
-  events: StoredEvent[], options: HotRecoveryOptions = {}): HotSnapshot {
+  events: StoredEvent[] | RecoveryEventSource, options: HotRecoveryOptions = {}): HotSnapshot {
   const maxRecords = options.maxRecords ?? 5000; const maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
   if (!Number.isSafeInteger(maxRecords) || maxRecords < 1 || maxRecords > 5000 || !Number.isSafeInteger(maxBytes) || maxBytes < 4096 || maxBytes > 2 * 1024 * 1024)
     throw new Error('Invalid hot recovery budget');
@@ -28,10 +29,10 @@ export function recoverNativeHot(native: NativeEventStore, contexts: NativeProje
     if (recovery.issues.length < 50) recovery.issues.push({ envelopeId, reason }); else recovery.omittedIssues++;
   };
   const items = new Map<string, SnapshotItem>(); const closed = new Set<string>();
-  const ended = new Set(events.filter(event => event.kind === 'turn.completed' && event.turnId !== null).map(event => event.turnId));
-  const committed = new Map(events.filter(event => event.nativeEnvelopeId !== undefined).map(event => [event.nativeEnvelopeId!, event]));
+  const source = recoveryEvents(events);
+  const ended = new Set<string | null>();
   const boundary = session.conversation?.resetSeq ?? 0;
-  const boundaryEnvelope = events.find(event => event.seq === boundary)?.nativeEnvelopeId ?? 0;
+  const boundaryEnvelope = source.boundaryEnvelope(boundary);
   let after = boundaryEnvelope; let count = 0; let bytes = 0; let relevant = false;
   while (count < maxRecords) {
     const page = native.list(session.id, after, Math.min(500, maxRecords - count) + 1);
@@ -46,7 +47,7 @@ export function recoverNativeHot(native: NativeEventStore, contexts: NativeProje
       // require a separate projection contract and are not inferred here.
       if (row.nativeId !== session.nativeId && row.actorId === null && row.parentToolUseId === null) continue;
       relevant = true;
-      const published = committed.get(row.id);
+      const published = source.publication(row.id);
       if (published !== undefined && published.seq <= boundary) continue;
       if (published?.kind === 'turn.completed') continue;
       if (published !== undefined && row.channel === 'item.complete') { items.delete(key(published.turnId, published.itemKey)); closed.add(key(published.turnId, published.itemKey)); continue; }
@@ -82,7 +83,7 @@ export function recoverNativeHot(native: NativeEventStore, contexts: NativeProje
         if (row.channel === 'item.complete' && (typeof event['kind'] !== 'string' || !isValidEventData(event['kind'] as EventKind, event['data']))) { issue(row.id, 'completion-mapping-invalid'); continue; }
         items.delete(id); closed.add(id); continue;
       }
-      if (context.turnEnded || ended.has(context.turnId) || context.hot?.closed || closed.has(id)) { items.delete(id); continue; }
+      if (context.turnEnded || (ended.has(context.turnId) || source.ended(context.turnId)) || context.hot?.closed || closed.has(id)) { items.delete(id); continue; }
       if (context.hot === undefined) { issue(row.id, 'item-context-missing'); continue; }
       if (row.channel === 'item.start') {
         if (typeof event['kind'] !== 'string' || !isValidEventData(event['kind'] as EventKind, event['data'])) { issue(row.id, 'start-mapping-invalid'); continue; }
@@ -112,7 +113,7 @@ export function recoverNativeHot(native: NativeEventStore, contexts: NativeProje
     recovery.hasMore = false;
   }
   if (count === maxRecords && native.list(session.id, after, 1).length > 0) { recovery.hasMore = true; issue(null, 'recovery-record-limit'); }
-  for (const [id, item] of items) if (ended.has(item.turnId ?? null)) items.delete(id);
+  for (const [id, item] of items) if (ended.has(item.turnId ?? null) || source.ended(item.turnId ?? null)) items.delete(id);
   if (Buffer.byteLength(JSON.stringify([...items.values()])) > maxBytes) issue(null, 'recovery-output-size-limit');
   return { items: recovery.coverage === 'partial' ? [] : [...items.values()],
     ...(relevant || recovery.issues.length > 0 ? { recovery } : {}) };

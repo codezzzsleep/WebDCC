@@ -148,6 +148,7 @@ export interface EventData {
   /** A cumulative diff emitted by an Agent for the current turn. */
   'turn.diff': { changes: FileChangeEntry[]; status?: 'running' | 'completed' | 'failed' };
   'tool.call': { name: string; label?: string; input: unknown; output?: unknown; status: 'running' | 'completed' | 'failed' | 'stopped' | 'paused' | 'pending' | 'unknown'; claudeActor?: ClaudeOutputOrigin; claudeBlock?: ClaudeBlockOrigin;
+    incomplete?: boolean;
     /** The observed native item notification phase, independent of business success. */
     codexItemPhase?: 'started' | 'completed' };
   /** Structured task steps and native Markdown plans have distinct content.

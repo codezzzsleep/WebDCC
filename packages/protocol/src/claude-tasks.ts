@@ -1,5 +1,5 @@
 import type { EventKind, StoredEvent } from './events.js';
-import { claudeBlockOrigin, orderClaudeBlocks, type ClaudeBlockOrigin } from './claude-content.js';
+import { claudeBlockOrigin, isIncompleteClaudeOutput, orderClaudeBlocks, type ClaudeBlockOrigin } from './claude-content.js';
 
 /** The spawning tool, native message and block identify a child output. A run
  * is attached only when the native tool-to-task join is unambiguous. */
@@ -302,7 +302,7 @@ function taskOutput(item: { itemKey: string; kind: EventKind; data: unknown; nat
   }
   const block = claudeBlockOrigin(item);
   return { itemKey: item.itemKey, kind: item.kind, text: output, origin, live, ...(block === undefined ? {} : { claudeBlock: block }),
-    ...(data['incomplete'] === true ? { incomplete: true } : {}) };
+    ...(isIncompleteClaudeOutput(item) ? { incomplete: true } : {}) };
 }
 
 /** Includes previous runs without attributing an ambiguous legacy output to

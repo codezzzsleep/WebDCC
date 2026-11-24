@@ -1,3 +1,4 @@
+import { recoveryEvents, type RecoveryEventSource } from './native-recovery-events.js';
 import { claudeOutputOrigin, type CompletedRecovery, type NativeEnvelopeDetail, type RecoveredCompletion, type RecoveredCompletionKind,
   type RuntimeIdentity, type SessionDto, type StoredEvent } from '@webdcc/protocol';
 import type { NativeEventStore } from './native-events.js';
@@ -13,22 +14,19 @@ const supported = new Set(['assistant.message', 'reasoning', 'command', 'tool.ca
 /** Recover original immutable output in a read model. Original assignments,
  * rather than a timestamp/current input guess, determine public turn identity. */
 export function recoverCompletedSnapshot(native: NativeEventStore, contexts: NativeProjectionContexts, session: SessionDto,
-  events: StoredEvent[], options: CompletedSnapshotOptions = {}): CompletedSnapshot {
+  events: StoredEvent[] | RecoveryEventSource, options: CompletedSnapshotOptions = {}): CompletedSnapshot {
   const maxRecords = options.maxRecords ?? 5000; const maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
   if (!Number.isSafeInteger(maxRecords) || maxRecords < 1 || maxRecords > 5000 || !Number.isSafeInteger(maxBytes) || maxBytes < 4096 || maxBytes > 2 * 1024 * 1024)
     throw new Error('Invalid completed snapshot budget');
   const recovery: CompletedRecovery = { formatVersion: 1, scope: 'immutable-completed-items', coverage: 'complete', throughEnvelopeId: 0,
     hasMore: false, issues: [], omittedIssues: 0, conflicts: [] };
   const issue = (id: number | null, reason: string) => { recovery.coverage = 'partial'; if (recovery.issues.length < 50) recovery.issues.push({ envelopeId: id, reason }); else recovery.omittedIssues++; };
-  const published = new Set(events.flatMap(event => event.nativeEnvelopeId === undefined ? [] : [event.nativeEnvelopeId]));
-  const semantic = new Map<string, StoredEvent[]>(); const rawCache = new Map<number, NativeEnvelopeDetail | undefined>();
-  const semanticKey = (turnId: string | null, kind: string, itemKey: string) => JSON.stringify([turnId, kind, itemKey]);
-  for (const event of events) if (event.nativeEnvelopeId !== undefined) {
-    const id = semanticKey(event.turnId, event.kind, event.itemKey); const values = semantic.get(id) ?? []; values.push(event); semantic.set(id, values);
-  }
+  const source = recoveryEvents(events);
+  const rawCache = new Map<number, NativeEnvelopeDetail | undefined>();
+  let witnesses = 0;
   const byId = new Map<string, RecoveredCompletion>(); const scopes = new Map<string, Set<string>>();
   const boundary = session.conversation?.resetSeq ?? 0;
-  let after = events.find(event => event.seq === boundary)?.nativeEnvelopeId ?? 0; let count = 0; let bytes = 0; let relevant = false;
+  let after = source.boundaryEnvelope(boundary); let count = 0; let bytes = 0; let relevant = false;
   while (count < maxRecords) {
     const size = Math.min(500, maxRecords - count); const page = native.list(session.id, after, size + 1);
     if (page.length === 0) break;
@@ -38,7 +36,7 @@ export function recoverCompletedSnapshot(native: NativeEventStore, contexts: Nat
         || !['accepted', 'duplicate-projection'].includes(row.disposition)) continue;
       if (options.identity !== undefined && (row.ownerId !== options.identity.ownerId || row.generation !== options.identity.generation)) continue;
       relevant = true;
-      if (published.has(row.id)) continue; // This reader covers missing semantic publications.
+      if (source.publication(row.id) !== undefined) continue; // This reader covers missing semantic publications.
       if (row.agent !== session.agent || !row.ownerId || !row.nativeId || row.nativeId !== session.nativeId) { issue(row.id, 'completed-source-identity-not-supported'); continue; }
       let raw: NativeEnvelopeDetail | undefined;
       try { raw = native.get(row.id); } catch { issue(row.id, 'completed-source-payload-invalid'); continue; }
@@ -71,11 +69,15 @@ export function recoverCompletedSnapshot(native: NativeEventStore, contexts: Nat
         ...(Object.hasOwn(payload, 'native') ? { native: candidate.native } : {}) });
       const versions = scopes.get(scopeId) ?? new Set<string>(); versions.add(projectionId); scopes.set(scopeId, versions);
       let represented = false;
-      for (const event of semantic.get(semanticKey(context.turnId, candidate.kind, candidate.itemKey)) ?? []) {
-        let known = rawCache.get(event.nativeEnvelopeId!);
-        if (!rawCache.has(event.nativeEnvelopeId!)) {
-          try { known = native.get(event.nativeEnvelopeId!); } catch { /* Unverifiable bytes cannot hide a retained result. */ }
-          rawCache.set(event.nativeEnvelopeId!, known);
+      const remaining = maxRecords - witnesses;
+      const envelopes = source.semanticEnvelopes(context.turnId, candidate.kind, candidate.itemKey, remaining + 1);
+      if (envelopes.length > remaining) { issue(row.id, 'completed-semantic-witness-limit'); recovery.hasMore = true; break; }
+      for (const envelopeId of envelopes) {
+        witnesses++;
+        let known = rawCache.get(envelopeId);
+        if (!rawCache.has(envelopeId)) {
+          try { known = native.get(envelopeId); } catch { /* Unverifiable bytes cannot hide a retained result. */ }
+          rawCache.set(envelopeId, known);
           if (known !== undefined) bytes += Buffer.byteLength(JSON.stringify(known));
         }
         if (bytes > maxBytes) { issue(row.id, 'completed-scan-size-limit'); recovery.hasMore = true; break; }

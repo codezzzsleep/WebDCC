@@ -310,18 +310,18 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   /** Replay executes the same SDK and permission handlers without a query. */
-  static replay(sessionId = 'replay'): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: ClaudeAdapter; decisions: PermissionResult[] } {
+  static replay(sessionId = 'replay', queryContext?: { queryId: string; generation: number }): { feed: (frame: TraceFrame) => AdapterEvent[]; adapter: ClaudeAdapter; decisions: PermissionResult[] } {
     const adapter = new ClaudeAdapter();
     const decisions: PermissionResult[] = [];
     const runtime: SessionRuntime = {
-      instanceId: `replay:${sessionId}`,
-      generation: 1, permissionRequestIds: new Set(),
+      instanceId: queryContext?.queryId ?? `replay:${sessionId}`,
+      generation: queryContext?.generation ?? 1, permissionRequestIds: new Set(),
       stdio: { enabled: false, failed: false },
       nativeOptions: {}, state: new ClaudeNativeState(), capabilities: [], nativePending: new Map(), questionGroups: new Map(),
       nativeId: '', launchOpts: { sessionId, cwd: '.', providerId: null }, input: createInputQueue(), q: undefined as unknown as Query,
       pump: Promise.resolve(), turnActive: false, backgroundTasks: new Map(), hasBackgroundSnapshot: false, taskStopAffordance: false, turnStartedAt: 0, generationStartedAt: null, generationMs: 0,
       pending: new Map(), toolItems: new Map(), outputOrigins: new Map(),
-      slashCommands: [], terminalSlashCommands: [], content: new ClaudeContentReducer(1), ready: Promise.resolve(), frameSeq: 0,
+      slashCommands: [], terminalSlashCommands: [], content: new ClaudeContentReducer(queryContext?.generation ?? 1), ready: Promise.resolve(), frameSeq: 0,
     };
     adapter.sessions.set(sessionId, runtime);
     runtime.state.taskProjection.runtime({ id: runtime.instanceId, state: 'started' });
@@ -330,7 +330,15 @@ export class ClaudeAdapter implements AgentAdapter {
     return { adapter, decisions, feed(frame) {
       events = []; adapter.replayTime = frame.t; runtime.frameSeq = frame.i;
       const raw = frame.frame as Record<string, unknown>;
-      if (frame.dir === 'in' && frame.ch === 'sdk') adapter.onSdkMessage(sessionId, raw as unknown as SDKMessage);
+      if (frame.dir === 'in' && frame.ch === 'claude-query-runtime') {
+        if (typeof raw['queryId'] !== 'string' || raw['queryId'] === '' || !Number.isSafeInteger(raw['generation']) || Number(raw['generation']) < 1) throw new Error('Invalid Claude replay query context');
+        if (runtime.instanceId !== raw['queryId']) {
+          runtime.instanceId = raw['queryId']; runtime.generation = Number(raw['generation']);
+          runtime.content = new ClaudeContentReducer(runtime.generation);
+          runtime.toolItems.clear(); runtime.outputOrigins.clear();
+          runtime.state.taskProjection.runtime({ id: runtime.instanceId, state: 'started' });
+        }
+      } else if (frame.dir === 'in' && frame.ch === 'sdk') adapter.onSdkMessage(sessionId, raw as unknown as SDKMessage);
       else if (frame.dir === 'in' && frame.ch === 'canUseTool') {
         if (Number.isSafeInteger(raw['queryGeneration']) && Number(raw['queryGeneration']) > 0) runtime.generation = Number(raw['queryGeneration']);
         void adapter.handleCanUseTool(sessionId, String(raw['toolName'] ?? raw['tool'] ?? ''), (raw['input'] ?? {}) as Record<string, unknown>, {
@@ -355,7 +363,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const signal = { id: runtime.instanceId, state };
     runtime.state.taskProjection.runtime(signal);
     this.emit(sessionId, { type: 'item.complete', itemKey: `claude-runtime:${signal.id}:${state}`, kind: 'internal',
-      data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: signal }, scope: 'session' });
+      data: { nativeType: 'claude-query-runtime', claudeTaskRuntime: signal, claudeQueryGeneration: runtime.generation }, scope: 'session' });
   }
 
   bindRuntime(sessionId: string, identity: NonNullable<CreateOpts['runtime']>): void {
@@ -1354,6 +1362,9 @@ export class ClaudeAdapter implements AgentAdapter {
           const itemKey = `${identity.itemKey}-tool`;
           const nativeData = { ...data, claudeBlock: { ...identity.claudeBlock, queryId: runtime.instanceId },
             ...(identity.claudeActor === undefined ? {} : { claudeActor: identity.claudeActor }) };
+          if (message.aborted === true) return [{ type: 'item.complete', itemKey, kind: 'tool.call',
+            data: { name, input: rawInput, status: 'unknown', incomplete: true, claudeBlock: nativeData.claudeBlock,
+              ...(identity.claudeActor === undefined ? {} : { claudeActor: identity.claudeActor }) }, native: message }];
           const target = JSON.stringify([message.session_id, message.parent_tool_use_id ?? null, toolId]);
           runtime.toolItems.set(target, [...runtime.toolItems.get(target) ?? [], { itemKey, toolId, kind, data: nativeData, name, input: rawInput,
             nativeSessionId: message.session_id, parentToolUseId: message.parent_tool_use_id ?? null }]);
