@@ -232,6 +232,8 @@ try {
   if (agent === 'dsh') {
     const adapter = server.manager.adaptersList().find(adapter => adapter.id === 'dsh');
     const host = await adapter.ensureSidecar();
+    const identity = await adapter.hostIdentity();
+    if (selected.nativeVersion !== undefined) assert.equal(identity.version, selected.nativeVersion, 'Official Host version differs from the admitted native target');
     let description = await host.rpc('settings/describe', {});
     const llm = description.namespaces.find(namespace => namespace.ns === 'llm-pi-ai');
     await host.rpc('settings/mutate', { ns: llm.ns, expectedRevision: llm.revision, ops: [{ op: 'set', path: ['providers', 'acceptance-real'], value: {
