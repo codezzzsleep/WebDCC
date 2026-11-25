@@ -2530,7 +2530,7 @@
           "evidenceScope": "Official Codex0.172 live Skill/fork context continuation with2modelrequests; official Claude SDK0.3.322/CLI2.1.322 with controlled native transcript; official DSHrc5 exact event-prefix fork without model input. Preserve failed/empty-history boundaries.",
           "remaining": "Full conversation rollback, compact/rewind authoritative projection and complete target-platform acceptance remain outside this fork delivery.",
           "sourceBase": "1ab4a18996ea33daf736663ba203e351f5d533b9",
-          "implementation": "source-ready; reviewed PR and exact-source gate required",
+          "implementation": "implemented; source acceptance is recorded with the delivery PR",
           "verificationDocument": "docs/native-skill-fork-web.md",
           "deployment": "not performed by this source workflow",
           "fileChanges": "Existing typed adapter/protocol/server/web boundaries extended; new focused source/browser tests; no database migration or native schema changes."
@@ -2926,7 +2926,7 @@
           "evidenceScope": "Official Codex0.172 skills/list and actual live first Skill invocation; no injected skill execution engine. Current-source controlled HTTP/WS/Chromium tests cover stale workspace catalog and disabled skills.",
           "remaining": "Complete Hooks/loading diagnostics and all native command outcomes remain separate; Claude/DSH retain native skill configuration/commands.",
           "sourceBase": "1ab4a18996ea33daf736663ba203e351f5d533b9",
-          "implementation": "source-ready; reviewed PR and exact-source gate required",
+          "implementation": "implemented; source acceptance is recorded with the delivery PR",
           "verificationDocument": "docs/native-skill-fork-web.md",
           "deployment": "not performed by this source workflow",
           "fileChanges": "Existing typed adapter/protocol/server/web boundaries extended; new focused source/browser tests; no database migration or native schema changes."

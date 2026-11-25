@@ -6,7 +6,7 @@ import type { RuntimeIdentity } from './runtime.js';
 import type { NativeFrameSink } from './native-events.js';
 import type { NativeObservation } from './native-observation.js';
 import type { NativeProcessCompletion, NativeProcessDelta, NativeProcessStart } from './native-controls.js';
-import type { InputSkillPart, ResolvedInputContent } from './input.js';
+import type { InputSkillPart, InputSkillOption, ResolvedInputContent } from './input.js';
 import type { SlashCommand, SlashCommandPreview, SlashControlResult } from './slash.js';
 import type { CodexSubagentView } from './subagents.js';
 import type { DshSubagentCatalog, DshSubagentHistory, DshSubagentHistoryOptions, DshSubagentReadTarget, DshSubagentControlTarget, DshSubagentInterruptReceipt,
@@ -184,7 +184,7 @@ export interface AgentAdapter {
   validateInput?(sessionId: string, input: UserInput): Promise<void>;
   resolveInputSkill?(sessionId: string, selection: InputSkillPart): Promise<{ path: string }>;
   /** Read native skill metadata without creating/resuming a writer or sending input. */
-  inputSkills?(sessionId?: string, cwd?: string): Promise<import('./input.js').InputSkillOption[]>;
+  inputSkills?(sessionId?: string, cwd?: string): Promise<InputSkillOption[]>;
   steer?(sessionId: string, input: UserInput): Promise<void>;
   interrupt(sessionId: string): Promise<void>;
   respond(sessionId: string, d: ApprovalDecision): Promise<void | NativeInteractionSubmission>;

@@ -19,6 +19,7 @@ import type {
   NativeActionResponse,
   NativeForkSession,
   InputContent,
+  InputSkillCatalog,
   ResolvedInputPart,
   CodexInputModeCatalog,
   SlashCommand,
@@ -1366,7 +1367,7 @@ export class SessionManager {
     return runtime.adapter.slashCommands?.(sessionId) ?? [];
   }
 
-  async inputSkillCatalog(agent: string, workspaceId: string, sessionId?: string): Promise<import('@webdcc/protocol').InputSkillCatalog> {
+  async inputSkillCatalog(agent: string, workspaceId: string, sessionId?: string): Promise<InputSkillCatalog> {
     const workspace = this.requireWorkspace(workspaceId);
     const session = sessionId === undefined ? undefined : this.requireSession(sessionId);
     if (session !== undefined && (session.agent !== agent || session.workspaceId !== workspaceId)) throw this.nativeControlRejected('技能目录的 Agent 或工作区不匹配', 400);

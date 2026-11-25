@@ -24,6 +24,7 @@ import type {
   ClaudeTaskRuntime,
   ClaudeQueryConfiguration,
   ClaudeQueryOptions,
+  NativeForkSession,
 } from '@webdcc/protocol';
 import {
   query,
@@ -1053,7 +1054,7 @@ export class ClaudeAdapter implements AgentAdapter {
             ...(runtime.launchOpts.model === undefined ? {} : { model: runtime.launchOpts.model }),
             ...(runtime.launchOpts.reasoningEffort === undefined ? {} : { reasoningEffort: runtime.launchOpts.reasoningEffort }),
             ...(runtime.launchOpts.accessMode === undefined ? {} : { accessMode: runtime.launchOpts.accessMode }),
-            ...(action.title === undefined ? {} : { title: action.title }), claudeConfiguration: runtime.configuration } satisfies import('@webdcc/protocol').NativeForkSession };
+            ...(action.title === undefined ? {} : { title: action.title }), claudeConfiguration: runtime.configuration } satisfies NativeForkSession };
         }
         return result;
       case 'mcp-reconnect': result = await runtime.q.reconnectMcpServer(action.serverName); break;

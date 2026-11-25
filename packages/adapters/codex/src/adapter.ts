@@ -16,6 +16,7 @@ import type {
   ProviderRuntimeConfig,
   UserInput,
   InputSkillPart,
+  InputSkillOption,
   TraceSink,
   TraceFrame,
   AccessModeOption,
@@ -1103,7 +1104,7 @@ export class CodexAdapter implements AgentAdapter {
       return { modes: result.data.flatMap(preset => preset.mode === 'plan' || preset.mode === 'default' ? [{ id: preset.mode, label: preset.mode === 'plan' ? '计划' : '默认' }] : []), observedMode: null };
     } finally { await rpc.kill(); }
   }
-  async inputSkills(sessionId?: string, cwd?: string): Promise<import('@webdcc/protocol').InputSkillOption[]> {
+  async inputSkills(sessionId?: string, cwd?: string): Promise<InputSkillOption[]> {
     const runtime = sessionId === undefined ? undefined : this.sessions.get(sessionId);
     const directory = cwd ?? runtime?.cwd ?? process.cwd();
     if (runtime !== undefined && (runtime.cwd !== directory || runtime.rpc.isClosed)) throw unsupportedCodexInput('原生技能目录的会话或工作区已变化');
