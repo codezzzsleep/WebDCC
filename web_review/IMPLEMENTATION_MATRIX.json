@@ -2511,7 +2511,30 @@
           "rewind dry-run列出可还原文件，未跟踪文件保持原生规定行为；失败不显示全部恢复。",
           "compact进度/完成/失败可见，后续提问与原生配置和上下文连续。"
         ],
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "personalWebWorkflow20261125": {
+          "scope": "Official native fork result to a separately continuable Web session for Codex, Claude Code and DSH; source parent/draft/queue preserved; atomic association/receipt and passive recovery.",
+          "plannedFiles": [
+            "packages/protocol/src/native-controls.ts",
+            "packages/protocol/src/api.ts",
+            "packages/adapters/codex/src/native.ts",
+            "packages/adapters/codex/src/native-results.ts",
+            "packages/adapters/claude/src/adapter.ts",
+            "packages/adapters/dsh/src/adapter.ts",
+            "packages/server/src/manager.ts",
+            "packages/server/src/native-actions.ts",
+            "packages/web/src/components/NativeControls.tsx",
+            "packages/web/src/components/SessionHeader.tsx",
+            "packages/web/src/lib/store.ts"
+          ],
+          "evidenceScope": "Official Codex0.172 live Skill/fork context continuation with2modelrequests; official Claude SDK0.3.322/CLI2.1.322 with controlled native transcript; official DSHrc5 exact event-prefix fork without model input. Preserve failed/empty-history boundaries.",
+          "remaining": "Full conversation rollback, compact/rewind authoritative projection and complete target-platform acceptance remain outside this fork delivery.",
+          "sourceBase": "1ab4a18996ea33daf736663ba203e351f5d533b9",
+          "implementation": "implemented; source acceptance is recorded with the delivery PR",
+          "verificationDocument": "docs/native-skill-fork-web.md",
+          "deployment": "not performed by this source workflow",
+          "fileChanges": "Existing typed adapter/protocol/server/web boundaries extended; new focused source/browser tests; no database migration or native schema changes."
+        }
       },
       "dependencyIds": [
         "NP-20",
@@ -2888,7 +2911,26 @@
           "带附件命令和返回正文保留，多个输入行不被截断。",
           "现有用户hooks/skills仍生效；刷新catalog不注入平台自定义能力。"
         ],
-        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim."
+        "latestScope": "2026-11-14 parallel native control integration; finite typed controls, truthful receipt/uncertain states, isolated native verification. No deployment or complete capability coverage claim.",
+        "personalWebWorkflow20261125": {
+          "scope": "Codex native Skill selection before session creation, preserving first user input and native skill identity; native metadata read bound to Agent/workspace/current runtime.",
+          "plannedFiles": [
+            "packages/protocol/src/adapter.ts",
+            "packages/protocol/src/input.ts",
+            "packages/adapters/codex/src/adapter.ts",
+            "packages/server/src/manager.ts",
+            "packages/server/src/rest.ts",
+            "packages/web/src/components/Composer.tsx",
+            "packages/web/src/lib/api.ts"
+          ],
+          "evidenceScope": "Official Codex0.172 skills/list and actual live first Skill invocation; no injected skill execution engine. Current-source controlled HTTP/WS/Chromium tests cover stale workspace catalog and disabled skills.",
+          "remaining": "Complete Hooks/loading diagnostics and all native command outcomes remain separate; Claude/DSH retain native skill configuration/commands.",
+          "sourceBase": "1ab4a18996ea33daf736663ba203e351f5d533b9",
+          "implementation": "implemented; source acceptance is recorded with the delivery PR",
+          "verificationDocument": "docs/native-skill-fork-web.md",
+          "deployment": "not performed by this source workflow",
+          "fileChanges": "Existing typed adapter/protocol/server/web boundaries extended; new focused source/browser tests; no database migration or native schema changes."
+        }
       },
       "dependencyIds": [
         "NP-01",

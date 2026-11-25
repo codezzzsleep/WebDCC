@@ -7,6 +7,17 @@ export interface InputAttachmentPart {
   type: 'image' | 'file' | 'audio'; fileId: string; name?: string; mime?: string; sha256?: string; size?: number;
 }
 export interface InputSkillPart { type: 'skill'; skillId: string; name: string }
+export interface InputSkillOption { skillId: string; name: string; description: string; enabled: boolean }
+export interface InputSkillCatalog {
+  agent: string;
+  workspaceId: string;
+  sessionId?: string;
+  scope: 'workspace-preview' | 'current-runtime';
+  status: 'ready' | 'empty' | 'error' | 'unavailable';
+  skills: InputSkillOption[];
+  revision: string;
+  reason?: string;
+}
 export interface InputResourcePart { type: 'resource'; uri: string; server?: string; name?: string }
 export type InputPart = InputTextPart | InputAttachmentPart | InputSkillPart | InputResourcePart;
 export interface InputContent { version: 1; parts: InputPart[]; collaborationMode?: CodexInputMode }

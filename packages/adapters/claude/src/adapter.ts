@@ -24,6 +24,7 @@ import type {
   ClaudeTaskRuntime,
   ClaudeQueryConfiguration,
   ClaudeQueryOptions,
+  NativeForkSession,
 } from '@webdcc/protocol';
 import {
   query,
@@ -646,9 +647,12 @@ export class ClaudeAdapter implements AgentAdapter {
   async resume(opts: CreateOpts & { nativeId: string }): Promise<void> {
     if (this.sessions.has(opts.sessionId)) throw nativeError('Claude 会话已存在', 409);
     const restored = opts.restoreNativeHistory === true ? undefined : opts.restoreClaudeConfiguration;
-    const nativeOptions = restored === undefined ? {} : this.restoreConfiguration(opts, restored);
+    const fork = restored === undefined ? opts.restoreClaudeForkConfiguration : undefined;
+    if (fork !== undefined && (fork.nativeSessionId !== opts.nativeId || !fork.source.nativeSessionId || fork.source.nativeSessionId === opts.nativeId)) throw nativeValidationError('Claude 分叉配置不属于此原生会话', 409);
+    const nativeOptions = restored !== undefined ? this.restoreConfiguration(opts, restored)
+      : fork === undefined ? {} : this.restoreConfiguration({ ...opts, nativeId: fork.source.nativeSessionId! }, fork.source);
     const runtime = this.startQuery(opts.sessionId, opts, opts.nativeId, nativeOptions);
-    if (restored !== undefined) runtime.restoredFromQueryId = restored.queryId;
+    if (restored !== undefined || fork !== undefined) runtime.restoredFromQueryId = (restored ?? fork!.source).queryId;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([runtime.ready,
@@ -656,7 +660,7 @@ export class ClaudeAdapter implements AgentAdapter {
         new Promise<void>(resolve => { timer = setTimeout(resolve, 3000); }),
       ]);
       if (this.sessions.get(opts.sessionId) !== runtime || runtime.state.transport !== 'live') throw nativeError('Claude 初始化连接已断开', 503);
-      if (restored !== undefined) {
+      if (restored !== undefined || fork !== undefined) {
         const initialized = await runtime.q.initializationResult();
         if (this.sessions.get(opts.sessionId) !== runtime || runtime.state.transport !== 'live') throw nativeError('Claude 配置恢复实例已替换', 409);
         if (initialized.claude_code_version !== PINNED_CLI_VERSION) throw nativeError('Claude 配置恢复的原生版本不匹配', 503);
@@ -1029,6 +1033,7 @@ export class ClaudeAdapter implements AgentAdapter {
         result = await runtime.q.rewindFiles(action.messageId, { dryRun: action.dryRun }); break;
       case 'rename': case 'tag': case 'fork': case 'delete':
         if (runtime.nativeId === '') throw nativeValidationError('原生会话 ID 尚未建立', 409);
+        if (action.type === 'fork') this.acceptConfiguration(sessionId, runtime, initialized.claude_code_version);
         if (action.type === 'delete') {
           if (runtime.turnActive || runtime.backgroundTasks.size > 0 || runtime.pending.size > 0 || [...runtime.nativePending.values()].some(pending => pending.status === 'pending')) throw nativeValidationError('原生会话仍有工作，不能删除', 409);
           if (action.confirmNativeId !== runtime.nativeId) throw nativeValidationError('删除确认目标不一致');
@@ -1044,7 +1049,12 @@ export class ClaudeAdapter implements AgentAdapter {
           const fork = record(result);
           if (typeof fork['sessionId'] !== 'string') throw nativeError('Claude fork 返回缺少原生 sessionId', 502);
           // Preserve the SDK result and expose its real native identity through the durable receipt contract.
-          return { ...fork, id: fork['sessionId'] };
+          current(true);
+          return { ...fork, id: fork['sessionId'], nativeFork: { sourceNativeId: runtime.nativeId, nativeId: fork['sessionId'], cwd: runtime.launchOpts.cwd,
+            ...(runtime.launchOpts.model === undefined ? {} : { model: runtime.launchOpts.model }),
+            ...(runtime.launchOpts.reasoningEffort === undefined ? {} : { reasoningEffort: runtime.launchOpts.reasoningEffort }),
+            ...(runtime.launchOpts.accessMode === undefined ? {} : { accessMode: runtime.launchOpts.accessMode }),
+            ...(action.title === undefined ? {} : { title: action.title }), claudeConfiguration: runtime.configuration } satisfies NativeForkSession };
         }
         return result;
       case 'mcp-reconnect': result = await runtime.q.reconnectMcpServer(action.serverName); break;

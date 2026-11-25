@@ -384,6 +384,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return manager.previewSlashCommands(agent, query.workspaceId);
   });
 
+  app.get('/api/agents/:agent/input-skills', request => {
+    const { agent } = request.params as { agent: string };
+    const query = request.query as { workspaceId?: string; sessionId?: string };
+    if (typeof query.workspaceId !== 'string' || query.workspaceId === '') throw badRequest('请选择技能所在的工作区');
+    return manager.inputSkillCatalog(agent, query.workspaceId, query.sessionId);
+  });
+
   app.post('/api/sessions/:id/slash-commands', async request => {
     const { id } = request.params as { id: string };
     return manager.executeSlashControl(id, request.body as SlashControlRequest);

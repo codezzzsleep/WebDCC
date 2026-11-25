@@ -42,10 +42,10 @@ export interface SessionDto {
   reasoningEffort?: string;
   accessMode?: string;
   permissions?: PermissionState;
-  /** 接续会话的上一棒（"在另一个 Agent 中继续"） */
+  /** 原生分叉或接续会话的来源。 */
   parentId?: string;
   /** Manual handoffs are children; Watchdog recoveries stay at their source's level. */
-  handoffKind?: 'manual' | 'watchdog';
+  handoffKind?: 'manual' | 'watchdog' | 'native-fork';
   status: 'idle' | 'running' | 'waiting' | 'error';
   pinned: boolean;
   archived: boolean;

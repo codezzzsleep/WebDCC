@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { dshCatalogFingerprint, dshCatalogForRevision } from './catalog-revision.js';
 import type {
   AdapterEvent,
   AgentAdapter,
@@ -17,6 +18,7 @@ import type {
   TraceSink,
   TraceFrame,
   NativeHistoryRecord,
+  NativeForkSession,
   AnswerSubmission,
   AccessModeOption,
   NativeInteractionSubmission,
@@ -264,6 +266,7 @@ interface PendingInteraction {
 }
 
 interface SessionRuntime {
+  cwd?: string;
   identity?: CreateOpts['runtime'];
   envelopeId?: number;
   nativeId: string;
@@ -511,8 +514,9 @@ export class DshAdapter implements AgentAdapter {
     const names = Object.keys(calls);
     const results = await Promise.allSettled(names.map(name => calls[name]!()));
     if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw dshNativeError('DSH runtime was replaced', 409);
-    const catalog = Object.fromEntries(results.map((result, index) => [names[index]!, result.status === 'fulfilled' ? dshPublicValue(result.value) : { unavailable: true, reason: 'Native endpoint is unavailable in this Host composition' }]));
-    return { ...catalog, revision: this.nativeRevision(runtime), nativeId: runtime.nativeId, workspaceId: runtime.workspaceId, host: state.host, selected: state.selected, workspaces: structuredClone(this.workspaceState.snapshot),
+    const raw = Object.fromEntries(results.map((result, index) => [names[index]!, result.status === 'fulfilled' ? result.value : { unavailable: true, reason: 'Native endpoint is unavailable in this Host composition' }]));
+    const catalog = Object.fromEntries(Object.entries(raw).map(([name, value]) => [name, dshPublicValue(value)]));
+    const snapshot = { ...catalog, revision: this.nativeRevision(runtime), nativeId: runtime.nativeId, workspaceId: runtime.workspaceId, host: state.host, selected: state.selected, workspaces: structuredClone(this.workspaceState.snapshot),
       contract: dshRuntimeSummary(client.nativeVersion),
       actions: dshNativeActionMetadata(state.host.status === 'verified', { ...catalog, session: { state: runtime.controlState, projections: runtime.projections } }, client.nativeVersion),
       controls: state.host.status === 'verified' ? DSH_NATIVE_CONTROLS : [],
@@ -523,6 +527,14 @@ export class DshAdapter implements AgentAdapter {
         rewind: 'no frozen native rewind endpoint; fork preserves an exact event prefix', speech: 'native-surface-and-device-required',
         sharing: 'native-surface-and-publish-conditions-required' },
     };
+    // Secret-field names in a schema dictionary are references, not secret
+    // values. Compare the intact graph before public redaction obscures them.
+    return { ...snapshot, catalogFingerprint: dshCatalogFingerprint({ ...snapshot, settings: raw['settings'] }) };
+  }
+
+  nativeCatalogForRevision(catalog: unknown): unknown {
+    const fingerprint = catalog !== null && typeof catalog === 'object' && !Array.isArray(catalog) ? (catalog as Record<string, unknown>)['catalogFingerprint'] : undefined;
+    return typeof fingerprint === 'string' && /^[0-9a-f]{64}$/.test(fingerprint) ? fingerprint : dshCatalogForRevision(catalog);
   }
 
   async executeNativeControl(sessionId: string, value: unknown): Promise<unknown> {
@@ -598,10 +610,23 @@ export class DshAdapter implements AgentAdapter {
         const outcome = result as { result?: { kind?: string; text?: string } };
         if (outcome.result?.kind !== 'success') throw dshNativeError(outcome.result?.text ?? 'Native compact command failed', 409);
       }
+      let nativeFork: NativeForkSession | undefined;
+      if (action.type === 'fork') {
+        const forked = result as { sessionId?: unknown };
+        if (typeof forked.sessionId !== 'string' || !forked.sessionId || runtime.cwd === undefined) throw dshNativeError('Native fork identity or source directory is unconfirmed', 502);
+        // An earlier event prefix can retain a different model/permission
+        // selection from the source's current one. Read the actual child.
+        const projection = await this.call<{ values?: Record<string, unknown> }>(client, 'session/projections', { request: { sessionId: forked.sessionId } }, sessionId).catch(() => undefined);
+        if (this.sessions.get(sessionId) !== runtime || this.client !== client) throw dshNativeError('Native fork belongs to a replaced Host or source runtime', 409);
+        const selected = projectedModelSelection(projection?.values?.['modelSelection']);
+        const model = selected === undefined ? null : this.modelPublicIds.get(JSON.stringify([selected.provider, selected.model])) ?? null;
+        nativeFork = { sourceNativeId: runtime.nativeId, nativeId: forked.sessionId, cwd: runtime.cwd, model,
+          reasoningEffort: selected?.reasoningEffort ?? null, accessMode: 'inherit' };
+      }
       // A confirmed mutation followed by a read failure must not invite the
       // browser to repeat its external effect. Preserve its receipt separately.
       const refreshed = await this.nativeState(sessionId).catch(() => ({ unavailable: true, reason: 'Native action succeeded; state refresh is unavailable' }));
-      return { result: dshPublicValue(result), nativeId: runtime.nativeId, state: refreshed };
+      return { result: dshPublicValue(result), nativeId: runtime.nativeId, state: refreshed, ...(nativeFork === undefined ? {} : { nativeFork }) };
     } catch (error) {
       if (nativeDispatched) throw error;
       const rejection = error instanceof Error ? error : dshNativeError('DSH control was rejected before dispatch');
@@ -1436,6 +1461,7 @@ export class DshAdapter implements AgentAdapter {
     }, opts.sessionId);
     const runtime: SessionRuntime = {
       nativeId: created.sessionId,
+      cwd: opts.cwd,
       identity: opts.runtime,
       workspaceId: workspace.workspace.workspaceId,
       ...(opts.model === undefined ? {} : { model: opts.model }),
@@ -1482,6 +1508,7 @@ export class DshAdapter implements AgentAdapter {
     }, opts.sessionId);
     const runtime: SessionRuntime = {
       nativeId: opts.nativeId,
+      cwd: opts.cwd,
       identity: opts.runtime,
       workspaceId: workspace.workspace.workspaceId,
       ...(opts.model === undefined ? {} : { model: opts.model }),

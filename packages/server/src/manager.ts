@@ -17,7 +17,9 @@ import type {
   NativeControlSnapshot,
   NativeActionRequest,
   NativeActionResponse,
+  NativeForkSession,
   InputContent,
+  InputSkillCatalog,
   ResolvedInputPart,
   CodexInputModeCatalog,
   SlashCommand,
@@ -42,9 +44,10 @@ import type {
 } from '@webdcc/protocol';
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { isAbsolute, resolve } from 'node:path';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
-import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents, currentClaudeConfiguration } from '@webdcc/protocol';
+import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents, currentClaudeConfiguration, isClaudeQueryConfiguration } from '@webdcc/protocol';
 import { TurnTracker, type TurnAssignment } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -237,6 +240,15 @@ export class SessionManager {
       const recovery = this.claudeConfiguration(session.id);
       if (recovery.state === 'unavailable') throw this.nativeControlRejected(recovery.reason);
       if (recovery.state === 'accepted') opts = { ...opts, restoreClaudeConfiguration: recovery.configuration };
+      else if (session.handoffKind === 'native-fork') {
+        const data = this.store.allEvents(session.id).find(event => event.kind === 'internal' && (event.data as { nativeType?: string }).nativeType === 'native/session-fork')?.data as
+          { nativeFork?: { nativeId: string; sourceNativeId: string; claudeConfiguration?: unknown } } | undefined;
+        const fork = data?.nativeFork;
+        if (fork?.nativeId === session.nativeId && fork.claudeConfiguration !== undefined) {
+          if (!isClaudeQueryConfiguration(fork.claudeConfiguration) || fork.claudeConfiguration.nativeSessionId !== fork.sourceNativeId) throw this.nativeControlRejected('分叉会话的原生配置来源无效，请核对原生设置');
+          opts = { ...opts, restoreClaudeForkConfiguration: { nativeSessionId: session.nativeId, source: fork.claudeConfiguration } };
+        }
+      }
     }
     const runtime = this.runtimes.get(session.id);
     if (runtime === undefined) throw new Error('原生实例尚未绑定运行身份');
@@ -408,7 +420,7 @@ export class SessionManager {
     const catalog = await runtime.adapter.nativeCatalog?.(sessionId);
     this.assertOwner(runtime);
     return { sessionId, agent: session.agent as AgentId, nativeId: session.nativeId ?? null, runtime: runtime.identity,
-      revision: payloadHash({ runtime: runtime.identity, state, catalog }), state, ...(!includeCatalog || catalog === undefined ? {} : { catalog }) };
+      revision: payloadHash({ runtime: runtime.identity, state, catalog: runtime.adapter.nativeCatalogForRevision?.(catalog) ?? catalog }), state, ...(!includeCatalog || catalog === undefined ? {} : { catalog }) };
   }
 
   async executeNativeControl(sessionId: string, request: NativeActionRequest): Promise<NativeActionResponse> {
@@ -420,6 +432,8 @@ export class SessionManager {
         ? (snapshot.state as { revision?: string }).revision : undefined;
       if (snapshot.revision !== request.revision && taskQueryRevision !== request.revision) throw this.nativeControlRejected('原生状态已变化，请刷新核对后重新操作');
       const runtime = this.runtimes.get(sessionId)!;
+      const source = this.requireSession(sessionId);
+      const sourceCwd = this.requireWorkspace(source.workspaceId).path;
       if (runtime.adapter.executeNativeControl === undefined) throw this.nativeControlRejected('此 Agent 未公开该控制', 501);
       const state = snapshot.state as { revision?: string };
       const action = runtime.adapter.id === 'dsh' ? { ...request.action, revision: state.revision } : request.action;
@@ -440,6 +454,7 @@ export class SessionManager {
       // Native delete may intentionally dispose the runtime. Other operations
       // must still belong to the same writer after the awaited native result.
       if (action.type !== 'delete' && action.type !== 'archive') this.assertOwner(runtime);
+      if (action.type === 'fork') this.linkNativeFork(source, sourceCwd, runtime, request.commandId, result);
       if (action.type === 'delete' || action.type === 'archive') {
         await this.dispose(sessionId);
         this.updateSessionAndFeed(sessionId, { archived: true }, { archived: true });
@@ -448,6 +463,38 @@ export class SessionManager {
       if (action.type === 'effort' && typeof action['effort'] === 'string') this.updateSessionAndFeed(sessionId, { reasoningEffort: action['effort'] }, { reasoningEffort: action['effort'] });
       return result;
     }));
+  }
+
+  private linkNativeFork(source: SessionDto, sourceCwd: string, runtime: Runtime, commandId: string, result: unknown): void {
+    const fork = result !== null && typeof result === 'object' ? (result as { nativeFork?: NativeForkSession }).nativeFork : undefined;
+    const uncertain = (): Error => Object.assign(new Error('原生分叉已调用，但新身份、工作区或配置关联未确认；请查询此命令，勿重复分叉'), { statusCode: 409 });
+    const current = this.requireSession(source.id);
+    if (fork === undefined || fork === null || Array.isArray(fork) || typeof fork.nativeId !== 'string' || fork.nativeId === '' || fork.nativeId.length > 4096
+      || fork.nativeId === source.nativeId || fork.sourceNativeId !== source.nativeId || typeof fork.cwd !== 'string' || !isAbsolute(fork.cwd) || resolve(fork.cwd) !== resolve(sourceCwd)
+      || fork.model !== undefined && fork.model !== null && typeof fork.model !== 'string' || fork.accessMode !== undefined && typeof fork.accessMode !== 'string'
+      || fork.reasoningEffort !== undefined && fork.reasoningEffort !== null && typeof fork.reasoningEffort !== 'string'
+      || current.agent !== source.agent || current.nativeId !== source.nativeId || current.workspaceId !== source.workspaceId
+      || current.providerId !== source.providerId || current.model !== source.model || current.reasoningEffort !== source.reasoningEffort || current.accessMode !== source.accessMode
+      || this.requireWorkspace(source.workspaceId).path !== sourceCwd) throw uncertain();
+    if (source.agent === 'claude-code' && (!isClaudeQueryConfiguration(fork.claudeConfiguration) || fork.claudeConfiguration.nativeSessionId !== source.nativeId)) throw uncertain();
+    let publication: { session: SessionDto; patch: FeedPatch; seq: number } | undefined;
+    this.store.nativeActions.recordFork(commandId, source.id, runtime.identity, source.nativeId!, fork.nativeId, () => {
+      this.assertOwner(runtime);
+      if (this.store.listSessions(true).some(session => session.agent === source.agent && session.nativeId === fork.nativeId)) throw uncertain();
+      const session = this.store.createSession({ workspaceId: source.workspaceId, agent: source.agent, providerId: source.providerId ?? null,
+        model: fork.model === undefined ? source.model ?? null : fork.model,
+        reasoningEffort: fork.reasoningEffort === undefined ? source.reasoningEffort ?? null : fork.reasoningEffort,
+        accessMode: fork.accessMode ?? source.accessMode ?? null, title: fork.title ?? `${source.title ?? source.agent} · 分叉`, parentId: source.id, handoffKind: 'native-fork' });
+      const linked = this.store.updateSession(session.id, { nativeId: fork.nativeId })!;
+      this.store.appendEvent({ sessionId: linked.id, turnId: null, itemKey: `native-fork:${commandId}`, kind: 'internal',
+        data: this.store.nativeEvents.redact({ nativeType: 'native/session-fork', nativeFork: { ...fork, commandId, sourceSessionId: source.id } }) as EventData['internal'] });
+      const patch: FeedPatch = { created: true, status: 'idle', agent: linked.agent, nativeId: fork.nativeId, workspaceId: linked.workspaceId,
+        createdAt: linked.createdAt, title: linked.title, model: linked.model, reasoningEffort: linked.reasoningEffort,
+        accessMode: linked.accessMode, permissions: linked.permissions, providerId: linked.providerId ?? null, parentId: source.id, handoffKind: 'native-fork' };
+      publication = { session: linked, patch, seq: this.store.appendFeed(linked.id, patch) };
+      return { sessionId: linked.id, nativeId: fork.nativeId, sourceNativeId: source.nativeId!, agent: source.agent as AgentId };
+    });
+    if (publication !== undefined) this.hooks.onFeed(publication.session.id, publication.patch, publication.seq);
   }
 
   async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown> {
@@ -684,7 +731,7 @@ export class SessionManager {
       ...(returningFromCli || session.reasoningEffort === undefined ? {} : { reasoningEffort: session.reasoningEffort }),
       ...(accessMode === undefined ? {} : { accessMode }),
       nativeId: session.nativeId,
-      ...(returningFromCli ? { restoreNativeHistory: true } : {}),
+      ...(returningFromCli || session.agent === 'codex' && session.handoffKind === 'native-fork' ? { restoreNativeHistory: true } : {}),
     })); } catch (error) { await this.dispose(session.id); throw error; }
     this.assertOwner(runtime);
     this.store.nativeOwners.activate(session.id, runtime.identity, session.nativeId);
@@ -1318,6 +1365,32 @@ export class SessionManager {
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
     return runtime.adapter.slashCommands?.(sessionId) ?? [];
+  }
+
+  async inputSkillCatalog(agent: string, workspaceId: string, sessionId?: string): Promise<InputSkillCatalog> {
+    const workspace = this.requireWorkspace(workspaceId);
+    const session = sessionId === undefined ? undefined : this.requireSession(sessionId);
+    if (session !== undefined && (session.agent !== agent || session.workspaceId !== workspaceId)) throw this.nativeControlRejected('技能目录的 Agent 或工作区不匹配', 400);
+    const runtime = sessionId === undefined ? undefined : this.runtimes.get(sessionId);
+    const adapter = runtime?.adapter ?? this.adapters.get(agent);
+    if (adapter === undefined) throw this.nativeControlRejected('Agent 不可用', 404);
+    const base = { agent, workspaceId, ...(sessionId === undefined ? {} : { sessionId }), scope: runtime === undefined ? 'workspace-preview' as const : 'current-runtime' as const };
+    if (adapter.inputSkills === undefined) return { ...base, status: 'unavailable', skills: [], revision: '', reason: '此 Agent 的技能沿用原生配置和原生命令目录。' };
+    if (runtime !== undefined) this.assertOwner(runtime);
+    try {
+      const skills = await adapter.inputSkills(sessionId, workspace.path);
+      if (this.requireWorkspace(workspaceId).path !== workspace.path || this.adapters.get(agent) !== adapter
+        || sessionId !== undefined && this.runtimes.get(sessionId) !== runtime) throw this.nativeControlRejected('技能目录的上下文在读取期间已变化');
+      if (session !== undefined) {
+        const current = this.requireSession(session.id);
+        if (current.agent !== agent || current.workspaceId !== workspaceId || current.nativeId !== session.nativeId) throw this.nativeControlRejected('技能目录的会话在读取期间已变化');
+      }
+      if (runtime !== undefined) this.assertOwner(runtime);
+      return { ...base, status: skills.length === 0 ? 'empty' : 'ready', skills, revision: payloadHash({ ...base, skills }) };
+    } catch (failure) {
+      const safe = this.store.nativeEvents.redact({ message: failure instanceof Error ? failure.message : String(failure) }) as { message: string };
+      return { ...base, status: 'error', skills: [], revision: '', reason: `原生技能目录读取失败：${safe.message}` };
+    }
   }
 
   async previewSlashCommands(agent: string, workspaceId?: string): Promise<SlashCommandCatalog> {

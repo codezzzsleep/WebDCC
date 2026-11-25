@@ -1,6 +1,27 @@
 import type { AgentId } from './adapter.js';
 import type { RuntimeIdentity } from './runtime.js';
 import type { DshSubagentInputReference } from './dsh-subagents.js';
+import type { ClaudeQueryConfiguration } from './claude-configuration.js';
+
+/** Adapter-owned descriptor of an actual native fork; never supplied by the browser. */
+export interface NativeForkSession {
+  sourceNativeId: string;
+  nativeId: string;
+  cwd: string;
+  /** null keeps the fork's native selection when a public model route is unknown. */
+  model?: string | null;
+  reasoningEffort?: string | null;
+  accessMode?: string;
+  title?: string;
+  /** Acceptance belongs to the source query; the fork must initialize separately. */
+  claudeConfiguration?: ClaudeQueryConfiguration;
+}
+export interface NativeForkContinuation {
+  sessionId: string;
+  nativeId: string;
+  sourceNativeId: string;
+  agent: AgentId;
+}
 
 export interface NativeControlSnapshot {
   sessionId: string;
@@ -28,6 +49,8 @@ export interface NativeActionReceipt {
   reference?: { id: string; generation?: number; runId?: string | null; dshChild?: DshSubagentInputReference };
   /** The SDK call returned; this does not establish a task's terminal outcome. */
   callReturnedAt?: string;
+  /** Persisted with the fork association, recoverable without repeating the native action. */
+  continuation?: NativeForkContinuation;
 }
 export interface NativeActionResponse {
   receipt: NativeActionReceipt;

@@ -121,6 +121,9 @@ export function NativeControls({ sessionId, initialCommand, agent }: { sessionId
     {receipt ? <p role="status" data-testid="native-action-receipt">{receipt.type === 'stop-task'
       ? `${receipt.callReturnedAt === undefined ? '调用返回尚未确认' : '调用已返回'} · ${receipt.state === 'completed' ? '原生停止已确认' : labels[receipt.state]}`
       : labels[receipt.state]} · {receipt.type}</p> : null}
+    {receipt?.sessionId === sessionId && receipt.type === 'fork' && receipt.state === 'completed' && receipt.continuation !== undefined ? <p role="status">
+      分叉会话已建立。<a className="btn primary" data-testid="native-fork-continuation" href={`/s/${encodeURIComponent(receipt.continuation.sessionId)}`}>在分叉会话中继续</a>
+    </p> : null}
     {snapshot ? <>
       <p style={{ margin: 0 }}>{snapshot.agent} · 原生会话 {snapshot.nativeId ?? '尚未建立'}</p>
       {dialogRefusals.map(refusal => { const payload = object(refusal['payload']); return <p key={String(refusal['requestId'])} data-testid="claude-dialog-refusal" role="status">

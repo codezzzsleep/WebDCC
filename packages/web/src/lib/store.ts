@@ -341,7 +341,7 @@ export class AppStore {
           ...(patch['permissions'] === undefined ? {} : { permissions: patch['permissions'] as PermissionState }),
           ...(patch['providerId'] === undefined ? {} : { providerId: patch['providerId'] === null ? null : String(patch['providerId']) }),
           ...(typeof patch['parentId'] === 'string' ? { parentId: patch['parentId'] } : {}),
-          ...(patch['handoffKind'] === 'manual' || patch['handoffKind'] === 'watchdog' ? { handoffKind: patch['handoffKind'] } : {}),
+          ...(patch['handoffKind'] === 'manual' || patch['handoffKind'] === 'watchdog' || patch['handoffKind'] === 'native-fork' ? { handoffKind: patch['handoffKind'] } : {}),
           updatedAt: nowIso(),
         };
         this.sessions.set(message.sessionId, next);
