@@ -83,6 +83,19 @@ export interface DshSubagentHistoryOptions {
   limit: number;
   throughSeq?: number;
   beforeSeq?: number;
+  includeActive?: boolean;
+}
+
+/** A native attempt has not become a committed child history record yet. */
+export interface DshSubagentActiveOutput {
+  attemptId: string;
+  revision: number;
+  startedAfterSeq: number;
+  turn: number;
+  step: number;
+  nextIndex: number;
+  stream: unknown[];
+  details?: string;
 }
 
 export interface DshSubagentHistory {
@@ -92,4 +105,5 @@ export interface DshSubagentHistory {
   records: DshSubagentRecord[];
   hasMore: boolean;
   nextCursor?: number;
+  activeOutput?: DshSubagentActiveOutput;
 }

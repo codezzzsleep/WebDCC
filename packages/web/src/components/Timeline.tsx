@@ -345,7 +345,7 @@ function outboxLabel(status: 'pending' | 'queued' | 'sent' | 'failed' | 'uncerta
 function formatUsageData(data: UsageData): string {
   const parts: string[] = [];
   if (data.inputTokens !== undefined || data.outputTokens !== undefined) {
-    parts.push(`输入 ${shortNumber(data.inputTokens ?? 0)} / 输出 ${shortNumber(data.outputTokens ?? 0)} tok`);
+    parts.push(`输入 ${data.inputTokens === undefined ? '未提供' : shortNumber(data.inputTokens)} / 输出 ${data.outputTokens === undefined ? '未提供' : shortNumber(data.outputTokens)} tok`);
   }
   if (data.cacheReadInputTokens !== undefined) parts.push(`缓存读取 ${shortNumber(data.cacheReadInputTokens)} tok`);
   if (data.cacheCreationInputTokens !== undefined) parts.push(`缓存写入 ${shortNumber(data.cacheCreationInputTokens)} tok`);

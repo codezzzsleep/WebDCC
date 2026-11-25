@@ -451,13 +451,29 @@ export class SessionManager {
   }
 
   async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown> {
-    this.requireSession(sessionId);
+    const session = this.requireSession(sessionId);
     const runtime = this.runtimes.get(sessionId);
-    if (runtime?.adapter.readNativeHistory === undefined) throw this.nativeControlRejected('原生历史入口尚不可用', 501);
-    this.assertOwner(runtime);
-    const result = await runtime.adapter.readNativeHistory(sessionId, options);
-    this.assertOwner(runtime);
-    return result;
+    const adapter = runtime?.adapter ?? this.adapters.get(session.agent);
+    if (adapter?.readNativeHistory === undefined || runtime === undefined && adapter.detachedNativeHistory !== true) throw this.nativeControlRejected('原生历史入口尚不可用', 501);
+    if (!session.nativeId) throw this.nativeControlRejected('原生会话身份尚未建立');
+    const nativeId = session.nativeId; const workspaceId = session.workspaceId;
+    const cwd = this.requireWorkspace(session.workspaceId).path;
+    if (runtime !== undefined) this.assertOwner(runtime);
+    const result = await adapter.readNativeHistory(sessionId, options, { nativeId, cwd });
+    const current = this.requireSession(sessionId);
+    if (current.nativeId !== nativeId || current.workspaceId !== workspaceId || this.requireWorkspace(current.workspaceId).path !== cwd
+      || this.adapters.get(current.agent) !== adapter) throw this.nativeControlRejected('原生会话身份或工作区在读取期间已变化');
+    if (runtime !== undefined) this.assertOwner(runtime);
+    return this.store.nativeEvents.diagnosticValue(result);
+  }
+
+  recoveryCapabilities(sessionId: string) {
+    const session = this.requireSession(sessionId);
+    const adapter = this.adapters.get(session.agent);
+    const canObserve = !!session.nativeId && adapter?.observe !== undefined;
+    const canReadHistory = !!session.nativeId && adapter?.readNativeHistory !== undefined && (this.runtimes.has(sessionId) || adapter.detachedNativeHistory === true);
+    return { agent: session.agent, workspaceId: session.workspaceId, ...(session.nativeId === undefined ? {} : { nativeId: session.nativeId }), canObserve, canReadHistory,
+      ...(canObserve ? {} : { reason: session.nativeId === undefined ? '原生会话身份尚未建立。' : '当前原生接口无法确认旧执行结果和控制权，自动恢复暂不可用。原输入与队列继续保留。' }) };
   }
 
   private async observeNative(sessionId: string): Promise<NativeObservation> {

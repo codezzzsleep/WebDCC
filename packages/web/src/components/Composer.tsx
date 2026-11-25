@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto, SlashCommand, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
-import { claudeOutputOrigin, parseSlashInput, slashCommandFor } from '@webdcc/protocol';
+import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { object as nativeObject, useClaudeTaskControls } from '../lib/claude-task-controls.js';
 import { api } from '../lib/api.js';
 import { useStoreVersion } from '../lib/hooks.js';
@@ -86,6 +86,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [selecting, setSelecting] = useState(false);
   const [mention, setMention] = useState<MentionState>({ open: false, query: '', start: 0 });
+  const replyRequest = useRef(0);
   const [files, setFiles] = useState<{ name: string; path: string }[]>([]);
   const [menu, setMenu] = useState<MenuName>(null);
   const [sessionModels, setSessionModels] = useState<string[]>([]);
@@ -126,6 +127,8 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     return () => { offDrafts(); offUploads(); offSync(); };
   }, [controls]);
   const draftSessionId = sessionId ?? `new:${workspaceId}`;
+  useEffect(() => () => { replyRequest.current++; }, [draftSessionId]);
+  useEffect(() => { if (!mention.open) replyRequest.current++; }, [mention.open]);
   const pendingSlashControl = sessionId === null ? undefined : store.getSlashControlRequest(sessionId);
   useEffect(() => { setSlashRequest(pendingSlashControl?.request); setSlashResponse(pendingSlashControl?.response); }, [sessionId, pendingSlashControl?.request.commandId]);
   useEffect(() => {
@@ -942,11 +945,21 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   type="button"
                   className="menu-item"
                   onClick={() => {
-                    const final = store
-                      .getEvents(item.id)
-                      .filter((event) => event.kind === 'assistant.message' && claudeOutputOrigin(event) === undefined)
-                      .at(-1);
-                    insertAtMention(final === undefined ? '' : (final.data as { text: string }).text);
+                    const draft = controls.drafts.snapshot();
+                    if (draft?.sessionId !== draftSessionId) return;
+                    const expected = ++replyRequest.current;
+                    const cursor = textareaRef.current?.selectionStart;
+                    setError(null);
+                    void store.readLatestCompletedAnswer(item.id).then(answer => {
+                      const current = controls.drafts.snapshot();
+                      if (expected !== replyRequest.current || current?.sessionId !== draft.sessionId || current.text !== draft.text
+                        || textareaRef.current?.selectionStart !== cursor) return;
+                      insertAtMention(answer);
+                    }).catch(cause => {
+                      const current = controls.drafts.snapshot();
+                      if (expected === replyRequest.current && current?.sessionId === draft.sessionId && current.text === draft.text)
+                        setError(cause instanceof Error ? cause.message : String(cause));
+                    });
                   }}
                 >
                   <AgentMark agent={item.agent} />
@@ -1030,11 +1043,9 @@ function statsFor(sessionId: string): string {
     events.filter((event) => event.kind === 'user.message' && event.turnId !== null).map((event) => event.turnId as string),
   ).size;
   const steps = events.filter((event) => event.kind === 'command' || event.kind === 'tool.call' || event.kind === 'file.change' || event.kind === 'file.read').length;
-  const usageByTurn = new Map<string, { inputTokens?: number; outputTokens?: number }>();
-  for (const event of events) {
-    if (event.kind !== 'usage') continue;
-    usageByTurn.set(event.turnId ?? `event-${event.seq}`, event.data as { inputTokens?: number; outputTokens?: number });
-  }
-  const tokens = [...usageByTurn.values()].reduce((sum, data) => sum + (data.inputTokens ?? 0) + (data.outputTokens ?? 0), 0);
-  return `${turns} 轮 · ${steps} 步${tokens > 0 ? ` · 累计 ${shortNumber(tokens)} tok` : ''}`;
+  const projected = store.getTurns(sessionId);
+  const usage = projected.flatMap(turn => turn.usage === undefined ? [] : [turn.usage]);
+  const partial = projected.some(turn => turn.usage?.inputTokens === undefined || turn.usage.outputTokens === undefined);
+  const tokens = usage.reduce((sum, data) => sum + (data.inputTokens ?? 0) + (data.outputTokens ?? 0), 0);
+  return `${turns} 轮 · ${steps} 步${tokens > 0 ? ` · ${partial ? '已观测' : '累计'} ${shortNumber(tokens)} tok${partial ? '（部分用量）' : ''}` : ''}`;
 }

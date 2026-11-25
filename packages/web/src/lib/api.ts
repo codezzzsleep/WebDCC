@@ -1,5 +1,6 @@
 /** REST 客户端（同源，Cookie 认证） */
 import type {
+  NativeRecoveryCapabilities,
   BrowseResponse,
   SlashCommandCatalog,
   SlashControlRequest,
@@ -89,12 +90,16 @@ export const api = {
   connectNativeControls: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/connect`, { method: 'POST', body: JSON.stringify({ commandId, action: { type: 'connect' } }) }),
   nativeAction: (sessionId: string, value: NativeActionRequest) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions`, { method: 'POST', body: JSON.stringify(value) }),
   nativeActionReceipt: (sessionId: string, commandId: string) => request<NativeActionReceipt>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions/${encodeURIComponent(commandId)}`),
-  nativeHistory: (sessionId: string) => request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/native/history?limit=50`),
+  nativeHistory: (sessionId: string, options: { cursor?: string; offset?: number } = {}) => {
+    const query = new URLSearchParams({ limit: '50', ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+      ...(options.offset === undefined ? {} : { offset: String(options.offset) }) });
+    return request<unknown>(`/api/sessions/${encodeURIComponent(sessionId)}/native/history?${query}`);
+  },
   nativeEvents: (sessionId?: string, after = 0) => request<{ records: NativeEnvelopeSummary[]; next: number; projectionVersion: number }>(`/api/native-events?after=${after}${sessionId ? `&sessionId=${encodeURIComponent(sessionId)}` : ''}`),
   nativeEvent: (id: number) => request<NativeEnvelopeDetail>(`/api/native-events/${id}`),
   eventEvidence: (sessionId: string, seq: number) => request<{ event: StoredEvent; envelope: NativeEnvelopeDetail | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/events/${seq}/evidence`),
   runtime: (sessionId: string) => request<{ owner: NativeOwnerDto | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/runtime`),
-  reconciliation: (sessionId: string) => request<{ reconciliation: ReconciliationView | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/reconciliation`),
+  reconciliation: (sessionId: string) => request<{ reconciliation: ReconciliationView | null; capabilities?: NativeRecoveryCapabilities }>(`/api/sessions/${encodeURIComponent(sessionId)}/reconciliation`),
   reconcile: (sessionId: string) => request<ReconciliationView>(`/api/sessions/${encodeURIComponent(sessionId)}/reconciliation`, { method: 'POST', body: '{}' }),
   applyReconciliation: (sessionId: string, revision: string) => request<ReconciliationView>(`/api/sessions/${encodeURIComponent(sessionId)}/reconciliation/apply`, { method: 'POST', body: JSON.stringify({ revision }) }),
   queue: (sessionId: string) => request<QueueSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/queue`),
@@ -160,7 +165,8 @@ export const api = {
   subagentHistory: (sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions) => {
     const query = new URLSearchParams({ limit: String(options.limit),
       ...(options.throughSeq === undefined ? {} : { throughSeq: String(options.throughSeq) }),
-      ...(options.beforeSeq === undefined ? {} : { beforeSeq: String(options.beforeSeq) }) });
+      ...(options.beforeSeq === undefined ? {} : { beforeSeq: String(options.beforeSeq) }),
+      ...(options.includeActive === undefined ? {} : { includeActive: String(options.includeActive) }) });
     return request<DshSubagentHistory>(`/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(childSessionId)}/history?${query}`);
   },
   models: async (agent: string, providerId: string | null): Promise<string[]> => {

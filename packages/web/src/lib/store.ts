@@ -612,7 +612,7 @@ export class AppStore {
     return loading;
   }
 
-  private async hydrateSession(sessionId: string): Promise<void> {
+  private async hydrateSession(sessionId: string, strictRead = false): Promise<void> {
     void this.refreshQueue(sessionId);
     const t0 = performance.now();
     this.trace['ensureStart'] = t0;
@@ -649,7 +649,8 @@ export class AppStore {
         this.sessionServerEnds.set(sessionId, Math.max(serverLastSeq!, this.sessionServerEnds.get(sessionId) ?? 0));
       }
       void cache.putSession(next as CachedSession);
-    } catch {
+    } catch (error) {
+      if (strictRead) throw error;
       // 会话可能已删除；保持现状
     }
     performance.mark('wdcc:detail-done');
@@ -658,6 +659,7 @@ export class AppStore {
       this.coverage.cursor(sessionId) < serverLastSeq)) {
       const page = await api.events(sessionId, { before: serverLastSeq + 1, limit: 200 }).catch(() => undefined);
       const completeRecentPage = completeRecentEventPage(page, sessionId, serverLastSeq);
+      if (strictRead && !completeRecentPage) throw new Error('源会话的最新记录未完整读取，请重试');
       let persisted = false;
       if (completeRecentPage) {
         const map = this.events.get(sessionId) ?? new Map<number, StoredEvent>();
@@ -681,6 +683,25 @@ export class AppStore {
 
   loadOlder(sessionId: string): Promise<boolean> { return this.olderHistory.load(sessionId); }
   getOlderHistoryState(sessionId: string): OlderHistoryState { return this.olderHistory.state(sessionId); }
+
+  /** Read a reply without adding a subscription or replaying source outboxes. */
+  async readLatestCompletedAnswer(sessionId: string): Promise<string> {
+    await this.hydrateSession(sessionId, true);
+    for (let page = 0; page < 10; page++) {
+      const events = this.getConversationEvents(sessionId);
+      const final = this.getTurns(sessionId, false).findLast(turn => turn.state === 'completed' && turn.answer.length > 0);
+      if (final !== undefined) {
+        const end = events.findLast(event => event.turnId === final.turnId && event.kind === 'turn.completed');
+        const keys = (end?.data as EventData['turn.completed'] | undefined)?.answerItemKeys;
+        const start = events.find(event => event.turnId === final.turnId && event.kind === 'turn.started');
+        const wholeTurn = start !== undefined && end !== undefined && this.contiguousSeq(sessionId, start.seq - 1) >= end.seq;
+        if (keys !== undefined ? final.answer.length === keys.length : wholeTurn)
+          return final.answer.map(answer => answer.text).join('\n');
+      }
+      if (!await this.loadOlder(sessionId)) break;
+    }
+    throw new Error('源会话的完整最终回答尚未读取，请打开源会话查看后重试');
+  }
 
   // ---------- 选择器 ----------
 
@@ -803,8 +824,7 @@ export class AppStore {
   getCompletedRecovery(sessionId: string): CompletedRecovery | undefined { return this.completedRecoveries.get(sessionId); }
 
   /** 按 turnId 分组，供虚拟列表渲染 */
-  getTurns(sessionId: string): TurnModel[] {
-    const history = this.isViewingConversationHistory(sessionId);
+  getTurns(sessionId: string, history = this.isViewingConversationHistory(sessionId)): TurnModel[] {
     const boundary = this.sessions.get(sessionId)?.conversation;
     const cacheKey = `${sessionId}:${history ? 'history' : 'current'}:${boundary?.uuid ?? ''}`;
     const cached = this.derived.get(cacheKey);

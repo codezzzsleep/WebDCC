@@ -102,7 +102,7 @@ export async function createDshSubagentFixture(localId = 'parent') {
   adapter.resume = async () => undefined;
   adapter.hostIdentity = async () => ({ url: `http://127.0.0.1:${address.port}/`, source: 'native-bootstrap', status: 'verified', version: '0.2.2-rc.1',
     fingerprint: 'f'.repeat(64), profile: { scope: 'current-host-profile', identity: 'unavailable-in-api' } });
-  return { adapter, native, client, parentId, states, descriptorSeqs, records, calls,
+  return { adapter, native, client, parentId, states, descriptorSeqs, records, calls, socketServer: sockets,
     cold() {
       (adapter as unknown as { sessions: Map<string, unknown> }).sessions.clear();
       adapter.hostIdentity = async () => ({ url: `http://127.0.0.1:${address.port}/`, source: 'native-bootstrap', status: 'verified', version: '0.2.2-rc.1',

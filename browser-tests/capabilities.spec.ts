@@ -31,6 +31,8 @@ it('capability diagnostics refresh reviewed versions, probe rejection and recove
     await expect.poll(() => runtime.textContent()).toContain('0.169.0 · 版本兼容');
     expect(first.runtimes.find(value => value.agent === 'codex')?.compatibility).toBe('compatible');
     expect(await page.getByText('已验证', { exact: true }).count()).toBe(0);
+    expect(await page.locator('summary').filter({ hasText: '待实现' }).count()).toBe(0);
+    expect(await page.locator('summary').filter({ hasText: '接入范围待核实' }).count()).toBeGreaterThan(0);
     for (const version of ['0.168.0', '0.167.0']) {
       probe = { ...probe, version };
       await snapshotAfter(() => page.getByRole('button', { name: '重新检查' }).click());

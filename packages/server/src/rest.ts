@@ -139,7 +139,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/sessions/:id/reconciliation', async request => {
     const { id } = request.params as { id: string };
     manager.requireSession(id);
-    return { reconciliation: store.reconciliations.get(id) };
+    return { reconciliation: store.reconciliations.get(id), capabilities: manager.recoveryCapabilities(id) };
   });
   app.post('/api/sessions/:id/reconciliation', async request => manager.reconcile((request.params as { id: string }).id));
   app.post('/api/sessions/:id/reconciliation/apply', async request => {
@@ -400,7 +400,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   app.get('/api/sessions/:id/subagents/:childId/history', request => {
     const { id, childId } = request.params as { id: string; childId: string };
-    const query = request.query as { limit?: string; throughSeq?: string; beforeSeq?: string };
+    const query = request.query as { limit?: string; throughSeq?: string; beforeSeq?: string; includeActive?: string };
+    if (query.includeActive !== undefined && query.includeActive !== 'true' && query.includeActive !== 'false') throw badRequest('当前输出参数无效');
     const integer = (value: string | undefined, fallback?: number): number | undefined => {
       if (value === undefined) return fallback;
       if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) throw badRequest('子会话历史分页参数无效');
@@ -408,7 +409,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     };
     return manager.readSubagentHistory(id, childId, { limit: integer(query.limit, 100)!,
       ...(query.throughSeq === undefined ? {} : { throughSeq: integer(query.throughSeq) }),
-      ...(query.beforeSeq === undefined ? {} : { beforeSeq: integer(query.beforeSeq) }) });
+      ...(query.beforeSeq === undefined ? {} : { beforeSeq: integer(query.beforeSeq) }),
+      ...(query.includeActive === undefined ? {} : { includeActive: query.includeActive === 'true' }) });
   });
 
   app.post('/api/sessions/:id/subagents/:childId/prompt', async (request) => {

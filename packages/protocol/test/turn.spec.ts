@@ -7,6 +7,27 @@ function event(seq: number, kind: StoredEvent['kind'], data: unknown, itemKey = 
 }
 
 describe('M9 unified turn model', () => {
+  it.each([
+    [{ outputTokens: 73 }, { inputTokens: undefined, outputTokens: 73 }],
+    [{ inputTokens: 51 }, { inputTokens: 51, outputTokens: undefined }],
+    [{}, { inputTokens: undefined, outputTokens: undefined }],
+    [{ inputTokens: 0, outputTokens: 0 }, { inputTokens: 0, outputTokens: 0 }],
+  ])('keeps missing native attempt counters distinct from reported zero: %j', (native, expected) => {
+    expect(reduceTurn([event(1, 'usage', { scope: 'attempt', ...native })]).usage).toMatchObject(expected);
+  });
+  it('does not label an incomplete multi-attempt sum or duration as an exact total or speed', () => {
+    const view = reduceTurn([
+      event(1, 'usage', { scope: 'attempt', inputTokens: 30, outputTokens: 10, generationMs: 1000 }),
+      event(2, 'usage', { scope: 'attempt', outputTokens: 20 }),
+    ]);
+    expect(view.usage).toMatchObject({ inputTokens: undefined, outputTokens: 30 });
+    expect(view.usage?.generationMs).toBeUndefined();
+    expect(view.usage?.tokensPerSecond).toBeUndefined();
+    expect(reduceTurn([
+      event(1, 'usage', { scope: 'attempt', inputTokens: 30, outputTokens: 10, generationMs: 1000 }),
+      event(2, 'usage', { scope: 'attempt', inputTokens: 40, outputTokens: 20, generationMs: 2000 }),
+    ]).usage).toMatchObject({ inputTokens: 70, outputTokens: 30, generationMs: 3000, tokensPerSecond: 10 });
+  });
   it.each([undefined, true, false])('only pending blocking questions affect turn/activity; native isBlocking=%s', isBlocking => {
     const question = { questionId: 'q', prompt: 'question', ...(isBlocking === undefined ? {} : { isBlocking }) };
     const events = [event(1, 'user.message', { text: 'ask' }), event(2, 'turn.started', {}), event(3, 'question', question)];

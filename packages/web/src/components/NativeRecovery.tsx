@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ReconciliationView } from '@webdcc/protocol';
+import { Link } from '@tanstack/react-router';
+import type { NativeRecoveryCapabilities, ReconciliationView } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
+import { NativeDshSurface } from './NativeDshSurface.js';
+import { NativeSurface } from './NativeSurface.js';
 
 export function NativeRecovery({ sessionId, onApplied }: { sessionId: string; onApplied: () => void }): React.ReactElement {
   const [view, setView] = useState<ReconciliationView | null>(null);
+  const [capabilities, setCapabilities] = useState<NativeRecoveryCapabilities>();
+  const [ready, setReady] = useState(false);
+  const [history, setHistory] = useState<unknown>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const request = useRef(0);
   useEffect(() => {
-    const current = ++request.current; setView(null); setBusy(false); setError('');
-    void api.reconciliation(sessionId).then(result => { if (current === request.current) setView(result.reconciliation); })
+    const current = ++request.current; setView(null); setCapabilities(undefined); setReady(false); setHistory(undefined); setBusy(false); setError('');
+    void api.reconciliation(sessionId).then(result => { if (current === request.current) { setView(result.reconciliation); setCapabilities(result.capabilities); setReady(true); } })
       .catch(failure => { if (current === request.current) setError(String(failure)); });
     return () => { request.current++; };
   }, [sessionId]);
+  const readHistory = async (options: { cursor?: string; offset?: number } = {}): Promise<void> => {
+    const current = ++request.current; setBusy(true); setError('');
+    try { const result = await api.nativeHistory(sessionId, options); if (current === request.current) setHistory(result); }
+    catch (failure) { if (current === request.current) setError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { if (current === request.current) setBusy(false); }
+  };
   const run = async (apply: boolean): Promise<void> => {
     const current = ++request.current; setBusy(true); setError('');
     try {
@@ -23,9 +35,25 @@ export function NativeRecovery({ sessionId, onApplied }: { sessionId: string; on
       if (current === request.current) { setError(failure instanceof Error ? failure.message : String(failure)); if (apply) setView(previous => previous === null ? null : { ...previous, canApply: false }); }
     } finally { if (current === request.current) setBusy(false); }
   };
+  const page = history !== null && typeof history === 'object' ? history as { hasMore?: boolean; nextCursor?: string; nextOffset?: number } : undefined;
+  const nextPage = page?.hasMore === true ? typeof page.nextCursor === 'string' ? { cursor: page.nextCursor }
+    : Number.isSafeInteger(page.nextOffset) ? { offset: page.nextOffset } : undefined : undefined;
+  const canObserve = ready && capabilities?.canObserve !== false;
   return <section aria-label="执行恢复"><h2>核对原生执行</h2>
     <p>读取原生记录，确认上次执行是否结束。恢复只收敛已确认的轮次，排队输入继续保留，发送由你另行发起。</p>
-    <button className="btn" disabled={busy} onClick={() => { void run(false); }}>读取原生状态</button>
+    {capabilities?.canObserve === false ? <p role="status">{capabilities.reason}</p> : null}
+    <button className="btn" disabled={busy || !canObserve} onClick={() => { void run(false); }}>读取原生状态</button>
+    {capabilities?.canReadHistory ? <button className="btn" disabled={busy} onClick={() => { void readHistory(); }}>读取原生历史（仅查看）</button> : null}
+    {history === undefined ? null : <details open><summary>本次原生历史窗口</summary>
+      <p>此读取不会确认输入接收、解除原会话锁定或重发队列。每页按原生接口读取；不作为自动恢复证明。</p>
+      <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(history, null, 2)}</pre>
+      {nextPage === undefined ? null : <button className="btn" disabled={busy} onClick={() => { void readHistory(nextPage); }}>读取下一页原生历史</button>}
+    </details>}
+    {capabilities?.canObserve === false ? <div>
+      {capabilities.agent === 'dsh' ? <NativeDshSurface sessionId={sessionId} /> : capabilities.agent === 'codex' || capabilities.agent === 'claude-code' ? <NativeSurface sessionId={sessionId} agent={capabilities.agent} /> : null}
+      <p>请先在原生入口核对旧任务。独立新会话与旧任务分开，原输入和队列仍保留。</p>
+      <Link to="/new" search={{ w: capabilities.workspaceId, agent: capabilities.agent }} className="btn">新建独立会话</Link>
+    </div> : null}
     {busy ? <p role="status">正在核对…</p> : null}
     {error ? <p role="alert">{error}</p> : null}
     {view === null ? null : <div>
@@ -34,7 +62,7 @@ export function NativeRecovery({ sessionId, onApplied }: { sessionId: string; on
       {view.observation.notes.map((note, index) => <p key={index}>{note}</p>)}
       {view.outcomes.length > 0 ? <ul>{view.outcomes.map(outcome => <li key={outcome.turnId}>轮次 {outcome.nativeTurnId}：{outcome.status}</li>)}</ul> : null}
       {view.reasons.map((reason, index) => <p key={index}>{reason}</p>)}
-      {view.applied ? <p role="status">已恢复确认的终态，队列未自动发送。</p> : <button className="btn" disabled={busy || !view.canApply} onClick={() => { void run(true); }}>恢复已确认的结果</button>}
+      {view.applied ? <p role="status">已恢复确认的终态，队列未自动发送。</p> : <button className="btn" disabled={busy || !canObserve || !view.canApply} onClick={() => { void run(true); }}>恢复已确认的结果</button>}
     </div>}
   </section>;
 }
