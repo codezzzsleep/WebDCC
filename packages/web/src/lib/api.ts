@@ -86,6 +86,10 @@ export const api = {
     return { blob: await response.blob(), filename };
   },
   nativeControls: (sessionId: string, catalog = false) => request<NativeControlSnapshot>(`/api/sessions/${encodeURIComponent(sessionId)}/native${catalog ? '?catalog=1' : ''}`),
+  inputSkills: (agent: string, workspaceId: string, sessionId?: string) => {
+    const query = new URLSearchParams({ workspaceId, ...(sessionId === undefined ? {} : { sessionId }) });
+    return request<import('@webdcc/protocol').InputSkillCatalog>(`/api/agents/${encodeURIComponent(agent)}/input-skills?${query}`);
+  },
   claudeConfiguration: (sessionId: string) => request<ClaudeConfigurationRecovery>(`/api/sessions/${encodeURIComponent(sessionId)}/native/claude-configuration`),
   connectNativeControls: (sessionId: string, commandId: string) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/connect`, { method: 'POST', body: JSON.stringify({ commandId, action: { type: 'connect' } }) }),
   nativeAction: (sessionId: string, value: NativeActionRequest) => request<NativeActionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/native/actions`, { method: 'POST', body: JSON.stringify(value) }),

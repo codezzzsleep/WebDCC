@@ -1103,6 +1103,30 @@ export class CodexAdapter implements AgentAdapter {
       return { modes: result.data.flatMap(preset => preset.mode === 'plan' || preset.mode === 'default' ? [{ id: preset.mode, label: preset.mode === 'plan' ? '计划' : '默认' }] : []), observedMode: null };
     } finally { await rpc.kill(); }
   }
+  async inputSkills(sessionId?: string, cwd?: string): Promise<import('@webdcc/protocol').InputSkillOption[]> {
+    const runtime = sessionId === undefined ? undefined : this.sessions.get(sessionId);
+    const directory = cwd ?? runtime?.cwd ?? process.cwd();
+    if (runtime !== undefined && (runtime.cwd !== directory || runtime.rpc.isClosed)) throw unsupportedCodexInput('原生技能目录的会话或工作区已变化');
+    const read = async (rpc: JsonRpcStdio) => {
+      const catalog = await nativeRequest(rpc, 'skills/list', { cwds: [directory], forceReload: false });
+      return catalog.data.flatMap(entry => entry.skills).map(skill => ({
+        skillId: createHash('sha256').update(JSON.stringify([skill.name, skill.path])).digest('hex'),
+        name: skill.name, description: skill.description, enabled: skill.enabled,
+      }));
+    };
+    if (runtime !== undefined) {
+      const skills = await read(runtime.rpc);
+      if (this.sessions.get(sessionId!) !== runtime || runtime.rpc.isClosed) throw unsupportedCodexInput('技能目录属于已替换的原生会话');
+      return skills;
+    }
+    const nativeVersion = await this.requireCompatibleVersion();
+    const spec = this.buildLaunchSpec({ sessionId: 'skill-preview', cwd: directory, providerId: null });
+    const rpc = JsonRpcStdio.start({ command: spec.command ?? 'codex', nativeVersion, args: spec.args,
+      cwd: directory, env: { ...(this.options.env ?? process.env), ...spec.env } });
+    try { await this.handshake(rpc, true); return await read(rpc); }
+    finally { await rpc.kill(); }
+  }
+
   async resolveInputSkill(sessionId: string, selection: InputSkillPart): Promise<{ path: string }> {
     const runtime = this.require(sessionId);
     const catalog = await nativeRequest(runtime.rpc, 'skills/list', { cwds: [runtime.cwd], forceReload: false });

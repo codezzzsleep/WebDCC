@@ -267,7 +267,7 @@ export function RelayBar({ sessionId, onOpen, onCompare }: { sessionId: string; 
   return (
     <div className="relay-bar" data-testid="relay-bar">
       <Icon name="cornerDownRight" size={14} strokeWidth={2} />
-      <span style={{ flex: '0 0 auto' }}>接续自</span>
+      <span style={{ flex: '0 0 auto' }}>{session?.handoffKind === 'native-fork' ? '分叉自' : '接续自'}</span>
       <button type="button" className="link" onClick={() => onOpen(parentId)}>
         {parent?.title ?? '上一个会话'}
       </button>

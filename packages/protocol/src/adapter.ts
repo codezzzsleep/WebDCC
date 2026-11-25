@@ -74,6 +74,8 @@ export interface ProviderRuntimeConfig {
 export interface CreateOpts {
   /** Claude-only accepted startup overrides; never a replay of a user action. */
   restoreClaudeConfiguration?: ClaudeQueryConfiguration;
+  /** Retain source acceptance provenance until the new fork query accepts these overrides. */
+  restoreClaudeForkConfiguration?: { nativeSessionId: string; source: ClaudeQueryConfiguration };
   sessionId: string;
   cwd: string;
   providerId: string | null;
@@ -181,6 +183,8 @@ export interface AgentAdapter {
   send(sessionId: string, input: UserInput): Promise<void>;
   validateInput?(sessionId: string, input: UserInput): Promise<void>;
   resolveInputSkill?(sessionId: string, selection: InputSkillPart): Promise<{ path: string }>;
+  /** Read native skill metadata without creating/resuming a writer or sending input. */
+  inputSkills?(sessionId?: string, cwd?: string): Promise<import('./input.js').InputSkillOption[]>;
   steer?(sessionId: string, input: UserInput): Promise<void>;
   interrupt(sessionId: string): Promise<void>;
   respond(sessionId: string, d: ApprovalDecision): Promise<void | NativeInteractionSubmission>;
@@ -212,6 +216,8 @@ export interface AgentAdapter {
   bindRuntime?(sessionId: string, identity: RuntimeIdentity): void;
   observe?(opts: CreateOpts & { nativeId: string }): Promise<NativeObservation>;
   nativeCatalog?(sessionId: string): Promise<unknown>;
+  /** Pure comparison projection; the browser still receives the original native catalog. */
+  nativeCatalogForRevision?(catalog: unknown): unknown;
   nativeState?(sessionId: string): unknown | Promise<unknown>;
   dshApprovalDelivery?(sessionId: string, approvalId: string): Promise<DshApprovalDelivery | undefined>;
   retryDshApproval?(sessionId: string, attempt: DshApprovalAttempt, revision: string): Promise<void | { confirmed: boolean }>;

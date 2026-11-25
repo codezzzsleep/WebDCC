@@ -2,6 +2,7 @@ import { Ajv } from 'ajv';
 import { nativeRequest } from './controls.js';
 import { resolve } from 'node:path';
 import type { JsonRpcStdio } from './rpc.js';
+import type { NativeForkSession } from '@webdcc/protocol';
 
 export type CodexNativeAction =
   | { type: 'goal-set'; objective: string; tokenBudget?: number }
@@ -73,7 +74,14 @@ export async function executeCodexNativeControl(rpc: JsonRpcStdio, nativeId: str
     case 'rename': return nativeRequest(rpc, 'thread/name/set', { threadId: nativeId, name: action.title });
     case 'archive': return nativeRequest(rpc, 'thread/archive', { threadId: nativeId });
     case 'unarchive': return nativeRequest(rpc, 'thread/unarchive', { threadId: nativeId });
-    case 'fork': return nativeRequest(rpc, 'thread/fork', { threadId: nativeId, ...(action.lastTurnId === undefined ? {} : { lastTurnId: action.lastTurnId }), excludeTurns: true });
+    case 'fork': {
+      const result = await nativeRequest(rpc, 'thread/fork', { threadId: nativeId, ...(action.lastTurnId === undefined ? {} : { lastTurnId: action.lastTurnId }), excludeTurns: true });
+      if (result.thread.id === nativeId || resolve(result.thread.cwd) !== resolve(cwd)) throw new Error('Native fork returned an unconfirmed source identity or directory');
+      await releaseCodexFork(rpc, result.thread.id);
+      const nativeFork: NativeForkSession = { sourceNativeId: nativeId, nativeId: result.thread.id, cwd: result.thread.cwd,
+        model: result.model, reasoningEffort: result.reasoningEffort, accessMode: 'inherit', ...(result.thread.name == null ? {} : { title: result.thread.name }) };
+      return { ...result, nativeFork };
+    }
     case 'compact': await nativeRequest(rpc, 'thread/compact/start', { threadId: nativeId }); return { submitted: true, confirmed: false, note: '等待原生压缩终态通知' };
     case 'review': {
       let thread;
@@ -86,4 +94,25 @@ export async function executeCodexNativeControl(rpc: JsonRpcStdio, nativeId: str
     }
     case 'refresh-skills': return nativeRequest(rpc, 'skills/list', { cwds: [cwd], forceReload: true });
   }
+}
+
+/** Fork loads a writer in the source app-server. Release only that new child
+ * before the browser resumes it independently; an unsubscribe ACK alone is
+ * not terminal evidence while native shutdown is still in progress. */
+export async function releaseCodexFork(rpc: JsonRpcStdio, nativeId: string): Promise<void> {
+  let closed!: () => void;
+  const completion = new Promise<void>(resolve => { closed = resolve; });
+  const unsubscribe = rpc.onNotification(frame => {
+    if (frame['method'] === 'thread/closed' && (frame['params'] as { threadId?: string } | undefined)?.threadId === nativeId) closed();
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await nativeRequest(rpc, 'thread/unsubscribe', { threadId: nativeId });
+    if (result.status === 'notLoaded') return;
+    await Promise.race([completion, new Promise<never>((_resolve, reject) => {
+      // Native idle eviction defaults to 60 seconds. Respect its configured
+      // lifecycle instead of changing native retention to satisfy a check.
+      timer = setTimeout(() => reject(new Error('Native fork writer release is unconfirmed; do not repeat the fork')), 90_000);
+    })]);
+  } finally { unsubscribe(); if (timer !== undefined) clearTimeout(timer); }
 }

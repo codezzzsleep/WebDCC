@@ -16,7 +16,6 @@ import { UploadController, type UploadKind } from '../lib/upload-controller.js';
 import { ComposerInputController, type ComposerInputCapabilities, type ComposerIntent, type PreparedPart } from '../lib/composer-input-controller.js';
 import { SyncedInputDraftStore } from '../lib/synced-input-draft-store.js';
 import { AttachmentPreview } from './InputAttachments.js';
-import { attachmentDigest } from '../lib/input-digest.js';
 import { SlashControl } from './SlashControl.js';
 
 type ComposerMode =
@@ -92,6 +91,8 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [sessionModels, setSessionModels] = useState<string[]>([]);
   const [skills, setSkills] = useState<{ skillId: string; name: string; description: string; enabled: boolean }[]>([]);
   const [skillStatus, setSkillStatus] = useState('');
+  const [skillSource, setSkillSource] = useState<string>();
+  const skillContext = `${agent}:${workspaceId}:${sessionId ?? 'new'}`;
   const [modelCatalog, setModelCatalog] = useState<{ agent: string; providerId: string | null; options: ModelOption[] }>();
   const catalogReady = modelCatalog?.agent === agent && modelCatalog.providerId === currentProviderId;
   const modelOptions = catalogReady ? modelCatalog.options : [];
@@ -232,17 +233,15 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     return () => { active = false; };
   }, [slashOpen, sessionId, agent, workspaceId, slashCatalogRevision]);
   useEffect(() => {
-    if (menu !== 'skill' || sessionId === null || agent !== 'codex') return;
-    let active = true; setSkills([]); setSkillStatus('正在读取原生技能目录');
-    void api.nativeControls(sessionId, true).then(async snapshot => {
-      const catalog = snapshot.catalog as { skills?: { available?: boolean; value?: { data?: { skills?: { name?: string; path?: string; description?: string; enabled?: boolean }[] }[] } } } | undefined;
-      if (catalog?.skills?.available !== true) throw new Error('原生技能目录当前不可用');
-      const options = await Promise.all((catalog.skills.value?.data ?? []).flatMap(entry => entry.skills ?? []).flatMap(skill =>
-        typeof skill.name === 'string' && typeof skill.path === 'string' ? [attachmentDigest(new Blob([JSON.stringify([skill.name, skill.path])])).then(skillId => ({ skillId, name: skill.name!, description: skill.description ?? '', enabled: skill.enabled === true }))] : []));
-      if (active) { setSkills([...new Map(options.map(option => [option.skillId, option])).values()]); setSkillStatus(options.length === 0 ? '当前原生目录没有可用技能' : ''); }
+    if (menu !== 'skill' || agent !== 'codex') return;
+    let active = true; setSkills([]); setSkillSource(undefined); setSkillStatus('正在读取原生技能目录');
+    void api.inputSkills(agent, workspaceId, sessionId ?? undefined).then(catalog => {
+      if (catalog.agent !== agent || catalog.workspaceId !== workspaceId || catalog.sessionId !== (sessionId ?? undefined)) throw new Error('技能目录的会话或工作区不匹配');
+      if (catalog.status === 'error' || catalog.status === 'unavailable') throw new Error(catalog.reason ?? '原生技能目录当前不可用');
+      if (active) { setSkills([...new Map(catalog.skills.map(skill => [skill.skillId, skill])).values()]); setSkillSource(skillContext); setSkillStatus(catalog.skills.length === 0 ? '当前原生目录没有可用技能' : ''); }
     }).catch(cause => { if (active) setSkillStatus(cause instanceof Error ? cause.message : String(cause)); });
     return () => { active = false; };
-  }, [menu, sessionId, agent]);
+  }, [menu, sessionId, agent, workspaceId, skillContext]);
 
   // 点菜单外面关闭菜单
   useEffect(() => {
@@ -586,13 +585,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   </span>
                 </button>
                 {agent === 'codex' && selectedModel?.inputModalities?.includes('audio') ? <button type="button" role="menuitem" className="menu-item" onClick={() => { setMenu(null); audioInputRef.current?.click(); }}>添加音频</button> : null}
-                {agent === 'codex' && sessionId !== null ? <button type="button" role="menuitem" className="menu-item" onClick={() => setMenu('skill')}>添加原生技能</button> : null}
+                {agent === 'codex' ? <button type="button" role="menuitem" className="menu-item" disabled={!workspaceId} onClick={() => setMenu('skill')}>添加原生技能</button> : null}
               </div>
             ) : null}
             {menu === 'skill' ? <div className="menu up left" role="menu" data-testid="input-skill-menu">
               {skillStatus ? <div role="status" className="menu-note">{skillStatus}</div> : null}
-              {skills.map(skill => <button type="button" role="menuitem" className="menu-item" key={skill.skillId} disabled={!skill.enabled} onClick={() => {
-                const token = controls.drafts.token(); if (token !== undefined) controls.input.appendPart(token, { type: 'skill', skillId: skill.skillId, name: skill.name }); setMenu(null);
+              {skills.map(skill => <button type="button" role="menuitem" className="menu-item" key={skill.skillId} disabled={!skill.enabled || skillSource !== skillContext} onClick={() => {
+                const token = controls.drafts.token(); if (skillSource !== skillContext || controls.drafts.snapshot()?.sessionId !== draftSessionId) return;
+                if (token !== undefined) controls.input.appendPart(token, { type: 'skill', skillId: skill.skillId, name: skill.name }); setMenu(null);
               }}><span className="menu-item-body">{skill.name}<span className="menu-item-sub">{skill.enabled ? skill.description : '已在原生端禁用'}</span></span></button>)}
             </div> : null}
           </span>

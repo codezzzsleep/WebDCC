@@ -1,4 +1,4 @@
-import type { NativeActionReceipt, NativeActionRequest, NativeActionResponse, NativeActionState, ManagedProcessIdentity, RuntimeIdentity, DshSubagentInputReference } from '@webdcc/protocol';
+import type { NativeActionReceipt, NativeActionRequest, NativeActionResponse, NativeActionState, NativeForkContinuation, ManagedProcessIdentity, RuntimeIdentity, DshSubagentInputReference } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { payloadHash } from './command-journal.js';
 import { captureProcess, processState } from './process-identity.js';
@@ -11,12 +11,13 @@ interface Row {
 const error = (message: string, statusCode = 409): Error => Object.assign(new Error(message), { statusCode, code: 'native-control-rejected' });
 const targetKey = (action: Record<string, unknown>): string => payloadHash({ type: action['type'], id: action['requestId'] ?? action['taskId'] ?? action['cardId'] ?? action['childSessionId'] ?? action['terminalId'] ?? action['processId'] ?? null, runId: action['runId'] ?? null });
 const receipt = (row: Row): NativeActionReceipt => {
-  const reference = row.reference === null ? undefined : JSON.parse(row.reference) as NonNullable<NativeActionReceipt['reference']> & { callReturnedAt?: string };
+  const reference = row.reference === null ? undefined : JSON.parse(row.reference) as NonNullable<NativeActionReceipt['reference']> & { callReturnedAt?: string; continuation?: NativeForkContinuation };
   return { commandId: row.command_id, sessionId: row.session_id, type: row.type, state: row.state, updatedAt: row.updated_at,
     ...(row.error === null ? {} : { error: row.error }), ...(reference === undefined ? {} : {
       reference: { id: reference.id, ...(reference.generation === undefined ? {} : { generation: reference.generation }), ...(reference.runId === undefined ? {} : { runId: reference.runId }),
         ...(reference.dshChild === undefined ? {} : { dshChild: reference.dshChild }) },
       ...(reference.callReturnedAt === undefined ? {} : { callReturnedAt: reference.callReturnedAt }),
+      ...(reference.continuation === undefined ? {} : { continuation: reference.continuation }),
     }) };
 };
 
@@ -55,6 +56,26 @@ export class NativeActionStore {
   bind(commandId: string, identity: RuntimeIdentity, nativeId: string): void {
     this.db.prepare('UPDATE native_actions SET runtime_key = ?, native_id = ? WHERE command_id = ?')
       .run(payloadHash(identity), nativeId, commandId);
+  }
+  /** The session, feed and completed receipt commit together after the native
+   * fork returns. A crash before this transaction leaves an uncertain action. */
+  recordFork(commandId: string, sessionId: string, identity: RuntimeIdentity, sourceNativeId: string, nativeId: string,
+    create: () => NativeForkContinuation): NativeForkContinuation {
+    return this.db.transaction(() => {
+      const row = this.db.prepare('SELECT * FROM native_actions WHERE command_id = ? AND session_id = ?').get(commandId, sessionId) as Row & { runtime_key: string | null; native_id: string | null } | undefined;
+      if (row === undefined || row.type !== 'fork' || row.runtime_key !== payloadHash(identity) || row.native_id !== sourceNativeId) throw new Error('Native fork receipt does not match its source writer');
+      const previous = row.reference === null ? {} : JSON.parse(row.reference) as { continuation?: NativeForkContinuation };
+      if (previous.continuation !== undefined) {
+        if (previous.continuation.nativeId !== nativeId || previous.continuation.sourceNativeId !== sourceNativeId) throw new Error('Native fork receipt already belongs to another result');
+        return previous.continuation;
+      }
+      if (row.state !== 'dispatching') throw new Error('Native fork dispatch is no longer current');
+      const continuation = create();
+      if (continuation.nativeId !== nativeId || continuation.sourceNativeId !== sourceNativeId) throw new Error('Native fork session does not match the returned identity');
+      this.db.prepare("UPDATE native_actions SET reference = ?, state = 'completed', error = NULL, updated_at = ? WHERE command_id = ?")
+        .run(JSON.stringify({ id: nativeId, continuation }), new Date().toISOString(), commandId);
+      return continuation;
+    })();
   }
   /** A returned SDK stop call is evidence about the old command, even when
    * the operation subsequently loses its owner. It never settles the task. */
@@ -135,7 +156,7 @@ export class NativeActionStore {
       const result = await run();
       const response = result !== null && typeof result === 'object' ? result as { id?: unknown; generation?: unknown; runId?: unknown } : {};
       if (value.action.type === 'stop-task') this.recordStopReturn(value.commandId, result);
-      else if (typeof response.id === 'string' && response.id.length <= 128) {
+      else if (value.action.type !== 'fork' && typeof response.id === 'string' && response.id.length <= 128) {
         const reference = { id: response.id, ...(Number.isSafeInteger(response.generation) ? { generation: response.generation } : {}) };
         this.db.prepare('UPDATE native_actions SET reference = ? WHERE command_id = ?').run(JSON.stringify(reference), value.commandId);
       }

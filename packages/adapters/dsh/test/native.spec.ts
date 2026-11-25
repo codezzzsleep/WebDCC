@@ -102,6 +102,25 @@ it('the adapter fences stale actions and reads native state back after a goal mu
   expect(writes).toEqual([{ endpoint: 'goals/create', args: { agentId: 'native-parent', request: { objective: '  exact\r\n  ' } } }]);
   expect(result.state.revision).not.toBe(refreshed.revision);
 });
+
+it('compares the intact native schema before redacting a secret-field reference in the public catalog', async () => {
+  const { adapter } = controller();
+  const client = (adapter as unknown as { client: DshHostClient }).client;
+  const rpc = client.rpc; let uid = 100;
+  client.rpc = async <T>(endpoint: string, args: Record<string, unknown>) => {
+    if (endpoint !== 'settings/describe') return rpc<T>(endpoint, args);
+    const id = uid++;
+    return { writable: true, namespaces: [{ ns: 'native-secret-setting', revision: 1, schema: { uid: id, refs: {
+      [id]: { type: 'object', dict: { apiKey: id + 1000 } }, [id + 1000]: { type: 'string', meta: { role: 'secret' } },
+    } } }] } as T;
+  };
+  const first = await adapter.nativeCatalog('local') as { settings: { namespaces: { schema: { uid: number; refs: Record<string, { dict?: { apiKey?: unknown } }> } }[] } };
+  const second = await adapter.nativeCatalog('local') as typeof first;
+  expect(adapter.nativeCatalogForRevision(first)).toBe(adapter.nativeCatalogForRevision(second));
+  const schema = first.settings.namespaces[0]!.schema;
+  expect(schema.refs[String(schema.uid)]?.dict?.apiKey).toBe('[redacted]');
+  expect(schema.uid).not.toBe(second.settings.namespaces[0]!.schema.uid);
+});
 it('unknown actual Host identity blocks writes, and direct-child controls cannot escape their parent', async () => {
   const { adapter, writes } = controller();
   vi.mocked(adapter.hostIdentity).mockResolvedValue({ ...host, version: undefined, status: 'unknown', reason: 'Host release missing' });

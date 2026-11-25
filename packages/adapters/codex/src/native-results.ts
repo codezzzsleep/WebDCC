@@ -9,6 +9,7 @@ import type { ThreadSetNameResponse } from './schema/v2/ThreadSetNameResponse.js
 import type { ThreadArchiveResponse } from './schema/v2/ThreadArchiveResponse.js';
 import type { ThreadUnarchiveResponse } from './schema/v2/ThreadUnarchiveResponse.js';
 import type { ThreadForkResponse } from './schema/v2/ThreadForkResponse.js';
+import type { ThreadUnsubscribeResponse } from './schema/v2/ThreadUnsubscribeResponse.js';
 import type { ThreadCompactStartResponse } from './schema/v2/ThreadCompactStartResponse.js';
 import type { ReviewStartResponse } from './schema/v2/ReviewStartResponse.js';
 import type { ThreadListResponse } from './schema/v2/ThreadListResponse.js';
@@ -37,6 +38,7 @@ export interface NativeControlResults {
   'thread/archive': ThreadArchiveResponse;
   'thread/unarchive': ThreadUnarchiveResponse;
   'thread/fork': ThreadForkResponse;
+  'thread/unsubscribe': ThreadUnsubscribeResponse;
   'thread/compact/start': ThreadCompactStartResponse;
   'review/start': ReviewStartResponse;
   'thread/list': ThreadListResponse;
@@ -61,6 +63,7 @@ export const nativeControlResultRefs: Record<keyof NativeControlResults, string>
   'thread/archive': '#/definitions/v2/ThreadArchiveResponse',
   'thread/unarchive': '#/definitions/v2/ThreadUnarchiveResponse',
   'thread/fork': '#/definitions/v2/ThreadForkResponse',
+  'thread/unsubscribe': '#/definitions/v2/ThreadUnsubscribeResponse',
   'thread/compact/start': '#/definitions/v2/ThreadCompactStartResponse',
   'review/start': '#/definitions/v2/ReviewStartResponse',
   'thread/list': '#/definitions/v2/ThreadListResponse',
