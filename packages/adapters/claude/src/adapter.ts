@@ -964,11 +964,16 @@ export class ClaudeAdapter implements AgentAdapter {
     };
   }
 
-  async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown> {
-    const runtime = this.require(sessionId);
-    if (runtime.nativeId === '') throw nativeError('原生会话 ID 尚未建立', 409);
+  readonly detachedNativeHistory = true;
+  async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }, target?: { nativeId: string; cwd: string }): Promise<unknown> {
+    const runtime = this.sessions.get(sessionId);
+    const nativeId = runtime?.nativeId || target?.nativeId;
+    const cwd = runtime?.launchOpts.cwd ?? target?.cwd;
+    if (!nativeId || !cwd || target !== undefined && (target.nativeId !== nativeId || target.cwd !== cwd)) throw nativeError('原生会话身份或工作区尚未确认', 409);
     const offset = options.offset ?? (options.cursor === undefined ? 0 : Number(options.cursor));
-    return this.nativeHistory.messages(runtime.launchOpts.cwd, runtime.nativeId, offset, options.limit);
+    const history = await this.nativeHistory.messages(cwd, nativeId, offset, options.limit);
+    if (this.sessions.get(sessionId) !== runtime) throw nativeError('原生会话在读取期间已变化', 409);
+    return { ...history, nativeId };
   }
 
   async executeNativeControl(sessionId: string, value: unknown): Promise<unknown> {

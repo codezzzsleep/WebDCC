@@ -69,6 +69,7 @@ export interface CodexAdapterOptions {
 
 interface PendingApproval {
   requestId: string | number;
+  nativeThreadId?: string;
   nativeTurnId?: string;
   kind: 'commandExecution' | 'fileChange' | 'legacyExec' | 'legacyPatch' | 'userInput' | 'elicitation' | 'permissions';
   elicitation?: McpServerElicitationRequestParams;
@@ -658,10 +659,14 @@ export class CodexAdapter implements AgentAdapter {
 
   private emit(sessionId: string, event: AdapterEvent): void {
     const current = this.sessions.get(sessionId);
+    const native = ('native' in event ? event.native : undefined) as { params?: { threadId?: unknown; conversationId?: unknown } } | undefined;
+    const requestThread = native?.params?.threadId ?? native?.params?.conversationId;
+    const childRequest = event.type === 'item.complete' && ['question', 'approval.request', 'approval.resolved'].includes(event.kind)
+      && typeof requestThread === 'string' && requestThread !== current?.nativeId;
     const identity = current?.identity;
     if (identity !== undefined) event = { ...event, runtime: identity };
     if (current?.envelopeId !== undefined) event = { ...event, nativeEnvelopeId: current.envelopeId };
-    if ('nativeTurnId' in event && event.nativeTurnId !== undefined) {
+    if ('nativeTurnId' in event && event.nativeTurnId !== undefined && !childRequest) {
       const projected = this.nativeTurnId({ turnId: event.nativeTurnId }, current);
       if (projected !== event.nativeTurnId) event = { ...event, nativeTurnId: projected };
     }
@@ -669,7 +674,7 @@ export class CodexAdapter implements AgentAdapter {
       && event.nativeTurnId === undefined && event.native !== null && typeof event.native === 'object') {
       const native = event.native as Record<string, unknown>;
       const params = native['params'] !== null && typeof native['params'] === 'object' ? native['params'] as Record<string, unknown> : native;
-      const nativeTurnId = this.nativeTurnId(params, current);
+      const nativeTurnId = this.nativeTurnId(params, childRequest ? undefined : current);
       if (nativeTurnId !== undefined) event = { ...event, nativeTurnId };
     }
     if (event.type === 'item.complete' && !isValidEventData(event.kind, event.data)) {
@@ -1191,6 +1196,7 @@ export class CodexAdapter implements AgentAdapter {
     if (runtime === undefined) return { confirmed: true };
     for (const [approvalId, pending] of [...runtime.approvals]) {
       void approvalId;
+      if (pending.nativeThreadId !== undefined && pending.nativeThreadId !== runtime.nativeId) continue;
       if (pending.submitted) continue;
       const decisionValue = pending.kind === 'legacyExec' || pending.kind === 'legacyPatch' ? 'denied' : 'decline';
       pending.submitted = true; pending.outcome = 'cancel'; pending.decision = 'cancel';
@@ -1578,7 +1584,9 @@ export class CodexAdapter implements AgentAdapter {
     this.observeSubagent(sessionId, runtime, frame);
     const thread = (params['thread'] ?? {}) as { id?: unknown };
     const nativeThreadId = params['threadId'] ?? params['conversationId'] ?? thread.id;
-    if (runtime.nativeId !== '' && typeof nativeThreadId === 'string' && nativeThreadId !== runtime.nativeId) {
+    const resolvesRequest = route === 'serverRequest/resolved' && [...runtime.approvals.values()].some(pending =>
+      pending.requestId === params['requestId'] && (pending.nativeThreadId ?? runtime.nativeId) === nativeThreadId);
+    if (runtime.nativeId !== '' && typeof nativeThreadId === 'string' && nativeThreadId !== runtime.nativeId && !resolvesRequest) {
       // Keep every notification in the native ledger without admitting child
       // turns, answers, errors, goals or settings into the parent runtime.
       this.emit(sessionId, { type: 'item.complete', itemKey: `foreign-${frameKey}`, kind: 'internal',
@@ -1599,8 +1607,9 @@ export class CodexAdapter implements AgentAdapter {
         return;
       }
       case 'serverRequest/resolved': {
-        if (params['threadId'] !== runtime.nativeId || (typeof params['requestId'] !== 'string' && typeof params['requestId'] !== 'number')) return;
-        const entry = [...runtime.approvals].find(([, pending]) => pending.requestId === params['requestId']);
+        if (typeof params['requestId'] !== 'string' && typeof params['requestId'] !== 'number') return;
+        const entry = [...runtime.approvals].find(([, pending]) => pending.requestId === params['requestId']
+          && (pending.nativeThreadId ?? runtime.nativeId) === params['threadId']);
         if (entry === undefined) return;
         const [approvalId, pending] = entry;
         runtime.approvals.delete(approvalId);
@@ -1615,6 +1624,7 @@ export class CodexAdapter implements AgentAdapter {
         } else this.emit(sessionId, {
           type: 'item.complete', itemKey: `approval-${approvalId}`, kind: 'approval.resolved',
           nativeTurnId: pending.nativeTurnId,
+          ...(pending.sessionScoped ? { scope: 'session' as const } : {}),
           data: { approvalId, optionId: pending.decision ?? 'resolved-externally', by: pending.submitted ? 'user' : 'other' }, native: frame,
         });
         return;
@@ -2047,6 +2057,13 @@ export class CodexAdapter implements AgentAdapter {
 
   // ---------- 服务端反向请求（审批 / 提问） ----------
 
+  private requestChild(runtime: SessionRuntime, threadId: unknown): CodexSubagentIdentity | undefined {
+    if (threadId === undefined || threadId === runtime.nativeId) return undefined;
+    const child = typeof threadId === 'string' ? runtime.subagents?.get(threadId) : undefined;
+    if (child === undefined) throw Object.assign(new Error('Reverse request belongs to another native thread'), { code: -32602 });
+    return child;
+  }
+
   private onServerRequest(sessionId: string, frame: Frame): unknown {
     const runtime = this.sessions.get(sessionId);
     const method = String(frame['method'] ?? '');
@@ -2055,25 +2072,28 @@ export class CodexAdapter implements AgentAdapter {
     if (runtime !== undefined && (method === 'mcpServer/elicitation/request' || method === 'item/permissions/requestApproval')) {
       validateNativeServerParams(method, frame['params'], runtime.nativeVersion);
       const params = frame['params'] as McpServerElicitationRequestParams | PermissionsRequestApprovalParams;
-      if (params.threadId !== runtime.nativeId) throw Object.assign(new Error('Reverse request belongs to another native thread'), { code: -32602 });
+      const child = this.requestChild(runtime, params.threadId);
       const approvalId = `${runtime.processToken}:${typeof id}:${id}`;
       if (runtime.approvals.has(approvalId)) return undefined;
       if (method === 'item/permissions/requestApproval') {
         const permission = params as PermissionsRequestApprovalParams;
-        runtime.approvals.set(approvalId, { requestId: id, kind: 'permissions', permissions: permission.permissions, nativeTurnId: permission.turnId });
+        runtime.approvals.set(approvalId, { requestId: id, nativeThreadId: params.threadId, sessionScoped: child !== undefined,
+          kind: 'permissions', permissions: permission.permissions, nativeTurnId: permission.turnId });
         this.emit(sessionId, { type: 'item.complete', itemKey: `approval-${approvalId}`, kind: 'approval.request', nativeTurnId: permission.turnId, native: frame,
-          data: { approvalId, title: '原生额外权限', tool: 'request_permissions', reason: permission.reason ?? undefined,
+          ...(child === undefined ? {} : { scope: 'session' as const }),
+          data: { approvalId, title: child === undefined ? '原生额外权限' : `子 Agent ${child.agentPath ?? child.childId} · 原生额外权限`, tool: 'request_permissions', reason: permission.reason ?? undefined,
             detail: JSON.stringify({ cwd: permission.cwd, environmentId: permission.environmentId, permissions: permission.permissions }, null, 2),
             options: [{ id: 'grant-turn', label: '仅本轮允许' }, { id: 'grant-session', label: '本会话允许' }, { id: 'deny-permissions', label: '拒绝额外权限' }] } });
       } else {
         const elicitation = params as McpServerElicitationRequestParams;
         const question: EventData['question'] = { questionId: `${approvalId}:elicitation`, groupId: approvalId, prompt: elicitation.message,
-          header: `MCP · ${elicitation.serverName}`, allowsFreeText: false, isSecret: elicitation.mode !== 'url' && schemaHasSecrets(elicitation.requestedSchema),
+          header: `${child === undefined ? '' : `子 Agent ${child.agentPath ?? child.childId} · `}MCP · ${elicitation.serverName}`, allowsFreeText: false, isSecret: elicitation.mode !== 'url' && schemaHasSecrets(elicitation.requestedSchema),
           elicitation: elicitation.mode === 'url' ? { kind: 'url', serverName: elicitation.serverName, url: elicitation.url, elicitationId: elicitation.elicitationId }
             : { kind: 'form', serverName: elicitation.serverName, schema: elicitation.requestedSchema as Record<string, unknown> } };
-        runtime.approvals.set(approvalId, { requestId: id, kind: 'elicitation', elicitation, questionIds: ['elicitation'], questions: [question], sessionScoped: elicitation.turnId === null, nativeTurnId: elicitation.turnId ?? undefined });
+        runtime.approvals.set(approvalId, { requestId: id, nativeThreadId: params.threadId, kind: 'elicitation', elicitation, questionIds: ['elicitation'], questions: [question], sessionScoped: child !== undefined || elicitation.turnId === null, nativeTurnId: elicitation.turnId ?? undefined });
         this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}`, kind: 'question', data: question, native: frame,
-          ...(elicitation.turnId === null ? { scope: 'session' as const } : { nativeTurnId: elicitation.turnId }) });
+          ...(child !== undefined || elicitation.turnId === null ? { scope: 'session' as const } : {}),
+          ...(elicitation.turnId === null ? {} : { nativeTurnId: elicitation.turnId }) });
       }
       return undefined;
     }
@@ -2083,9 +2103,7 @@ export class CodexAdapter implements AgentAdapter {
     }
     const params = (frame['params'] ?? {}) as Record<string, unknown>;
     const nativeThreadId = params['threadId'] === undefined ? params['conversationId'] : params['threadId'];
-    if (runtime !== undefined && nativeThreadId !== undefined && nativeThreadId !== runtime.nativeId) {
-      throw Object.assign(new Error('Reverse request belongs to another native thread'), { code: -32602 });
-    }
+    const child = runtime === undefined ? undefined : this.requestChild(runtime, nativeThreadId);
 
     const options = ((): { id: string; label: string }[] => {
       switch (method) {
@@ -2123,14 +2141,18 @@ export class CodexAdapter implements AgentAdapter {
 
     const approvalId = `${runtime?.processToken ?? 'p'}:${typeof id}:${id}`;
     if (runtime?.approvals.has(approvalId)) return undefined;
-    runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params, runtime) });
+    runtime?.approvals.set(approvalId, { requestId: id, nativeThreadId: typeof nativeThreadId === 'string' ? nativeThreadId : runtime.nativeId,
+      sessionScoped: child !== undefined, kind, nativeTurnId: this.nativeTurnId(params, child === undefined ? runtime : undefined) });
     if (kind === 'userInput' && Array.isArray(params['questions'])) {
       const questions = params['questions'] as { id: string; question?: string; header?: string; options?: { label: string; description?: string }[] | null; isOther?: boolean; isSecret?: boolean }[];
-      const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答', header: question.header, isSecret: question.isSecret === true,
+      const items = questions.map(question => ({ questionId: `${approvalId}:${question.id}`, groupId: approvalId, prompt: question.question ?? '请回答',
+        header: child === undefined ? question.header : `子 Agent ${child.agentPath ?? child.childId}${question.header === undefined ? '' : ` · ${question.header}`}`, isSecret: question.isSecret === true,
         ...(typeof params['isBlocking'] === 'boolean' ? { isBlocking: params['isBlocking'] } : {}),
         allowsFreeText: question.isSecret === true || question.options == null || question.isOther !== false, options: question.options?.map(option => ({ id: option.label, label: option.label, description: option.description })) }));
-      runtime?.approvals.set(approvalId, { requestId: id, kind, nativeTurnId: this.nativeTurnId(params, runtime), questionIds: questions.map(question => question.id), questions: items });
-      for (const question of items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.questionId.slice(approvalId.length + 1)}`, kind: 'question', data: question, native: frame });
+      runtime?.approvals.set(approvalId, { requestId: id, nativeThreadId: typeof nativeThreadId === 'string' ? nativeThreadId : runtime.nativeId,
+        sessionScoped: child !== undefined, kind, nativeTurnId: this.nativeTurnId(params, child === undefined ? runtime : undefined), questionIds: questions.map(question => question.id), questions: items });
+      for (const question of items) this.emit(sessionId, { type: 'item.complete', itemKey: `question-${approvalId}-${question.questionId.slice(approvalId.length + 1)}`, kind: 'question', data: question, native: frame,
+        ...(child === undefined ? {} : { scope: 'session' as const }) });
       return undefined;
     }
 
@@ -2139,8 +2161,9 @@ export class CodexAdapter implements AgentAdapter {
       type: 'item.complete',
       itemKey: `approval-${approvalId}`,
       kind: 'approval.request',
-      nativeTurnId: this.nativeTurnId(params, runtime),
+      nativeTurnId: this.nativeTurnId(params, child === undefined ? runtime : undefined),
       native: frame,
+      ...(child === undefined ? {} : { scope: 'session' as const }),
       data: {
         approvalId,
         title: (() => {
@@ -2150,7 +2173,8 @@ export class CodexAdapter implements AgentAdapter {
               ? params['command']
               : '';
           const base = kind === 'fileChange' || kind === 'legacyPatch' ? 'apply_patch' : 'exec_command';
-          return command === '' ? base : `${base} · ${command}`;
+          const title = command === '' ? base : `${base} · ${command}`;
+          return child === undefined ? title : `子 Agent ${child.agentPath ?? child.childId} · ${title}`;
         })(),
         detail: detail.length > 2000 ? `${detail.slice(0, 2000)}…` : detail,
         tool: kind === 'fileChange' || kind === 'legacyPatch' ? 'apply_patch' : 'exec_command',

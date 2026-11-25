@@ -29,7 +29,7 @@ export function CapabilitiesPage(): React.ReactElement {
     </p>)}
     <label>搜索能力<input className="text-input" value={query} onChange={event => setQuery(event.target.value)} /></label>
     {snapshot?.capabilities.filter(capability => `${capability.title} ${capability.agent} ${capability.methods.join(' ')}`.toLowerCase().includes(query.toLowerCase())).map(capability => <details key={capability.id}>
-      <summary>{agentText(capability.agent).name} · {capability.title} · {capability.structuredVerified || capability.fallbackVerified ? '已验证' : capability.structuredImplemented ? '待验收' : '待实现'}</summary>
+      <summary>{agentText(capability.agent).name} · {capability.title} · {capability.structuredVerified || capability.fallbackVerified ? '已验证' : capability.structuredImplemented ? '已接入，待验证' : '接入范围待核实'}</summary>
       <p>{capability.reason}</p><p>原生可用性：{capability.nativeAvailability} · 接口：{capability.apiExposure}</p>
       <ul>{capability.methods.map(method => <li key={method}><code>{method}</code></li>)}</ul>
     </details>)}

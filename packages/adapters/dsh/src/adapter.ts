@@ -41,7 +41,7 @@ import { buildFileChanges, isValidEventData, traceFrame, ulid, normalizeQuestion
 import { dshBaseUrl, DshHostClient, DshRpcError, startSidecar, type Sidecar, type StreamFrame, type DshRpcObservation, type DshBinaryUploadObservation } from './host.js';
 import { validateDshArgs, type DshHistoryRecord, type DshPage, type DshSubagentPrompt, type DshSubagentInterrupt } from './contracts.js';
 import { DshHistoryBridge, type DshOpening } from './history.js';
-import { DshAssistantBridge, failedDshAttemptDetails } from './assistant.js';
+import { DshAssistantBridge, failedDshAttemptDetails, type DshAssistantBaseline } from './assistant.js';
 import { DshRetryDisplay } from './retry.js';
 import { readDshHostIdentity, requireDshBaseline, type DshHostIdentity } from './identity.js';
 import { DSH_BASELINE_VERSION, dshRuntimeContract, dshRuntimeSummary, isSupportedDshVersion, SUPPORTED_DSH_VERSIONS } from './runtime.js';
@@ -618,15 +618,23 @@ export class DshAdapter implements AgentAdapter {
     return { host: await this.hostIdentity(), result: dshPublicValue(result) };
   }
 
-  async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown> {
-    const runtime = this.require(sessionId);
+  readonly detachedNativeHistory = true;
+  async readNativeHistory(sessionId: string, options: { cursor?: string; offset?: number; limit: number }, target?: { nativeId: string; cwd: string }): Promise<unknown> {
+    const runtime = this.sessions.get(sessionId);
+    const nativeId = runtime?.nativeId ?? target?.nativeId;
+    if (!nativeId || target !== undefined && target.nativeId !== nativeId) throw dshNativeError('原生会话身份尚未确认', 409);
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 200 || options.offset !== undefined && options.offset !== 0) throw dshNativeError('DSH history requires a native cursor and limit 1–200');
     const beforeSeq = options.cursor === undefined ? undefined : Number(options.cursor);
     if (beforeSeq !== undefined && (!/^\d+$/.test(options.cursor ?? '') || !Number.isSafeInteger(beforeSeq))) throw dshNativeError('Invalid DSH history cursor');
+    if (runtime === undefined && this.client === null && (this.options.mode ?? 'spawn') !== 'attach') throw dshNativeError('DSH Host 尚未连接；历史读取不会启动新 Host', 503);
     const client = await this.ensureSidecar();
-    const page = await this.call<{ records: DshHistoryRecord[]; hasMore: boolean }>(client, 'session/page', { request: { address: { kind: 'session', sessionId: runtime.nativeId }, maxMessages: options.limit, ...(beforeSeq === undefined ? {} : { beforeSeq }) } }, sessionId);
+    const host = await this.hostIdentity();
+    requireDshBaseline(host);
+    const epoch = this.hostEpoch; const generation = this.muxGeneration;
+    const page = await this.call<{ records: DshHistoryRecord[]; hasMore: boolean }>(client, 'session/page', { request: { address: { kind: 'session', sessionId: nativeId }, maxMessages: options.limit, ...(beforeSeq === undefined ? {} : { beforeSeq }) } }, sessionId);
     if (this.sessions.get(sessionId) !== runtime) throw dshNativeError('DSH runtime was replaced', 409);
-    return { nativeId: runtime.nativeId, records: page.records, hasMore: page.hasMore, nextCursor: page.records[0]?.event.seq.toString() };
+    if (this.client !== client || this.hostEpoch !== epoch || this.muxGeneration !== generation) throw dshNativeError('DSH Host 在读取期间已变化', 409);
+    return { nativeId, host, records: page.records, hasMore: page.hasMore, nextCursor: page.records[0]?.event.seq.toString() };
   }
 
   private async childReadContext(sessionId: string, target?: DshSubagentReadTarget) {
@@ -688,7 +696,9 @@ export class DshAdapter implements AgentAdapter {
   async readSubagentHistory(sessionId: string, childSessionId: string, options: DshSubagentHistoryOptions, target?: DshSubagentReadTarget): Promise<DshSubagentHistory> {
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 200
       || options.throughSeq !== undefined && (!Number.isSafeInteger(options.throughSeq) || options.throughSeq < -1)
-      || options.beforeSeq !== undefined && (!Number.isSafeInteger(options.beforeSeq) || options.beforeSeq < 0)) throw dshNativeError('DSH 子会话历史分页参数无效', 400);
+      || options.beforeSeq !== undefined && (!Number.isSafeInteger(options.beforeSeq) || options.beforeSeq < 0)
+      || options.includeActive !== undefined && typeof options.includeActive !== 'boolean'
+      || options.includeActive === true && (options.beforeSeq !== undefined || options.throughSeq !== undefined)) throw dshNativeError('DSH 子会话历史分页参数无效；当前输出只适用于最新窗口', 400);
     const context = await this.childReadContext(sessionId, target);
     const child = context.children.find(entry => entry.childId === childSessionId);
     if (child === undefined) throw dshNativeError('子 Agent 不属于当前父会话', 409);
@@ -696,8 +706,28 @@ export class DshAdapter implements AgentAdapter {
     const projection = await this.call(context.client, 'session/projections', { request: { sessionId: child.childId } }, sessionId);
     context.guard();
     const ownDescriptorSeq = dshSubagentDescriptorSeq(projection, child);
-    const throughSeq = options.throughSeq ?? (await this.call<DshSubagentState>(context.client, 'session/state', { request: { sessionId: child.childId } }, sessionId)).cursor;
+    const state = options.throughSeq === undefined ? await this.call<DshSubagentState>(context.client, 'session/state', { request: { sessionId: child.childId } }, sessionId) : undefined;
+    const throughSeq = options.throughSeq ?? state!.cursor;
     context.guard();
+    if (options.includeActive === true && state?.running === true) {
+      const opening = await context.client.snapshot<DshOpening>('session/follow', { request: {
+        address, activate: false, assistantStream: true, maxMessages: options.limit,
+      } });
+      context.guard();
+      if (opening.type !== 'snapshot' || opening.header?.id !== child.childId || opening.cursor < throughSeq)
+        throw dshNativeError('DSH 当前输出的子会话身份或水位无效', 409);
+      checkDshSubagentPage(opening);
+      const bridge = new DshAssistantBridge();
+      bridge.baseline(opening.assistantStream);
+      const baseline = opening.assistantStream as DshAssistantBaseline | undefined;
+      const attempt = baseline?.activeAttempt;
+      if (attempt !== undefined && attempt.startedAfterSeq > opening.cursor) throw dshNativeError('DSH 当前尝试不属于读取的历史窗口', 409);
+      return { address, cursor: opening.cursor, records: opening.records, hasMore: opening.hasMore,
+        ...(ownDescriptorSeq === undefined ? {} : { ownDescriptorSeq }),
+        ...(opening.records[0] === undefined ? {} : { nextCursor: opening.records[0].event.seq }),
+        ...(attempt === undefined ? {} : { activeOutput: { ...attempt, revision: baseline!.revision,
+          details: failedDshAttemptDetails(attempt.stream) } }) };
+    }
     const page = await this.call<DshPage>(context.client, 'session/page', { request: { address, maxMessages: options.limit, throughSeq,
       ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }) } }, sessionId);
     context.guard();

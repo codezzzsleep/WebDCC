@@ -178,11 +178,14 @@ function usageFor(events: readonly StoredEvent[], completedData: EventData['turn
   const samples = events.filter((event) => event.kind === 'usage').map((event) => ({ at: event.at, data: event.data as UsageData }));
   const attempts = samples.map((sample) => sample.data).filter((sample) => sample.scope === 'attempt');
   if (attempts.length > 0) {
-    const inputTokens = attempts.reduce((sum, sample) => sum + (sample.inputTokens ?? 0), 0);
-    const outputTokens = attempts.reduce((sum, sample) => sum + (sample.outputTokens ?? 0), 0);
-    const generationMs = attempts.reduce((sum, sample) => sum + (sample.generationMs ?? 0), 0);
+    const completeSum = (field: 'inputTokens' | 'outputTokens' | 'generationMs'): number | undefined =>
+      attempts.every(sample => sample[field] !== undefined) ? attempts.reduce((total, sample) => total + sample[field]!, 0) : undefined;
+    const inputTokens = completeSum('inputTokens');
+    const outputTokens = completeSum('outputTokens');
+    const generationMs = completeSum('generationMs');
     const sum = (field: 'cacheReadInputTokens' | 'cacheCreationInputTokens' | 'reasoningOutputTokens' | 'totalCostUsd'): number | undefined => attempts.some(sample => sample[field] !== undefined) ? attempts.reduce((total, sample) => total + (sample[field] ?? 0), 0) : undefined;
-    return { inputTokens, outputTokens, cacheReadInputTokens: sum('cacheReadInputTokens'), cacheCreationInputTokens: sum('cacheCreationInputTokens'), reasoningOutputTokens: sum('reasoningOutputTokens'), totalCostUsd: sum('totalCostUsd'), scope: 'turn', ...(generationMs > 0 ? { generationMs, tokensPerSecond: outputTokens / (generationMs / 1000) } : {}) };
+    return { inputTokens, outputTokens, cacheReadInputTokens: sum('cacheReadInputTokens'), cacheCreationInputTokens: sum('cacheCreationInputTokens'), reasoningOutputTokens: sum('reasoningOutputTokens'), totalCostUsd: sum('totalCostUsd'), scope: 'turn',
+      ...(generationMs !== undefined && generationMs > 0 ? { generationMs, ...(outputTokens === undefined ? {} : { tokensPerSecond: outputTokens / (generationMs / 1000) }) } : {}) };
   }
   const latestSample = samples.at(-1);
   const latest = latestSample?.data ?? completedData?.usage;

@@ -33,3 +33,12 @@ export interface ReconciliationView {
   canApply: boolean; reasons: string[]; applied: boolean;
   outcomes: { turnId: string; nativeTurnId: string; status: 'completed' | 'failed' | 'interrupted' }[];
 }
+
+export interface NativeRecoveryCapabilities {
+  agent: string;
+  workspaceId: string;
+  nativeId?: string;
+  canObserve: boolean;
+  canReadHistory: boolean;
+  reason?: string;
+}

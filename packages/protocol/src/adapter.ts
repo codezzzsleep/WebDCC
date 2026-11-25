@@ -219,7 +219,9 @@ export interface AgentAdapter {
   prepareDshQuestionAnswer?(sessionId: string, questionId: string, answer: unknown): Promise<DshQuestionAttempt | undefined>;
   retryDshQuestion?(sessionId: string, questionId: string, attempt: DshQuestionAttempt, revision: string): Promise<AnswerSubmission>;
   executeNativeControl?(sessionId: string, action: unknown): Promise<unknown>;
-  readNativeHistory?(sessionId: string, options: { cursor?: string; offset?: number; limit: number }): Promise<unknown>;
+  /** Supports an explicitly supplied identity without starting/resuming a native writer. */
+  detachedNativeHistory?: boolean;
+  readNativeHistory?(sessionId: string, options: { cursor?: string; offset?: number; limit: number }, target?: { nativeId: string; cwd: string }): Promise<unknown>;
   nativeProcessStart?(sessionId: string, params: NativeProcessStart, onOutput: (delta: NativeProcessDelta) => void): Promise<NativeProcessCompletion>;
   nativeProcessWrite?(sessionId: string, params: { processId: string; deltaBase64?: string; closeStdin?: boolean }): Promise<void>;
   nativeProcessResize?(sessionId: string, params: { processId: string; size: { rows: number; cols: number } }): Promise<void>;

@@ -16,10 +16,14 @@ import { mkdir, open, readFile, rename, realpath, writeFile } from 'node:fs/prom
 import { join, resolve } from 'node:path';
 import { URL, pathToFileURL } from 'node:url';
 import { closeVerifiedServer, finalizeVerifiedServer } from './deployed-native-cleanup.mjs';
+import { waitForNativeTurn, waitForNativeReceipts } from './deployed-native-wait.mjs';
 
 const [configPath, agent, flag] = process.argv.slice(2);
 assert(['codex', 'claude-code', 'dsh'].includes(agent), 'Select one of all three Agents');
 const config = JSON.parse(await readFile(resolve(configPath), 'utf8'));
+const observationPolicy = { idleTimeoutMs: config.nativeIdleTimeoutMs ?? 150000, maxDurationMs: config.nativeTurnMaxDurationMs ?? 900000 };
+const receiptDrainTimeoutMs = config.receiptDrainTimeoutMs ?? 120000;
+assert([...Object.values(observationPolicy), receiptDrainTimeoutMs].every(value => Number.isFinite(value) && value > 0), 'Observation budgets must be positive finite milliseconds before model admission');
 const acceptanceScope = config.acceptanceScope ?? 'target-deployment';
 assert(['target-deployment', 'source-native'].includes(acceptanceScope), 'Select an explicit source or target acceptance scope');
 const live = flag === '--live';
@@ -190,9 +194,8 @@ async function authenticate() {
   await page.goto(base + '/?token=' + encodeURIComponent(serverConfig.token));
 }
 let sid;
-async function waitTurn(before) {
-  const until = Date.now() + 150000;
-  while (Date.now() < until) {
+async function waitTurn(afterSeq) {
+  return waitForNativeTurn(async () => {
     const approvals = page.locator('[data-testid="approval-card"][data-state="pending"][data-sync="ready"]');
     if (await approvals.count()) {
       const card = approvals.first();
@@ -204,15 +207,8 @@ async function waitTurn(before) {
       await card.getByRole('button', { name: /^(允许一次|允许|Allow|Yes|接受|确认)$/i }).first().click();
     }
     const events = (await api('/api/sessions/' + sid + '/events?limit=500')).events;
-    const done = events.filter(event => event.kind === 'turn.completed');
-    if (done.length > before) {
-      assert.equal(done.at(-1).data.status, 'completed', 'Official native turn did not complete');
-      return events;
-    }
-    if (report.requests.some(row => row.state === 'uncertain')) throw Error('Uncertain model receipt; paid input will not be repeated');
-    await new Promise(resolveWait => setTimeout(resolveWait, 250));
-  }
-  throw Error('Native turn did not finish; receipt remains incomplete');
+    return { events, requests: report.requests };
+  }, { afterSeq, ...observationPolicy });
 }
 const walk = (value, out = []) => {
   if (value && typeof value === 'object') { out.push(value); for (const child of Object.values(value)) walk(child, out); }
@@ -361,7 +357,7 @@ try {
     let events = await waitTurn(0);
     assert(events.some(event => event.kind === 'assistant.message' && event.data.text?.trim() === 'NATIVE_TEXT_OK'));
     report.checks.text = true;
-    const before = events.filter(event => event.kind === 'turn.completed').length;
+    const before = events.at(-1)?.seq ?? 0;
     report.userCommands.push({ id: randomUUID(), prompt: prompts[1], phase: 'native-tools', submittedAt: new Date().toISOString() });
     report.status = 'native-tools:submitting'; await save();
     await page.getByTestId('composer-input').fill(prompts[1]);
@@ -423,9 +419,23 @@ try {
   }
 } catch (error) {
   report.status = 'failed'; report.error = error instanceof Error ? error.stack : String(error);
+  if (error?.observation !== undefined) report.observationDeadline = error.observation;
   process.exitCode = 1;
 } finally {
   modelAdmission = false;
+  report.receiptDrain = await waitForNativeReceipts(() => report.requests, { timeoutMs: receiptDrainTimeoutMs });
+  if (report.receiptDrain.pendingRequestIds.length > 0) {
+    report.status = 'failed'; process.exitCode = 1;
+    report.pending.push({ kind: 'cleanup-deferred', reason: 'Admitted provider requests remain in flight; native services stay alive until those receipts settle.',
+      requestIds: report.receiptDrain.pendingRequestIds });
+    await atomic(join(root, 'receipt-drain.json'), { runId, pid: process.pid, status: 'cleanup-deferred', requestIds: report.receiptDrain.pendingRequestIds });
+    process.stdout.write(JSON.stringify({ agent, runId, status: 'cleanup-deferred', pendingRequestIds: report.receiptDrain.pendingRequestIds }) + '\n');
+    report.receiptDrain = await waitForNativeReceipts(() => report.requests, { timeoutMs: Infinity });
+  }
+  if (report.receiptDrain.uncertainRequestIds.length > 0) {
+    report.status = 'failed'; process.exitCode = 1;
+    report.pending.push({ kind: 'uncertain-provider-receipt', requestIds: report.receiptDrain.uncertainRequestIds, reason: 'No active stream remains, but these paid receipts are not confirmed. Do not repeat their inputs.' });
+  }
   if (page && report.status === 'failed') {
     await page.screenshot({ path: join(root, 'failed-page.png'), fullPage: true }).catch(() => undefined);
     report.failedBrowserText = await page.locator('body').innerText().catch(() => 'unavailable');

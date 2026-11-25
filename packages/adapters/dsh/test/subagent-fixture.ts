@@ -4,7 +4,8 @@ import { WebSocketServer } from 'ws';
 import type { DshSubagentState, DshSubagentRecord, AgentAdapter, SessionDto } from '@webdcc/protocol';
 import { DshAdapter } from '../src/adapter.js';
 import type { DshHostClient } from '../src/host.js';
-import type { DshPageRequest } from '../src/contracts.js';
+import type { DshFollowRequest, DshPageRequest } from '../src/contracts.js';
+import type { DshAssistantBaseline } from '../src/assistant.js';
 
 export const childRecord = (seq: number, type: string, data: unknown): DshSubagentRecord => ({ type: 'event', event: { seq, type, time: 1000 + seq, data } });
 
@@ -19,6 +20,9 @@ export async function createDshSubagentFixture(localId = 'parent') {
   const states = new Map<string, DshSubagentState>();
   const descriptorSeqs = new Map<string, number | null>();
   const records = new Map<string, DshSubagentRecord[]>();
+  const assistants = new Map<string, DshAssistantBaseline>();
+  const opens: { streamId: string; request: DshFollowRequest }[] = [];
+  const canceled: string[] = [];
   for (const id of ['reviewer', 'failing', 'once']) {
     const rows = [
       childRecord(0, 'subagent/descriptor', { version: id === 'once' ? 0 : 3, mode: id === 'once' ? 'one-shot' : 'continuable', label: id, provider: 'fork' }),
@@ -88,6 +92,26 @@ export async function createDshSubagentFixture(localId = 'parent') {
     })().catch(error => { response.writeHead(500); response.end(JSON.stringify({ error: String(error) })); });
   });
   const sockets = new WebSocketServer({ server });
+  sockets.on('connection', socket => socket.on('message', raw => {
+    const frame = JSON.parse(String(raw)) as { type: string; streamId: string; endpoint?: string; payload?: { args: { request: DshFollowRequest } } };
+    if (frame.type === 'cancel') { canceled.push(frame.streamId); return; }
+    if (frame.type !== 'open' || frame.endpoint !== 'session/follow') return;
+    const request = frame.payload?.args.request;
+    if (request?.address.kind !== 'subagent' || request.address.parentSessionId !== parentId || request.activate !== false || request.assistantStream !== true)
+      throw new Error('Controlled child output requires the original passive native address');
+    opens.push({ streamId: frame.streamId, request: structuredClone(request) });
+    const child = request.address.childSessionId;
+    const all = records.get(child);
+    if (all === undefined) throw new Error('fixture child absent');
+    const cursor = states.get(child)?.cursor ?? -1;
+    const eligible = all.filter(record => record.event.seq <= cursor);
+    const window = eligible.slice(-Math.min(request.maxMessages ?? 100, pageSize));
+    socket.send(JSON.stringify({ type: 'item', streamId: frame.streamId, value: { type: 'snapshot', header: { id: child },
+      cursor, records: structuredClone(window), hasMore: window.length < eligible.length,
+      projections: { asOfSeq: cursor, values: { subagent: { seq: descriptorSeqs.get(child), mode: request.address.mode } } },
+      assistantStream: structuredClone(assistants.get(child) ?? { revision: 0 }),
+    } }));
+  }));
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (address === null || typeof address === 'string') throw new Error('fixture listener missing');
@@ -102,7 +126,7 @@ export async function createDshSubagentFixture(localId = 'parent') {
   adapter.resume = async () => undefined;
   adapter.hostIdentity = async () => ({ url: `http://127.0.0.1:${address.port}/`, source: 'native-bootstrap', status: 'verified', version: '0.2.2-rc.1',
     fingerprint: 'f'.repeat(64), profile: { scope: 'current-host-profile', identity: 'unavailable-in-api' } });
-  return { adapter, native, client, parentId, states, descriptorSeqs, records, calls,
+  return { adapter, native, client, parentId, states, descriptorSeqs, records, assistants, opens, canceled, calls, socketServer: sockets,
     cold() {
       (adapter as unknown as { sessions: Map<string, unknown> }).sessions.clear();
       adapter.hostIdentity = async () => ({ url: `http://127.0.0.1:${address.port}/`, source: 'native-bootstrap', status: 'verified', version: '0.2.2-rc.1',

@@ -113,7 +113,7 @@ function DshChildHistory({ sessionId, child, onClose }: { sessionId: string; chi
       const expected = ++generation.current;
       setLoading(true);
       try {
-        const result = await api.subagentHistory(sessionId, child.childId, { limit: 100 });
+        const result = await api.subagentHistory(sessionId, child.childId, { limit: 100, includeActive: true });
         if (!active || expected !== generation.current) return;
         accept(result); setHistory(result); setError(undefined);
       } catch (cause) { if (active && expected === generation.current) setError(cause instanceof Error ? cause.message : String(cause)); }
@@ -144,6 +144,11 @@ function DshChildHistory({ sessionId, child, onClose }: { sessionId: string; chi
     {error === undefined ? null : <p role="alert">{error}。已读取的历史保留，当前未同步。</p>}
     {history?.hasMore ? <button type="button" className="btn small ghost" disabled={loading} onClick={() => void loadOlder()}>加载更早的子会话记录</button> : null}
     {history?.records.map(record => <DshHistoryRecord key={`${child.childId}:${record.event.seq}`} record={record} ownDescriptorSeq={history.ownDescriptorSeq} />)}
+    {history?.activeOutput === undefined ? null : <article className="dsh-child-message" data-testid="dsh-child-active-output" data-attempt-id={history.activeOutput.attemptId}>
+      <strong>子 Agent 当前输出（尚未提交）</strong>
+      {history.activeOutput.details === undefined ? null : <pre className="output">{history.activeOutput.details}</pre>}
+      <details><summary>原生流记录</summary><pre className="output">{JSON.stringify(history.activeOutput.stream, null, 2)}</pre></details>
+    </article>}
     {history?.records.length === 0 ? <p className="muted">原生子会话暂无记录。</p> : null}
     <DshChildComposer sessionId={sessionId} child={child} disabled={error !== undefined || history === undefined} onReadCurrent={() => { setOlder(false); setRefresh(value => value + 1); }} />
     <DshChildStop sessionId={sessionId} child={child} disabled={error !== undefined || history === undefined} onReadCurrent={() => { setOlder(false); setRefresh(value => value + 1); }} />
