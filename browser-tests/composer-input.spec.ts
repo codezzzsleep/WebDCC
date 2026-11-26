@@ -93,7 +93,7 @@ it.each(['picker', 'paste', 'provider'] as const)('Claude %s images reach SDK en
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
 
-it('Codex mixed drops explain unsupported files while sending the image through the native encoder', async () => {
+it('Codex mixed drops keep files for explicit workspace references while sending native images', async () => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
   try {
     const adapter = declaredAdapter('codex');
@@ -108,9 +108,12 @@ it('Codex mixed drops explain unsupported files while sending the image through 
       { name: 'unsupported.pdf', mime: 'application/pdf', bytes: [1, 2, 3] },
       { name: 'codex.png', mime: 'image/png', bytes: [...pixel] },
     ])).toBe(true);
-    await page.getByRole('alert').filter({ hasText: 'unsupported.pdf' }).waitFor();
+    const reference = page.getByRole('button', { name: '放入工作区并引用', exact: true });
+    await expect.poll(() => reference.isEnabled()).toBe(true);
+    expect(await page.getByTestId('send-button').isDisabled()).toBe(true);
+    await reference.click();
     await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);
-    expect(uploadedNames).toEqual(['codex.png']);
+    expect(uploadedNames).toEqual(['unsupported.pdf', 'codex.png']);
     await page.getByTestId('send-button').click();
     await expect.poll(() => encoded?.some(part => part.type === 'localImage')).toBe(true);
     expect(encoded!.map(part => part.type)).toEqual(['text', 'localImage']);
@@ -456,16 +459,16 @@ it('Codex Composer explains its native file boundary and Enter cannot submit a r
       await page.setViewportSize({ width, height: 720 });
       await page.getByTestId('attach-button').click();
       await expect.poll(() => page.getByTestId('attach-button').getAttribute('aria-expanded')).toBe('true');
-      expect(await page.getByTestId('add-file').isDisabled()).toBe(true);
+      expect(await page.getByTestId('add-file').isEnabled()).toBe(true);
       // Mobile menus are bottom sheets; dismiss by tapping outside the sheet.
       await page.getByTestId('composer-input').click();
       await expect.poll(() => page.getByTestId('attach-button').getAttribute('aria-expanded')).toBe('false');
     }
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByTestId('attach-button').click();
-    expect(await page.getByTestId('add-file').isDisabled()).toBe(true);
+    expect(await page.getByTestId('add-file').isEnabled()).toBe(true);
     await page.getByTestId('add-file-input').setInputFiles({ name: 'unsupported.txt', mimeType: 'text/plain', buffer: Buffer.from('original bytes') });
-    await expect.poll(() => page.getByTestId('input-blocked-reason').textContent()).toContain('不支持 file');
+    await expect.poll(() => page.getByTestId('input-blocked-reason').textContent()).toContain('放入工作区并引用');
     await page.getByTestId('composer-input').press('Enter');
     expect(ctx.store.allEvents(session.sessionId).filter(event => event.kind === 'user.message')).toHaveLength(0);
     expect(await page.getByTestId('send-button').isDisabled()).toBe(true);

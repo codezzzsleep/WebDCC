@@ -134,6 +134,8 @@ export const api = {
     request<FsReadResponse>(`/api/workspaces/${workspaceId}/fs`, { method: 'PUT', body: JSON.stringify(input) }),
   rawUrl: (workspaceId: string, path: string) =>
     `/api/workspaces/${workspaceId}/raw?path=${encodeURIComponent(path)}`,
+  copyAttachmentToWorkspace: (workspaceId: string, fileId: string) => request<{ path: string; fileId: string }>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/attach`, { method: 'POST', body: JSON.stringify({ fileId }) }),
   previewWorkspaceFile: (workspaceId: string, path: string, content?: string, external = false) => request<{ url: string; expiresAt: number }>(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/preview`, { method: 'POST', body: JSON.stringify({ path, external, ...(content === undefined ? {} : { content }) }) }),
   feed: (after: number) => request<{ entries: { feedSeq: number; sessionId: string; patch: Record<string, unknown> }[] }>(`/api/feed?after=${after}`),
