@@ -13,6 +13,7 @@ import type {
   FsReadResponse,
   MetaResponse,
   SessionDetailResponse,
+  SessionUsageResponse,
   InteractionKind,
   InteractionEventResponse,
   WorkspaceDto,
@@ -76,6 +77,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  sessionUsage: (id: string, signal: AbortSignal) => request<SessionUsageResponse>(`/api/sessions/${encodeURIComponent(id)}/usage`, { signal }),
   nativeTerminalResults: (sessionId: string, signal?: AbortSignal): Promise<NativeTerminalResultsResponse> => request(`/api/sessions/${encodeURIComponent(sessionId)}/native-terminal-results`, { signal }),
   inputModes: (sessionId?: string): Promise<CodexInputModeCatalog> => request(`/api/agents/codex/input-modes${sessionId === undefined ? '' : `?sessionId=${encodeURIComponent(sessionId)}`}`),
   nativeDshSurface: () => request<{ status: string; writable: boolean }>('/api/dsh/native-surface'),

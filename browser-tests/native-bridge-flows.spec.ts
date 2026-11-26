@@ -35,7 +35,7 @@ it('hands off the displayed complete final answer while a later turn remains unf
     await page.goto(`${base}/s/${source.sessionId}`);
     await expect.poll(() => page.locator('body').textContent()).toContain('First native part');
     await expect.poll(() => page.locator('body').textContent()).toContain('输入 未提供 / 输出 16 tok');
-    expect(await page.locator('body').textContent()).toContain('已观测 16 tok（部分用量）');
+    await expect.poll(() => page.getByTestId('session-token-count').textContent()).toBe('已观测 16 tok（部分用量）');
     await page.goto(`${base}/s/${target.id}`);
     const input = page.getByTestId('composer-input'); await input.fill('@');
     await page.getByTestId('at-menu').getByRole('button').filter({ hasText: 'Source answer' }).click();
