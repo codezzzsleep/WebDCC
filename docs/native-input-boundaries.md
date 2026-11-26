@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Codex 0.167.0 | 原文与 text elements、目录明确声明的图片/音频、当前原生 skills/list 重新确认的启用技能 | 独立文件和资源引用。目录没有声明某输入模态时拒绝该模态 |
 | DSH 0.2.2-rc.1 | 原文、已声明图片能力模型的原始图片字节、原生 binary upload 与新 Session receipt | 音频、技能/资源引用、非空 text elements。不能把未知模型当作支持图片 |
-| Claude CLI 2.1.322 / Agent SDK 0.3.322 | 原文、PDF 原始 base64 字节、逐字节可保留的 UTF-8 文档（包括 BOM） | 独立音频、技能/资源引用与 text elements。SDK ModelInfo 不声明输入模态，因此当前普通模型的图片能力保持未知并拒绝提交 |
+| Claude CLI 2.1.322 / Agent SDK 0.3.322 | 原文、PNG/JPEG/GIF/WebP 原始 base64 图片块、PDF 原始 base64 字节、逐字节可保留的 UTF-8 文档（包括 BOM） | 独立音频、技能/资源引用与 text elements。SDK ModelInfo 不声明输入模态；网页按 SDK 内容合同接收图片，实际 Provider/模型视觉能力仍以原生结果为准 |
 
 ## Codex 文件不是应用 mention
 
@@ -18,9 +18,13 @@
 
 因此 Codex 独立文件输入会在原生提交前返回 `input-unsupported` / `nativeAdmission: not-submitted`。用户可以选择 DSH 的原生文件上传，或 Claude 支持的文档块。应用 mention 将来须使用其独立、可验证的选择合同。
 
+当前运行的 Codex 0.172.0 输入联合仍不含通用 `file` 类型；线程 `ThreadAttachment` 的任意 JSON 持久记录也不构成模型收到文件字节的证明。工作区文件路径引用属于独立的用户操作，不能静默改写消息来伪装原生附件。
+
 ## 网页准备与验证范围
 
 真实 Composer 使用按会话与 revision 保存的草稿和上传 Blob。发送、排队和介入共享按钮/Enter guard；取得 IndexedDB 持久 command ID 后只清理未再编辑的草稿。上传可暂停、续传和取消，晚返回不能回填另一会话。新会话创建后显式授予所选附件访问权限，再提交正文和原生附件。
+
+新会话与已有会话的输入区均接收文件拖拽和剪贴板图片。拖入图片按图片处理，普通文件按文件处理，纯文字粘贴和文字拖动沿用浏览器编辑行为。它们复用文件选择器的上传与草稿通路；混合拖入 Codex 时，普通文件逐项解释不支持，合法图片仍可准备。是否允许发送图片继续遵守各 Agent 的输入合同，Claude 的 SDK 内容类型许可不冒充模型目录声明。
 
 远程草稿有独立的 server revision。409 保留本机草稿，并提供“使用本机草稿”和“使用云端草稿”；两种选择都重新读取当前版本。原生文字元素在编辑后失去对应关系时，提交被阻止，用户可以显式按当前正文重新准备。
 
