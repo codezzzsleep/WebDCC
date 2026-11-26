@@ -120,7 +120,8 @@ export function NativeControls({ sessionId, initialCommand, agent }: { sessionId
     </details> : null}
     {receipt ? <p role="status" data-testid="native-action-receipt">{receipt.type === 'stop-task'
       ? `${receipt.callReturnedAt === undefined ? '调用返回尚未确认' : '调用已返回'} · ${receipt.state === 'completed' ? '原生停止已确认' : labels[receipt.state]}`
-      : labels[receipt.state]} · {receipt.type}</p> : null}
+      : receipt.state === 'failed' && receipt.error === 'native-rejected-without-effects'
+        ? '原生已拒绝，未创建分叉；请在条件满足后重试' : labels[receipt.state]} · {receipt.type}</p> : null}
     {receipt?.sessionId === sessionId && receipt.type === 'fork' && receipt.state === 'completed' && receipt.continuation !== undefined ? <p role="status">
       分叉会话已建立。<a className="btn primary" data-testid="native-fork-continuation" href={`/s/${encodeURIComponent(receipt.continuation.sessionId)}`}>在分叉会话中继续</a>
     </p> : null}

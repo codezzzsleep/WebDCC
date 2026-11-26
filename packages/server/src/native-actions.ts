@@ -166,9 +166,13 @@ export class NativeActionStore {
       return { receipt: this.get(value.commandId, sessionId)!, result };
     } catch (failure) {
       if (value.action.type === 'stop-task') this.recordStopReturn(value.commandId, (failure as { nativeCallReturn?: unknown } | null)?.nativeCallReturn);
-      // Only our explicit pre-dispatch validation can prove there was no side effect.
-      const rejected = (failure as { code?: string } | null)?.code === 'native-control-rejected';
-      this.finish(value.commandId, rejected ? 'failed' : 'uncertain', rejected ? 'rejected-before-dispatch' : 'native-outcome-unconfirmed');
+      // A verified adapter-specific native rejection can also prove no
+      // operation effect. A received RPC error alone does not prove that.
+      const code = (failure as { code?: string } | null)?.code;
+      const preflight = code === 'native-control-rejected';
+      const nativeRejected = code === 'native-control-rejected-no-effect';
+      this.finish(value.commandId, preflight || nativeRejected ? 'failed' : 'uncertain',
+        preflight ? 'rejected-before-dispatch' : nativeRejected ? 'native-rejected-without-effects' : 'native-outcome-unconfirmed');
       throw failure;
     }
   }
