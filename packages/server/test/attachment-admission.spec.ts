@@ -153,6 +153,7 @@ describe('structured input server API → journal → native adapter', () => {
       await send(ctx, { op: 'send', clientCommandId: 'steer-active', sessionId: ctx.sessionId, text: 'active' }); const active = ctx.manager.getRuntime(ctx.sessionId)!.turnId!;
       const fileId = await upload(ctx, Buffer.from('steer bytes'), { name: 'steer.txt', mime: 'text/plain', sessionId: ctx.sessionId });
       const command: Command = { op: 'send', clientCommandId: 'steer', sessionId: ctx.sessionId, text: ' exact steer ', intent: 'steer', expectedTurnId: active, contentParts: { version: 1, parts: [{ type: 'file', fileId }, { type: 'text', text: ' exact steer ' }] } };
+      ctx.store.nativeEvents.addSecret('exact steer');
       expect((await send(ctx, command)).json()).toMatchObject({ ok: true, value: { turnId: active, queued: false, confirmed: false } });
       const input = ctx.adapter.steered[0]!.input; const admission = ctx.store.journal.get('steer')!.turnId!; expect(admission).not.toBe(active); expect(ctx.store.journal.nativeTargetTurn(admission)).toBe(active);
       expect(input.expectedTurnId).toBe('native-1'); expect(ctx.store.journal.get('steer')?.state).toBe('native-accepted');
