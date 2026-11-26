@@ -1,10 +1,15 @@
 import type { EventData, StoredEvent, TraceFrame } from './index.js';
 
-/** Match only a persisted command identity; equal text alone is not an echo. */
-export function findUserEcho(events: readonly StoredEvent[], incoming: EventData['user.message']): StoredEvent | undefined {
+export class UserEchoMismatchError extends Error {
+  constructor() { super('原生消息身份相同但正文不同'); }
+}
+
+/** Verify the original admitted text when the stored event is a redacted projection. */
+export function findUserEcho(events: readonly StoredEvent[], incoming: EventData['user.message'], admittedText?: string): StoredEvent | undefined {
   if (incoming.clientCommandId === undefined) return undefined;
   const local = events.find(event => event.kind === 'user.message' && (event.data as EventData['user.message']).clientCommandId === incoming.clientCommandId);
-  if (local !== undefined && (local.data as EventData['user.message']).text !== incoming.text) throw new Error('原生消息身份相同但正文不同');
+  const expectedText = admittedText ?? (local?.data as EventData['user.message'] | undefined)?.text;
+  if (expectedText !== undefined && expectedText !== incoming.text) throw new UserEchoMismatchError();
   return local;
 }
 
