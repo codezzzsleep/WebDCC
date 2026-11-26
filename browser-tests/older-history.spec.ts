@@ -1,8 +1,9 @@
-import { chromium, expect as browserExpect, type Browser, type Page } from '@playwright/test';
+import { chromium, expect as browserExpect, type Browser, type Page, type WebSocketRoute } from '@playwright/test';
 import { expect, it } from 'vitest';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { StoredEvent } from '@webdcc/protocol';
+import type { AdapterEvent, CreateOpts, StoredEvent } from '@webdcc/protocol';
+import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { createSourceTestApp, observeSessionSnapshots } from './helpers.js';
 import { seedWorkspaceAndSession, type TestApp } from '../packages/server/test/helpers.js';
 
@@ -145,5 +146,72 @@ it('a reloaded browser recovers older committed events offline without another h
       await writeFile(join(evidence, 'older-history-browser-offline.json'), JSON.stringify({ databaseReopened: true, offline: true, attemptedHistory,
         serverEvents: events, cachedEvents: await readCache(page, sessionId), pageErrors: errors, newNativeCalls: 0, newProviderCalls: 0 }, null, 2));
     }
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it('shows the full-session tokens on cold open, paging, refresh and reconnection', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    let receive!: (sessionId: string, event: AdapterEvent) => void;
+    let createOptions!: CreateOpts;
+    const adapter = new FakeAdapter({ id: 'codex' });
+    const create = adapter.create.bind(adapter);
+    adapter.onEvent = callback => { receive = callback; };
+    adapter.create = async options => { createOptions = options; return create(options); };
+    adapter.send = async () => undefined;
+    ctx.manager.registerAdapter(adapter);
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    const append = (turnId: string, inputTokens: number, outputTokens: number) =>
+      ctx.store.appendEvent({ sessionId, turnId, itemKey: 'terminal', kind: 'turn.completed',
+        data: { status: 'completed', usage: { inputTokens, outputTokens } } });
+    ctx.store.appendEvent({ sessionId, turnId: 'old', itemKey: 'input', kind: 'user.message', data: { text: 'Original token history' } });
+    append('old', 12000, 25);
+    for (let index = 0; index < 70; index++) {
+      const common = { sessionId, turnId: `recent-${index}` };
+      ctx.store.appendEvent({ ...common, itemKey: 'start', kind: 'turn.started', data: {} });
+      ctx.store.appendEvent({ ...common, itemKey: 'input', kind: 'user.message', data: { text: `Recent input ${index}` } });
+      append(common.turnId, 300, 20);
+    }
+    const base = await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    let serverSocket: WebSocketRoute | undefined;
+    await page.routeWebSocket('**/api/ws', route => { serverSocket = route.connectToServer(); });
+    const requests: number[] = [];
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (url.pathname === `/api/sessions/${sessionId}/events`) requests.push(Number(url.searchParams.get('before')));
+    });
+    const usageUrl = `**/api/sessions/${sessionId}/usage`;
+    await page.route(usageUrl, async route => { await route.fulfill({ status: 503 }); }, { times: 1 });
+    await page.goto(`${base}/s/${sessionId}`);
+    const tokens = page.getByTestId('session-token-count');
+    const retry = page.getByRole('button', { name: '重试读取用量' });
+    await browserExpect(retry).toBeVisible();
+    await browserExpect(tokens).toHaveCount(0);
+    await retry.click();
+    await browserExpect(tokens).toHaveText('累计 34,425 tok');
+    expect(requests).toEqual([213]);
+    await browserExpect(page.getByText('Original token history', { exact: true })).toHaveCount(0);
+    await scrollToHistory(page);
+    await browserExpect(page.getByText('Original token history', { exact: true })).toBeVisible();
+    await browserExpect(tokens).toHaveText('累计 34,425 tok');
+    await page.reload();
+    await browserExpect(tokens).toHaveText('累计 34,425 tok');
+    expect(requests).toEqual([213, 13]);
+    expect(serverSocket).toBeDefined();
+    await serverSocket?.close();
+    await browserExpect(tokens).toHaveText('已观测 34,425 tok（截至上次同步）');
+    append('arrived-offline', 650, 25);
+    await browserExpect(tokens).toHaveText('累计 35,100 tok');
+
+    await ctx.manager.send(sessionId, { text: 'New live token usage' });
+    const nativeTurnId = 'live-turn';
+    receive(sessionId, { runtime: createOptions.runtime, type: 'turn.start', nativeTurnId });
+    receive(sessionId, { runtime: createOptions.runtime, type: 'item.complete', kind: 'usage', nativeTurnId, itemKey: 'response-usage',
+      data: { inputTokens: 326, outputTokens: 7, scope: 'attempt' } });
+    receive(sessionId, { runtime: createOptions.runtime, type: 'turn.end', status: 'completed', nativeTurnId });
+    await browserExpect(tokens).toHaveText('累计 35,433 tok');
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);

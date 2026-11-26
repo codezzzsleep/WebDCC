@@ -11,6 +11,7 @@ import type {
   FsReadResponse,
   MetaResponse,
   SessionDetailResponse,
+  SessionUsageResponse,
   UploadCompleteResponse,
   UploadInitResponse,
   UploadStatusResponse,
@@ -339,6 +340,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       ...(hot.completed === undefined ? {} : { completed: hot.completed }),
       ...(hot.completedRecovery === undefined ? {} : { completedRecovery: hot.completedRecovery }),
     };
+  });
+
+  app.get('/api/sessions/:id/usage', async (request, reply): Promise<SessionUsageResponse> => {
+    const { id } = request.params as { id: string };
+    const usage = store.sessionUsage(id);
+    if (usage === undefined) throw Object.assign(new Error('会话不存在'), { statusCode: 404 });
+    reply.header('cache-control', 'no-store');
+    return usage;
   });
 
   app.get('/api/sessions/:id/events', async (request): Promise<EventsPageResponse> => {

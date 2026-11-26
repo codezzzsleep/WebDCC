@@ -8,7 +8,7 @@ import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { AGENT_IDS, agentAvailable, agentText, isAccessModeSelectable, rememberAccessMode, rememberModel, rememberReasoning, modelGroups, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
-import { shortNumber } from '../lib/format.js';
+import { SessionTokenCount } from './SessionTokenCount.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
 import { InputPreparationStore } from '../lib/input-preparation-store.js';
@@ -1031,22 +1031,25 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             需要模型目录，否则工具可能不可用
           </span>
         ) : null}
-        {stats !== null ? <span>{stats}</span> : <span>由 {agentText(agent).name} 运行 · 发送后生成会话地址</span>}
+        {sessionId !== null && stats !== null ? <>
+          <span>{stats.text}</span>
+          <SessionTokenCount key={sessionId} sessionId={sessionId} usageSeq={stats.usageSeq}
+            resetSeq={session?.conversation?.resetSeq ?? 0} online={store.connectionState === 'online'}
+            reconnectedAt={store.lastReconnectAt} />
+        </> : <span>由 {agentText(agent).name} 运行 · 发送后生成会话地址</span>}
       </div>
     </div>
   );
 }
 
-function statsFor(sessionId: string): string {
+function statsFor(sessionId: string): { text: string; usageSeq: number } {
   const events = store.getConversationEvents(sessionId);
   // "N 轮"只统计包含 user.message 的轮次（F4）
   const turns = new Set(
     events.filter((event) => event.kind === 'user.message' && event.turnId !== null).map((event) => event.turnId as string),
   ).size;
   const steps = events.filter((event) => event.kind === 'command' || event.kind === 'tool.call' || event.kind === 'file.change' || event.kind === 'file.read').length;
-  const projected = store.getTurns(sessionId);
-  const usage = projected.flatMap(turn => turn.usage === undefined ? [] : [turn.usage]);
-  const partial = projected.some(turn => turn.usage?.inputTokens === undefined || turn.usage.outputTokens === undefined);
-  const tokens = usage.reduce((sum, data) => sum + (data.inputTokens ?? 0) + (data.outputTokens ?? 0), 0);
-  return `${turns} 轮 · ${steps} 步${tokens > 0 ? ` · ${partial ? '已观测' : '累计'} ${shortNumber(tokens)} tok${partial ? '（部分用量）' : ''}` : ''}`;
+  const usageSeq = events.findLast(event => event.kind === 'usage' || event.kind === 'turn.completed' ||
+    event.kind === 'turn.started' || event.kind === 'user.message')?.seq ?? 0;
+  return { text: `${turns} 轮 · ${steps} 步`, usageSeq };
 }

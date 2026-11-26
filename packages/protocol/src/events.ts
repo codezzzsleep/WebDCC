@@ -43,7 +43,7 @@ export interface UsageData {
   tokensPerSecond?: number;
   /** Duration of the model generation that produced this usage sample. */
   generationMs?: number;
-  /** DSH emits one sample per model attempt; other adapters emit turn totals. */
+  /** Snapshot scope. Historical Codex rows with native last usage are per request. */
   scope?: 'attempt' | 'turn';
 }
 

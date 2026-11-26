@@ -69,6 +69,13 @@ export interface SessionDetailResponse extends SessionDto {
   completedRecovery?: CompletedRecovery;
 }
 
+export interface SessionUsageResponse {
+  throughSeq: number;
+  resetSeq: number;
+  totalTokens?: number;
+  partial: boolean;
+}
+
 export interface EventsPageResponse {
   events: StoredEvent[];
   hasMore: boolean;

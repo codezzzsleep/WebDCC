@@ -7,6 +7,7 @@ import type {
   FileDto,
   ProviderDto,
   SessionDto,
+  SessionUsageResponse,
   StoredEvent,
   WorkspaceDto,
   WatchdogJob,
@@ -35,6 +36,7 @@ import { recoverCompletedSnapshot } from './native-completed-snapshot.js';
 import { NativeReconciliationStore } from './native-reconciliation.js';
 import { NativeActionStore } from './native-actions.js';
 import { InputAdmissionStore } from './input-admission.js';
+import { readSessionUsage } from './session-usage.js';
 
 interface SessionRow {
   id: string;
@@ -702,6 +704,13 @@ export class Store {
       .all(...values) as EventRow[];
     if (descending) rows.reverse();
     return rows.map(toEvent);
+  }
+
+  sessionUsage(sessionId: string): SessionUsageResponse | undefined {
+    return this.db.transaction(() => {
+      const session = this.getSession(sessionId);
+      return session === undefined ? undefined : readSessionUsage(this.db, session);
+    })();
   }
 
   allEvents(sessionId: string): StoredEvent[] {

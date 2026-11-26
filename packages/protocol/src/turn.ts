@@ -9,6 +9,7 @@ import { claudeStructuredOutputs, type ClaudeStructuredOutputView } from './clau
 import type { HotObservation } from './hot-recovery.js';
 import type { RecoveredCompletion } from './completed-recovery.js';
 import { isIncompleteClaudeOutput } from './claude-content.js';
+import { observeUsage, selectTurnUsage } from './usage.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -174,9 +175,11 @@ function activityFor(live: readonly LiveItem[], waiting = false): TurnView['acti
 /** Aggregate provider attempt samples without using the whole turn wall time.
  * Tool calls and approval waits are not model generation and must not be the
  * denominator for tok/s. */
-function usageFor(events: readonly StoredEvent[], completedData: EventData['turn.completed'] | undefined): UsageData | undefined {
-  const samples = events.filter((event) => event.kind === 'usage').map((event) => ({ at: event.at, data: event.data as UsageData }));
-  const attempts = samples.map((sample) => sample.data).filter((sample) => sample.scope === 'attempt');
+function usageFor(events: readonly StoredEvent[]): UsageData | undefined {
+  const codexTotals = new Map<string, number>();
+  const samples = events.map(event => observeUsage(event, codexTotals)).filter(sample => sample !== undefined);
+  const selected = selectTurnUsage(samples);
+  const attempts = selected.filter(sample => !sample.terminal && sample.usage.scope === 'attempt').map(sample => sample.usage);
   if (attempts.length > 0) {
     const completeSum = (field: 'inputTokens' | 'outputTokens' | 'generationMs'): number | undefined =>
       attempts.every(sample => sample[field] !== undefined) ? attempts.reduce((total, sample) => total + sample[field]!, 0) : undefined;
@@ -187,8 +190,8 @@ function usageFor(events: readonly StoredEvent[], completedData: EventData['turn
     return { inputTokens, outputTokens, cacheReadInputTokens: sum('cacheReadInputTokens'), cacheCreationInputTokens: sum('cacheCreationInputTokens'), reasoningOutputTokens: sum('reasoningOutputTokens'), totalCostUsd: sum('totalCostUsd'), scope: 'turn',
       ...(generationMs !== undefined && generationMs > 0 ? { generationMs, ...(outputTokens === undefined ? {} : { tokensPerSecond: outputTokens / (generationMs / 1000) }) } : {}) };
   }
-  const latestSample = samples.at(-1);
-  const latest = latestSample?.data ?? completedData?.usage;
+  const latestSample = selected[0];
+  const latest = latestSample?.usage;
   if (latest === undefined) return undefined;
   if (latest.tokensPerSecond !== undefined) return latest;
   if (latest.generationMs !== undefined && latest.generationMs > 0 && latest.outputTokens !== undefined) {
@@ -198,7 +201,7 @@ function usageFor(events: readonly StoredEvent[], completedData: EventData['turn
   // several native usage updates, the interval since the previous update is
   // the only recoverable timing signal; use it for the latest response rather
   // than dividing by the entire turn (which includes tools and approvals).
-  const previous = samples.at(-2);
+  const previous = samples.findLast(sample => sample !== latestSample && !sample.terminal);
   if (latest.scope === 'turn' && latest.outputTokens !== undefined && latestSample !== undefined && previous !== undefined) {
     const elapsedMs = Date.parse(latestSample.at) - Date.parse(previous.at);
     if (elapsedMs > 0) return { ...latest, tokensPerSecond: latest.outputTokens / (elapsedMs / 1000) };
@@ -252,6 +255,7 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     edits: steps.filter((event) => (event.kind === 'file.change' || event.kind === 'turn.diff') && !failedFileOperation(event)).length,
     tools: steps.filter((event) => event.kind === 'tool.call' && codexReviewItem(event) === undefined && !isIncompleteClaudeOutput(event)).length,
   };
+  const usage = usageFor(events);
   const startedAt = started?.at ?? userEvent?.at ?? first?.at ?? new Date(0).toISOString();
   return {
     turnId,
@@ -280,10 +284,6 @@ export function reduceTurn(events: StoredEvent[], open: OpenItem[] = [], session
     summary,
     ...(latestPlan === undefined ? {} : { plan: (latestPlan.data as EventData['plan']).items }),
     ...(latestGoal === undefined ? {} : { goal: latestGoal.data as EventData['goal'] }),
-    ...(usageFor(events, completedData) === undefined
-      ? {}
-      : {
-          usage: usageFor(events, completedData),
-        }),
+    ...(usage === undefined ? {} : { usage }),
   };
 }
