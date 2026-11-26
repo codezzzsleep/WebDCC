@@ -134,3 +134,14 @@ describe('NP-03 browser queue recovery', () => {
     expect(store.getTurns('s')[0]?.pendingInputs).toBeUndefined();
   });
 });
+
+it('keeps a queued legacy Stop in evidence without replaying it into an unknown turn', async () => {
+  const stop = { op: 'interrupt', sessionId: 's', clientCommandId: 'older-stop', createdAt: Date.now() };
+  mocks.getOutbox.mockResolvedValue([{ clientCommandId: stop.clientCommandId, command: stop, status: 'pending', createdAt: stop.createdAt }]);
+  const store = new AppStore();
+  await store.restoreOutbox();
+  mocks.options[0]?.onOpen?.();
+  expect(mocks.send).not.toHaveBeenCalled();
+  expect(store.interruptError('s')).toContain('缺少轮次信息');
+  expect(mocks.putOutbox).toHaveBeenCalledWith(expect.objectContaining({ command: stop, status: 'failed' }));
+});

@@ -1288,18 +1288,35 @@ export class SessionManager {
     this.setStatus(runtime, runtime.nativeObservedStatus === 'error' ? 'error' : waiting ? 'waiting' : runtime.turnId === null ? 'idle' : 'running');
   }
 
-  async interrupt(sessionId: string): Promise<void> {
+  async interrupt(sessionId: string, expectedTurnId?: string): Promise<void> {
     const session = this.requireSession(sessionId);
-    this.watchdog.cancel(sessionId, '用户停止了会话，取消自动恢复');
-    if (this.activations.has(sessionId)) { this.activationStops.add(sessionId); return; }
-    if (!this.runtimes.has(sessionId)) return;
+    const observed = this.runtimes.get(sessionId);
+    const assertTarget = expectedTurnId === undefined ? undefined : () => {
+      if (observed === undefined || this.runtimes.get(sessionId) !== observed || observed.disposing
+        || observed.turnId !== expectedTurnId || observed.finishAction !== null) {
+        throw Object.assign(new Error('要停止的轮次已结束或已切换'), { statusCode: 409 });
+      }
+      this.assertOwner(observed);
+    };
+    assertTarget?.();
+    if (expectedTurnId === undefined) this.watchdog.cancel(sessionId, '用户停止了会话，取消自动恢复');
+    if (this.activations.has(sessionId) && expectedTurnId === undefined) { this.activationStops.add(sessionId); return; }
+    if (observed === undefined) return;
     const workspace = this.requireWorkspace(session.workspaceId);
     const runtime = await this.ensureReady(session, workspace.path);
-    await runtime.adapter.interrupt(sessionId);
+    assertTarget?.();
+    if (expectedTurnId !== undefined) this.watchdog.cancel(sessionId, '用户停止了会话，取消自动恢复');
+    await runtime.adapter.interrupt(sessionId, assertTarget);
     this.assertOwner(runtime);
-    // 打断时把本会话挂起的审批标成已取消（只处理自己的会话，AG-*-09）
-    const cancelled = await runtime.adapter.cancelPending?.(sessionId);
-    if (cancelled?.confirmed === false) { this.touchIdle(runtime); return; }
+
+    // Native Stop can settle the target while its acknowledgement is still
+    // pending. Do not dispatch approval cleanup into a newly started turn.
+    const stillRelevant = expectedTurnId === undefined ? undefined : () =>
+      this.runtimes.get(sessionId) === runtime && !runtime.disposing
+      && (runtime.turnId === expectedTurnId || runtime.turnId === null);
+    if (stillRelevant?.() === false) return;
+    const cancelled = await runtime.adapter.cancelPending?.(sessionId, stillRelevant);
+    if (stillRelevant?.() === false || cancelled?.confirmed === false) { this.touchIdle(runtime); return; }
     for (const approvalId of this.pendingApprovalIds(sessionId)) {
       const event = this.store.appendEvent({
         sessionId,

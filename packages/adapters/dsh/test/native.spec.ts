@@ -219,3 +219,21 @@ it('catalog metadata distinguishes an idle started Session from a verified blank
     expect(catalog(true).find(action => action.type === type)).toMatchObject({ supported: true, requiresBlankSession: true });
   }
 });
+
+it('checks a browser Stop target after the Host wait and keeps the original cancel arguments', async () => {
+  const { adapter, writes } = controller();
+  const transport = adapter as unknown as { client: DshHostClient; ensureSidecar(): Promise<DshHostClient> };
+  const client = transport.client;
+  let release!: (value: DshHostClient) => void;
+  vi.spyOn(transport, 'ensureSidecar').mockImplementationOnce(() => new Promise(resolve => { release = resolve; })).mockResolvedValue(client);
+  let sameTurn = true;
+  const assertTarget = () => { if (!sameTurn) throw new Error('turn changed while reconnecting'); };
+  const stop = adapter.interrupt('local', assertTarget);
+  sameTurn = false;
+  release(client);
+  await expect(stop).rejects.toThrow('turn changed while reconnecting');
+  expect(writes).toEqual([]);
+  sameTurn = true;
+  await adapter.interrupt('local', assertTarget);
+  expect(writes).toEqual([{ endpoint: 'session/cancel', args: { request: { sessionId: 'native-parent' } } }]);
+});
