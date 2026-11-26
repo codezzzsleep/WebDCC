@@ -59,6 +59,30 @@ it('attachment hashing blocks Enter in its original Session and cannot append in
   expect(selected).toMatchObject({ attached: false, task: { sessionId: 'A', name: 'file.txt' } });
   expect(drafts.snapshot()).toMatchObject({ sessionId: 'B', text: 'B body', contentParts: { parts: [] } });
 });
+it('a user-confirmed workspace reference keeps concurrent text edits and blocks sending while copying', async () => {
+  const { drafts, composer } = controls(); await drafts.open('A');
+  const part = { type: 'file', fileId: 'chosen-file', name: '引文 "draft".md' };
+  drafts.update('original', { version: 1, parts: [part] });
+  let finish!: (value: { path: string; fileId: string }) => void;
+  const copying = composer.referenceAttachment(part, async () => new Promise(resolve => { finish = resolve; }));
+  expect(composer.reason('send')).toContain('正在准备');
+  drafts.update('edited while copying');
+  const path = '.webdcc/uploads/chosen-file-引文 "draft".md';
+  finish({ path, fileId: part.fileId }); expect(await copying).toBe(true);
+  expect(drafts.snapshot()?.text).toBe(`edited while copying\n${JSON.stringify(path)}`);
+  expect(drafts.snapshot()?.contentParts.parts).toEqual([{ type: 'text', text: `edited while copying\n${JSON.stringify(path)}` }]);
+});
+it('removing a file during a copy cannot reinsert it or its path into the draft', async () => {
+  const { drafts, composer } = controls(); await drafts.open('A');
+  const part = { type: 'file', fileId: 'removed-file' };
+  drafts.update('keep this', { version: 1, parts: [part] });
+  let finish!: (value: { path: string; fileId: string }) => void;
+  const copying = composer.referenceAttachment(part, async () => new Promise(resolve => { finish = resolve; }));
+  drafts.update('keep this', { version: 1, parts: [] });
+  finish({ path: '.webdcc/uploads/removed-file.md', fileId: part.fileId });
+  expect(await copying).toBe(false);
+  expect(drafts.snapshot()).toMatchObject({ text: 'keep this', contentParts: { parts: [] } });
+});
 it('editing native text elements cannot submit stale byte spans and can explicitly prepare the edited text again', async () => {
   const { drafts, composer } = controls(); await drafts.open('A');
   drafts.update('old', { version: 1, parts: [{ type: 'text', text: 'old', elements: [{ byteRange: { start: 0, end: 3 }, placeholder: 'old' }] }] });

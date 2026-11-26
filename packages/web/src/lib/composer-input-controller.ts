@@ -10,6 +10,7 @@ export interface ComposerInputCapabilities {
   intents: readonly ComposerIntent[];
   running: boolean;
   unavailableReason?: string;
+  workspaceFileReferences?: boolean;
 }
 export interface PreparedComposerInput<Part = PreparedPart> { sessionId: string; text: string; contentParts: DraftContent<Part>; intent: ComposerIntent }
 /** One guard for clicks and Enter. A submission clears only its own unchanged
@@ -46,6 +47,7 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
     if (textParts.length === 1 && textParts[0]!.elements?.length && textParts[0]!.text !== draft.text) return '原生文字元素与编辑后的正文不一致，请重新准备';
     if (textParts.length > 1 && textParts.map(part => part.text ?? '').join('') !== draft.text) return '文字与结构化输入不一致，请重新核对';
     for (const part of draft.contentParts.parts) {
+      if (part.type === 'file' && capabilities.workspaceFileReferences) return '请先点击“放入工作区并引用”，确认文件路径后再发送';
       if (!capabilities.contentTypes.includes(part.type)) return `当前原生输入不支持 ${part.type}`;
       if ((part.type === 'image' || part.type === 'audio') && !capabilities.inputModalities?.includes(part.type)) return `当前模型未声明支持 ${part.type} 输入`;
       if (part.uploadTaskId !== undefined) {
@@ -96,6 +98,39 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
     const current = this.drafts.snapshot()!;
     this.drafts.update(current.text, { ...current.contentParts, version: 1, parts: [...current.contentParts.parts, structuredClone(part)] });
     return true;
+  }
+  /** A user-confirmed workspace copy becomes a visible, editable path in the
+   * body. It never impersonates a native file/mention input or adds prose. */
+  async referenceAttachment(part: Part, copy: (fileId: string) => Promise<{ path: string; fileId: string }>): Promise<boolean> {
+    const token = this.drafts.token();
+    if (!token || this.drafts.loading() || this.sending || (this.preparing.get(token.sessionId) ?? 0) > 0) throw new Error('正文或附件正在准备，请稍候');
+    const matches = (candidate: Part) => candidate.type === 'file' && (part.uploadTaskId === undefined
+      ? candidate.uploadTaskId === undefined && candidate.fileId === part.fileId
+      : candidate.uploadTaskId === part.uploadTaskId);
+    const current = this.drafts.snapshot()!;
+    if (part.type !== 'file' || !current.contentParts.parts.some(matches)) throw new Error('附件已移除，请重新选择');
+    const task = part.uploadTaskId === undefined ? undefined : this.uploads.get(part.uploadTaskId);
+    const fileId = task?.fileId ?? part.fileId;
+    if (!fileId || part.uploadTaskId !== undefined && (task?.state !== 'completed' || task.sessionId !== token.sessionId)) throw new Error('附件尚未上传完成');
+    const checkText = (parts: Part[]) => {
+      if (parts.some(part => part.type === 'text' && part.elements?.length)) throw new Error('正文包含原生文字元素，请先按当前正文重新准备');
+    };
+    checkText(current.contentParts.parts);
+    this.preparing.set(token.sessionId, (this.preparing.get(token.sessionId) ?? 0) + 1);
+    try {
+      const copied = await copy(fileId);
+      if (copied.fileId !== fileId || !copied.path.startsWith('.webdcc/uploads/') || [...copied.path].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) throw new Error('工作区文件引用无效，请核对后重试');
+      if (!this.drafts.accepts(token) || this.drafts.loading()) return false;
+      const draft = this.drafts.snapshot()!;
+      if (!draft.contentParts.parts.some(matches)) return false;
+      checkText(draft.contentParts.parts);
+      const text = `${draft.text}${draft.text === '' || draft.text.endsWith('\n') ? '' : '\n'}${JSON.stringify(copied.path)}`;
+      this.drafts.update(text, { ...draft.contentParts, parts: [
+        { type: 'text', text } as Part, ...draft.contentParts.parts.filter(part => part.type !== 'text' && !matches(part)),
+      ] });
+      await this.drafts.flush(token.sessionId);
+      return true;
+    } finally { this.preparing.set(token.sessionId, Math.max(0, (this.preparing.get(token.sessionId) ?? 1) - 1)); }
   }
   async addAttachment(file: File, kind: UploadKind): Promise<{ attached: boolean; task: UploadTask }> {
     const token = this.drafts.token(); if (token === undefined || this.drafts.loading()) throw new Error('草稿正在恢复');

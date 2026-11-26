@@ -85,6 +85,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   });
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [selecting, setSelecting] = useState(false);
+  const [referencing, setReferencing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [mention, setMention] = useState<MentionState>({ open: false, query: '', start: 0 });
   const replyRequest = useRef(0);
@@ -288,12 +289,12 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   // Claude's SDK accepts image content blocks; supportedModels does not expose
   // modalities. Actual Provider/model support remains the native result.
   capabilitiesRef.current = { contentTypes: agent === 'codex' ? ['text', 'image', 'audio', 'skill'] : ['text', 'image', 'file'], inputModalities: agent === 'claude-code' ? ['text', 'image'] : selectedModel?.inputModalities,
-    collaborationModes: agent === 'codex' ? inputModes.modes.map(mode => mode.id) : [],
+    workspaceFileReferences: agent === 'codex', collaborationModes: agent === 'codex' ? inputModes.modes.map(mode => mode.id) : [],
     intents: running ? agent === 'codex' || agent === 'dsh' ? ['queue', 'steer'] : ['queue'] : ['send'], running,
     ...(mode.kind === 'new' && workspaceId === '' ? { unavailableReason: '请先选择工作区' } : {}) };
   const attachmentParts = (controls.drafts.snapshot()?.sessionId === draftSessionId ? controls.drafts.snapshot()?.contentParts.parts ?? [] : []).filter(part => part.type !== 'text');
   const uploadTasks = controls.uploads.list(draftSessionId);
-  const uploading = selecting || attachmentParts.some(part => part.uploadTaskId !== undefined && ['queued', 'uploading', 'completing'].includes(controls.uploads.get(part.uploadTaskId)?.state ?? 'queued'));
+  const uploading = selecting || referencing || attachmentParts.some(part => part.uploadTaskId !== undefined && ['queued', 'uploading', 'completing'].includes(controls.uploads.get(part.uploadTaskId)?.state ?? 'queued'));
   const currentReasoning = agent === 'dsh' && mode.kind === 'session'
     ? dshReasoningObservation.confirmed ? dshReasoningObservation.effort! : session?.reasoningEffort === undefined ? '待确认' : `${session.reasoningEffort} · 待确认`
     : (agent === 'dsh' || agent === 'codex') && mode.kind === 'new' ? mode.choice.reasoningEffort ?? `沿用原生${selectedModel?.defaultReasoningEffort === undefined ? '' : `（默认 ${selectedModel.defaultReasoningEffort}）`}`
@@ -447,7 +448,6 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
       for (const file of Array.from(list)) {
         if (!controls.drafts.accepts(token)) break;
         const selectedKind = kind ?? (file.type.startsWith('image/') ? 'image' : agent === 'codex' && file.type.startsWith('audio/') ? 'audio' : 'file');
-        if (kind === undefined && agent === 'codex' && selectedKind === 'file') { errors.push(`Codex 当前不支持直接发送普通文件：${file.name}`); continue; }
         try {
           const selected = await controls.input.addAttachment(file, selectedKind);
           if (selected.attached) void controls.uploads.resume(selected.task.id).catch(cause => {
@@ -459,6 +459,16 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
       if (controls.drafts.accepts(token) && errors.length > 0) setError(errors.join('\n'));
       setSelecting(false);
     }
+  };
+  const referenceAttachment = async (part: PreparedPart): Promise<void> => {
+    const token = controls.drafts.token();
+    if (!token || token.sessionId !== draftSessionId || workspaceId === '' || viewingHistory) return;
+    setReferencing(true); setError(null);
+    try {
+      await controls.input.referenceAttachment(part, fileId => api.copyAttachmentToWorkspace(workspaceId, fileId));
+    } catch (cause) {
+      if (controls.drafts.accepts(token)) setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setReferencing(false); }
   };
   const removeAttachment = (part: PreparedPart): void => {
     const current = controls.drafts.snapshot();
@@ -538,6 +548,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             const uploaded = task?.fileId === undefined ? part : { ...part, fileId: task.fileId };
             return <span className="attachment-chip" key={part.uploadTaskId ?? `${part.fileId}-${index}`}>
               <AttachmentPreview part={uploaded} blob={task?.blob} />
+              {part.type === 'file' ? <button type="button" disabled={!workspaceId || referencing || controls.drafts.loading() || viewingHistory || !uploaded.fileId || task !== undefined && task.state !== 'completed'}
+                title="把原文件保存到当前工作区，并将路径加入可编辑正文，供 Agent 的文件工具读取"
+                onClick={() => void referenceAttachment(part)}>放入工作区并引用</button> : null}
               {task !== undefined && task.state !== 'completed' ? <span role="status">{task.state === 'failed' ? task.error ?? '上传失败' : task.state === 'paused' ? '已暂停' : task.state === 'cancelled' ? '已取消' : `正在上传 ${task.received.length} 个分片`}</span> : null}
               {task?.state === 'uploading' ? <button type="button" onClick={() => void controls.uploads.pause(task.id)}>暂停</button> : null}
               {task !== undefined && ['paused', 'failed', 'queued'].includes(task.state) ? <button type="button" onClick={() => void controls.uploads.resume(task.id).catch(cause => setError(String(cause)))}>继续上传</button> : null}
@@ -606,7 +619,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   type="button"
                   role="menuitem"
                   className="menu-item"
-                  disabled={workspaceId === '' || agent === 'codex'}
+                  disabled={workspaceId === ''}
                   onClick={() => {
                     setMenu(null);
                     attachInputRef.current?.click();
@@ -616,7 +629,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <Icon name="paperclip" />
                   <span className="menu-item-body">
                     添加文件
-                    <span className="menu-item-sub">{agent === 'codex' ? '当前 Codex 原生输入未验证独立文件引用' : '作为原生附件发送，保留文件名和原始内容'}</span>
+                    <span className="menu-item-sub">{agent === 'codex' ? '上传后确认放入工作区，将文件路径加入正文' : '支持原生附件，也可放入工作区并引用路径'}</span>
                   </span>
                 </button>
                 {agent === 'codex' && selectedModel?.inputModalities?.includes('audio') ? <button type="button" role="menuitem" className="menu-item" onClick={() => { setMenu(null); audioInputRef.current?.click(); }}>添加音频</button> : null}
