@@ -317,12 +317,21 @@ export class ProviderRegistry {
     });
   }
 
-  async update(id: string, patch: Partial<ProviderInput>): Promise<ProviderDto | undefined> {
+  async update(id: string, patch: Partial<ProviderInput> & { endpoint?: { protocol: string; url: string } }): Promise<ProviderDto | undefined> {
     return this.exclusive(async () => {
       if (patch.apiKey !== undefined && typeof patch.apiKey !== 'string') throw Object.assign(new Error('API Key 必须是字符串'), { statusCode: 400 });
       const next = this.reachableSecrets(await this.readSecrets());
       const row = this.store.getProvider(id);
       if (row === undefined) return undefined;
+      let endpoints = patch.endpoints;
+      if (patch.endpoint !== undefined) {
+        const { protocol, url } = patch.endpoint;
+        if (endpoints !== undefined || !(patch.protocols ?? row.protocols).includes(protocol) || url.trim() === '') {
+          throw Object.assign(new Error('需要为已启用的协议提供地址，或提交完整的协议地址映射'), { statusCode: 400 });
+        }
+        const stored = row.endpoints === null ? {} : JSON.parse(row.endpoints) as Record<string, string>;
+        endpoints = { ...stored, [protocol]: url.trim() };
+      }
       // Changing an immutable reference makes file-before-SQL crash recovery safe.
       const secretRef = patch.apiKey === undefined ? row.secretRef : `provider:${id}:${ulid()}`;
       if (patch.apiKey !== undefined && patch.apiKey !== '') next[secretRef] = patch.apiKey;
@@ -331,7 +340,7 @@ export class ProviderRegistry {
         secretRef,
         ...(patch.name === undefined ? {} : { name: patch.name }),
         ...(patch.baseUrl === undefined ? {} : { baseUrl: patch.baseUrl }),
-        ...(patch.endpoints === undefined ? {} : { endpoints: JSON.stringify(patch.endpoints) }),
+        ...(endpoints === undefined ? {} : { endpoints: JSON.stringify(endpoints) }),
         ...(patch.protocols === undefined ? {} : { protocols: patch.protocols }),
         ...(patch.models === undefined ? {} : { models: patch.models }),
         ...(patch.modelDetails === undefined ? {} : { modelDetails: patch.modelDetails }),
