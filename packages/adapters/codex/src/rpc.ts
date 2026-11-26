@@ -9,6 +9,18 @@ import WebSocket from 'ws';
 
 export type Frame = Record<string, unknown>;
 
+export interface NativeRpcErrorBody extends Frame { code: number; message: string }
+
+/** A validated native error reply is distinct from a lost/malformed response.
+ * Preserve its original text and payload; callers still prove effect scope. */
+export class NativeRpcResponseError extends Error {
+  readonly response: Readonly<NativeRpcErrorBody>;
+  constructor(readonly method: string, response: NativeRpcErrorBody, readonly nativeVersion?: string) {
+    super(`${method} 失败：${JSON.stringify(response)}`);
+    this.response = Object.freeze({ ...response });
+  }
+}
+
 export interface StartOptions {
   command: string;
   /** Executable version selects the reviewed incoming protocol contract. */
@@ -169,7 +181,7 @@ export class JsonRpcStdio {
       // A void native ACK still carries result:null. Never guess success from an ID alone.
       if (resultPresent === errorPresent || errorPresent && !validError) {
         pending.reject(Object.assign(new Error(`${pending.method} 原生响应格式无效`), { code: 'native-protocol-error' }));
-      } else if (errorPresent) pending.reject(new Error(`${pending.method} 失败：${JSON.stringify(error)}`));
+      } else if (errorPresent) pending.reject(new NativeRpcResponseError(pending.method, error as NativeRpcErrorBody, this.options.nativeVersion));
       else pending.resolve(frame['result']);
       return;
     }

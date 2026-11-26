@@ -1,7 +1,7 @@
 import { Ajv } from 'ajv';
 import { nativeRequest } from './controls.js';
 import { resolve } from 'node:path';
-import type { JsonRpcStdio } from './rpc.js';
+import { NativeRpcResponseError, type JsonRpcStdio } from './rpc.js';
 import type { NativeForkSession } from '@webdcc/protocol';
 
 export type CodexNativeAction =
@@ -75,7 +75,21 @@ export async function executeCodexNativeControl(rpc: JsonRpcStdio, nativeId: str
     case 'archive': return nativeRequest(rpc, 'thread/archive', { threadId: nativeId });
     case 'unarchive': return nativeRequest(rpc, 'thread/unarchive', { threadId: nativeId });
     case 'fork': {
-      const result = await nativeRequest(rpc, 'thread/fork', { threadId: nativeId, ...(action.lastTurnId === undefined ? {} : { lastTurnId: action.lastTurnId }), excludeTurns: true });
+      let result;
+      try {
+        result = await nativeRequest(rpc, 'thread/fork', { threadId: nativeId, ...(action.lastTurnId === undefined ? {} : { lastTurnId: action.lastTurnId }), excludeTurns: true });
+      } catch (failure) {
+        // Reviewed official 0.172 source rejects missing persisted history
+        // before creating a child. Do not infer safety from arbitrary text,
+        // unfamiliar native versions/data, or a later child release failure.
+        if (failure instanceof NativeRpcResponseError && rpc.nativeVersion === '0.172.0'
+          && failure.nativeVersion === rpc.nativeVersion && failure.method === 'thread/fork'
+          && failure.response.code === -32600 && failure.response.message === `no rollout found for thread id ${nativeId}`
+          && Object.keys(failure.response).every(key => key === 'code' || key === 'message')) {
+          throw Object.assign(failure, { statusCode: 409, code: 'native-control-rejected-no-effect' });
+        }
+        throw failure;
+      }
       if (result.thread.id === nativeId || resolve(result.thread.cwd) !== resolve(cwd)) throw new Error('Native fork returned an unconfirmed source identity or directory');
       await releaseCodexFork(rpc, result.thread.id);
       const nativeFork: NativeForkSession = { sourceNativeId: nativeId, nativeId: result.thread.id, cwd: result.thread.cwd,

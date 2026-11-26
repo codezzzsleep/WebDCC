@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JsonRpcStdio } from '../src/rpc.js';
+import { JsonRpcStdio, NativeRpcResponseError } from '../src/rpc.js';
 
 const script = String.raw`
 const readline = require('node:readline');
@@ -66,10 +66,13 @@ describe('Codex native RPC response envelopes over stdio', () => {
   });
 
   it('keeps a valid native error a failure and preserves its full diagnostic payload', async () => {
-    const rpc = JsonRpcStdio.start({ command: process.execPath, args: ['-e', responseProgram], maxFrames: 1 });
+    const rpc = JsonRpcStdio.start({ command: process.execPath, args: ['-e', responseProgram], nativeVersion: '0.172.0', maxFrames: 1 });
     const error = { code: -32000, message: 'native denied', data: { retryable: false } };
     try {
-      await expect(rpc.request('wire', { error }, 2000)).rejects.toThrow(`wire 失败：${JSON.stringify(error)}`);
+      const failure = await rpc.request('wire', { error }, 2000).catch(value => value);
+      expect(failure).toBeInstanceOf(NativeRpcResponseError);
+      expect(failure).toMatchObject({ method: 'wire', nativeVersion: '0.172.0', response: error, message: `wire 失败：${JSON.stringify(error)}` });
+      expect(String(failure)).toBe(`Error: wire 失败：${JSON.stringify(error)}`);
       expect(rpc.receivedFrames).toEqual([{ id: 1, error }]);
       expect(rpc.resourceCounts.pending).toBe(0);
     } finally { await rpc.kill(); }
