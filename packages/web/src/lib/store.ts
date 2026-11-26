@@ -113,6 +113,7 @@ export class AppStore {
   private queueOrderMutations = new Set<string>();
   private drafts = new Map<string, { text: string; fileIds: string[] }>();
   private outbox = new Map<string, { command: Command; status: PendingMessage['status']; durable?: boolean; createdAt?: number; error?: string }>();
+  private interruptRequests = new Map<string, { commandId?: string; error?: string }>();
   private interactionSubmissions = new Map<string, InteractionSubmission>();
   private dispatchedInteractions = new Set<string>();
   private sessionHydrations = new Map<string, Promise<void>>();
@@ -191,7 +192,11 @@ export class AppStore {
         if (state === 'online') this.lastReconnectAt = Date.now();
         this.notify();
       },
-      onOpen: () => this.replayOutbox(),
+      onOpen: () => {
+        this.replayOutbox();
+        // A saved feed cursor can cover a queue notification whose HTTP read failed.
+        for (const sessionId of this.visibleSessionIds) void this.refreshQueue(sessionId);
+      },
     });
     this.dshQuestionWaits = new DshQuestionWaits(message => this.connection.sendDshQuestionWait(message), () => this.notify());
   }
@@ -433,6 +438,11 @@ export class AppStore {
           }
         }
         if (entry !== undefined) {
+          const command = entry.command;
+          if (command.op === 'interrupt' && this.interruptRequests.get(command.sessionId)?.commandId === command.clientCommandId) {
+            this.interruptRequests.set(command.sessionId, { commandId: command.clientCommandId,
+              ...(message.result.ok ? {} : { error: message.result.error }) });
+          }
           entry.status = message.result.ok ? 'sent' : message.result.code === 'uncertain' ? 'uncertain' : 'failed';
           this.outbox.set(message.clientCommandId, entry);
           if (message.result.ok) { this.outbox.delete(message.clientCommandId); void cache.deleteOutbox(message.clientCommandId); }
@@ -1058,9 +1068,15 @@ export class AppStore {
   async restoreOutbox(): Promise<void> {
     const entries = await cache.getOutbox().catch(() => []);
     for (const entry of entries) {
-      const status = entry.sensitive && entry.status !== 'uncertain' ? 'failed' : entry.status;
-      this.outbox.set(entry.clientCommandId, { command: entry.command as Command, status, durable: true, createdAt: entry.createdAt, error: entry.error });
       const command = entry.command as Command;
+      const unboundStop = command.op === 'interrupt' && entry.status === 'pending' && command.expectedTurnId === undefined;
+      const status = unboundStop || entry.sensitive && entry.status !== 'uncertain' ? 'failed' : entry.status;
+      const error = unboundStop ? '之前的停止请求缺少轮次信息，请对当前轮次重新操作' : entry.error;
+      this.outbox.set(entry.clientCommandId, { command, status, durable: true, createdAt: entry.createdAt, error });
+      if (command.op === 'interrupt' && entry.status === 'pending') {
+        this.interruptRequests.set(command.sessionId, { commandId: command.clientCommandId, ...(unboundStop ? { error } : {}) });
+        if (unboundStop) void cache.putOutbox({ ...entry, status: 'failed', error }).catch(() => undefined);
+      }
       if (command.op === 'approve' || command.op === 'answer') this.interactionSubmissions.set(JSON.stringify([command.sessionId, command.op, command.op === 'answer' ? command.questionId : command.approvalId]), { commandId: command.clientCommandId, status: status === 'uncertain' ? 'uncertain' : status === 'failed' ? 'failed' : 'pending', ...(entry.sensitive && status === 'failed' ? { error: '敏感回答未保留，请重新输入；已送达的回应以原生状态为准。' } : {}) });
       if (command.op === 'send') {
         const list = this.pending.get(command.sessionId) ?? [];
@@ -1170,8 +1186,25 @@ export class AppStore {
     this.enqueue({ op: 'answer', clientCommandId: ulid(), sessionId, questionId, answer, ...delivery }, (question?.data as EventData['question'] | undefined)?.isSecret === true);
   }
 
-  interrupt(sessionId: string): void {
-    this.enqueue({ op: 'interrupt', clientCommandId: ulid(), sessionId, createdAt: Date.now() });
+  interruptError(sessionId: string): string | undefined {
+    return this.interruptRequests.get(sessionId)?.error;
+  }
+
+  interrupt(sessionId: string, expectedTurnId: string | undefined): void {
+    if (expectedTurnId === undefined) {
+      this.interruptRequests.set(sessionId, { error: '当前轮次还在同步，请确认后再停止' });
+      this.notify();
+      return;
+    }
+    const clientCommandId = ulid();
+    this.interruptRequests.set(sessionId, { commandId: clientCommandId });
+    this.notify();
+    void this.enqueue({ op: 'interrupt', clientCommandId, sessionId, expectedTurnId, createdAt: Date.now() }).then(saved => {
+      if (!saved && this.interruptRequests.get(sessionId)?.commandId === clientCommandId) {
+        this.interruptRequests.set(sessionId, { commandId: clientCommandId, error: '停止请求未能保存，请重试' });
+        this.notify();
+      }
+    });
   }
 
   setAccessMode(sessionId: string, accessMode: string): void {
