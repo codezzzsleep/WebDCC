@@ -81,3 +81,16 @@ it('excludes earlier conversations and late Claude results after a reset', async
     expect(ctx.store.sessionUsage(id)).toEqual({ throughSeq: zero.seq, resetSeq: old.seq, totalTokens: 0, partial: false });
   } finally { await ctx.close(); }
 });
+
+it('labels pre-native-payload Codex usage as partial without adding ambiguous updates', async () => {
+  const ctx = await createTestApp();
+  try {
+    const workspace = ctx.store.createWorkspace('Usage', ctx.dataDir);
+    const { id } = ctx.store.createSession({ workspaceId: workspace.id, agent: 'codex' });
+    ctx.store.appendEvent({ sessionId: id, turnId: 'legacy', itemKey: 'usage-thread-tokenUsage-updated-1', kind: 'usage',
+      data: { inputTokens: 100, outputTokens: 20, scope: 'attempt', generationMs: 100 } });
+    ctx.store.appendEvent({ sessionId: id, turnId: 'legacy', itemKey: 'usage-thread-tokenUsage-updated-2', kind: 'usage',
+      data: { inputTokens: 120, outputTokens: 30, scope: 'turn' } });
+    expect(ctx.store.sessionUsage(id)).toMatchObject({ totalTokens: 120, partial: true });
+  } finally { await ctx.close(); }
+});

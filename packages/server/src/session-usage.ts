@@ -3,6 +3,7 @@ import type { Db } from './db.js';
 
 interface UsageRow {
   turn_id: string;
+  item_key: string;
   kind: UsageEvent['kind'];
   at: string;
   usage: string | null;
@@ -18,7 +19,7 @@ export function readSessionUsage(db: Db, session: SessionDto): SessionUsageRespo
   const previousNative = session.nativeId !== undefined && boundary?.previousNativeId !== session.nativeId ? boundary?.previousNativeId : undefined;
   // Read just the accounting fields and turn markers through the session's
   // durable cursor. In particular, do not materialize tool output or result text.
-  const rows = db.prepare(`SELECT turn_id, kind, at,
+  const rows = db.prepare(`SELECT turn_id, kind, at, item_key,
       CASE kind WHEN 'usage' THEN data WHEN 'turn.completed' THEN json_extract(data, '$.usage') END AS usage,
       CASE WHEN kind IN ('usage', 'turn.completed') THEN json_extract(native, '$.usage') END AS native_usage,
       CASE WHEN kind = 'usage' THEN json_extract(native, '$.tokenUsage') END AS codex_usage,
@@ -35,11 +36,12 @@ export function readSessionUsage(db: Db, session: SessionDto): SessionUsageRespo
     if (row.turn_id === '' && row.kind !== 'usage') continue;
     const usage = row.usage === null ? undefined : JSON.parse(row.usage) as UsageEvent['data'];
     const sample = observeUsage({
-      kind: row.kind, at: row.at, data: (row.kind === 'turn.completed' ? { usage } : usage ?? {}) as UsageEvent['data'],
+      kind: row.kind, at: row.at, itemKey: row.item_key, data: (row.kind === 'turn.completed' ? { usage } : usage ?? {}) as UsageEvent['data'],
       native: { type: row.native_type, threadId: row.native_thread,
         usage: row.native_usage === null ? undefined : JSON.parse(row.native_usage),
         tokenUsage: row.codex_usage === null ? undefined : JSON.parse(row.codex_usage) },
     }, codexTotals, session.agent);
+    if (sample === undefined && row.kind === 'usage') continue;
     let observations = turns.get(row.turn_id);
     if (observations === undefined) {
       observations = [];

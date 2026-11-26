@@ -1,6 +1,6 @@
 import type { EventData, StoredEvent, UsageData } from './events.js';
 
-export type UsageEvent = Pick<StoredEvent, 'kind' | 'data' | 'native' | 'at'>;
+export type UsageEvent = Pick<StoredEvent, 'kind' | 'data' | 'native' | 'at' | 'itemKey'>;
 export type CodexUsageHistory = Map<string, { latest: number; seen: Set<number> }>;
 export interface UsageObservation {
   usage: UsageData;
@@ -34,7 +34,9 @@ export function observeUsage(event: UsageEvent, codexTotals: CodexUsageHistory, 
 
   const usage = { ...data };
   let nativeTotal: number | undefined;
-  let partial = false;
+  // Older Codex rows retain these projected counters without the original
+  // last/total pair. Timing scope alone cannot prove complete accounting.
+  let partial = !terminal && codex === undefined && /^usage-thread-tokenUsage-updated-\d+$/u.test(event.itemKey);
   if (codex !== undefined) {
     const last = record(codex['last']);
     nativeTotal = count(last?.['totalTokens']);
