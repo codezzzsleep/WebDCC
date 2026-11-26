@@ -6,7 +6,7 @@ import type { AgentAdapter, NativeObservation } from '@webdcc/protocol';
 import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { createSourceTestApp } from './helpers.js';
 
-it('NP-04 source UI reads native state, blocks changed results, applies a fresh revision and preserves recovery after reload', async () => {
+it('NP-04 retries loading recovery with the page refresh control, then applies only a fresh native result', async () => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
   try {
@@ -36,8 +36,34 @@ it('NP-04 source UI reads native state, blocks changed results, applies a fresh 
     const base = `http://127.0.0.1:${address.port}`;
     browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
     await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    const recoveryPath = `/api/sessions/${session.id}/reconciliation`;
+    let failRecoveryReads = true;
+    let recoveryReads = 0;
+    await page.route('**' + recoveryPath, async route => {
+      if (route.request().method() === 'GET') {
+        recoveryReads++;
+        if (failRecoveryReads) {
+          await route.fulfill({ status: 503, json: { error: 'temporary recovery read failure' } });
+          return;
+        }
+      }
+      await route.continue();
+    });
     await page.goto(`${base}/settings/native-events?sessionId=${session.id}`);
     const recovery = page.getByRole('region', { name: '执行恢复' });
+    await expect.poll(() => recovery.getByRole('alert').textContent()).toContain('503');
+    const inspect = recovery.getByRole('button', { name: '读取原生状态' });
+    expect(await inspect.isEnabled()).toBe(false);
+    expect((await page.request.get(base + recoveryPath)).status()).toBe(200);
+    failRecoveryReads = false;
+    const readsBeforeRefresh = recoveryReads;
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await expect.poll(() => recoveryReads, { timeout: 4_000 }).toBeGreaterThan(readsBeforeRefresh);
+    await expect.poll(() => inspect.isEnabled()).toBe(true);
+    expect(await recovery.getByRole('alert').count()).toBe(0);
+    expect(reads).toBe(0);
+    expect(sends).toBe(0);
+    expect(ctx.store.journal.queue(session.id)[0]?.state).toBe('uncertain');
     await recovery.getByRole('button', { name: '读取原生状态' }).click();
     await expect.poll(() => recovery.getByRole('button', { name: '恢复已确认的结果' }).isEnabled()).toBe(true);
     ctx.store.updateSession(session.id, { title: 'another browser changed session' });

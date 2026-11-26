@@ -63,7 +63,7 @@ export function NativeEventsPage({ initialSessionId = '' }: { initialSessionId?:
     {webEvent === undefined ? null : <section aria-label="Web 事件详情"><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(webEvent, null, 2)}</pre>
       {detail === undefined ? <p>未关联原生信封。本地生成事件和旧版本记录可能没有原始接口证据。</p> : null}</section>}
     {owner === null ? null : <details><summary>运行实例：{owner.state}</summary><pre>{JSON.stringify(owner, null, 2)}</pre><p>此记录仅覆盖 WebDCC 管理的连接。外部原生客户端由原生系统仲裁。</p></details>}
-    {filter ? <NativeRecovery sessionId={filter} onApplied={() => setRevision(value => value + 1)} /> : null}
+    {filter ? <NativeRecovery key={filter} sessionId={filter} refreshRevision={revision} onApplied={() => setRevision(value => value + 1)} /> : null}
     {error ? <p role="alert">{error}</p> : null}
     {busy ? <p role="status">正在读取…</p> : null}
     <table><thead><tr><th>ID</th><th>接口</th><th>来源</th><th>状态</th><th>代际</th></tr></thead>

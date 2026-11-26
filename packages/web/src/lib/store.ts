@@ -192,7 +192,11 @@ export class AppStore {
         if (state === 'online') this.lastReconnectAt = Date.now();
         this.notify();
       },
-      onOpen: () => this.replayOutbox(),
+      onOpen: () => {
+        this.replayOutbox();
+        // A saved feed cursor can cover a queue notification whose HTTP read failed.
+        for (const sessionId of this.visibleSessionIds) void this.refreshQueue(sessionId);
+      },
     });
     this.dshQuestionWaits = new DshQuestionWaits(message => this.connection.sendDshQuestionWait(message), () => this.notify());
   }

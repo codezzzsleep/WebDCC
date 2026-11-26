@@ -5,7 +5,7 @@ import { api } from '../lib/api.js';
 import { NativeDshSurface } from './NativeDshSurface.js';
 import { NativeSurface } from './NativeSurface.js';
 
-export function NativeRecovery({ sessionId, onApplied }: { sessionId: string; onApplied: () => void }): React.ReactElement {
+export function NativeRecovery({ sessionId, refreshRevision, onApplied }: { sessionId: string; refreshRevision: number; onApplied: () => void }): React.ReactElement {
   const [view, setView] = useState<ReconciliationView | null>(null);
   const [capabilities, setCapabilities] = useState<NativeRecoveryCapabilities>();
   const [ready, setReady] = useState(false);
@@ -13,12 +13,20 @@ export function NativeRecovery({ sessionId, onApplied }: { sessionId: string; on
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const request = useRef(0);
+  useEffect(() => () => { request.current++; }, []);
   useEffect(() => {
-    const current = ++request.current; setView(null); setCapabilities(undefined); setReady(false); setHistory(undefined); setBusy(false); setError('');
-    void api.reconciliation(sessionId).then(result => { if (current === request.current) { setView(result.reconciliation); setCapabilities(result.capabilities); setReady(true); } })
-      .catch(failure => { if (current === request.current) setError(String(failure)); });
-    return () => { request.current++; };
-  }, [sessionId]);
+    // Page refresh can retry a failed initial read while leaving an explicit review intact.
+    if (ready) return;
+    let cancelled = false;
+    setError('');
+    void api.reconciliation(sessionId).then(result => {
+      if (cancelled) return;
+      setView(result.reconciliation);
+      setCapabilities(result.capabilities);
+      setReady(true);
+    }).catch(failure => { if (!cancelled) setError(String(failure)); });
+    return () => { cancelled = true; };
+  }, [sessionId, refreshRevision, ready]);
   const readHistory = async (options: { cursor?: string; offset?: number } = {}): Promise<void> => {
     const current = ++request.current; setBusy(true); setError('');
     try { const result = await api.nativeHistory(sessionId, options); if (current === request.current) setHistory(result); }
