@@ -137,6 +137,98 @@ it('new-session Composer explicitly grants its uploaded file after creation befo
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
 
+it.each(['lost creation response', 'failed attachment grant'])('reuses the first session after a %s across refresh', async failure => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    ctx.manager.registerAdapter(declaredAdapter());
+    const workspace = ctx.store.createWorkspace('first-send recovery', ctx.dataDir);
+    browser = await chromium.launch({ headless: true });
+    const { page, base } = await listener(ctx, browser);
+    const creationIds: string[] = [];
+    let lostResponse = false; let deniedGrant = false;
+    await page.route(`${base}/api/commands`, async route => {
+      const { command } = route.request().postDataJSON() as { command: { op: string; clientCommandId: string } };
+      if (command.op === 'create-session') creationIds.push(command.clientCommandId);
+      if (command.op === 'create-session' && failure === 'lost creation response' && !lostResponse) {
+        lostResponse = true;
+        const response = await route.fetch();
+        expect((await response.json() as { ok: boolean }).ok).toBe(true);
+        await route.abort('failed');
+      } else await route.continue();
+    });
+    if (failure === 'failed attachment grant') await page.route('**/api/sessions/*/attachments', async route => {
+      if (deniedGrant) await route.continue();
+      else {
+        deniedGrant = true;
+        await route.fulfill({ status: 503, json: { error: 'Temporary attachment grant failure' } });
+      }
+    });
+    await page.goto(`${base}/new?w=${workspace.id}&agent=dsh`);
+    const input = page.getByTestId('new-session-input');
+    const text = '  first message retained🐈\n  ';
+    await input.fill(text);
+    if (failure === 'failed attachment grant') await page.getByTestId('add-file-input').setInputFiles({ name: 'retry.txt', mimeType: 'text/plain', buffer: Buffer.from('retry bytes') });
+    const send = page.getByTestId('new-session-send');
+    await expect.poll(() => send.isEnabled()).toBe(true);
+    await send.click();
+    await page.getByText(failure === 'lost creation response' ? /Failed to fetch/ : /Temporary attachment grant failure/).waitFor();
+    const original = ctx.store.listSessions()[0]!;
+    expect(ctx.store.listSessions()).toHaveLength(1);
+    expect(ctx.store.allEvents(original.id).filter(event => event.kind === 'user.message')).toHaveLength(0);
+
+    await page.reload();
+    await expect.poll(() => input.inputValue()).toBe(text);
+    const retriedText = deniedGrant ? `${text}edited before retry` : text;
+    if (deniedGrant) await input.fill(retriedText);
+    await send.click();
+    await page.waitForURL('**/s/**');
+    expect(ctx.store.listSessions()).toHaveLength(1);
+    expect(creationIds).toEqual([creationIds[0], creationIds[0]]);
+    expect(new URL(page.url()).pathname).toBe(`/s/${original.id}`);
+    await expect.poll(() => ctx.store.allEvents(original.id).filter(event => event.kind === 'user.message').length).toBe(1);
+    expect(ctx.store.allEvents(original.id).find(event => event.kind === 'user.message')?.data).toMatchObject({ text: retriedText });
+    if (deniedGrant) await page.getByTestId('message-attachments').getByRole('link', { name: 'retry.txt' }).waitFor();
+    else {
+      await page.goto(`${base}/new?w=${workspace.id}&agent=dsh`);
+      await input.fill(text);
+      await send.click();
+      await page.waitForURL('**/s/**');
+      expect(ctx.store.listSessions()).toHaveLength(2);
+      expect(creationIds[2]).not.toBe(creationIds[0]);
+    }
+  } finally { await browser?.close(); await ctx.close(); }
+}, 40_000);
+
+it('can retry a definite creation rejection using the same draft', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const adapter = declaredAdapter();
+    const create = adapter.create.bind(adapter);
+    let attempts = 0;
+    adapter.create = async options => {
+      if (++attempts === 1) throw Object.assign(new Error('Fixture rejected creation'), { statusCode: 400 });
+      return create(options);
+    };
+    ctx.manager.registerAdapter(adapter);
+    const workspace = ctx.store.createWorkspace('retry rejected creation', ctx.dataDir);
+    browser = await chromium.launch({ headless: true });
+    const { page, base } = await listener(ctx, browser);
+    await page.goto(`${base}/new?w=${workspace.id}&agent=dsh`);
+    const input = page.getByTestId('new-session-input');
+    const send = page.getByTestId('new-session-send');
+    const text = 'Reuse the same draft after rejection';
+    await input.fill(text);
+    await send.click();
+    await page.getByText('Fixture rejected creation').waitFor();
+    expect(ctx.store.listSessions()).toHaveLength(0);
+    expect(await input.inputValue()).toBe(text);
+    await send.click();
+    await page.waitForURL('**/s/**');
+    expect(attempts).toBe(2);
+    expect(ctx.store.listSessions()).toHaveLength(1);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
 it('product handoff saves through draft CAS and both cloud conflict choices remain actionable', async () => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
   try {

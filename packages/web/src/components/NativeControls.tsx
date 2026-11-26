@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useRef, useState } from 'react';
 import { isClaudeQueryConfiguration, type AgentId, type ClaudeConfigurationRecovery, type NativeActionReceipt, type NativeActionResponse, type NativeControlSnapshot } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
@@ -53,7 +54,7 @@ export function NativeControls({ sessionId, initialCommand, agent }: { sessionId
     const current = generation.current;
     const active = (): boolean => generation.current === current && current.sessionId === sessionId;
     setBusy(true); setError(''); setResult(undefined);
-    const commandId = crypto.randomUUID();
+    const commandId = randomUuid();
     // Recovery keeps only the operation identity, never its form content.
     try {
       const prepared = connect ? action : nativeActionFields(action, selectedAction?.type === action.type ? selectedAction.schema : undefined, catalog, commandId);

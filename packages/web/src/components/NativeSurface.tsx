@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useRef, useState } from 'react';
 import { NativeTerminal, nativeSurfaceRequest, type NativeTerminalInfo } from './NativeTerminal.js';
 
@@ -35,7 +36,7 @@ export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
   const openPeer = async (): Promise<void> => {
     setPending(true); setError('');
     try {
-      const view = await nativeSurfaceRequest<NativeTerminalInfo>('/api/native-peer', { method: 'POST', body: JSON.stringify({ commandId: crypto.randomUUID(), sessionId, intent: 'live-session', recordOutput }) });
+      const view = await nativeSurfaceRequest<NativeTerminalInfo>('/api/native-peer', { method: 'POST', body: JSON.stringify({ commandId: randomUuid(), sessionId, intent: 'live-session', recordOutput }) });
       if (currentSession.current === sessionId) setPeers(values => [...values.filter(value => value.id !== view.id), view]);
     } catch (failure) { if (currentSession.current === sessionId) setError(failure instanceof Error ? failure.message : '原生界面打开失败'); }
     finally { if (currentSession.current === sessionId) setPending(false); }
@@ -43,7 +44,7 @@ export function NativeSurface({ sessionId, agent, takeover, initialCommand }: {
   const open = async (intent: 'new-native' | 'same-session'): Promise<void> => {
     setPending(true); setError('');
     try {
-      const terminal = await nativeSurfaceRequest<NativeTerminalInfo>('/api/native-terminal', { method: 'POST', body: JSON.stringify({ commandId: crypto.randomUUID(), sessionId, intent, recordOutput }) });
+      const terminal = await nativeSurfaceRequest<NativeTerminalInfo>('/api/native-terminal', { method: 'POST', body: JSON.stringify({ commandId: randomUuid(), sessionId, intent, recordOutput }) });
       if (currentSession.current === sessionId) setTerminals(values => [...values.filter(value => value.id !== terminal.id), terminal]);
     } catch (failure) { if (currentSession.current === sessionId) setError(failure instanceof Error ? failure.message : '原生终端启动失败'); }
     finally { if (currentSession.current === sessionId) setPending(false); }
@@ -84,7 +85,7 @@ export function NativeProcessSurface({ sessionId }: { sessionId: string }) {
     try {
       const command: unknown = JSON.parse(argv);
       if (!Array.isArray(command) || !command.length || command.some(value => typeof value !== 'string')) throw new Error('请输入 JSON argv 数组，每个参数是一个字符串。');
-      const process = await nativeSurfaceRequest<NativeTerminalInfo>('/api/native-process', { method: 'POST', body: JSON.stringify({ commandId: crypto.randomUUID(), sessionId, command, rows: 30, cols: 100, recordOutput }) });
+      const process = await nativeSurfaceRequest<NativeTerminalInfo>('/api/native-process', { method: 'POST', body: JSON.stringify({ commandId: randomUuid(), sessionId, command, rows: 30, cols: 100, recordOutput }) });
       if (currentSession.current === sessionId) setProcesses(values => [...values.filter(value => value.id !== process.id), process]);
     } catch (failure) { if (currentSession.current === sessionId) setError(failure instanceof Error ? failure.message : '原生命令启动失败'); }
     finally { if (currentSession.current === sessionId) setPending(false); }

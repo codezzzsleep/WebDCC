@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useRef, useState } from 'react';
 import { canStopClaudeTask, claudeTaskKey, type ClaudeTask, type NativeActionReceipt, type NativeControlSnapshot } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
@@ -47,7 +48,7 @@ export function ClaudeTaskStop({ sessionId, task, snapshot }: { sessionId: strin
   const allowed = claudeTaskStopSupported(snapshot) && knownTask !== undefined && canStopClaudeTask(knownTask) && canStopClaudeTask(task);
   const stop = async (): Promise<void> => {
     if (busy || !allowed) return;
-    const captured = key; const commandId = crypto.randomUUID();
+    const captured = key; const commandId = randomUuid();
     setBusy(true); setError('');
     try {
       const fresh = await readClaudeTaskControls(sessionId);
