@@ -156,9 +156,9 @@ it('a dropped batch hashing in A cannot append its remaining files into B', asyn
       const original = Blob.prototype.arrayBuffer;
       Blob.prototype.arrayBuffer = function () {
         if (!(this instanceof File) || this.name !== 'slow-first.txt') return original.call(this);
-        const blob = this;
+        const read = original.bind(this);
         return new Promise<ArrayBuffer>(resolve => {
-          (window as unknown as { releaseAttachmentDigest: () => Promise<void> }).releaseAttachmentDigest = async () => resolve(await original.call(blob));
+          (window as unknown as { releaseAttachmentDigest: () => Promise<void> }).releaseAttachmentDigest = async () => resolve(await read());
         });
       };
     });
