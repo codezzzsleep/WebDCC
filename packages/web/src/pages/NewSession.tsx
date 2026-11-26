@@ -1,7 +1,7 @@
 import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import type { InputContent, SlashControlResult } from '@webdcc/protocol';
+import type { DraftDto, InputContent, NativeActionResponse, SlashControlRequest, SlashControlResult } from '@webdcc/protocol';
 import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
@@ -12,7 +12,15 @@ import { AgentMark } from '../components/AgentMark.js';
 import { Composer } from '../components/Composer.js';
 import { Icon } from '../components/Icon.js';
 
-interface NewSessionAttempt { target: string; input: string; createId: string; sendId: string; inputStarted: boolean }
+interface SlashDraftWrite { revision: number; before: string; after: string }
+interface NewSessionAttempt {
+  target: string;
+  input: string;
+  createId: string;
+  sendId: string;
+  inputStarted: boolean;
+  slashDraftWrite?: SlashDraftWrite;
+}
 const NEW_SESSION_ATTEMPT = 'wdcc:new-session-attempt';
 let pendingAttempt: NewSessionAttempt | undefined;
 
@@ -38,8 +46,9 @@ function firstInputAttempt(target: string, input: string): NewSessionAttempt {
   if (previous?.target === target && previous.input === input) return (pendingAttempt = previous);
   // The same still-empty session can receive a corrected draft, but an input
   // that may already have been submitted always keeps its own command ID.
-  const createId = previous?.target === target && !previous.inputStarted ? previous.createId : randomUuid();
-  const attempt = { target, input, createId, sendId: randomUuid(), inputStarted: false };
+  const reusable = previous?.target === target && !previous.inputStarted ? previous : undefined;
+  const attempt = { target, input, createId: reusable?.createId ?? randomUuid(), sendId: randomUuid(), inputStarted: false,
+    slashDraftWrite: reusable?.slashDraftWrite };
   saveAttempt(attempt);
   return attempt;
 }
@@ -54,6 +63,29 @@ function finishAttempt(attempt: NewSessionAttempt): void {
   if (pendingAttempt !== attempt) return;
   pendingAttempt = undefined;
   try { sessionStorage.removeItem(NEW_SESSION_ATTEMPT); } catch { /* Browser storage may be unavailable. */ }
+}
+
+function fingerprintInput(text: string, contentParts: InputContent | undefined): string {
+  return sha256Bytes(new TextEncoder().encode(JSON.stringify([text, contentParts])));
+}
+
+async function stageSlashDraft(sessionId: string, attempt: NewSessionAttempt, text: string, contentParts: InputContent): Promise<DraftDto> {
+  const current = await api.draft(sessionId);
+  const before = fingerprintInput(current.text, current.contentParts);
+  const write = attempt.slashDraftWrite;
+  const sameDraft = before === attempt.input;
+  // A lost response can leave either side of this attempt's last CAS write.
+  // A different revision or payload belongs to another edit.
+  const ownDraft = write !== undefined && (current.revision === write.revision && before === write.before
+    || current.revision === write.revision + 1 && before === write.after);
+  if (!sameDraft && current.revision !== 0 && !ownDraft) {
+    throw new Error('已创建会话中有其他草稿，请打开该会话核对。新会话页的输入仍保留。');
+  }
+  if (pendingAttempt === attempt) {
+    attempt.slashDraftWrite = { revision: current.revision, before, after: attempt.input };
+    saveAttempt(attempt);
+  }
+  return sameDraft ? current : api.saveInputDraft(sessionId, text, contentParts, current.revision);
 }
 
 interface NewSessionProps {
@@ -129,8 +161,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
       ...(choice.reasoningEffort === undefined ? {} : { reasoningEffort: choice.reasoningEffort }),
       ...(accessMode === undefined ? {} : { accessMode }),
     };
-    const inputFingerprint = sha256Bytes(new TextEncoder().encode(JSON.stringify([text, contentParts])));
-    const attempt = firstInputAttempt(JSON.stringify(options), inputFingerprint);
+    const attempt = firstInputAttempt(JSON.stringify(options), fingerprintInput(text, contentParts));
     let sessionId: string;
     try { sessionId = await store.createSession(options, attempt.createId); }
     catch (error) {
@@ -145,17 +176,36 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
     store.setDrawer(false);
     for (const part of contentParts.parts) if (part.type === 'image' || part.type === 'file' || part.type === 'audio') await api.grantAttachment(sessionId, part.fileId);
     if (parseSlashInput(text)) {
-      const savedDraft = await api.saveInputDraft(sessionId, text, contentParts, 0);
-      const catalog = await api.slashCommands(sessionId); const command = slashCommandFor(catalog.commands, text);
+      const openSlashResult = async (request: SlashControlRequest, response: NativeActionResponse, draft: DraftDto) => {
+        const result = response.result as SlashControlResult | undefined;
+        store.requestSlashControl(sessionId, request, response);
+        try { sessionStorage.setItem(`slash-action:${sessionId}`, request.commandId); } catch { /* Optional browser pointer. */ }
+        if (!result?.form && !result?.failed && ['completed', 'submitted'].includes(response.receipt.state)
+          && fingerprintInput(draft.text, draft.contentParts) === attempt.input) {
+          await api.saveInputDraft(sessionId, '', { ...contentParts, parts: [] }, draft.revision).catch(error => {
+            if ((error as { status?: number } | null)?.status !== 409) throw error;
+          });
+        }
+        await openCreatedSession();
+        return { commandId: response.receipt.commandId };
+      };
+      if (attempt.inputStarted) {
+        const response = await api.slashControlResult(sessionId, attempt.sendId).catch(error => {
+          if ((error as { status?: number } | null)?.status !== 404) throw error;
+          return undefined;
+        });
+        if (response !== undefined) {
+          return openSlashResult({ commandId: attempt.sendId, line: text, revision: '', contentParts }, response, await api.draft(sessionId));
+        }
+      }
+      const savedDraft = await stageSlashDraft(sessionId, attempt, text, contentParts);
+      const catalog = await api.slashCommands(sessionId);
+      if (catalog.status === 'error') throw new Error(catalog.reason ?? '原生指令目录读取失败');
+      const command = slashCommandFor(catalog.commands, text);
       if (command?.route === 'native-control') {
         const request = { commandId: attempt.sendId, line: text, revision: catalog.revision, contentParts };
         startInput(attempt);
-        const response = await api.slashControl(sessionId, request); const result = response.result as SlashControlResult | undefined;
-        store.requestSlashControl(sessionId, request, response);
-        try { sessionStorage.setItem(`slash-action:${sessionId}`, request.commandId); } catch { /* Optional browser pointer. */ }
-        if (!result?.form && !result?.failed && ['completed', 'submitted'].includes(response.receipt.state)) await api.saveInputDraft(sessionId, '', { ...contentParts, parts: [] }, savedDraft.revision ?? 0);
-        await openCreatedSession();
-        return { commandId: response.receipt.commandId };
+        return openSlashResult(request, await api.slashControl(sessionId, request), savedDraft);
       }
       if (!command || command.route === 'native-terminal' || command.route === 'web') {
         if (command?.route === 'native-terminal' || command?.route === 'web') store.requestNativeCommand(sessionId, text);
