@@ -76,6 +76,8 @@ export interface AnswerCommand extends CommandBase {
 export interface InterruptCommand extends CommandBase {
   op: 'interrupt';
   sessionId: string;
+  /** Public turn observed when the browser requested Stop. */
+  expectedTurnId?: string;
   /** 命令创建时间，用于 60 秒过期判断 */
   createdAt: number;
 }

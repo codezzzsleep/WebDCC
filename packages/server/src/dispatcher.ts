@@ -116,7 +116,7 @@ export class CommandDispatcher {
           if (typeof command.createdAt === 'number' && Date.now() - command.createdAt > INTERRUPT_TTL_MS) {
             return { ok: false, error: '打断未送达，Agent 可能仍在运行', code: 'interrupt-expired' };
           }
-          await this.manager.interrupt(command.sessionId);
+          await this.manager.interrupt(command.sessionId, command.expectedTurnId);
           return { ok: true };
         }
         case 'create-session': {

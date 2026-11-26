@@ -27,7 +27,7 @@ export function isCommand(value: unknown): value is Command {
         && record(value['answer']) && Object.keys(value['answer']).length === 1 && isDshQuestionAnswers(value['answer']['answers']))
       && (value['intent'] === undefined || ['send', 'queue', 'steer'].includes(String(value['intent'])))
       && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
-    case 'interrupt': return sequence(value['createdAt']);
+    case 'interrupt': return sequence(value['createdAt']) && (value['expectedTurnId'] === undefined || id(value['expectedTurnId']));
     case 'rename': return typeof value['title'] === 'string';
     case 'pin': return typeof value['pinned'] === 'boolean';
     case 'archive': return typeof value['archived'] === 'boolean';

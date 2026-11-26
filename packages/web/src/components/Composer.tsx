@@ -262,6 +262,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   }, [menu]);
 
   const running = session?.status === 'running' || session?.status === 'waiting';
+  const stopTurnId = !running || sessionId === null ? undefined : store.getTurns(sessionId, false).findLast(turn =>
+    turn.pending === undefined && turn.observation !== 'lost' && ['starting', 'running', 'waiting'].includes(turn.state))?.turnId;
+  const stopError = sessionId === null ? undefined : store.interruptError(sessionId);
   const accessModes = agentMeta?.accessModes ?? [];
   const rootBlocked = meta?.runningAsRoot === true && agent === 'claude-code';
   const accessModeId = mode.kind === 'session' ? session?.accessMode : mode.accessMode;
@@ -868,7 +871,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                 <Icon name="arrowUp" size={17} strokeWidth={2.2} />
               </button>
               {capabilitiesRef.current.intents.includes('steer') ? <button type="button" className="btn" onClick={() => void submit('steer')} disabled={viewingHistory || busy || controls.input.reason('steer') !== undefined} title={controls.input.reason('steer')} data-testid="steer-send-button">介入当前轮</button> : null}
-              <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId)} aria-label={stopTitle} title={stopTitle} data-testid="stop-button">
+              <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId, stopTurnId)} aria-label={stopTitle} title={stopTitle} data-testid="stop-button">
                 <Icon name="stop" size={16} />
                 {agent === 'claude-code' ? <span>{perTaskStop === true ? '本轮' : perTaskStop === false ? '全部' : '停止'}</span> : null}
               </button>
@@ -991,6 +994,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           <details className="muted" data-testid="composer-settings-help"><summary>设置说明</summary><p>权限决定可执行的操作；Provider 提供模型连接；模型决定处理能力；思考强度控制推理投入。{agent === 'codex' ? '默认执行和先做计划是工作方式，两种方式都可提问。沿用原生会保留原生设置，待确认表示尚未读到实际值。思考档位来自当前模型目录，此处显示请求值；原生接受的档位与发往上游模型的实际值可能不同，需以原生记录核对。' : agent === 'dsh' ? 'DSH 思考等级来自当前 Provider 和模型，已有会话确认成功后才更新显示。' : '沿用原生会保留原生设置。'}</p></details>
         </div>
       </div>
+      {stopError === undefined ? null : <div className="composer-error" role="alert">{stopError}</div>}
       {error !== null ? (
         <div className="composer-error" role="alert">
           {error}
