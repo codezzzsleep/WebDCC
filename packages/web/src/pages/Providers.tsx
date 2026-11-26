@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import type { ProviderDto, DshSettingsView, DshSettingsPreview, DshProviderUpdate, DshDefaultModelUpdate } from '@webdcc/protocol';
+import type { ProviderDto, ProviderEndpointMap, DshSettingsView, DshSettingsPreview, DshProviderUpdate, DshDefaultModelUpdate } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { AGENT_IDS, agentText, isCompatible, sourceLabel, type AgentKey } from '../lib/agents.js';
 import { refreshAppData, refreshDsh, refreshProviders, useAppData } from '../lib/appData.js';
@@ -15,6 +15,7 @@ const PROTOCOLS = [
 ];
 
 type ModelDetail = { id: string; name: string; reasoningEfforts?: string[] };
+type ProviderEdit = { name?: string; endpoint?: { protocol: keyof ProviderEndpointMap; url: string }; apiKey?: string };
 const REASONING_OPTIONS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 type DshProviderView = DshSettingsView;
 
@@ -22,8 +23,12 @@ function modelDetails(provider: ProviderDto): ModelDetail[] {
   return provider.models.map((id) => provider.modelDetails?.find((model) => model.id === id) ?? { id, name: id });
 }
 
+function providerProtocol(agent: AgentKey): keyof ProviderEndpointMap {
+  return agent === 'codex' ? 'openai-responses' : 'anthropic-messages';
+}
+
 function endpoint(provider: ProviderDto, agent: AgentKey): string {
-  return provider.endpoints?.[agent === 'codex' ? 'openai-responses' : 'anthropic-messages'] ?? provider.baseUrl;
+  return provider.endpoints?.[providerProtocol(agent)] ?? provider.baseUrl;
 }
 
 function agentStatus(agent: AgentKey, meta: ReturnType<typeof useAppData>['meta'], dsh: ReturnType<typeof useAppData>['dsh'], providers: ProviderDto[]): { label: string; detail: string; enabled: boolean } {
@@ -108,10 +113,10 @@ function ProviderTree({ provider, agent, onSaved }: { provider: ProviderDto; age
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const models = modelDetails(provider);
-  const saveProvider = (patch: { name: string; baseUrl: string; apiKey: string }): void => {
-    if (patch.name.trim() === '' || patch.baseUrl.trim() === '') return;
-    setSaving(true);
-    void api.updateProvider(provider.id, { name: patch.name.trim(), baseUrl: patch.baseUrl.trim(), endpoints: Object.fromEntries(provider.protocols.map((protocol) => [protocol, patch.baseUrl.trim()])), ...(patch.apiKey === '' ? {} : { apiKey: patch.apiKey }) }).then(() => { setEditProvider(false); onSaved(); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
+  const saveProvider = (patch: ProviderEdit): void => {
+    if (Object.keys(patch).length === 0) { setEditProvider(false); return; }
+    setSaving(true); setError(null);
+    void api.updateProvider(provider.id, patch).then(() => { setEditProvider(false); onSaved(); }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
   };
   const saveModels = (next: ModelDetail[]): void => {
     setSaving(true); setError(null);
@@ -132,12 +137,32 @@ function ProviderTree({ provider, agent, onSaved }: { provider: ProviderDto; age
     void api.providerLocalChange(provider.id, action).then(onSaved).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setSaving(false));
   };
   const removeProvider = (): void => { if (window.confirm('删除 Provider“' + provider.name + '”？已有会话使用的 Provider 无法删除。')) void api.deleteProvider(provider.id).then(onSaved).catch((cause: unknown) => setError(String(cause))); };
-  return <article className={'provider-tree ' + (open ? 'open' : '')} data-testid={'provider-' + provider.id}><button type="button" className="provider-tree-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} /><span className="provider-tree-title"><strong>{provider.name}</strong><small>{endpoint(provider, agent)}</small></span><span className="provider-tree-meta">{provider.localChange?.status === 'changed' ? <span className="badge warn">本机配置已变化</span> : null}<span className="badge">{models.length} 个 Model</span><span className={'badge ' + (provider.hasKey ? '' : 'warn')}>{provider.hasKey ? 'Key ····' + (provider.keyHint ?? '') : '缺少 Key'}</span></span></button>{open ? <div className="provider-tree-body"><div className="provider-facts"><span>{sourceLabel(provider.source)}</span>{provider.protocols.map((protocol) => <span key={protocol} className="protocol-chip">{protocol}</span>)}{provider.note !== undefined ? <span className="provider-note">{provider.note}</span> : null}<span className="provider-facts-actions"><button type="button" className="btn small ghost" onClick={() => setEditProvider((value) => !value)}>{editProvider ? '收起编辑' : '编辑 Provider'}</button><button type="button" className="btn small ghost danger-text" onClick={removeProvider}>删除</button></span></div>{provider.localChange === undefined ? null : <div className="notice-card" data-testid="provider-local-change"><span>{provider.localChange.status === 'ignored' ? '已忽略本次本机配置变化' : '本机配置已变化'}。已有会话仍保留此 Provider；新会话默认使用当前本机配置，已保存选择优先。</span><div className="row-actions"><button type="button" className="btn small" disabled={saving} onClick={() => localChange('update')}>更新</button>{provider.localChange.status === 'ignored' ? null : <button type="button" className="btn small ghost" disabled={saving} onClick={() => localChange('ignore')}>忽略</button>}</div></div>}{editProvider ? <ProviderEditForm provider={provider} agent={agent} saving={saving} onSave={saveProvider} /> : null}<div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>模型 ID、显示名称和能力属于这一层</small></div><button type="button" className="btn small" onClick={() => { setError(null); setModelDraft({ id: '', name: '' }); }}>添加 Model</button></div><div className="model-list">{models.length === 0 && modelDraft === null ? <div className="model-empty">这个 Provider 还没有模型。点击“添加 Model”。</div> : null}{models.map((model) => <ModelRow key={model.id} model={model} onEdit={() => { setError(null); setModelDraft(model); }} onDelete={() => removeModel(model.id)} />)}{modelDraft !== null ? <ModelForm draft={modelDraft} saving={saving} onChange={setModelDraft} onCancel={() => setModelDraft(null)} onSave={saveModel} /> : null}</div>{error !== null ? <div className="error-card" role="alert">{error}</div> : null}</div></div> : null}</article>;
+  return <article className={'provider-tree ' + (open ? 'open' : '')} data-testid={'provider-' + provider.id}><button type="button" className="provider-tree-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={15} /><span className="provider-tree-title"><strong>{provider.name}</strong><small>{endpoint(provider, agent)}</small></span><span className="provider-tree-meta">{provider.localChange?.status === 'changed' ? <span className="badge warn">本机配置已变化</span> : null}<span className="badge">{models.length} 个 Model</span><span className={'badge ' + (provider.hasKey ? '' : 'warn')}>{provider.hasKey ? 'Key ····' + (provider.keyHint ?? '') : '缺少 Key'}</span></span></button>{open ? <div className="provider-tree-body"><div className="provider-facts"><span>{sourceLabel(provider.source)}</span>{provider.protocols.map((protocol) => <span key={protocol} className="protocol-chip">{protocol}</span>)}{provider.note !== undefined ? <span className="provider-note">{provider.note}</span> : null}<span className="provider-facts-actions"><button type="button" className="btn small ghost" onClick={() => setEditProvider((value) => !value)}>{editProvider ? '收起编辑' : '编辑 Provider'}</button><button type="button" className="btn small ghost danger-text" onClick={removeProvider}>删除</button></span></div>{provider.localChange === undefined ? null : <div className="notice-card" data-testid="provider-local-change"><span>{provider.localChange.status === 'ignored' ? '已忽略本次本机配置变化' : '本机配置已变化'}。已有会话仍保留此 Provider；新会话默认使用当前本机配置，已保存选择优先。</span><div className="row-actions"><button type="button" className="btn small" disabled={saving} onClick={() => localChange('update')}>更新</button>{provider.localChange.status === 'ignored' ? null : <button type="button" className="btn small ghost" disabled={saving} onClick={() => localChange('ignore')}>忽略</button>}</div></div>}{editProvider ? <ProviderEditForm key={agent} provider={provider} agent={agent} saving={saving} onSave={saveProvider} /> : null}<div className="model-tree"><div className="model-tree-head"><div><strong>Model</strong><small>模型 ID、显示名称和能力属于这一层</small></div><button type="button" className="btn small" onClick={() => { setError(null); setModelDraft({ id: '', name: '' }); }}>添加 Model</button></div><div className="model-list">{models.length === 0 && modelDraft === null ? <div className="model-empty">这个 Provider 还没有模型。点击“添加 Model”。</div> : null}{models.map((model) => <ModelRow key={model.id} model={model} onEdit={() => { setError(null); setModelDraft(model); }} onDelete={() => removeModel(model.id)} />)}{modelDraft !== null ? <ModelForm draft={modelDraft} saving={saving} onChange={setModelDraft} onCancel={() => setModelDraft(null)} onSave={saveModel} /> : null}</div>{error !== null ? <div className="error-card" role="alert">{error}</div> : null}</div></div> : null}</article>;
 }
 
-function ProviderEditForm({ provider, agent, saving, onSave }: { provider: ProviderDto; agent: AgentKey; saving: boolean; onSave: (patch: { name: string; baseUrl: string; apiKey: string }) => void }): React.ReactElement {
-  const [draft, setDraft] = useState({ name: provider.name, baseUrl: endpoint(provider, agent), apiKey: '' });
-  return <div className="provider-edit-form"><div className="form-grid"><label className="field"><span>Provider 名称</span><input className="text-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label className="field"><span>Base URL</span><input className="text-input" value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} /></label><label className="field"><span>替换 API Key（留空不修改）</span><input className="text-input" type="password" value={draft.apiKey} placeholder={provider.hasKey ? '已配置' : '未配置'} onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} /></label></div><div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={() => onSave(draft)}>保存 Provider</button></div></div>;
+function ProviderEditForm({ provider, agent, saving, onSave }: { provider: ProviderDto; agent: AgentKey; saving: boolean; onSave: (patch: ProviderEdit) => void }): React.ReactElement {
+  const [initial] = useState(() => ({ name: provider.name, url: endpoint(provider, agent), apiKey: '' }));
+  const [draft, setDraft] = useState(initial);
+  const protocol = providerProtocol(agent);
+  const protocolLabel = PROTOCOLS.find((item) => item.id === protocol)?.label;
+  const submit = (): void => {
+    const name = draft.name.trim();
+    const url = draft.url.trim();
+    if (name === '' || url === '') return;
+    onSave({
+      ...(name === initial.name.trim() ? {} : { name }),
+      ...(url === initial.url.trim() ? {} : { endpoint: { protocol, url } }),
+      ...(draft.apiKey === '' ? {} : { apiKey: draft.apiKey }),
+    });
+  };
+  return <div className="provider-edit-form">
+    <div className="form-grid">
+      <label className="field"><span>Provider 名称</span><input className="text-input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+      <label className="field"><span>{protocolLabel} Base URL</span><input className="text-input" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value })} /></label>
+      <label className="field"><span>替换 API Key（留空不修改）</span><input className="text-input" type="password" value={draft.apiKey} placeholder={provider.hasKey ? '已配置' : '未配置'} onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} /></label>
+    </div>
+    <div className="row-actions"><button type="button" className="btn primary" disabled={saving} onClick={submit}>保存 Provider</button></div>
+  </div>;
 }
 
 function ModelRow({ model, onEdit, onDelete, readOnly = false }: { model: ModelDetail; onEdit: () => void; onDelete?: () => void; readOnly?: boolean }): React.ReactElement {

@@ -688,10 +688,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.patch('/api/providers/:id', async (request) => {
     const { id } = request.params as { id: string };
     const body = request.body as Record<string, unknown>;
+    const endpoint = body['endpoint'] as { protocol?: unknown; url?: unknown } | undefined;
+    let endpointUpdate: { protocol: string; url: string } | undefined;
+    if (endpoint !== undefined) {
+      if (typeof endpoint?.protocol !== 'string' || typeof endpoint.url !== 'string') throw badRequest('需要协议和地址');
+      endpointUpdate = { protocol: endpoint.protocol, url: endpoint.url };
+    }
     const updated = await deps.providers.update(id, {
       ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
       ...(typeof body['baseUrl'] === 'string' ? { baseUrl: body['baseUrl'] } : {}),
       ...(typeof body['endpoints'] === 'object' && body['endpoints'] !== null ? { endpoints: body['endpoints'] as Record<string, string> } : {}),
+      ...(endpointUpdate === undefined ? {} : { endpoint: endpointUpdate }),
       ...(Array.isArray(body['protocols']) ? { protocols: body['protocols'] as string[] } : {}),
       ...(Array.isArray(body['models']) ? { models: body['models'] as string[] } : {}),
       ...(Array.isArray(body['modelDetails']) ? { modelDetails: body['modelDetails'] as { id: string; name: string; reasoningEfforts?: string[] }[] } : {}),
