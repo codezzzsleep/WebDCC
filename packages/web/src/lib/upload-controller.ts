@@ -158,7 +158,8 @@ export class UploadController {
         signal.throwIfAborted(); task = await this.save({ ...task, received: [...new Set([...task.received, index])].sort((a, b) => a - b) });
       }
       signal.throwIfAborted(); task = await this.save({ ...task, state: 'completing' });
-      const complete = await this.json(`${this.endpoint}/${task.uploadId}/complete`, { method: 'POST', signal }, '完成上传');
+      const complete = await this.json(`${this.endpoint}/${task.uploadId}/complete`, { method: 'POST', signal,
+        headers: { 'content-type': 'application/json' }, body: '{}' }, '完成上传');
       signal.throwIfAborted();
       if (!fileId(complete['fileId'])) throw new Error('完成上传未返回有效文件标识');
       return await this.save({ ...task, state: 'completed', fileId: complete['fileId'], blob: undefined, error: undefined });
