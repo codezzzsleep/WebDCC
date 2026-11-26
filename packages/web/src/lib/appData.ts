@@ -21,32 +21,53 @@ interface AppData {
 let data: AppData = { meta: null, providers: [], workspaces: [], dsh: null, loaded: false };
 const listeners = new Set<() => void>();
 let loading: Promise<void> | null = null;
+const readers = { meta: api.meta, providers: api.providers, workspaces: api.workspaces, dsh: api.dshStatus };
+type Field = keyof typeof readers;
+const activeReads = new Map<Field, { retry?: ReturnType<typeof setTimeout> }>();
 
 function emit(next: Partial<AppData>): void {
   data = { ...data, ...next };
   for (const listener of listeners) listener();
 }
 
+async function refreshField(field: Field, attempt = 0): Promise<void> {
+  const previous = activeReads.get(field)?.retry;
+  if (previous !== undefined) clearTimeout(previous);
+  const current: { retry?: ReturnType<typeof setTimeout> } = {};
+  activeReads.set(field, current);
+  try {
+    const value = await readers[field]();
+    if (activeReads.get(field) === current) emit({ [field]: value });
+  } catch (error) {
+    if (activeReads.get(field) !== current) return;
+    const status = (error as { status?: number } | null)?.status;
+    if (status === undefined || status === 408 || status === 429 || status >= 500) {
+      const delay = Math.min(1_000 * 2 ** attempt, 30_000);
+      current.retry = setTimeout(() => {
+        if (activeReads.get(field) === current) void refreshField(field, attempt + 1);
+      }, delay);
+    }
+    if (field === 'dsh') emit({ dsh: null });
+  }
+}
+
 export function refreshAppData(): Promise<void> {
   loading = Promise.all([
-    api.meta().then((meta) => emit({ meta })).catch(() => undefined),
-    api.providers().then((providers) => emit({ providers })).catch(() => undefined),
-    api.workspaces().then((workspaces) => emit({ workspaces })).catch(() => undefined),
-    api.dshStatus().then((dsh) => emit({ dsh })).catch(() => emit({ dsh: null })),
+    refreshField('meta'), refreshProviders(), refreshWorkspaces(), refreshDsh(),
   ]).then(() => emit({ loaded: true }));
   return loading;
 }
 
 export function refreshProviders(): Promise<void> {
-  return api.providers().then((providers) => emit({ providers })).catch(() => undefined);
+  return refreshField('providers');
 }
 
 export function refreshWorkspaces(): Promise<void> {
-  return api.workspaces().then((workspaces) => emit({ workspaces })).catch(() => undefined);
+  return refreshField('workspaces');
 }
 
 export function refreshDsh(): Promise<void> {
-  return api.dshStatus().then((dsh) => emit({ dsh })).catch(() => emit({ dsh: null }));
+  return refreshField('dsh');
 }
 
 export function useAppData(): AppData {
