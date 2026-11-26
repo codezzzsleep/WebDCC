@@ -10,13 +10,16 @@ import { openDb } from '../src/db.js';
 import { Store } from '../src/store.js';
 import { SessionManager } from '../src/manager.js';
 
-async function fixture(agent: AgentId = 'codex') {
+const originalInput = 'original input';
+
+async function fixture(agent: AgentId = 'codex', redactInput = false) {
   const db = openDb(':memory:'); const store = new Store(db); const manager = new SessionManager(store, { idleDisposeMin: 0 }); const adapter = new FakeAdapter({ id: agent });
   let callback!: (id: string, event: AdapterEvent) => void; const disposed = vi.fn(async () => undefined); const send = vi.fn(async () => undefined);
   adapter.onEvent = cb => { callback = cb; }; adapter.send = send; adapter.dispose = disposed; manager.registerAdapter(adapter);
   const workspace = store.createWorkspace('publication failure', tmpdir()); const session = await manager.createSession({ workspaceId: workspace.id, agent });
-  const commandId = 'original-input-command'; store.journal.claim({ op: 'send', clientCommandId: commandId, sessionId: session.id, text: 'original input' }); store.journal.acquire(commandId);
-  const sent = await manager.send(session.id, { text: 'original input' }, commandId); const runtime = manager.getRuntime(session.id)!;
+  if (redactInput) store.nativeEvents.addSecret(originalInput);
+  const commandId = 'original-input-command'; store.journal.claim({ op: 'send', clientCommandId: commandId, sessionId: session.id, text: originalInput }); store.journal.acquire(commandId);
+  const sent = await manager.send(session.id, { text: originalInput }, commandId); const runtime = manager.getRuntime(session.id)!;
   return { db, store, manager, adapter, session, sent, commandId, runtime, send, disposed,
     emit: (event: AdapterEvent) => callback(session.id, { ...event, runtime: event.runtime ?? runtime.identity }),
     close: async () => { db.exec('DROP TRIGGER IF EXISTS reject_publication'); await manager.disposeAll(); db.close(); } };
@@ -25,6 +28,58 @@ const complete: Extract<AdapterEvent, { type: 'item.complete' }> = { type: 'item
 async function evidence(name: string, report: unknown) {
   const directory = process.env['WDCC_PUBLICATION_FAILURE_EVIDENCE_DIR']; if (directory !== undefined) await writeFile(join(directory, `${name}.json`), JSON.stringify(report, null, 2));
 }
+
+it('joins live and recovered Codex echoes to one redacted user message', async () => {
+  const ctx = await fixture('codex', true);
+  try {
+    const nativeRequestId = ctx.store.journal.nativeRequestId(ctx.sent.turnId);
+    const nativeTurnId = 'native-input-turn';
+    const start = { type: 'turn.start', nativeTurnId } as const;
+    const echo = { type: 'item.complete', kind: 'user.message', itemKey: 'native-input', nativeTurnId,
+      data: { text: originalInput, clientCommandId: nativeRequestId } } as const;
+    const maskedText = '*'.repeat(originalInput.length);
+    expect(ctx.store.allEvents(ctx.session.id).find(event => event.kind === 'user.message')?.data).toMatchObject({ text: maskedText });
+
+    ctx.emit(start);
+    ctx.emit(echo);
+    ctx.emit({ type: 'history', nativeId: ctx.runtime.nativeId!, records: [{
+      nativeSeq: 1, nativeTurnId, at: '2026-11-26T16:00:00.000Z', native: { type: 'fixture-turn' },
+      admittedInputs: [{ nativeRequestId, text: originalInput }], events: [start, echo],
+    }] });
+
+    expect(ctx.store.allEvents(ctx.session.id).filter(event => event.kind === 'user.message')).toEqual([
+      expect.objectContaining({ turnId: ctx.sent.turnId, data: expect.objectContaining({ text: maskedText, clientCommandId: ctx.commandId }) }),
+    ]);
+    expect(ctx.store.nativeHistory.turn(ctx.session.id, nativeTurnId)).toBe(ctx.sent.turnId);
+    expect(ctx.store.journal.get(ctx.commandId)?.state).toBe('native-accepted');
+    expect(ctx.disposed).not.toHaveBeenCalled();
+  } finally { await ctx.close(); }
+});
+
+it('isolates a conflicting Codex echo even when both texts have the same redacted view', async () => {
+  const ctx = await fixture('codex', true);
+  try {
+    const other = await ctx.manager.createSession({ workspaceId: ctx.session.workspaceId, agent: 'codex' });
+    const otherInput = await ctx.manager.send(other.id, { text: 'continue independently' });
+    const conflictingText = 'modified input';
+    ctx.store.nativeEvents.addSecret(conflictingText);
+    expect(ctx.store.nativeEvents.redact(originalInput)).toBe(ctx.store.nativeEvents.redact(conflictingText));
+
+    const nativeRequestId = ctx.store.journal.nativeRequestId(ctx.sent.turnId);
+    expect(() => ctx.emit({ type: 'item.complete', kind: 'user.message', itemKey: 'conflicting-input',
+      data: { text: conflictingText, clientCommandId: nativeRequestId } })).not.toThrow();
+
+    const raw = ctx.store.nativeEvents.list(ctx.session.id).at(-1)!;
+    expect(ctx.store.nativeEvents.get(raw.id)?.payload).toMatchObject({ itemKey: 'conflicting-input', data: { clientCommandId: nativeRequestId } });
+    expect(ctx.store.allEvents(ctx.session.id)).toContainEqual(expect.objectContaining({
+      kind: 'notice', data: expect.objectContaining({ nativeType: 'input-echo-mismatch' }),
+    }));
+    expect(ctx.store.journal.get(ctx.commandId)?.state).toBe('uncertain');
+    expect(ctx.store.getSession(ctx.session.id)?.status).toBe('error');
+    expect(ctx.disposed).toHaveBeenCalledExactlyOnceWith(ctx.session.id);
+    expect(ctx.manager.getRuntime(other.id)).toMatchObject({ turnId: otherInput.turnId, disposing: false });
+  } finally { await ctx.close(); }
+});
 
 it.each(['codex', 'claude-code', 'dsh'] as const)('%s real SQLite publication failure retains raw, isolates current owner/input and never becomes a native callback error', async agent => {
   const ctx = await fixture(agent);

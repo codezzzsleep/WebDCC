@@ -47,7 +47,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { isAbsolute, resolve } from 'node:path';
 import { initialPermissions, isBlockingQuestion, isInputContent, isValidEventData, nativeAccessMode, normalizeQuestionAnswer, observePermissions, publicInputContent, ulid, parseSlashInput, slashCommandFor, formatCodexAsyncReply, parseCodexAsyncReplies } from '@webdcc/protocol';
 import type { Store } from './store.js';
-import { findUserEcho, resolveAnswer, currentClaudeTasks, currentCodexSubagents, currentClaudeConfiguration, isClaudeQueryConfiguration } from '@webdcc/protocol';
+import { findUserEcho, UserEchoMismatchError, resolveAnswer, currentClaudeTasks, currentCodexSubagents, currentClaudeConfiguration, isClaudeQueryConfiguration } from '@webdcc/protocol';
 import { TurnTracker, type TurnAssignment } from './turn-tracker.js';
 import { CodexWatchdog } from './watchdog.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
@@ -1838,9 +1838,9 @@ export class SessionManager {
       const data = event.data as EventData['user.message'];
       const identity = data.clientCommandId === undefined ? undefined : this.store.journal.nativeInputRecord(sessionId, data.clientCommandId);
       if (identity?.steered && !this.confirmInputEcho(sessionId, data.clientCommandId!, data.text, event.nativeTurnId)) return;
-      this.resolveAsyncInput(sessionId, event);
       const commandId = identity?.commandId ?? data.clientCommandId;
-      const local = findUserEcho(this.store.allEvents(sessionId), { ...data, clientCommandId: commandId });
+      const local = findUserEcho(this.store.allEvents(sessionId), { ...data, clientCommandId: commandId }, identity?.input.text);
+      this.resolveAsyncInput(sessionId, event);
       if (local !== undefined) {
         return;
       }
@@ -2241,13 +2241,13 @@ export class SessionManager {
     void runtime.adapter.dispose(runtime.sessionId).catch(() => undefined);
   }
 
-  /** A platform SQL failure is not evidence of a native error or terminal.
-   * Non-SQL errors continue through the original Adapter error path. */
+  /** A publication failure leaves the affected runtime uncertain until reconciliation. */
   private nativePublication(runtime: Runtime, publish: () => void): void {
     const turnId = runtime.turnId;
     try { publish(); }
     catch (error) {
-      if (!isSqliteFailure(error)) throw error;
+      const echoMismatch = error instanceof UserEchoMismatchError;
+      if (!echoMismatch && !isSqliteFailure(error)) throw error;
       if (this.runtimes.get(runtime.sessionId) !== runtime || runtime.disposing) return;
       let owns: boolean | undefined;
       try { owns = this.store.nativeOwners.current(runtime.sessionId, runtime.identity); } catch { /* ownership unavailable */ }
@@ -2261,7 +2261,9 @@ export class SessionManager {
       try {
         const notice = this.store.appendEvent({ sessionId: runtime.sessionId, turnId,
           itemKey: `native-publication-failed:${runtime.identity.ownerId}:${runtime.identity.generation}`, kind: 'notice',
-          data: { level: 'warning', nativeType: 'runtime-unobserved', text: '原生输出已收到，但 Web 记录未能保存；运行观测已隔离，执行结果需要核对。' } });
+          data: { level: 'warning', ...(echoMismatch
+            ? { nativeType: 'input-echo-mismatch', text: '原生消息回显与已记录输入不一致，执行结果需要核对。' }
+            : { nativeType: 'runtime-unobserved', text: '原生输出已收到，但 Web 记录未能保存；运行观测已隔离，执行结果需要核对。' }) } });
         this.hooks.onEvent(notice);
         this.updateSessionAndFeed(runtime.sessionId, { status: 'error' }, { status: 'error', queueRevision: Date.now() });
       } catch { /* Retain committed raw and the in-memory fence when writes fail. */ }
