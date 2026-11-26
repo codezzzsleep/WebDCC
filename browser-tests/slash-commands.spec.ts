@@ -193,3 +193,72 @@ it.each(['dsh', 'claude-code'] as const)('%s reads a pre-creation catalog and ex
     await page.getByTestId('composer-input').fill('/'); await page.getByTestId('slash-menu').getByRole('button', { name: new RegExp(name) }).waitFor();
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
+
+it.each(['/status', '/status details'])('recovers the first native command %s after a catalog interruption and a lost result', async retryLine => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const workspace = ctx.store.createWorkspace('new slash retry', ctx.dataDir);
+    const adapter: AgentAdapter = new FakeAdapter({ id: 'codex' });
+    adapter.previewSlashCommands = async () => codexSlashCommands;
+    adapter.slashCommands = async () => codexSlashCommands;
+    const controls: string[] = [];
+    adapter.executeSlashControl = async (_id, line) => { controls.push(line); return { text: 'First native command returned' }; };
+    ctx.manager.registerAdapter(adapter);
+    const base = await ctx.app.listen({ host: '127.0.0.1', port: 0 });
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.route('**/api/sessions/*/slash-commands', route => route.fulfill({ status: 503, body: 'controlled catalog interruption' }), { times: 1 });
+    await page.goto(`${base}/new?w=${workspace.id}&agent=codex`);
+    const input = page.getByTestId('new-session-input');
+    await input.fill('/status');
+    await input.press('Enter');
+    await page.getByRole('alert').filter({ hasText: 'controlled catalog interruption' }).waitFor();
+    const [created] = ctx.store.listSessions();
+    expect(created).toBeDefined();
+    expect(ctx.store.getDraft(created!.id)).toMatchObject({ text: '/status', revision: 1 });
+    expect(controls).toEqual([]);
+
+    await page.reload();
+    await expect.poll(() => input.inputValue()).toBe('/status');
+    const errors: number[] = [];
+    page.on('response', response => {
+      if (response.url().endsWith('/draft') && response.request().method() === 'PUT' && response.status() >= 400) errors.push(response.status());
+    });
+    let posts = 0;
+    let originalCommandId = '';
+    await page.route('**/api/sessions/*/slash-commands', async route => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
+      posts++;
+      if (posts > 1) { await route.continue(); return; }
+      originalCommandId = (route.request().postDataJSON() as { commandId: string }).commandId;
+      const reply = await route.fetch();
+      expect(reply.status()).toBe(200);
+      await route.fulfill({ status: 503, body: 'controlled lost native result' });
+    });
+    await input.fill(retryLine);
+    await input.press('Enter');
+    await page.getByRole('alert').filter({ hasText: 'controlled lost native result' }).waitFor({ timeout: 5_000 });
+    expect(controls).toEqual([retryLine]);
+    expect(errors).toEqual([]);
+    expect(ctx.store.getDraft(created!.id).text).toBe(retryLine);
+    expect(ctx.store.nativeActions.slashResult(originalCommandId, created!.id)?.receipt.state).toBe('completed');
+
+    // Simulate another tab editing the created session while the first tab
+    // still has the submitted original in its new-session draft.
+    const remote = await ctx.app.inject({ method: 'PUT', url: `/api/sessions/${created!.id}/draft`, headers: { cookie: ctx.cookie },
+      payload: { text: 'New cloud draft', contentParts: { version: 1, parts: [{ type: 'text', text: 'New cloud draft' }] },
+        expectedRevision: ctx.store.getDraft(created!.id).revision } });
+    expect(remote.statusCode).toBe(200);
+    await page.reload();
+    await expect.poll(() => input.inputValue()).toBe(retryLine);
+    await input.press('Enter');
+    await page.waitForURL(`**/s/${created!.id}`);
+    expect(ctx.store.listSessions().map(session => session.id)).toEqual([created!.id]);
+    await page.getByLabel('原生指令结果', { exact: true }).getByText('First native command returned', { exact: true }).waitFor();
+    await expect.poll(() => page.getByTestId('composer-input').inputValue()).toBe('New cloud draft');
+    expect(ctx.store.getDraft(created!.id).text).toBe('New cloud draft');
+    expect(controls).toEqual([retryLine]);
+    expect(posts).toBe(1);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
