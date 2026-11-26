@@ -1734,8 +1734,9 @@ export class DshAdapter implements AgentAdapter {
     await this.selectModel(client, runtime, model, effort, selected?.provider === undefined || selected.model === undefined ? undefined : { provider: selected.provider, model: selected.model });
   }
 
-  async interrupt(sessionId: string): Promise<void> {
+  async interrupt(sessionId: string, assertTarget?: () => void): Promise<void> {
     const client = await this.ensureSidecar();
+    assertTarget?.();
     const runtime = this.require(sessionId);
     await this.call(client, 'session/cancel', { request: { sessionId: runtime.nativeId } });
   }
@@ -1798,11 +1799,12 @@ export class DshAdapter implements AgentAdapter {
   }
 
   /** 打断时把自己挂起的审批标成 cancelled（只处理本会话的） */
-  async cancelPending(sessionId: string): Promise<void> {
+  async cancelPending(sessionId: string, stillRelevant?: () => boolean): Promise<void> {
     const runtime = this.sessions.get(sessionId);
     if (runtime === undefined) return;
     const client = await this.ensureSidecar().catch(() => null);
     for (const [eventId, pending] of runtime.pending) {
+      if (stillRelevant?.() === false) return;
       this.releaseQuestionWaits(pending);
       if (client === null || pending.generation !== this.muxGeneration || this.clientId === '') continue;
       if (pending.kind === 'approval') {

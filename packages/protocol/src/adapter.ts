@@ -186,10 +186,10 @@ export interface AgentAdapter {
   /** Read native skill metadata without creating/resuming a writer or sending input. */
   inputSkills?(sessionId?: string, cwd?: string): Promise<InputSkillOption[]>;
   steer?(sessionId: string, input: UserInput): Promise<void>;
-  interrupt(sessionId: string): Promise<void>;
+  interrupt(sessionId: string, assertTarget?: () => void): Promise<void>;
   respond(sessionId: string, d: ApprovalDecision): Promise<void | NativeInteractionSubmission>;
   /** 打断时取消该会话自己挂起的审批/提问（SPEC 7.4 AG-*-09 / 2.3 生命周期） */
-  cancelPending?(sessionId: string): Promise<void | NativeInteractionSubmission>;
+  cancelPending?(sessionId: string, stillRelevant?: () => boolean): Promise<void | NativeInteractionSubmission>;
   answer?(sessionId: string, questionId: string, answer: unknown, prepared?: DshQuestionAttempt): Promise<void | AnswerSubmission>;
   claimDshQuestionWait?(sessionId: string, questionId: string, signal: AbortSignal): Promise<DshQuestionWaitOpening | undefined>;
   timeoutDshQuestion?(sessionId: string, questionId: string, signal: AbortSignal, guard?: () => void): Promise<void>;
