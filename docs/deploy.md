@@ -124,6 +124,25 @@ manifest 和发布日志保留源码 commit，目录中的 release-id 区分不�
 
 ## 运行注意事项
 
+### Ubuntu 24.04 的 Codex 原生 sandbox
+
+在非 root 运行账号上，Ubuntu 的 AppArmor 用户命名空间限制可能使官方 Codex sandbox 初始化失败，错误为 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`。先在同一运行账号、HOME、CODEX_HOME、PATH 和工作区中执行 `codex sandbox -- /bin/cat /etc/os-release`，并核对 kernel audit 中的 `userns_create`。这个探针不调用模型；不要把网络请求成功当作文件工具可用。
+
+确认该限制后，可按 Ubuntu 为 Chrome 等应用采用的方式，为**实际、固定且由 root 拥有、非运行用户可写**的官方 Codex 可执行文件提供 `userns` 兼容规则。示例 `/etc/apparmor.d/webdcc-codex`：
+
+```text
+abi <abi/4.0>,
+include <tunables/global>
+
+profile webdcc-codex /opt/webdcc/runtime/native/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex flags=(unconfined) {
+  userns,
+}
+```
+
+路径必须替换为安装后的真实原生二进制，不能写成用户可更换的 CLI 软链接或宽泛目录通配。用 `apparmor_parser -r /etc/apparmor.d/webdcc-codex` 加载后，重新运行同一探针，再用实际 Agent 验证工作区读取；保存原失败、规则和原生二进制 SHA256。升级原生安装路径后须重新核对规则。
+
+此规则为原本没有专用 AppArmor profile 的固定应用允许创建其原生 sandbox 所需的用户命名空间，保持全局 `kernel.apparmor_restrict_unprivileged_userns=1`，也保持 Codex 自己的文件/网络 sandbox、原生权限和审批策略。不要为让测试通过而使用 `danger-full-access`、关闭全局限制或修改原生工具。已有专用 AppArmor 规则的部署应在其既有策略内配置，不能用此示例覆盖。
+
 - **不要同时运行 DSH 自带的 `dsh web`**：两边共享全局注册表会互相覆盖（SPEC 5.4.9）。WebDCC 自己会在 127.0.0.1:${WDCC_DSH_PORT} 拉起侧车。
 - `codex`、`claude`、`dsh` 必须已按锁定版本安装在运行用户的 PATH 上，并完成各自的登录（或改用 Provider + API Key）。
 - Provider 的 Key 存在 `WDCC_DATA_DIR/secrets.json`（0600），不会出现在日志、事件或 API 响应里。
