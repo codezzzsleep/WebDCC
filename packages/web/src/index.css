@@ -1242,6 +1242,11 @@ button.step-line:hover {
 .composer:focus-within {
   border-color: var(--border-l4);
 }
+.composer.is-file-dragover {
+  border-color: var(--border-l4);
+  outline: 2px dashed var(--border-l4);
+  outline-offset: 3px;
+}
 .composer-input {
   width: 100%;
   border: 0;

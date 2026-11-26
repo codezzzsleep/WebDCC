@@ -1,12 +1,183 @@
 import { chromium, type Browser, type Page } from '@playwright/test';
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { FakeAdapter } from '../packages/testing/fake-adapter/src/index.js';
 import { seedWorkspaceAndSession } from '../packages/server/test/helpers.js';
 import type { AgentAdapter, EventData } from '@webdcc/protocol';
 import { createSourceTestApp } from './helpers.js';
+import { encodeClaudeInput } from '../packages/adapters/claude/src/input.js';
+import { encodeCodexInput } from '../packages/adapters/codex/src/input.js';
+
+const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6n1sAAAAASUVORK5CYII=', 'base64');
+
+async function transferFiles(page: Page, selector: string, kind: 'drop' | 'paste', files: { name: string; mime: string; bytes: number[] }[]): Promise<boolean> {
+  return page.locator(selector).evaluate((target, { kind, files }) => {
+    const transfer = new DataTransfer();
+    for (const file of files) transfer.items.add(new File([new Uint8Array(file.bytes)], file.name, { type: file.mime }));
+    if (kind === 'drop') target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    const event = kind === 'drop' ? new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })
+      : new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer });
+    target.dispatchEvent(event); return event.defaultPrevented;
+  }, { kind, files });
+}
+
+it.each(['new', 'session'] as const)('%s Composer drops images and files through durable upload with original bytes and text', async kind => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    ctx.manager.registerAdapter(declaredAdapter());
+    const { sessionId, workspaceId } = await seedWorkspaceAndSession(ctx);
+    browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
+    await page.goto(kind === 'new' ? `${base}/new?w=${workspaceId}&agent=dsh` : `${base}/s/${sessionId}`);
+    const input = page.getByTestId(kind === 'new' ? 'new-session-input' : 'composer-input');
+    await input.fill('  original\n正文  '); const body = await input.inputValue();
+    const fileBytes = Buffer.from('original\r\nfile bytes');
+    expect(await transferFiles(page, `[data-testid="${kind === 'new' ? 'new-session-input' : 'composer-input'}"]`, 'drop', [
+      { name: 'dropped.png', mime: 'image/png', bytes: [...pixel] },
+      { name: 'dropped.txt', mime: 'text/plain', bytes: [...fileBytes] },
+    ])).toBe(true);
+    const send = page.getByTestId(kind === 'new' ? 'new-session-send' : 'send-button');
+    await expect.poll(() => page.getByTestId('composer-attachments').locator('.attachment-chip').count()).toBe(2);
+    await expect.poll(() => send.isEnabled()).toBe(true); await send.click();
+    if (kind === 'new') await page.waitForURL('**/s/**');
+    const targetId = kind === 'new' ? page.url().split('/s/')[1]!.split('?')[0]! : sessionId;
+    await expect.poll(() => ctx.store.allEvents(targetId).filter(event => event.kind === 'user.message').length).toBe(1);
+    const data = ctx.store.allEvents(targetId).find(event => event.kind === 'user.message')!.data as EventData['user.message'];
+    expect(data.text).toBe(body);
+    const parts = data.contentParts!.parts.filter(part => part.type === 'file' || part.type === 'image');
+    expect(parts.map(part => [part.type, part.name])).toEqual([['image', 'dropped.png'], ['file', 'dropped.txt']]);
+    for (const [index, part] of parts.entries()) {
+      const expected = index === 0 ? pixel : fileBytes;
+      const found = await ctx.files.readAll(part.fileId);
+      expect(found!.buffer.equals(expected)).toBe(true);
+      expect(found!.file.sha256).toBe(createHash('sha256').update(expected).digest('hex'));
+    }
+    await page.reload();
+    await page.getByTestId('message-attachments').getByRole('link', { name: 'dropped.txt' }).waitFor();
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it.each(['picker', 'paste', 'provider'] as const)('Claude %s images reach SDK encoding without model modality metadata after refresh', async kind => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const adapter = new FakeAdapter({ id: 'claude-code' });
+    adapter.listModels = async () => [{ id: 'fixture', label: 'SDK model without modalities', isDefault: true }];
+    let encoded: Awaited<ReturnType<typeof encodeClaudeInput>> | undefined;
+    const checked = Object.assign(adapter, { validateInput: async (_sessionId: string, input: Parameters<typeof encodeClaudeInput>[0]) => { encoded = await encodeClaudeInput(input); } });
+    ctx.manager.registerAdapter(checked);
+    const seeded = await seedWorkspaceAndSession(ctx, 'claude-code');
+    let sessionId = seeded.sessionId;
+    if (kind === 'provider') {
+      const provider = await ctx.app.inject({ method: 'POST', url: '/api/providers', headers: { cookie: ctx.cookie }, payload: {
+        name: 'Fixture image provider', baseUrl: 'https://fixture.invalid/v1', protocols: ['anthropic'], models: ['fixture'], apiKey: 'fixture-only',
+      } });
+      expect(provider.statusCode).toBe(200);
+      const created = await ctx.manager.createSession({ workspaceId: seeded.workspaceId, agent: 'claude-code', providerId: (provider.json() as { id: string }).id, model: 'fixture' });
+      sessionId = created.id;
+    }
+    browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
+    await page.goto(`${base}/s/${sessionId}`); await page.getByTestId('composer-input').fill(kind === 'paste' ? '' : '  with picture  ');
+    if (kind !== 'paste') await page.getByTestId('add-image-input').setInputFiles({ name: 'sdk.png', mimeType: 'image/png', buffer: pixel });
+    else expect(await transferFiles(page, '[data-testid="composer-input"]', 'paste', [{ name: 'sdk.png', mime: 'image/png', bytes: [...pixel] }])).toBe(true);
+    await expect.poll(() => page.getByTestId('composer-attachments').getByRole('img', { name: 'sdk.png' }).count()).toBe(1);
+    await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);
+    await expect.poll(() => ctx.store.getDraft(sessionId).fileIds.length).toBe(1);
+    await page.reload(); await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);
+    await page.getByTestId('composer-input').press('Enter');
+    await expect.poll(() => ctx.store.allEvents(sessionId).filter(event => event.kind === 'user.message').length).toBe(1);
+    const blocks = encoded as { type: string; source?: { data: string } }[];
+    expect(Buffer.from(blocks.find(block => block.type === 'image')!.source!.data, 'base64').equals(pixel)).toBe(true);
+    const data = ctx.store.allEvents(sessionId).find(event => event.kind === 'user.message')!.data as EventData['user.message'];
+    expect(data.text).toBe(kind === 'paste' ? '' : '  with picture  ');
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it('Codex mixed drops explain unsupported files while sending the image through the native encoder', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const adapter = declaredAdapter('codex');
+    let encoded: Awaited<ReturnType<typeof encodeCodexInput>> | undefined;
+    ctx.manager.registerAdapter(Object.assign(adapter, { validateInput: async (_sessionId: string, input: Parameters<typeof encodeCodexInput>[0]) => { encoded = await encodeCodexInput(input, ['text', 'image']); } }));
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
+    await page.goto(`${base}/s/${sessionId}`); await page.getByTestId('composer-input').fill('image body');
+    const uploadedNames: string[] = [];
+    page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/uploads')) uploadedNames.push((request.postDataJSON() as { name: string }).name); });
+    expect(await transferFiles(page, '[data-testid="composer-input"]', 'drop', [
+      { name: 'unsupported.pdf', mime: 'application/pdf', bytes: [1, 2, 3] },
+      { name: 'codex.png', mime: 'image/png', bytes: [...pixel] },
+    ])).toBe(true);
+    await page.getByRole('alert').filter({ hasText: 'unsupported.pdf' }).waitFor();
+    await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);
+    expect(uploadedNames).toEqual(['codex.png']);
+    await page.getByTestId('send-button').click();
+    await expect.poll(() => encoded?.some(part => part.type === 'localImage')).toBe(true);
+    expect(encoded!.map(part => part.type)).toEqual(['text', 'localImage']);
+    const path = encoded!.find(part => part.type === 'localImage')!;
+    if (path.type !== 'localImage') throw new Error('Missing native image');
+    expect((await readFile(path.path)).equals(pixel)).toBe(true);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it.each(['codex', 'dsh'] as const)('%s still requires native image modalities and leaves text-only paste/drop to the browser', async agent => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    ctx.manager.registerAdapter(new FakeAdapter({ id: agent }));
+    const { sessionId } = await seedWorkspaceAndSession(ctx, agent);
+    browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
+    await page.goto(`${base}/s/${sessionId}`); await page.getByTestId('composer-input').fill('unchanged text');
+    expect(await page.getByTestId('composer-input').evaluate(target => {
+      const transfer = new DataTransfer(); transfer.setData('text/plain', 'normal text');
+      const paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer });
+      const drag = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer });
+      target.dispatchEvent(paste); target.dispatchEvent(drag);
+      return { paste: paste.defaultPrevented, drag: drag.defaultPrevented };
+    })).toEqual({ paste: false, drag: false });
+    expect(await page.getByTestId('composer-attachments').count()).toBe(0);
+    await page.getByTestId('add-image-input').setInputFiles({ name: 'unknown-model.png', mimeType: 'image/png', buffer: pixel });
+    await expect.poll(() => ctx.store.getDraft(sessionId).fileIds.length).toBe(1);
+    await page.getByTestId('input-blocked-reason').filter({ hasText: '未声明支持 image' }).waitFor();
+    expect(await page.getByTestId('send-button').isDisabled()).toBe(true);
+    await page.getByTestId('composer-input').press('Enter');
+    expect(ctx.store.allEvents(sessionId).filter(event => event.kind === 'user.message')).toHaveLength(0);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it('a dropped batch hashing in A cannot append its remaining files into B', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    ctx.manager.registerAdapter(declaredAdapter());
+    const a = await seedWorkspaceAndSession(ctx);
+    const b = await ctx.manager.createSession({ workspaceId: a.workspaceId, agent: 'dsh' });
+    browser = await chromium.launch({ headless: true }); const { page, base } = await listener(ctx, browser);
+    await page.goto(`${base}/s/${a.sessionId}`); await page.getByTestId('composer-input').fill('A draft');
+    await page.evaluate(() => {
+      const original = Blob.prototype.arrayBuffer;
+      Blob.prototype.arrayBuffer = function () {
+        if (!(this instanceof File) || this.name !== 'slow-first.txt') return original.call(this);
+        const read = original.bind(this);
+        return new Promise<ArrayBuffer>(resolve => {
+          (window as unknown as { releaseAttachmentDigest: () => Promise<void> }).releaseAttachmentDigest = async () => resolve(await read());
+        });
+      };
+    });
+    expect(await transferFiles(page, '[data-testid="composer-input"]', 'drop', [
+      { name: 'slow-first.txt', mime: 'text/plain', bytes: [1] },
+      { name: 'remaining.txt', mime: 'text/plain', bytes: [2] },
+    ])).toBe(true);
+    await expect.poll(() => page.evaluate(() => typeof (window as unknown as { releaseAttachmentDigest?: unknown }).releaseAttachmentDigest)).toBe('function');
+    await page.locator(`[data-testid="session-row"][href="/s/${b.id}"]`).click();
+    await page.waitForURL(`**/s/${b.id}`); await page.getByTestId('composer-input').fill('B draft');
+    await page.evaluate(() => (window as unknown as { releaseAttachmentDigest: () => Promise<void> }).releaseAttachmentDigest());
+    // Wait for the original async selection to finish; the attach button is
+    // disabled while a selection is still preparing.
+    await expect.poll(() => page.getByTestId('attach-button').isEnabled()).toBe(true);
+    expect(await page.getByTestId('composer-input').inputValue()).toBe('B draft');
+    expect(await page.getByTestId('composer-attachments').count()).toBe(0);
+    expect(ctx.store.getDraft(b.id).fileIds).toEqual([]);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
 
 async function listener(ctx: Awaited<ReturnType<typeof createSourceTestApp>>, browser: Browser): Promise<{ page: Page; base: string }> {
   await ctx.app.listen({ host: '127.0.0.1', port: 0 });

@@ -85,6 +85,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   });
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [selecting, setSelecting] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
   const [mention, setMention] = useState<MentionState>({ open: false, query: '', start: 0 });
   const replyRequest = useRef(0);
   const [files, setFiles] = useState<{ name: string; path: string }[]>([]);
@@ -284,7 +285,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     const { reasoningEffort: _effort, ...choice } = mode.choice;
     mode.onChoice(choice);
   }, [agent, mode, catalogReady, selectedModel]);
-  capabilitiesRef.current = { contentTypes: agent === 'codex' ? ['text', 'image', 'audio', 'skill'] : ['text', 'image', 'file'], inputModalities: selectedModel?.inputModalities,
+  // Claude's SDK accepts image content blocks; supportedModels does not expose
+  // modalities. Actual Provider/model support remains the native result.
+  capabilitiesRef.current = { contentTypes: agent === 'codex' ? ['text', 'image', 'audio', 'skill'] : ['text', 'image', 'file'], inputModalities: agent === 'claude-code' ? ['text', 'image'] : selectedModel?.inputModalities,
     collaborationModes: agent === 'codex' ? inputModes.modes.map(mode => mode.id) : [],
     intents: running ? agent === 'codex' || agent === 'dsh' ? ['queue', 'steer'] : ['queue'] : ['send'], running,
     ...(mode.kind === 'new' && workspaceId === '' ? { unavailableReason: '请先选择工作区' } : {}) };
@@ -434,18 +437,28 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     } finally { setBusy(false); }
   };
 
-  const attach = async (list: FileList | null, kind: UploadKind): Promise<void> => {
-    if (list === null) return;
+  const attach = async (list: FileList | readonly File[] | null, kind?: UploadKind): Promise<void> => {
+    if (list === null || list.length === 0) return;
+    const token = controls.drafts.token();
+    if (viewingHistory || token?.sessionId !== draftSessionId || controls.drafts.loading()) { setError('当前输入框不可添加附件，请等待草稿恢复或返回当前对话'); return; }
     setSelecting(true); setError(null);
+    const errors: string[] = [];
     try {
       for (const file of Array.from(list)) {
-        const selected = await controls.input.addAttachment(file, kind);
-        if (selected.attached) void controls.uploads.resume(selected.task.id).catch(cause => {
-          if (controls.drafts.snapshot()?.sessionId === selected.task.sessionId) setError(cause instanceof Error ? cause.message : String(cause));
-        });
+        if (!controls.drafts.accepts(token)) break;
+        const selectedKind = kind ?? (file.type.startsWith('image/') ? 'image' : agent === 'codex' && file.type.startsWith('audio/') ? 'audio' : 'file');
+        if (kind === undefined && agent === 'codex' && selectedKind === 'file') { errors.push(`Codex 当前不支持直接发送普通文件：${file.name}`); continue; }
+        try {
+          const selected = await controls.input.addAttachment(file, selectedKind);
+          if (selected.attached) void controls.uploads.resume(selected.task.id).catch(cause => {
+            if (controls.drafts.accepts(token)) setError(cause instanceof Error ? cause.message : String(cause));
+          });
+        } catch (cause) { errors.push(`${file.name}：${cause instanceof Error ? cause.message : String(cause)}`); }
       }
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setSelecting(false); }
+    } finally {
+      if (controls.drafts.accepts(token) && errors.length > 0) setError(errors.join('\n'));
+      setSelecting(false);
+    }
   };
   const removeAttachment = (part: PreparedPart): void => {
     const current = controls.drafts.snapshot();
@@ -505,7 +518,20 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
 
   return (
     <div className="composer-wrap" data-testid="composer">
-      <div className="composer">
+      <div className={`composer${draggingFiles ? ' is-file-dragover' : ''}`}
+        onDragOver={event => {
+          if (!event.dataTransfer.types.includes('Files')) return;
+          event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDraggingFiles(true);
+        }}
+        onDragLeave={event => {
+          if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDraggingFiles(false);
+        }}
+        onDrop={event => {
+          setDraggingFiles(false);
+          if (!event.dataTransfer.types.includes('Files')) return;
+          event.preventDefault(); void attach(Array.from(event.dataTransfer.files));
+        }}
+      >
         {attachmentParts.length > 0 ? <div className="attachments" data-testid="composer-attachments">
           {attachmentParts.map((part, index) => {
             const task = part.uploadTaskId === undefined ? undefined : controls.uploads.get(part.uploadTaskId);
@@ -538,6 +564,11 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
           disabled={viewingHistory || controls.drafts.loading() || controls.drafts.snapshot()?.sessionId !== draftSessionId}
           rows={Math.min(10, Math.max(isSession ? 1 : 2, text.split('\n').length))}
           onChange={(event) => updateText(event.target.value)}
+          onPaste={event => {
+            const files = Array.from(event.clipboardData.files);
+            if (files.length === 0) return;
+            event.preventDefault(); void attach(files);
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
