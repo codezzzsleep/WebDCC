@@ -1,3 +1,4 @@
+import { randomUuid } from './uuid.js';
 import type { DshQuestionIdentity, DshQuestionWaitRequest, DshQuestionWaitMessage } from '@webdcc/protocol';
 import { DshQuestionWaitCard } from './dsh-question-wait.js';
 import { DshQuestionDrafts } from './dsh-question-drafts.js';
@@ -46,7 +47,7 @@ export class DshQuestionWaits {
   get(sessionId: string, identity: DshQuestionIdentity): DshWaitEntry | undefined { return this.entries.get(this.key(sessionId, identity)); }
   toggleSurface(entry: DshWaitEntry): void { entry.card.releaseFocus(); entry.hidden = !entry.hidden; this.changed(); }
   private claim(entry: DshWaitEntry): void {
-    const requestId = crypto.randomUUID(); entry.attempted = true; entry.error = undefined; entry.requestId = requestId;
+    const requestId = randomUuid(); entry.attempted = true; entry.error = undefined; entry.requestId = requestId;
     this.requests.set(requestId, entry);
     this.send({ op: 'dsh-question-wait', requestId, sessionId: entry.sessionId, questionId: entry.questionId, action: 'claim' });
     this.changed();
@@ -56,7 +57,7 @@ export class DshQuestionWaits {
     if (entry.card.snapshot().phase === 'open') this.claim(entry);
   }
   release(entry: DshWaitEntry): void {
-    if (entry.claimId !== undefined) this.send({ op: 'dsh-question-wait', requestId: crypto.randomUUID(), sessionId: entry.sessionId, questionId: entry.questionId, action: 'release', claimId: entry.claimId });
+    if (entry.claimId !== undefined) this.send({ op: 'dsh-question-wait', requestId: randomUuid(), sessionId: entry.sessionId, questionId: entry.questionId, action: 'release', claimId: entry.claimId });
     for (const [id, owner] of this.requests) if (owner === entry) this.requests.delete(id);
     entry.claimId = undefined; entry.requestId = undefined; entry.card.detach();
   }
@@ -80,7 +81,7 @@ export class DshQuestionWaits {
       entry.claimId = result.claimId;
       entry.card.attach(result.claimId, result.remainingMs, () => {
         if (entry.claimId !== result.claimId) return;
-        const requestId = crypto.randomUUID(); entry.requestId = requestId; this.requests.set(requestId, entry);
+        const requestId = randomUuid(); entry.requestId = requestId; this.requests.set(requestId, entry);
         this.send({ op: 'dsh-question-wait', requestId, sessionId: entry.sessionId, questionId: entry.questionId, action: 'timeout', claimId: result.claimId });
       });
     } else if (result.kind === 'ended' || result.kind === 'submitted') {

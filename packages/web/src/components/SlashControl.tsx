@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useRef, useState } from 'react';
 import type { NativeActionReceipt, NativeActionResponse, SlashControlRequest, SlashControlResult } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
@@ -55,7 +56,7 @@ export function SlashControl({ sessionId, request, onAccepted, onClose, initialR
     // metadata describing the command that opened this form.
     const line = options.line ?? original.line;
     const attachments = options.replaceGoal === true ? result?.attachments : undefined;
-    await send({ ...original, ...options, ...(attachments?.length ? { contentParts: { version: 1 as const, parts: [{ type: 'text' as const, text: line }, ...attachments] } } : {}), revision: catalog.revision, commandId: crypto.randomUUID() });
+    await send({ ...original, ...options, ...(attachments?.length ? { contentParts: { version: 1 as const, parts: [{ type: 'text' as const, text: line }, ...attachments] } } : {}), revision: catalog.revision, commandId: randomUuid() });
   };
   return <section aria-label="原生指令结果" className="panel" style={{ padding: 12 }}>
     <div className="row-actions"><strong>{request.line || '原生指令结果'}</strong><button type="button" disabled={busy} onClick={() => { try { sessionStorage.removeItem(`slash-action:${sessionId}`); } catch { /* Optional browser pointer. */ } onClose(); }}>关闭指令结果</button></div>

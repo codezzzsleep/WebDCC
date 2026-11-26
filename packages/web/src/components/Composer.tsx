@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto, SlashCommand, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
 import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
@@ -402,7 +403,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
         if (command.route === 'native-control') {
           await controls.drafts.flush();
           if (!controls.drafts.accepts(token)) return;
-          const commandId = crypto.randomUUID(); slashDraftTokens.current.set(commandId, token);
+          const commandId = randomUuid(); slashDraftTokens.current.set(commandId, token);
           setSlashResponse(undefined); setSlashRequest({ commandId, line: commandLine, revision: catalog.revision, contentParts: prepared }); setSlashOpen(false); return;
         }
         if (command.route === 'native-terminal' || command.route === 'web' && parsed.rawArguments.trim() !== '') {
@@ -478,7 +479,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
       } else {
         if (reasoningBusy) return;
         setReasoningBusy(true); setError(null);
-        void api.command({ op: 'set-reasoning-effort', clientCommandId: crypto.randomUUID(), sessionId, reasoningEffort: effort }).then(result => {
+        void api.command({ op: 'set-reasoning-effort', clientCommandId: randomUuid(), sessionId, reasoningEffort: effort }).then(result => {
           if (!result.ok) throw new Error(result.error ?? '原生未确认思考等级切换');
         }).catch(cause => { if (activeReasoningSession.current === sessionId) setError(cause instanceof Error ? cause.message : String(cause)); })
           .finally(() => { if (activeReasoningSession.current === sessionId) setReasoningBusy(false); });

@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useRef, useState } from 'react';
 import type { DshSubagentInputRequest, DshSubagentSummary, NativeActionReceipt } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
@@ -63,7 +64,7 @@ export function DshChildComposer({ sessionId, child, disabled, onReadCurrent }: 
 
   const submit = async (delivery: 'queue' | 'steer', retry = false): Promise<void> => {
     if (sending.current) return;
-    const pending = retry ? attempt : { commandId: crypto.randomUUID(), text, delivery, clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+    const pending = retry ? attempt : { commandId: randomUuid(), text, delivery, clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
     if (pending?.text === undefined || pending.text.trim() === '') return;
     sending.current = true; setBusy(true); setError(undefined); setReceipt(undefined); generation.current++;
     attemptId.current = pending.commandId; save(text, pending); setAttempt(pending);

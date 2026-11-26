@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useRef, useState } from 'react';
 import type { DshSubagentSummary, NativeActionReceipt } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
@@ -46,7 +47,7 @@ export function DshChildStop({ sessionId, child, disabled, onReadCurrent }: {
   const stop = async (): Promise<void> => {
     if (submitting.current) return;
     submitting.current = true; setBusy(true); setError(undefined); setReceipt(undefined);
-    const commandId = crypto.randomUUID(); const next = { commandId, cursor: child.state?.cursor };
+    const commandId = randomUuid(); const next = { commandId, cursor: child.state?.cursor };
     try { sessionStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* The in-memory identity remains available. */ }
     setAttempt(next);
     try {

@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 
@@ -13,7 +14,7 @@ export function NativeDshSurface({ sessionId }: { sessionId: string }): React.Re
   const open = async (): Promise<void> => {
     setBusy(true); setError('');
     // Open during the click gesture; credentials are exchanged in a POST body.
-    const name = `dsh-native-${crypto.randomUUID()}`;
+    const name = `dsh-native-${randomUuid()}`;
     const popup = window.open('about:blank', name);
     if (!popup) { setError('浏览器阻止了新窗口，请允许后再打开。'); setBusy(false); return; }
     popup.opener = null;

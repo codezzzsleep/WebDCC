@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -130,7 +131,7 @@ export function NativeTerminal({ terminal, endpoint = '/api/native-terminal', on
   const control = async (action: 'stop' | 'close'): Promise<void> => {
     setPending(true); setError('');
     try {
-      const commandId = crypto.randomUUID();
+      const commandId = randomUuid();
       if (action === 'stop') {
         const next = await nativeSurfaceRequest<NativeTerminalInfo>(`${endpoint}/${encodeURIComponent(view.id)}/stop`, { method: 'POST', body: JSON.stringify({ generation: view.generation, commandId }) });
         setView(next); viewRef.current = next; callbacks.current.onChanged?.(next);
@@ -144,7 +145,7 @@ export function NativeTerminal({ terminal, endpoint = '/api/native-terminal', on
   const returnToStructured = async (): Promise<void> => {
     setPending(true); setError('');
     try {
-      await nativeSurfaceRequest(`${endpoint}/${encodeURIComponent(view.id)}/return`, { method: 'POST', body: JSON.stringify({ generation: view.generation, commandId: crypto.randomUUID() }) });
+      await nativeSurfaceRequest(`${endpoint}/${encodeURIComponent(view.id)}/return`, { method: 'POST', body: JSON.stringify({ generation: view.generation, commandId: randomUuid() }) });
       callbacks.current.onClosed?.();
     } catch (failure) { setError(failure instanceof Error ? failure.message : '原生返回状态需核对'); }
     finally { setPending(false); }

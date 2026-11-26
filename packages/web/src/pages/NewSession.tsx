@@ -1,3 +1,4 @@
+import { randomUuid } from '../lib/uuid.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type { InputContent, SlashControlResult } from '@webdcc/protocol';
@@ -6,9 +7,54 @@ import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
 import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultAccessMode, defaultChoice, rememberAccessMode, rememberModel, rememberReasoning, type ModelChoice } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
+import { sha256Bytes } from '../lib/input-digest.js';
 import { AgentMark } from '../components/AgentMark.js';
 import { Composer } from '../components/Composer.js';
 import { Icon } from '../components/Icon.js';
+
+interface NewSessionAttempt { target: string; input: string; createId: string; sendId: string; inputStarted: boolean }
+const NEW_SESSION_ATTEMPT = 'wdcc:new-session-attempt';
+let pendingAttempt: NewSessionAttempt | undefined;
+
+function readPendingAttempt(): NewSessionAttempt | undefined {
+  if (pendingAttempt !== undefined) return pendingAttempt;
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(NEW_SESSION_ATTEMPT) ?? 'null') as Partial<NewSessionAttempt> | null;
+    if (typeof stored?.target === 'string' && typeof stored.input === 'string' && typeof stored.createId === 'string'
+      && typeof stored.sendId === 'string' && typeof stored.inputStarted === 'boolean') {
+      return stored as NewSessionAttempt;
+    }
+  } catch { /* The active page can still retry without session storage. */ }
+  return undefined;
+}
+
+function saveAttempt(attempt: NewSessionAttempt): void {
+  pendingAttempt = attempt;
+  try { sessionStorage.setItem(NEW_SESSION_ATTEMPT, JSON.stringify(attempt)); } catch { /* Browser storage may be unavailable. */ }
+}
+
+function firstInputAttempt(target: string, input: string): NewSessionAttempt {
+  const previous = readPendingAttempt();
+  if (previous?.target === target && previous.input === input) return (pendingAttempt = previous);
+  // The same still-empty session can receive a corrected draft, but an input
+  // that may already have been submitted always keeps its own command ID.
+  const createId = previous?.target === target && !previous.inputStarted ? previous.createId : randomUuid();
+  const attempt = { target, input, createId, sendId: randomUuid(), inputStarted: false };
+  saveAttempt(attempt);
+  return attempt;
+}
+
+function startInput(attempt: NewSessionAttempt): void {
+  if (pendingAttempt !== attempt || attempt.inputStarted) return;
+  attempt.inputStarted = true;
+  saveAttempt(attempt);
+}
+
+function finishAttempt(attempt: NewSessionAttempt): void {
+  if (pendingAttempt !== attempt) return;
+  pendingAttempt = undefined;
+  try { sessionStorage.removeItem(NEW_SESSION_ATTEMPT); } catch { /* Browser storage may be unavailable. */ }
+}
 
 interface NewSessionProps {
   /** 由路由层传入（"/" 和 "/new" 共用这个组件，不能直接用 useSearch） */
@@ -75,37 +121,51 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
   const submit = async (text: string, contentParts: InputContent): Promise<{ commandId: string }> => {
     if (workspaceId === '') throw new Error('先添加一个工作区');
     const accessMode = selectedMode;
-    const sessionId = await store.createSession({
+    const options = {
       workspaceId,
       agent,
       providerId: choice.providerId,
       ...(choice.model === '' ? {} : { model: choice.model }),
       ...(choice.reasoningEffort === undefined ? {} : { reasoningEffort: choice.reasoningEffort }),
       ...(accessMode === undefined ? {} : { accessMode }),
-    });
-    if (sessionId === '') throw new Error('服务端没有返回会话 id');
+    };
+    const inputFingerprint = sha256Bytes(new TextEncoder().encode(JSON.stringify([text, contentParts])));
+    const attempt = firstInputAttempt(JSON.stringify(options), inputFingerprint);
+    let sessionId: string;
+    try { sessionId = await store.createSession(options, attempt.createId); }
+    catch (error) {
+      if ((error as { creationRejected?: boolean } | null)?.creationRejected === true) finishAttempt(attempt);
+      throw error;
+    }
+    if (sessionId === '') throw new Error('创建会话仍待确认，重试会查询同一创建命令');
+    const openCreatedSession = async (): Promise<void> => {
+      await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+      finishAttempt(attempt);
+    };
     store.setDrawer(false);
     for (const part of contentParts.parts) if (part.type === 'image' || part.type === 'file' || part.type === 'audio') await api.grantAttachment(sessionId, part.fileId);
     if (parseSlashInput(text)) {
       const savedDraft = await api.saveInputDraft(sessionId, text, contentParts, 0);
       const catalog = await api.slashCommands(sessionId); const command = slashCommandFor(catalog.commands, text);
       if (command?.route === 'native-control') {
-        const request = { commandId: crypto.randomUUID(), line: text, revision: catalog.revision, contentParts };
+        const request = { commandId: attempt.sendId, line: text, revision: catalog.revision, contentParts };
+        startInput(attempt);
         const response = await api.slashControl(sessionId, request); const result = response.result as SlashControlResult | undefined;
         store.requestSlashControl(sessionId, request, response);
         try { sessionStorage.setItem(`slash-action:${sessionId}`, request.commandId); } catch { /* Optional browser pointer. */ }
         if (!result?.form && !result?.failed && ['completed', 'submitted'].includes(response.receipt.state)) await api.saveInputDraft(sessionId, '', { ...contentParts, parts: [] }, savedDraft.revision ?? 0);
-        await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+        await openCreatedSession();
         return { commandId: response.receipt.commandId };
       }
       if (!command || command.route === 'native-terminal' || command.route === 'web') {
         if (command?.route === 'native-terminal' || command?.route === 'web') store.requestNativeCommand(sessionId, text);
-        await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+        await openCreatedSession();
         return { commandId: store.getSessionCreationCommand(sessionId)! };
       }
     }
-    const receipt = await store.sendStructuredMessage(sessionId, text, contentParts);
-    await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
+    startInput(attempt);
+    const receipt = await store.sendStructuredMessage(sessionId, text, contentParts, 'send', undefined, attempt.sendId);
+    await openCreatedSession();
     return receipt;
   };
 

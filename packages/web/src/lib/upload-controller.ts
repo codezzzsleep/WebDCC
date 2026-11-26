@@ -1,6 +1,7 @@
+import { randomUuid } from './uuid.js';
 /** Durable WebDCC uploads. These prepare bytes; native attachment admission
  * remains the receiving adapter's responsibility. */
-import { attachmentDigest, uploadTaskId } from './input-digest.js';
+import { attachmentDigest } from './input-digest.js';
 export type UploadKind = 'image' | 'file' | 'audio';
 export type UploadState = 'queued' | 'uploading' | 'completing' | 'paused' | 'failed' | 'completed' | 'cancelled';
 export interface UploadTask {
@@ -57,7 +58,7 @@ export class UploadController {
     if (sessionId === '' || !file.name || file.size > MAX_BYTES) throw new Error('附件缺少会话、文件名或超过 100 MB 上限');
     const sha256 = await (this.options.digest ?? attachmentDigest)(file);
     if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error('附件 SHA-256 无效');
-    return this.save({ id: uploadTaskId(), sessionId, kind, name: file.name, mime: file.type || 'application/octet-stream', size: file.size,
+    return this.save({ id: randomUuid(), sessionId, kind, name: file.name, mime: file.type || 'application/octet-stream', size: file.size,
       sha256, blob: file.slice(0, file.size, file.type), state: 'queued', received: [], updatedAt: Date.now() });
   }
   async restore(sessionId: string): Promise<UploadTask[]> {

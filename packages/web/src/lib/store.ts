@@ -1090,15 +1090,21 @@ export class AppStore {
 
   /** Resolve only after IndexedDB admits the exact command. A network ACK
    * is separate; offline acceptance still retains the complete input. */
-  async sendStructuredMessage(sessionId: string, text: string, contentParts: InputContent, intent: InputIntent = 'send', expectedTurnId?: string): Promise<{ commandId: string }> {
+  async sendStructuredMessage(sessionId: string, text: string, contentParts: InputContent, intent: InputIntent = 'send', expectedTurnId?: string, commandId = ulid()): Promise<{ commandId: string }> {
     if (this.isViewingConversationHistory(sessionId)) throw new Error('正在查看此前对话，请先返回当前对话');
     if (!isInputContent(contentParts, text)) throw new Error('结构化输入与正文不一致或含有未授权字段');
-    const commandId = ulid();
+    const command: Command = { op: 'send', clientCommandId: commandId, sessionId, text, contentParts: structuredClone(contentParts), intent,
+      ...(expectedTurnId === undefined ? {} : { expectedTurnId }) };
+    const existing = this.outbox.get(commandId);
+    if (existing?.durable === true) {
+      if (JSON.stringify(existing.command) !== JSON.stringify(command)) throw new Error('同一发送命令的内容已变化');
+      return { commandId };
+    }
     const pending: PendingMessage = { clientCommandId: commandId, text, contentParts: structuredClone(contentParts),
       ...(intent !== 'steer' || expectedTurnId === undefined ? {} : { turnId: expectedTurnId }), at: nowIso(), status: 'pending' };
-    this.pending.set(sessionId, [...this.pending.get(sessionId) ?? [], pending]);
-    const accepted = this.enqueue({ op: 'send', clientCommandId: commandId, sessionId, text, contentParts: structuredClone(contentParts), intent,
-      ...(expectedTurnId === undefined ? {} : { expectedTurnId }) });
+    const previous = this.pending.get(sessionId) ?? [];
+    this.pending.set(sessionId, [...previous.filter(item => item.clientCommandId !== commandId), pending]);
+    const accepted = this.enqueue(command);
     this.notify();
     if (!await accepted) throw new Error('消息未能保存，正文和附件仍在草稿中');
     return { commandId };
@@ -1196,10 +1202,10 @@ export class AppStore {
     reasoningEffort?: string;
     accessMode?: string;
     parentId?: string;
-  }): Promise<string> {
+  }, clientCommandId = ulid()): Promise<string> {
     const command: Command = {
       op: 'create-session',
-      clientCommandId: ulid(),
+      clientCommandId,
       workspaceId: input.workspaceId,
       agent: input.agent,
       ...(input.providerId === undefined ? {} : { providerId: input.providerId }),
@@ -1209,7 +1215,7 @@ export class AppStore {
       ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
     };
     const result = await api.command(command);
-    if (!result.ok) throw new Error(result.error ?? '创建会话失败');
+    if (!result.ok) throw Object.assign(new Error(result.error ?? '创建会话失败'), { creationRejected: result.code !== undefined && result.code !== 'uncertain' });
     const value = result.value as { sessionId?: string } | undefined;
     if (value?.sessionId) this.sessionCreationCommands.set(value.sessionId, command.clientCommandId);
     return value?.sessionId ?? '';
