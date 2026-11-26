@@ -9,7 +9,7 @@ import { claudeStructuredOutputs, type ClaudeStructuredOutputView } from './clau
 import type { HotObservation } from './hot-recovery.js';
 import type { RecoveredCompletion } from './completed-recovery.js';
 import { isIncompleteClaudeOutput } from './claude-content.js';
-import { observeUsage, selectTurnUsage } from './usage.js';
+import { observeUsage, selectTurnUsage, type CodexUsageHistory } from './usage.js';
 
 /** A live item is the in-memory counterpart of an item.start event. */
 export interface OpenItem {
@@ -176,7 +176,7 @@ function activityFor(live: readonly LiveItem[], waiting = false): TurnView['acti
  * Tool calls and approval waits are not model generation and must not be the
  * denominator for tok/s. */
 function usageFor(events: readonly StoredEvent[]): UsageData | undefined {
-  const codexTotals = new Map<string, number>();
+  const codexTotals: CodexUsageHistory = new Map();
   const samples = events.map(event => observeUsage(event, codexTotals)).filter(sample => sample !== undefined);
   const selected = selectTurnUsage(samples);
   const attempts = selected.filter(sample => !sample.terminal && sample.usage.scope === 'attempt').map(sample => sample.usage);

@@ -1,4 +1,4 @@
-import { observeUsage, selectTurnUsage, type SessionDto, type SessionUsageResponse, type UsageEvent, type UsageObservation } from '@webdcc/protocol';
+import { observeUsage, selectTurnUsage, type CodexUsageHistory, type SessionDto, type SessionUsageResponse, type UsageEvent, type UsageObservation } from '@webdcc/protocol';
 import type { Db } from './db.js';
 
 interface UsageRow {
@@ -30,7 +30,7 @@ export function readSessionUsage(db: Db, session: SessionDto): SessionUsageRespo
     ORDER BY seq`).iterate(session.id, resetSeq, session.lastSeq, previousNative ?? null, previousNative ?? null) as Iterable<UsageRow>;
 
   const turns = new Map<string, UsageObservation[]>();
-  const codexTotals = new Map<string, number>();
+  const codexTotals: CodexUsageHistory = new Map();
   for (const row of rows) {
     if (row.turn_id === '' && row.kind !== 'usage') continue;
     const usage = row.usage === null ? undefined : JSON.parse(row.usage) as UsageEvent['data'];

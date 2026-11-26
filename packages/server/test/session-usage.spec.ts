@@ -22,7 +22,9 @@ it('reconciles historical Codex per-response usage, including untimed and repeat
     // A repeated snapshot arriving under a later turn does not consume the
     // previous response again.
     append('three', 13, 16800, false);
-    expect(ctx.store.sessionUsage(id)).toEqual({ throughSeq: 14, resetSeq: 0, totalTokens: 402572, partial: false });
+    const late = ctx.store.allEvents(id).find(event => event.itemKey === 'usage-11')!;
+    ctx.store.appendEvent({ sessionId: id, turnId: 'three', itemKey: 'delayed-replay', kind: 'usage', data: late.data, native: late.native });
+    expect(ctx.store.sessionUsage(id)).toEqual({ throughSeq: 15, resetSeq: 0, totalTokens: 402572, partial: false });
     const first = ctx.store.allEvents(id).filter(event => event.turnId === 'one');
     expect(reduceTurn(first).usage).toMatchObject({ inputTokens: 138059, outputTokens: 600 });
     expect(reduceTurn(first).usage?.tokensPerSecond).toBeUndefined();

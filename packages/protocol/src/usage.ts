@@ -1,6 +1,7 @@
 import type { EventData, StoredEvent, UsageData } from './events.js';
 
 export type UsageEvent = Pick<StoredEvent, 'kind' | 'data' | 'native' | 'at'>;
+export type CodexUsageHistory = Map<string, { latest: number; seen: Set<number> }>;
 export interface UsageObservation {
   usage: UsageData;
   at: string;
@@ -19,7 +20,7 @@ function count(value: unknown): number | undefined {
 
 /** Read original usage where older projections lost fields or scope. Codex's
  * last is one response, even if generation timing was never observed. */
-export function observeUsage(event: UsageEvent, codexTotals: Map<string, number>, agent?: string): UsageObservation | undefined {
+export function observeUsage(event: UsageEvent, codexTotals: CodexUsageHistory, agent?: string): UsageObservation | undefined {
   const terminal = event.kind === 'turn.completed';
   const data = terminal ? (event.data as EventData['turn.completed']).usage
     : event.kind === 'usage' ? event.data as UsageData : undefined;
@@ -46,11 +47,15 @@ export function observeUsage(event: UsageEvent, codexTotals: Map<string, number>
     const total = count(record(codex['total'])?.['totalTokens']);
     const thread = typeof native?.['threadId'] === 'string' ? native['threadId'] : '';
     if (total !== undefined) {
-      const previous = codexTotals.get(thread);
-      if (total === previous) return undefined;
+      const history = codexTotals.get(thread);
+      if (history?.seen.has(total)) return undefined;
       const responseTokens = nativeTotal ?? completeSum([usage.inputTokens, usage.outputTokens]);
-      partial = responseTokens !== undefined && total - (previous ?? 0) !== responseTokens;
-      codexTotals.set(thread, total);
+      partial = responseTokens !== undefined && total - (history?.latest ?? 0) !== responseTokens;
+      if (history === undefined) codexTotals.set(thread, { latest: total, seen: new Set([total]) });
+      else {
+        history.latest = total;
+        history.seen.add(total);
+      }
     }
   } else if (claude) {
     usage.inputTokens = count(source['input_tokens']) ?? usage.inputTokens;
