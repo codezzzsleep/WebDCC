@@ -469,7 +469,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return store.getDraft(id);
   });
 
-  app.get('/api/sessions/:id/interactions/:kind', async (request): Promise<InteractionEventResponse> => {
+  app.get('/api/sessions/:id/interactions/:kind', async (request, reply): Promise<InteractionEventResponse> => {
+    reply.header('cache-control', 'no-store');
     const { id, kind } = request.params as { id: string; kind: string };
     const interactionId = (request.query as { interactionId?: unknown }).interactionId;
     if (kind !== 'answer' && kind !== 'approve') throw badRequest('交互类型必须是 answer 或 approve');

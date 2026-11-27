@@ -21,7 +21,7 @@ import type {
   QueueSnapshot,
   QueuedInput,
 } from '@webdcc/protocol';
-import { initialPermissions, isClaudeQueryConfiguration, ulid } from '@webdcc/protocol';
+import { initialPermissions, isClaudeQueryConfiguration, isDshQuestionAnswers, normalizeQuestionAnswer, ulid } from '@webdcc/protocol';
 import type { Db } from './db.js';
 import { CommandJournal } from './command-journal.js';
 import { NativeHistoryStore } from './native-history.js';
@@ -726,7 +726,27 @@ export class Store {
       const row = kind === 'answer'
         ? this.db.prepare("SELECT * FROM events WHERE session_id = ? AND kind = 'question' AND json_extract(data, '$.questionId') = ? ORDER BY seq DESC LIMIT 1").get(sessionId, interactionId)
         : this.db.prepare("SELECT * FROM events WHERE session_id = ? AND kind IN ('approval.request', 'approval.resolved') AND json_extract(data, '$.approvalId') = ? ORDER BY seq DESC LIMIT 1").get(sessionId, interactionId);
-      return { event: row === undefined ? null : toEvent(row as EventRow), throughSeq: session.lastSeq };
+      const event = row === undefined ? null : toEvent(row as EventRow);
+      const result: InteractionEventResponse = { event, throughSeq: session.lastSeq };
+      if (kind === 'answer' && event?.kind === 'question' && !(event.data as EventData['question']).isSecret) {
+        const interaction = this.interactions.get(sessionId, 'answer', interactionId);
+        const command = interaction?.command_id == null ? undefined : this.journal.get(interaction.command_id)?.payload;
+        if (command?.op === 'answer' && command.sessionId === sessionId && command.questionId === interactionId) {
+          try {
+            let value = command.answer;
+            if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+              const object = value as Record<string, unknown>;
+              if (isDshQuestionAnswers(object['answers'])) {
+                value = object['answers'].find(answer => answer.id === (event.data as EventData['question']).dshQuestion?.itemId);
+              } else if (!['selected', 'custom', 'text', 'value'].some(field => field in object)) value = undefined;
+            }
+            const answer = normalizeQuestionAnswer(value);
+            result.submittedAnswer = { commandId: command.clientCommandId, selected: this.nativeEvents.redact(answer.selected) as string[],
+              ...(answer.custom === undefined ? {} : { custom: this.nativeEvents.redact(answer.custom) as string }) };
+          } catch { /* Older/sensitive command shapes have no public answer preview. */ }
+        }
+      }
+      return result;
     })();
   }
 
