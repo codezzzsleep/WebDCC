@@ -23,6 +23,7 @@ import { CapabilitiesPage } from './pages/Capabilities.js';
 import { NativeEventsPage } from './pages/NativeEvents.js';
 import { DiagnosticsPage } from './pages/Diagnostics.js';
 import { WatchdogBar } from './components/WatchdogBar.js';
+import { AppUpdate } from './components/AppUpdate.js';
 
 function initialCollapsed(): boolean {
   // SPEC 9.12：768–1023px 默认收起成窄栏；手机上是抽屉
@@ -57,6 +58,7 @@ function RootLayout(): React.ReactElement {
       />
       {store.drawerOpen ? <div className="drawer-backdrop" data-testid="drawer-backdrop" onClick={() => store.setDrawer(false)} /> : null}
       <Outlet />
+      <AppUpdate />
       {addOpen ? <AddWorkspaceDialog onClose={() => setAddOpen(false)} /> : null}
       <ConnectionBar />
     </div>

@@ -11,6 +11,23 @@
 .watchdog-bar > span { flex: 1 1 240px; overflow-wrap: anywhere; }
 
 /* ============ 基础 ============ */
+.app-update {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 150;
+  max-width: calc(100% - 24px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border-l3);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px #0002;
+}
 *,
 *::before,
 *::after {
