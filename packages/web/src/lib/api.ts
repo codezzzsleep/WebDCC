@@ -13,6 +13,8 @@ import type {
   FsReadResponse,
   MetaResponse,
   SessionDetailResponse,
+  SessionReferenceIdentity,
+  SessionReferenceResponse,
   SessionUsageResponse,
   InteractionKind,
   InteractionEventResponse,
@@ -77,6 +79,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  sessionReferenceIdentity: (id: string) => request<SessionReferenceIdentity>(`/api/sessions/${encodeURIComponent(id)}/reference`),
+  prepareSessionReference: (id: string) => request<SessionReferenceResponse>(`/api/sessions/${encodeURIComponent(id)}/reference`, { method: 'POST', body: '{}' }),
   sessionUsage: (id: string, signal: AbortSignal) => request<SessionUsageResponse>(`/api/sessions/${encodeURIComponent(id)}/usage`, { signal }),
   nativeTerminalResults: (sessionId: string, signal?: AbortSignal): Promise<NativeTerminalResultsResponse> => request(`/api/sessions/${encodeURIComponent(sessionId)}/native-terminal-results`, { signal }),
   inputModes: (sessionId?: string): Promise<CodexInputModeCatalog> => request(`/api/agents/codex/input-modes${sessionId === undefined ? '' : `?sessionId=${encodeURIComponent(sessionId)}`}`),

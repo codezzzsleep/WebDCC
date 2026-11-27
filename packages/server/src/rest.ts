@@ -41,6 +41,7 @@ import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
 import { createWorkspaceEntry } from './workspace-create.js';
 import { registerNativeControlRoutes } from './native-control-routes.js';
+import { prepareSessionReference, sessionReferenceIdentity } from './session-reference.js';
 
 export interface RouteDeps {
   store: Store;
@@ -371,6 +372,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     reply.header('content-type', 'application/x-ndjson; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="${id}.jsonl"`);
     return events.map((event) => JSON.stringify(event)).join('\n');
+  });
+
+  app.get('/api/sessions/:id/reference', async (request, reply) => {
+    reply.header('cache-control', 'no-store');
+    return sessionReferenceIdentity(store, (request.params as { id: string }).id);
+  });
+  app.post('/api/sessions/:id/reference', async (request, reply) => {
+    reply.header('cache-control', 'no-store');
+    return prepareSessionReference(store, (request.params as { id: string }).id);
   });
 
   app.get('/api/agents/codex/input-modes', async request => {

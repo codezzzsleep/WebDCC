@@ -637,6 +637,8 @@ textarea.text-input {
   gap: 10px;
   min-height: 34px;
 }
+.session-copy-notice { margin: 6px 0; font-size: 12px; overflow-wrap: anywhere; }
+.session-copy-notice[role="alert"] { color: var(--danger); }
 .session-title-button {
   border: 0;
   background: transparent;

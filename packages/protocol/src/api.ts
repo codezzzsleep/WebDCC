@@ -30,6 +30,25 @@ export interface WorkspaceDto {
   createdAt: string;
 }
 
+/** A copied reference identifies a source conversation without resuming it. */
+export interface SessionReferenceIdentity {
+  sessionId: string;
+  agent: string;
+  nativeId?: string;
+  title: string;
+  workspace: WorkspaceDto;
+}
+
+export interface SessionReferenceResponse extends SessionReferenceIdentity {
+  /** A checked snapshot in the source workspace, readable with native file tools. */
+  path: string;
+  absolutePath: string;
+  sha256: string;
+  bytes: number;
+  throughSeq: number;
+  eventCount: number;
+}
+
 export interface SessionDto {
   id: string;
   workspaceId: string;
