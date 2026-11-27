@@ -385,6 +385,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     const expectedTurnId = intent === 'steer' ? store.getTurns(sessionId ?? '').findLast(turn => ['starting', 'running', 'waiting'].includes(turn.state) && turn.pending === undefined)?.turnId : undefined;
     try {
       const parsed = parseSlashInput(text);
+      if (parsed) {
+        const reason = controls.input.commandReason();
+        if (reason !== undefined) throw new Error(reason);
+      }
       if (parsed && sessionId === null) {
         const token = controls.drafts.token();
         const catalog = await api.previewSlashCommands(agent, workspaceId || undefined);
@@ -598,7 +602,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             event.preventDefault(); void attach(files);
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            // Some IMEs clear isComposing on their confirmation Enter but
+            // still identify that event with the IME key code 229.
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
               event.preventDefault();
               void submit();
             }

@@ -36,7 +36,7 @@ import { isCommand, isInputContent } from '@webdcc/protocol';
 import { SystemMetricsReader } from './system-metrics.js';
 import { MAX_EDIT_BYTES, WorkspaceFiles, type FileOperation } from './workspace-files.js';
 import { listWorkspaceDirectory } from './workspace-list.js';
-import { copyWorkspaceAttachment } from './workspace-attach.js';
+import { copyWorkspaceAttachment, workspaceAttachmentFilename } from './workspace-attach.js';
 import type { InteractionRecorder } from './interaction-recorder.js';
 import { workspaceAsset, sendWorkspaceAsset } from './workspace-assets.js';
 import { createWorkspaceEntry } from './workspace-create.js';
@@ -806,7 +806,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (found.buffer.byteLength > 100 * 1024 * 1024) throw Object.assign(new Error('文件超过 100 MB 上限'), { statusCode: 413 });
     const original = body.name ?? found.file.name;
     const safeName = original.replace(/[/\\]/g, '_');
-    const copied = await copyWorkspaceAttachment(workspace.path, `${body.fileId}-${safeName}`, found.buffer);
+    const copied = await copyWorkspaceAttachment(workspace.path, workspaceAttachmentFilename(body.fileId, safeName), found.buffer);
     return {
       path: copied.path,
       name: safeName,

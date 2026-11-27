@@ -25,6 +25,7 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
     if (!draft || this.drafts.loading()) return '草稿正在恢复';
     if (this.sending || (this.preparing.get(draft.sessionId) ?? 0) > 0) return '正文或附件正在准备';
     if (this.drafts.error()) return this.drafts.error()!.message;
+    if (this.capabilities().workspaceFileReferences && draft.contentParts.parts.some(part => part.type === 'file')) return '文件尚未准备完成';
     try { this.prepareContent(); } catch (error) { return error instanceof Error ? error.message : String(error); }
     return draft.text.trim() === '' ? '请输入原生指令' : undefined;
   }

@@ -1,16 +1,39 @@
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 
 function failure(statusCode: number, message: string): Error & { statusCode: number } { return Object.assign(new Error(message), { statusCode }); }
+
+function validateFilename(filename: string): void {
+  if (filename === '' || basename(filename) !== filename || filename.includes('\\') || filename.includes('\0') || Buffer.byteLength(filename) > 255
+    || Buffer.from(filename).toString() !== filename || [...filename].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) throw failure(400, '附件文件名无效或过长');
+}
+
+/** Keep established paths for short names. A legal original name may need a
+ * shorter workspace alias once the immutable file identity is prefixed. */
+export function workspaceAttachmentFilename(fileId: string, filename: string): string {
+  validateFilename(filename);
+  const prefix = `${fileId}-`, full = prefix + filename;
+  if (Buffer.byteLength(full) <= 255) return full;
+  const originalExtension = extname(filename);
+  const extension = Buffer.byteLength(originalExtension) <= 32 ? originalExtension : '';
+  const suffix = `-${createHash('sha256').update(filename).digest('hex').slice(0, 12)}${extension}`;
+  const budget = 255 - Buffer.byteLength(prefix + suffix);
+  if (budget < 0) throw failure(400, '附件文件名无效或过长');
+  let shortened = '', bytes = 0;
+  for (const char of filename.slice(0, filename.length - extension.length)) {
+    const size = Buffer.byteLength(char); if (bytes + size > budget) break;
+    shortened += char; bytes += size;
+  }
+  return prefix + shortened + suffix;
+}
 
 /** The reserved attachment directory is created and written through pinned
  * directory descriptors. A completed copy cannot be undone by a later check. */
 export async function copyWorkspaceAttachment(rootPath: string, filename: string, payload: Buffer): Promise<{ path: string }> {
   if (process.platform !== 'linux') throw failure(501, '当前平台无法安全复制工作区附件');
-  if (filename === '' || basename(filename) !== filename || filename.includes('\\') || filename.includes('\0') || Buffer.byteLength(filename) > 255
-    || Buffer.from(filename).toString() !== filename || [...filename].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) throw failure(400, '附件文件名无效或过长');
+  validateFilename(filename);
   const root = await realpath(rootPath), initial = await stat(root);
   const handles: FileHandle[] = []; let temporary: string | undefined, copied = false;
   try {
