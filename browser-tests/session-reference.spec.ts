@@ -35,10 +35,9 @@ it.each(['codex', 'claude-code', 'dsh'])('%s copies actual native identity and a
       expect(await clickCopy(page, '复制原生 Session ID')).toBe(nativeId);
       if (agent === 'codex') expect(await clickCopy(page, '复制 Deep Link')).toBe(`codex://threads/${nativeId}`);
       else { await page.getByTestId('session-more').click(); expect(await page.getByRole('menuitem', { name: '复制 Deep Link', exact: true }).count()).toBe(0); await page.getByTestId('session-more').click(); }
-      let reference: SessionReferenceResponse | undefined;
       const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith(`/api/sessions/${sessionId}/reference`));
       const text = await clickCopy(page, '复制会话引用');
-      reference = await (await response).json() as SessionReferenceResponse;
+      const reference = await (await response).json() as SessionReferenceResponse;
       expect(text).toContain(`原生 Session ID：${nativeId}`); expect(text).toContain(`会话链接：${base}/s/${sessionId}`);
       expect(text).toContain(`记录文件：${JSON.stringify(reference.absolutePath)}`); expect(text).toContain(reference.sha256);
       expect(text).not.toContain('not-a-real-token'); expect(text).not.toContain('dock=files');
