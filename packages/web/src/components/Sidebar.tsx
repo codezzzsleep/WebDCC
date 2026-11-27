@@ -275,7 +275,7 @@ function SessionRow({
         {session.status === 'running' ? (
           <Spinner size={13} label="运行中" />
         ) : session.status === 'waiting' ? (
-          '待批准'
+          '待处理'
         ) : session.status === 'error' ? (
           '出错'
         ) : inDock ? (

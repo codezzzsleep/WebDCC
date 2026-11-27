@@ -102,7 +102,12 @@ export interface EventsPageResponse {
 
 export type InteractionKind = 'answer' | 'approve';
 /** An actual persisted interaction event and its same-read-window event boundary. */
-export interface InteractionEventResponse { event: StoredEvent | null; throughSeq: number }
+export interface SubmittedQuestionAnswer {
+  commandId: string;
+  selected: string[];
+  custom?: string;
+}
+export interface InteractionEventResponse { event: StoredEvent | null; throughSeq: number; submittedAnswer?: SubmittedQuestionAnswer }
 
 export interface FileDto {
   id: string;

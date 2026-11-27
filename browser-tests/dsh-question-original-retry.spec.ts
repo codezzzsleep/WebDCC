@@ -15,9 +15,9 @@ for (const width of [1280, 390]) it(`restores and explicitly retries the complet
     await page.goto(`${base}/s/${group.session.id}`);
     const cards = page.getByTestId('question-card'); const first = cards.filter({ hasText: 'Original first choice' }); const last = cards.filter({ hasText: 'Original second choice' });
     await expect.poll(() => last.getAttribute('data-sync')).toBe('ready');
-    await first.getByRole('radio', { name: 'Keep', exact: true }).check(); await first.getByRole('button', { name: '提交', exact: true }).click();
+    await first.getByRole('radio', { name: 'Keep', exact: true }).check(); await first.getByRole('button', { name: /^(保存本题答案|更新本题答案|提交本组回答)$/, exact: true }).click();
     await expect.poll(() => first.textContent()).toContain('等待其他问题');
-    await last.getByRole('checkbox', { name: 'Second', exact: true }).check(); await last.getByRole('button', { name: '提交', exact: true }).click();
+    await last.getByRole('checkbox', { name: 'Second', exact: true }).check(); await last.getByRole('button', { name: /^(保存本题答案|更新本题答案|提交本组回答)$/, exact: true }).click();
     await expect.poll(() => last.textContent()).toContain('提交结果待核对'); group.reoffer(); await page.reload();
     await expect.poll(() => last.getAttribute('data-sync')).toBe('ready'); expect(group.replies).toHaveLength(1);
     await expect.poll(() => last.getByRole('button', { name: '重试本组原回答', exact: true }).count()).toBe(1);
@@ -56,9 +56,9 @@ it('keeps an explicit same-page recovery check after a cached question token is 
     await page.goto(`${base}/s/${group.session.id}`);
     const cards = page.getByTestId('question-card'); const first = cards.filter({ hasText: 'Original first choice' }); const last = cards.filter({ hasText: 'Original second choice' });
     await expect.poll(() => last.getAttribute('data-sync')).toBe('ready');
-    await first.getByRole('radio', { name: 'Keep', exact: true }).check(); await first.getByRole('button', { name: '提交', exact: true }).click();
+    await first.getByRole('radio', { name: 'Keep', exact: true }).check(); await first.getByRole('button', { name: /^(保存本题答案|更新本题答案|提交本组回答)$/, exact: true }).click();
     await expect.poll(() => first.textContent()).toContain('等待其他问题');
-    await last.getByRole('checkbox', { name: 'Second', exact: true }).check(); await last.getByRole('button', { name: '提交', exact: true }).click();
+    await last.getByRole('checkbox', { name: 'Second', exact: true }).check(); await last.getByRole('button', { name: /^(保存本题答案|更新本题答案|提交本组回答)$/, exact: true }).click();
     await expect.poll(() => last.textContent()).toContain('提交结果待核对'); group.reoffer(); await page.reload();
     await expect.poll(() => last.getByRole('button', { name: '重试本组原回答', exact: true }).count()).toBe(1);
     const identity = group.native.adapter.hostIdentity;
