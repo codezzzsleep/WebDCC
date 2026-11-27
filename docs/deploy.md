@@ -124,6 +124,14 @@ manifest 和发布日志保留源码 commit，目录中的 release-id 区分不�
 
 ## 运行注意事项
 
+### 小内存主机上的原生验收
+
+约 2 GiB 内存的主机同时运行服务、官方原生进程和 Chromium 时可能出现内存峰值。先核对 `free -m`、`/proc/swaps`、`sysctl vm.swappiness` 和内核 OOM 日志；退出码 137 需结合日志判断，不能直接记为 Agent 功能失败或验收通过。
+
+已启用 swap 也不代表它能及时吸收峰值。测试主机曾在 `vm.swappiness=0`、swap 使用量为零时发生 global OOM，Claude 恢复验证的 Node 和 Chromium 被杀死。确认这一配置原因后，可按主机负载为已有 swap 设置适当的非零 swappiness；该测试环境使用 30，通过独立的 `/etc/sysctl.d/99-webdcc-test-memory.conf` 持久化，并记录原值、文件 SHA256 和回退方式。这是主机级设置，会影响该机其他进程，应结合现有策略评估；swap 也不能替代足够的物理内存。
+
+原生验证串行运行，保存原 OOM 报告，在新证据目录重新验证失败场景，并核对刷新、重连、服务恢复和模型请求数。保持官方 prompt、工具、权限及 sandbox 策略；一次重验成功仅证明当次目标平台场景，不代表容量压力测试或全部原生能力已通过。
+
 ### Ubuntu 24.04 的 Codex 原生 sandbox
 
 在非 root 运行账号上，Ubuntu 的 AppArmor 用户命名空间限制可能使官方 Codex sandbox 初始化失败，错误为 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`。先在同一运行账号、HOME、CODEX_HOME、PATH 和工作区中执行 `codex sandbox -- /bin/cat /etc/os-release`，并核对 kernel audit 中的 `userns_create`。这个探针不调用模型；不要把网络请求成功当作文件工具可用。
