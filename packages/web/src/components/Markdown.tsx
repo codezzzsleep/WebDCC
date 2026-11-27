@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { Children, createContext, isValidElement, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { workspaceFileUrl, isImageUrl } from '../lib/workspace-url.js';
@@ -29,6 +29,7 @@ function getHighlighter(): Promise<Highlighter> | null {
 
 function CodeBlock({ code, language }: { code: string; language: string }): React.ReactElement {
   const [html, setHtml] = useState<string | null>(null);
+  const highlighted = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<'github-light' | 'github-dark'>(() => currentCodeTheme());
   useEffect(() => {
     const update = (): void => setTheme(currentCodeTheme());
@@ -42,10 +43,11 @@ function CodeBlock({ code, language }: { code: string; language: string }): Reac
   }, []);
   useEffect(() => {
     let cancelled = false;
+    if (language === '') { setHtml(null); return undefined; }
     const highlighter = getHighlighter();
     if (highlighter === null) return undefined;
     void highlighter.then((instance) => {
-      if (cancelled || instance.codeToHtml === undefined) return;
+      if (cancelled || instance?.codeToHtml === undefined) return;
       try {
         setHtml(instance.codeToHtml(code, { lang: language === '' ? 'text' : language, theme }));
       } catch {
@@ -56,10 +58,14 @@ function CodeBlock({ code, language }: { code: string; language: string }): Reac
       cancelled = true;
     };
   }, [code, language, theme]);
+  useEffect(() => {
+    const pre = highlighted.current?.querySelector('pre');
+    if (pre) { pre.tabIndex = 0; pre.setAttribute('aria-label', '代码块'); }
+  }, [html]);
 
-  if (html !== null) return <div className="code-block" dangerouslySetInnerHTML={{ __html: html }} />;
+  if (html !== null) return <div ref={highlighted} className="code-block" dangerouslySetInnerHTML={{ __html: html }} />;
   return (
-    <pre className="code-block">
+    <pre className="code-block" tabIndex={0} aria-label="代码块">
       <code>{code}</code>
     </pre>
   );
@@ -75,11 +81,14 @@ function currentCodeTheme(): 'github-light' | 'github-dark' {
 // every Markdown render remounts CodeBlock, resets its async Shiki state to
 // <pre>, and can form a render/measure loop with the virtualized timeline.
 const markdownComponents: Components = {
-  code({ className, children }) {
-    const match = /language-(\w+)/.exec(className ?? '');
-    const content = String(children).replace(/\n$/, '');
-    if (match !== null) return <CodeBlock code={content} language={match[1] ?? ''} />;
-    return <code className="inline-code">{content}</code>;
+  pre({ children }) {
+    const child = Children.toArray(children).find(isValidElement);
+    if (!isValidElement<{ className?: string; children?: ReactNode }>(child)) return <pre className="code-block" tabIndex={0} aria-label="代码块">{children}</pre>;
+    const language = /language-(\S+)/.exec(child.props.className ?? '')?.[1] ?? '';
+    return <CodeBlock code={String(child.props.children).replace(/\n$/, '')} language={language} />;
+  },
+  code({ children }) {
+    return <code className="inline-code">{children}</code>;
   },
   a({ href, children }) {
     const workspaceId = useContext(MarkdownWorkspace);

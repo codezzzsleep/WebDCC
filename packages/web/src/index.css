@@ -937,6 +937,10 @@ button.step-line:hover {
   border-radius: 10px;
   padding: 8px 12px;
 }
+.error-card > svg { flex: 0 0 auto; }
+.error-card-body { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.error-card-body summary { cursor: pointer; margin-top: 6px; }
+.error-card-body .output { margin: 8px 0 0; }
 .render-fallback {
   font-size: 13px;
   color: var(--text-tertiary);
@@ -2131,7 +2135,8 @@ button.step-line:hover {
   overflow: hidden;
   border: 1px solid var(--border-l1);
 }
-.code-block pre {
+.code-block pre,
+pre.code-block {
   margin: 0;
   padding: 12px 14px;
   overflow-x: auto;

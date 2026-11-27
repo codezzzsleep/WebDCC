@@ -13,6 +13,7 @@ import { duration, shortNumber } from '../lib/format.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Icon, Spinner, type IconName } from './Icon.js';
 import { Markdown, MarkdownWorkspace } from './Markdown.js';
+import { AgentError } from './AgentError.js';
 import { ElicitationForm } from './ElicitationForm.js';
 import { InputAttachments } from './InputAttachments.js';
 import { DshSubagentPanel } from './DshSubagentPanel.js';
@@ -665,12 +666,7 @@ function StepRow({
     }
     case 'error': {
       const data = event.data as EventData['error'];
-      return (
-        <div className="error-card" data-testid="error-card" role="alert">
-          <Icon name="alert" size={15} />
-          <span>{data.message}</span>
-        </div>
-      );
+      return <AgentError message={data.message} />;
     }
     case 'unknown': {
       const data = event.data as EventData['unknown'];
