@@ -121,7 +121,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
       || new URL(to, 'http://webdcc.invalid').origin !== 'http://webdcc.invalid'
       || /^\/api(?:\/|$)/.test(new URL(to, 'http://webdcc.invalid').pathname))) return reply.status(400).send({ error: '页面地址无效' });
     const target = JSON.stringify(to ?? '/').replaceAll('<', '\\u003c');
-    const bootstrap = `<script>window.__wdccAppRecovery=(async()=>{try{if('serviceWorker' in navigator){const rows=await navigator.serviceWorker.getRegistrations();await Promise.all(rows.filter(r=>{const worker=r.active||r.waiting||r.installing;return r.scope===location.origin+'/'&&worker&&new URL(worker.scriptURL).pathname==='/sw.js'}).map(r=>r.unregister()));}}catch{/* Storage restrictions must not prevent the current page from opening. */}history.replaceState(null,'',${target});})();</script>`;
+    const bootstrap = `<script>window.__wdccAppRecovery=(async()=>{history.replaceState(null,'',${target});try{if('serviceWorker' in navigator){const rows=await navigator.serviceWorker.getRegistrations();await Promise.all(rows.filter(r=>{const worker=r.active||r.waiting||r.installing;return r.scope===location.origin+'/'&&worker&&new URL(worker.scriptURL).pathname==='/sw.js'}).map(r=>r.unregister()));}}catch{/* Storage restrictions must not prevent the current page from opening. */}})();</script>`;
     const html = await readFile(join(options.webDist, 'index.html'), 'utf8');
     return reply.header('cache-control', 'no-store').header('referrer-policy', 'no-referrer').type('text/html').send(html.replace('<head>', '<head>' + bootstrap));
   });

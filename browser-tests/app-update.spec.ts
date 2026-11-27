@@ -19,6 +19,25 @@ async function meta(page: Page, commit: () => string | undefined): Promise<void>
   });
 }
 
+it.each(['delayed', 'denied'])('recovery restores the route before router initialization when worker storage is %s', async mode => {
+  const { ctx, base, sessionId } = await setup(); let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'wdcc-auth', value: ctx.cookie.slice('wdcc-auth='.length), url: base }]);
+    await page.addInitScript(mode => {
+      navigator.serviceWorker.getRegistrations = async () => {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        if (mode === 'denied') throw new DOMException('fixture denied worker storage', 'SecurityError');
+        return [];
+      };
+    }, mode);
+    await page.goto(base + '/api/app?to=' + encodeURIComponent(`/s/${sessionId}`));
+    await expect.poll(() => page.getByTestId('composer-input').isEnabled()).toBe(true);
+    expect(page.url()).toBe(`${base}/s/${sessionId}`);
+    expect(await page.getByText('Unexpected Application Error!').count()).toBe(0);
+  } finally { await browser?.close(); await ctx.close(); }
+});
+
 it('only a confirmed different build offers an update, with no automatic navigation', async () => {
   const { ctx, base, sessionId } = await setup(); let browser: Browser | undefined;
   try {
