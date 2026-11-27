@@ -19,7 +19,7 @@ async function meta(page: Page, commit: () => string | undefined): Promise<void>
   });
 }
 
-it.each(['delayed', 'denied'])('recovery restores the route before router initialization when worker storage is %s', async mode => {
+it.each(['delayed', 'denied', 'unregister-pending'])('recovery restores the route before router initialization when worker storage is %s', async mode => {
   const { ctx, base, sessionId } = await setup(); let browser: Browser | undefined;
   try {
     browser = await chromium.launch({ headless: true }); const page = await browser.newPage();
@@ -28,6 +28,8 @@ it.each(['delayed', 'denied'])('recovery restores the route before router initia
       navigator.serviceWorker.getRegistrations = async () => {
         await new Promise(resolve => setTimeout(resolve, 400));
         if (mode === 'denied') throw new DOMException('fixture denied worker storage', 'SecurityError');
+        if (mode === 'unregister-pending') return [{ scope: location.origin + '/', installing: { scriptURL: location.origin + '/sw.js' },
+          unregister: () => new Promise<boolean>(() => undefined) }] as unknown as readonly ServiceWorkerRegistration[];
         return [];
       };
     }, mode);

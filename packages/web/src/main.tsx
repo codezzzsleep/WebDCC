@@ -10,12 +10,13 @@ applyTheme(readTheme());
 const container = document.getElementById('root');
 if (container === null) throw new Error('缺少 #root 容器');
 const recovery = (window as Window & { __wdccAppRecovery?: Promise<void> }).__wdccAppRecovery;
-void (async () => {
-  await recovery;
-  if ('serviceWorker' in navigator && import.meta.env.PROD) void navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => undefined);
-  createRoot(container).render(
-    <StrictMode>
-      <RouterProvider router={router} />
-    </StrictMode>,
-  );
-})();
+// unregister() can wait behind an installing worker's network requests.
+// Recovery restores the route synchronously; cleanup must not block the UI.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  void Promise.resolve(recovery).then(() => navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })).catch(() => undefined);
+}
+createRoot(container).render(
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
+);
