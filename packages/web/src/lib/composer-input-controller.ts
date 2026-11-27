@@ -47,7 +47,7 @@ export class ComposerInputController<Part extends PreparedPart = PreparedPart> {
     if (textParts.length === 1 && textParts[0]!.elements?.length && textParts[0]!.text !== draft.text) return '原生文字元素与编辑后的正文不一致，请重新准备';
     if (textParts.length > 1 && textParts.map(part => part.text ?? '').join('') !== draft.text) return '文字与结构化输入不一致，请重新核对';
     for (const part of draft.contentParts.parts) {
-      if (part.type === 'file' && capabilities.workspaceFileReferences) return '请先点击“放入工作区并引用”，确认文件路径后再发送';
+      if (part.type === 'file' && capabilities.workspaceFileReferences) return '文件尚未准备完成';
       if (!capabilities.contentTypes.includes(part.type)) return `当前原生输入不支持 ${part.type}`;
       if ((part.type === 'image' || part.type === 'audio') && !capabilities.inputModalities?.includes(part.type)) return `当前模型未声明支持 ${part.type} 输入`;
       if (part.uploadTaskId !== undefined) {
