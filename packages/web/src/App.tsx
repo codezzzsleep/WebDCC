@@ -35,7 +35,15 @@ function RootLayout(): React.ReactElement {
   const { workspaces } = useAppData();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
   const [addOpen, setAddOpen] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const changed = (): void => { setMobile(media.matches); store.setDrawer(false); };
+    media.addEventListener('change', changed);
+    return () => media.removeEventListener('change', changed);
+  }, []);
 
   useEffect(() => {
     void store.restoreOutbox().then(() => store.init());
@@ -50,8 +58,8 @@ function RootLayout(): React.ReactElement {
         currentSessionId={currentSessionId === '' || currentSessionId === undefined ? null : currentSessionId}
         dockSessionId={dockSessionId ?? null}
         workspaces={workspaces}
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((value) => !value)}
+        collapsed={collapsed && !mobile}
+        onToggle={() => mobile ? store.setDrawer(false) : setCollapsed((value) => !value)}
         onAddWorkspace={() => setAddOpen(true)}
         onNavigate={() => store.setDrawer(false)}
         settingsActive={pathname.startsWith('/settings/') && pathname !== '/settings/watchdog'}

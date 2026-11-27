@@ -220,7 +220,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
   };
 
   return (
-    <main className="main" data-testid="new-session">
+    <main className="main new-session-page" data-testid="new-session">
       <div className="mobile-only session-header" style={{ borderBottom: 0 }}>
         <div className="session-header-row">
           <button type="button" className="icon-btn drawer-toggle" aria-label="会话列表" onClick={() => store.setDrawer(true)} data-testid="drawer-toggle">
