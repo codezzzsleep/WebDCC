@@ -598,7 +598,9 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
             event.preventDefault(); void attach(files);
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            // Some IMEs clear isComposing on their confirmation Enter but
+            // still identify that event with the IME key code 229.
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
               event.preventDefault();
               void submit();
             }

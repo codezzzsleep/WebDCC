@@ -152,3 +152,25 @@ it('refresh resumes automatic preparation from a completed upload without upload
     expect(await page.getByTestId('composer-attachments').count()).toBe(0);
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
+
+it('a legal long Chinese filename automatically prepares a readable path and survives refresh before sending', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const { sessionId, workspaceId } = await seedWorkspaceAndSession(ctx, 'codex');
+    browser = await chromium.launch({ headless: true }); const { page, base } = await open(ctx, browser);
+    await page.goto(`${base}/s/${sessionId}`); await page.getByTestId('composer-input').fill('请读取长中文文件名');
+    const name = '参'.repeat(78) + '.md';
+    await page.getByTestId('add-file-input').setInputFiles({ name, mimeType: 'text/markdown', buffer: bytes });
+    await expect.poll(() => page.getByTestId('composer-input').inputValue()).toContain('.webdcc/uploads/');
+    await expect.poll(() => page.getByTestId('composer-attachments').count()).toBe(0);
+    const text = await page.getByTestId('composer-input').inputValue();
+    const path = JSON.parse(text.split('\n').at(-1)!) as string;
+    expect(path.startsWith('.webdcc/uploads/')).toBe(true); expect(path.endsWith('.md')).toBe(true);
+    expect(Buffer.byteLength(path.split('/').at(-1)!)).toBeLessThanOrEqual(255);
+    expect((await readFile(join(ctx.store.getWorkspace(workspaceId)!.path, path))).equals(bytes)).toBe(true);
+    await page.reload(); await expect.poll(() => page.getByTestId('composer-input').inputValue()).toBe(text);
+    await page.getByTestId('send-button').click();
+    await expect.poll(() => ctx.store.allEvents(sessionId).filter(e => e.kind === 'user.message').length).toBe(1);
+    expect(ctx.store.allEvents(sessionId).find(e => e.kind === 'user.message')!.data).toMatchObject({ text, contentParts: { parts: [{ type: 'text', text }] } });
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);

@@ -46,6 +46,47 @@ it('normal and repeated copies retain exact Chinese/CRLF bytes, returned identit
   } finally { await ctx.close(); }
 });
 
+it.each([
+  'r'.repeat(240) + '.md',
+  '参'.repeat(78) + '.md',
+  '📄'.repeat(60) + '.md',
+  'q'.repeat(225) + '.md',
+  'q'.repeat(226) + '.md',
+])('a legal long name gets a stable UTF-8 workspace alias while original metadata and bytes remain intact (%s)', async name => {
+  const ctx = await createTestApp();
+  try {
+    const root = join(ctx.dataDir, 'workspace'); await mkdir(root); const workspace = ctx.store.createWorkspace('long name', root);
+    const bytes = Buffer.from('\uFEFF长文件名\r\noriginal bytes\r\n');
+    const file = await ctx.files.putBuffer(bytes, name, 'text/markdown');
+    const request = () => ctx.app.inject({ method: 'POST', url: `/api/workspaces/${workspace.id}/attach`, headers: { cookie: ctx.cookie }, payload: { fileId: file.id } });
+    const result = await request(); expect(result.statusCode).toBe(200);
+    const path = result.json().path as string; const leaf = path.split('/').at(-1)!;
+    expect(Buffer.byteLength(leaf)).toBeLessThanOrEqual(255);
+    expect(Buffer.from(leaf).toString()).toBe(leaf); expect(leaf).not.toContain('\uFFFD');
+    expect(leaf.startsWith(file.id + '-')).toBe(true); expect(leaf.endsWith('.md')).toBe(true);
+    if (Buffer.byteLength(`${file.id}-${name}`) <= 255) expect(leaf).toBe(`${file.id}-${name}`);
+    expect(result.json()).toMatchObject({ name, fileId: file.id, size: bytes.length });
+    expect((await readFile(join(root, path))).equals(bytes)).toBe(true);
+    expect((await ctx.files.readAll(file.id))?.file.name).toBe(name);
+    expect((await request()).json()).toEqual(result.json());
+  } finally { await ctx.close(); }
+});
+
+it('long workspace aliases distinguish explicit names that differ beyond their truncated prefix', async () => {
+  const ctx = await createTestApp();
+  try {
+    const root = join(ctx.dataDir, 'workspace'); await mkdir(root); const workspace = ctx.store.createWorkspace('name collision', root);
+    const file = await ctx.files.putBuffer(Buffer.from('original bytes'), 'original.md', 'text/markdown');
+    const paths: string[] = [];
+    for (const ending of ['甲', '乙']) {
+      const result = await ctx.app.inject({ method: 'POST', url: `/api/workspaces/${workspace.id}/attach`, headers: { cookie: ctx.cookie }, payload: { fileId: file.id, name: '参'.repeat(78) + ending + '.md' } });
+      expect(result.statusCode).toBe(200); paths.push(result.json().path);
+    }
+    expect(paths[0]).not.toBe(paths[1]);
+    for (const path of paths) expect(await readFile(join(root, path), 'utf8')).toBe('original bytes');
+  } finally { await ctx.close(); }
+});
+
 it('a directory moved after atomic copy preserves the applied original copy and reports conflict without touching the replacement', async () => {
   const ctx = await createTestApp();
   try {
