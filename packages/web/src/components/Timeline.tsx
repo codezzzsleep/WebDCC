@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
@@ -64,8 +64,13 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     }
   }, [turns.length]);
 
+  // Older history prepends turns. Measurements and observer ownership must
+  // follow the same identity as React's rows, rather than their old index.
+  const getTurnKey = useCallback((index: number) => JSON.stringify([sessionId, conversation?.uuid, history, turns[index]!.turnId]),
+    [sessionId, conversation?.uuid, history, turns]);
   const virtualizer = useVirtualizer({
     count: turns.length,
+    getItemKey: getTurnKey,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 260,
     overscan: 6,
@@ -114,7 +119,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
           const isExpanded = expanded[turn.turnId] ?? false;
           return (
             <div
-              key={turn.turnId}
+              key={item.key}
               data-index={item.index}
               ref={virtualizer.measureElement}
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
