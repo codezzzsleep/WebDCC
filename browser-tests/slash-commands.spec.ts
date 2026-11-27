@@ -148,6 +148,36 @@ it.each(['codex', 'claude-code'] as const)('%s goal replacement confirmation res
   } finally { await h.close(); }
 });
 
+it.each(['new', 'session'] as const)('%s Codex slash cannot bypass failed file preparation with a button or Enter', async mode => {
+  const h = await fixture();
+  try {
+    const catalog = async () => [{ name: '/goal', route: 'native-control' as const, supportsAttachments: true }];
+    h.adapter.slashCommands = catalog; h.adapter.previewSlashCommands = catalog;
+    const inputs: { line: string; content: unknown }[] = [];
+    h.adapter.executeSlashControl = async (_id, line, options) => {
+      inputs.push({ line, content: options?.contentParts }); return { text: 'Prepared goal accepted' };
+    };
+    await h.page.route('**/api/workspaces/*/attach', route => route.fulfill({ status: 503, json: { error: 'copy temporarily unavailable' } }));
+    if (mode === 'new') await h.page.goto(`${h.base}/new?w=${h.workspace.id}&agent=codex`);
+    const input = h.page.getByTestId(mode === 'new' ? 'new-session-input' : 'composer-input');
+    const send = h.page.getByTestId(mode === 'new' ? 'new-session-send' : 'send-button');
+    const line = '/goal read this file'; await input.fill(line);
+    await h.page.getByTestId('add-file-input').setInputFiles({ name: 'retry-goal.md', mimeType: 'text/markdown', buffer: Buffer.from('goal exact bytes') });
+    await h.page.getByRole('alert').filter({ hasText: 'copy temporarily unavailable' }).waitFor();
+    expect(await send.isDisabled()).toBe(true);
+    await input.press('Enter'); await h.page.waitForTimeout(350);
+    expect(inputs).toHaveLength(0); expect(h.ctx.store.listSessions()).toHaveLength(1);
+    expect(await input.inputValue()).toBe(line);
+    await h.page.unroute('**/api/workspaces/*/attach');
+    await h.page.getByRole('button', { name: '重试文件准备', exact: true }).click();
+    await expect.poll(() => input.inputValue()).toContain('.webdcc/uploads/');
+    const prepared = await input.inputValue(); await expect.poll(() => send.isEnabled()).toBe(true);
+    await input.press('Enter'); if (mode === 'new') await h.page.waitForURL('**/s/**');
+    await h.page.getByText('Prepared goal accepted', { exact: false }).first().waitFor();
+    expect(inputs).toEqual([{ line: prepared, content: { version: 1, parts: [{ type: 'text', text: prepared }] } }]);
+  } finally { await h.close(); }
+});
+
 it('product catalog preserves failure reasons, retries, routes terminal commands, and keeps unknown command drafts', async () => {
   const h = await fixture();
   try {

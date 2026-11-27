@@ -385,6 +385,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     const expectedTurnId = intent === 'steer' ? store.getTurns(sessionId ?? '').findLast(turn => ['starting', 'running', 'waiting'].includes(turn.state) && turn.pending === undefined)?.turnId : undefined;
     try {
       const parsed = parseSlashInput(text);
+      if (parsed) {
+        const reason = controls.input.commandReason();
+        if (reason !== undefined) throw new Error(reason);
+      }
       if (parsed && sessionId === null) {
         const token = controls.drafts.token();
         const catalog = await api.previewSlashCommands(agent, workspaceId || undefined);
