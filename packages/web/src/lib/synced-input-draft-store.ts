@@ -12,6 +12,9 @@ const contentOf = (draft: DraftDto): InputContent => draft.contentParts ?? { ver
   ...(draft.text === '' ? [] : [{ type: 'text' as const, text: draft.text }]),
   ...draft.fileIds.map(fileId => ({ type: 'image' as const, fileId })),
 ] };
+const sameContent = (left: { text: string; contentParts?: InputContent }, right: { text: string; contentParts?: InputContent }): boolean =>
+  left.text === right.text && JSON.stringify(left.contentParts) === JSON.stringify(right.contentParts);
+const baselineOf = (sessionId: string, draft: DraftDto): RemoteDraftBaseline => ({ sessionId, revision: draft.revision, text: draft.text, contentParts: contentOf(draft) });
 /** The complete local draft is always durable first. Server CAS has an
  * independent persistent revision, so offline edits cannot invent a server
  * revision or silently replace another device's draft. */
@@ -20,9 +23,11 @@ export class SyncedInputDraftStore implements InputDraftStore<PreparedPart> {
   private readonly pending = new Map<string, number>();
   private readonly states = new Map<string, DraftSyncState>();
   private readonly listeners = new Set<() => void>();
+  private readonly lockScope?: string;
   constructor(private readonly local: InputPreparationStore<PreparedPart>, private readonly uploads: UploadController,
     private readonly initial?: (sessionId: string) => { text: string; fileIds: string[] }) {
     const scope = typeof local.syncScope === 'function' ? local.syncScope() : undefined;
+    this.lockScope = scope;
     const queues = scope === undefined ? objectQueues.get(local) : databaseQueues.get(scope);
     this.jobs = queues ?? new Map();
     if (scope === undefined) objectQueues.set(local, this.jobs); else databaseQueues.set(scope, this.jobs);
@@ -33,7 +38,11 @@ export class SyncedInputDraftStore implements InputDraftStore<PreparedPart> {
     this.stateChanged(sessionId, { ...this.states.get(sessionId), pending: true });
     const result = pending.then(async () => {
       this.stateChanged(sessionId, { pending: true, syncedRevision: this.states.get(sessionId)?.syncedRevision });
-      return operation();
+      // JavaScript queues are page-local. Web Locks serialize shared
+      // IndexedDB baselines across tabs without locking out other devices.
+      return this.lockScope !== undefined && typeof navigator !== 'undefined' && navigator.locks !== undefined
+        ? navigator.locks.request(`webdcc:draft:${JSON.stringify([this.lockScope, sessionId])}`, operation)
+        : operation();
     }).catch(error => {
       this.stateChanged(sessionId, { pending: true, syncedRevision: this.states.get(sessionId)?.syncedRevision,
         error: error instanceof Error ? error.message : '云端草稿同步失败', conflict: (error as { status?: number } | null)?.status === 409 });
@@ -100,10 +109,34 @@ export class SyncedInputDraftStore implements InputDraftStore<PreparedPart> {
     if (!isInputContent(content, draft.text)) throw new Error('草稿的结构化内容需要核对后才能同步');
     return content;
   }
-  private async syncNow(sessionId: string): Promise<void> {
+  private async acceptBaseline(next: RemoteDraftBaseline, expected: RemoteDraftBaseline): Promise<void> {
+    try { await this.local.compareRemoteDraft(next, expected); }
+    catch (error) {
+      const current = await this.local.getRemoteDraft(next.sessionId);
+      // On HTTP origins without Web Locks another tab can have already
+      // reconciled this exact save, or accepted a later server revision.
+      if (current !== undefined && (current.revision > next.revision || current.revision === next.revision && sameContent(current, next))) return;
+      throw error;
+    }
+  }
+  private async recoverWrite(baseline: RemoteDraftBaseline): Promise<RemoteDraftBaseline> {
+    const remote = baselineOf(baseline.sessionId, await api.draft(baseline.sessionId));
+    if (remote.revision > baseline.revision && (sameContent(remote, baseline.pendingWrite!) || sameContent(remote, baseline))) {
+      // Exact submitted content needs no rewrite. Unchanged baseline content
+      // at a newer revision can safely be used for a fresh CAS; it does not
+      // authorize overwriting different content from another device.
+      await this.acceptBaseline(remote, baseline); return remote;
+    }
+    if (remote.revision === baseline.revision && sameContent(remote, baseline)) {
+      await this.acceptBaseline(remote, baseline); return remote;
+    }
+    throw Object.assign(new Error('云端草稿与待确认的保存不同，本机内容已保留，请核对后处理'), { status: 409 });
+  }
+  private async syncNow(sessionId: string, canRebase = true): Promise<void> {
     const draft = await this.local.getDraft(sessionId); if (draft === undefined) return;
     const content = await this.prepared(draft);
     let baseline = await this.local.getRemoteDraft(sessionId);
+    if (baseline?.pendingWrite !== undefined) baseline = await this.recoverWrite(baseline);
     if (baseline === undefined) {
       const remote = await api.draft(sessionId); const remoteContent = contentOf(remote);
       if (remote.text !== '' || remoteContent.parts.length > 0 || remoteContent.collaborationMode !== undefined) {
@@ -113,9 +146,23 @@ export class SyncedInputDraftStore implements InputDraftStore<PreparedPart> {
       await this.local.compareRemoteDraft(baseline, undefined);
     }
     if (baseline.text !== draft.text || JSON.stringify(baseline.contentParts) !== JSON.stringify(content)) {
-      const saved = await api.saveInputDraft(sessionId, draft.text, content, baseline.revision);
-      const next: RemoteDraftBaseline = { sessionId, revision: saved.revision, text: saved.text, contentParts: contentOf(saved) };
-      await this.local.compareRemoteDraft(next, baseline);
+      const pending = { ...baseline, pendingWrite: { text: draft.text, contentParts: content } };
+      await this.local.compareRemoteDraft(pending, baseline);
+      let next: RemoteDraftBaseline;
+      try {
+        const saved = await api.saveInputDraft(sessionId, draft.text, content, baseline.revision);
+        next = baselineOf(sessionId, saved);
+        if (next.revision !== baseline.revision + 1 || !sameContent(next, pending.pendingWrite)) throw new Error('保存草稿返回的版本或内容不一致');
+      } catch (error) {
+        // A response can be lost after commit. Reconcile matching content;
+        // older installations may also have an obsolete baseline revision.
+        next = await this.recoverWrite(pending).catch(() => { throw error; });
+        if (!sameContent(next, pending.pendingWrite)) {
+          if (next.revision > baseline.revision && canRebase) return this.syncNow(sessionId, false);
+          throw error;
+        }
+      }
+      await this.acceptBaseline(next, pending);
     }
     this.stateChanged(sessionId, { pending: true, syncedRevision: draft.revision });
   }

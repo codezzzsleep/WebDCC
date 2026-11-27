@@ -3,10 +3,15 @@ import { DraftConflictError, type InputDraft, type InputDraftStore } from './dra
 import type { UploadTask, UploadTaskStore } from './upload-controller.js';
 import type { InputContent } from '@webdcc/protocol';
 
-export interface RemoteDraftBaseline { sessionId: string; revision: number; text: string; contentParts?: InputContent }
+export interface RemoteDraftBaseline {
+  sessionId: string; revision: number; text: string; contentParts?: InputContent;
+  /** Persist before PUT so a lost response can be reconciled after reload. */
+  pendingWrite?: { text: string; contentParts: InputContent };
+}
 export class RemoteDraftConflictError extends Error { readonly status = 409; constructor() { super('云端草稿版本已被另一页面更新，请重新核对'); } }
 const sameBaseline = (left: RemoteDraftBaseline | undefined, right: RemoteDraftBaseline | undefined): boolean =>
-  left?.revision === right?.revision && left?.text === right?.text && JSON.stringify(left?.contentParts) === JSON.stringify(right?.contentParts);
+  left?.revision === right?.revision && left?.text === right?.text && JSON.stringify(left?.contentParts) === JSON.stringify(right?.contentParts)
+  && JSON.stringify(left?.pendingWrite) === JSON.stringify(right?.pendingWrite);
 
 interface PreparationSchema extends DBSchema {
   drafts: { key: string; value: InputDraft };
