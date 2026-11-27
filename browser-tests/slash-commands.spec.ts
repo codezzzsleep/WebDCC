@@ -108,8 +108,8 @@ it('product slash result and edit form recover after refresh; new text does not 
   } finally { await h.close(); }
 });
 
-it('goal replacement confirmation restores attachment references after refresh without submitting twice', async () => {
-  const h = await fixture();
+it.each(['codex', 'claude-code'] as const)('%s goal replacement confirmation restores file references after refresh without submitting twice', async agent => {
+  const h = await fixture(agent);
   try {
     h.adapter.slashCommands = async () => [{ name: '/goal', route: 'native-control', supportsAttachments: true }];
     const inputs: { line: string; content: unknown }[] = [];
@@ -121,6 +121,11 @@ it('goal replacement confirmation restores attachment references after refresh w
     await h.page.getByTestId('composer-input').fill(line);
     await h.page.getByTestId('add-file-input').setInputFiles({ name: 'reference.md', mimeType: 'text/markdown', buffer: Buffer.from('original\r\n中文') });
     await expect.poll(() => h.page.getByTestId('send-button').isEnabled()).toBe(true);
+    const preparedLine = await h.page.getByTestId('composer-input').inputValue();
+    if (agent === 'codex') {
+      expect(preparedLine.startsWith(line + '\n')).toBe(true);
+      expect(JSON.parse(preparedLine.slice(line.length + 1))).toMatch(/^\.webdcc\/uploads\/.*-reference\.md$/);
+    } else expect(preparedLine).toBe(line);
     await h.page.getByTestId('composer-input').press('Enter');
     await h.page.getByRole('button', { name: '确认替换原生目标' }).waitFor();
     expect(inputs).toHaveLength(1);
@@ -129,8 +134,17 @@ it('goal replacement confirmation restores attachment references after refresh w
     await h.page.getByRole('button', { name: '确认替换原生目标' }).click();
     await h.page.getByText('Native replacement saved', { exact: false }).first().waitFor();
     expect(inputs).toHaveLength(2);
-    expect(inputs[1]).toEqual(inputs[0]);
-    expect(inputs[1]?.content).toMatchObject({ parts: [{ type: 'text', text: line }, { type: 'file', name: 'reference.md', sha256: expect.any(String), path: expect.any(String) }] });
+    expect(inputs[0]?.line).toBe(preparedLine);
+    expect(inputs[1]?.line).toBe(preparedLine);
+    if (agent === 'codex') {
+      expect(inputs[0]?.content).toEqual({ version: 1, parts: [{ type: 'text', text: preparedLine }] });
+      // The existing confirmation flow carries plain text in line, without
+      // duplicating it as contentParts when no native attachments remain.
+      expect(inputs[1]?.content).toBeUndefined();
+    } else {
+      expect(inputs[1]).toEqual(inputs[0]);
+      expect(inputs[1]?.content).toMatchObject({ parts: [{ type: 'text', text: line }, { type: 'file', name: 'reference.md', sha256: expect.any(String), path: expect.any(String) }] });
+    }
   } finally { await h.close(); }
 });
 

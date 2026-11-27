@@ -93,7 +93,7 @@ it.each(['picker', 'paste', 'provider'] as const)('Claude %s images reach SDK en
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
 
-it('Codex mixed drops keep files for explicit workspace references while sending native images', async () => {
+it('Codex mixed drops automatically prepare file paths while preserving native images', async () => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
   try {
     const adapter = declaredAdapter('codex');
@@ -108,10 +108,6 @@ it('Codex mixed drops keep files for explicit workspace references while sending
       { name: 'unsupported.pdf', mime: 'application/pdf', bytes: [1, 2, 3] },
       { name: 'codex.png', mime: 'image/png', bytes: [...pixel] },
     ])).toBe(true);
-    const reference = page.getByRole('button', { name: '放入工作区并引用', exact: true });
-    await expect.poll(() => reference.isEnabled()).toBe(true);
-    expect(await page.getByTestId('send-button').isDisabled()).toBe(true);
-    await reference.click();
     await expect.poll(() => page.getByTestId('send-button').isEnabled()).toBe(true);
     expect(uploadedNames).toEqual(['unsupported.pdf', 'codex.png']);
     await page.getByTestId('send-button').click();
@@ -467,8 +463,10 @@ it('Codex Composer explains its native file boundary and Enter cannot submit a r
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByTestId('attach-button').click();
     expect(await page.getByTestId('add-file').isEnabled()).toBe(true);
+    await page.route('**/api/workspaces/*/attach', route => route.fulfill({ status: 500, json: { error: 'workspace unavailable' } }));
     await page.getByTestId('add-file-input').setInputFiles({ name: 'unsupported.txt', mimeType: 'text/plain', buffer: Buffer.from('original bytes') });
-    await expect.poll(() => page.getByTestId('input-blocked-reason').textContent()).toContain('放入工作区并引用');
+    await expect.poll(() => page.getByTestId('input-blocked-reason').textContent()).toContain('文件尚未准备完成');
+    await page.getByRole('button', { name: '重试文件准备' }).waitFor();
     await page.getByTestId('composer-input').press('Enter');
     expect(ctx.store.allEvents(session.sessionId).filter(event => event.kind === 'user.message')).toHaveLength(0);
     expect(await page.getByTestId('send-button').isDisabled()).toBe(true);

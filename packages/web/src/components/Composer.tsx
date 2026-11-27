@@ -86,6 +86,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [selecting, setSelecting] = useState(false);
   const [referencing, setReferencing] = useState(false);
+  const autoReferenceAttempts = useRef(new Set<string>());
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [mention, setMention] = useState<MentionState>({ open: false, query: '', start: 0 });
   const replyRequest = useRef(0);
@@ -526,6 +527,20 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const viewingHistory = sessionId !== null && store.isViewingConversationHistory(sessionId);
   const sendDisabled = busy || blockedReason !== undefined || viewingHistory;
 
+  useEffect(() => {
+    if (agent !== 'codex' || workspaceId === '' || viewingHistory || selecting || referencing || controls.input.busy() || controls.drafts.loading()) return;
+    const token = controls.drafts.token();
+    if (token?.sessionId !== draftSessionId) return;
+    const key = (part: PreparedPart) => `${workspaceId}:${token.sessionId}:${token.generation}:${part.uploadTaskId ?? part.fileId}`;
+    const part = attachmentParts.find(part => part.type === 'file' && !autoReferenceAttempts.current.has(key(part))
+      && (part.uploadTaskId === undefined ? part.fileId !== undefined : controls.uploads.get(part.uploadTaskId)?.state === 'completed'));
+    if (part === undefined) return;
+    // Run once per file/draft generation. A failed copy stays available for
+    // an explicit retry; successful batches advance one file at a time.
+    autoReferenceAttempts.current.add(key(part));
+    void referenceAttachment(part);
+  }, [agent, workspaceId, draftSessionId, preparationVersion, selecting, referencing, viewingHistory, controls]);
+
   return (
     <div className="composer-wrap" data-testid="composer">
       <div className={`composer${draggingFiles ? ' is-file-dragover' : ''}`}
@@ -550,7 +565,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
               <AttachmentPreview part={uploaded} blob={task?.blob} />
               {part.type === 'file' ? <button type="button" disabled={!workspaceId || referencing || controls.drafts.loading() || viewingHistory || !uploaded.fileId || task !== undefined && task.state !== 'completed'}
                 title="把原文件保存到当前工作区，并将路径加入可编辑正文，供 Agent 的文件工具读取"
-                onClick={() => void referenceAttachment(part)}>放入工作区并引用</button> : null}
+                onClick={() => void referenceAttachment(part)}>{agent === 'codex' ? '重试文件准备' : '放入工作区并引用'}</button> : null}
               {task !== undefined && task.state !== 'completed' ? <span role="status">{task.state === 'failed' ? task.error ?? '上传失败' : task.state === 'paused' ? '已暂停' : task.state === 'cancelled' ? '已取消' : `正在上传 ${task.received.length} 个分片`}</span> : null}
               {task?.state === 'uploading' ? <button type="button" onClick={() => void controls.uploads.pause(task.id)}>暂停</button> : null}
               {task !== undefined && ['paused', 'failed', 'queued'].includes(task.state) ? <button type="button" onClick={() => void controls.uploads.resume(task.id).catch(cause => setError(String(cause)))}>继续上传</button> : null}
@@ -629,7 +644,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
                   <Icon name="paperclip" />
                   <span className="menu-item-body">
                     添加文件
-                    <span className="menu-item-sub">{agent === 'codex' ? '上传后确认放入工作区，将文件路径加入正文' : '支持原生附件，也可放入工作区并引用路径'}</span>
+                    <span className="menu-item-sub">{agent === 'codex' ? '上传后自动放入工作区，文件路径显示在正文中' : '支持原生附件，也可放入工作区并引用路径'}</span>
                   </span>
                 </button>
                 {agent === 'codex' && selectedModel?.inputModalities?.includes('audio') ? <button type="button" role="menuitem" className="menu-item" onClick={() => { setMenu(null); audioInputRef.current?.click(); }}>添加音频</button> : null}

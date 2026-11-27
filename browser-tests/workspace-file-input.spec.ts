@@ -26,7 +26,7 @@ async function drop(page: Page, selector = '[data-testid="composer-input"]') {
   }, [...bytes]);
 }
 
-it.each(['new', 'session', 'claude'] as const)('%s can explicitly put an uploaded Markdown file in its workspace and send its visible reference', async mode => {
+it.each(['new', 'session', 'claude'] as const)('%s prepares an uploaded Markdown file for native workspace reading', async mode => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
   try {
     const agent = mode === 'claude' ? 'claude-code' : 'codex';
@@ -40,17 +40,14 @@ it.each(['new', 'session', 'claude'] as const)('%s can explicitly put an uploade
     await page.getByTestId(inputId).fill('  请读取这个文件\n原始正文  ');
     if (mode === 'session') await drop(page);
     else await page.getByTestId('add-file-input').setInputFiles({ name: filename, mimeType: 'text/markdown', buffer: bytes });
-    const reference = page.getByRole('button', { name: '放入工作区并引用', exact: true });
-    await expect.poll(() => reference.isEnabled()).toBe(true);
-    if (agent === 'codex') {
-      expect(await page.getByTestId(sendId).isDisabled()).toBe(true);
-      await page.getByTestId(inputId).press('Enter');
-      expect(ctx.store.allEvents(seeded.sessionId).filter(e => e.kind === 'user.message')).toHaveLength(0);
+    const body = '  请读取这个文件\n原始正文  ';
+    if (agent === 'claude-code') {
+      const reference = page.getByRole('button', { name: '放入工作区并引用', exact: true });
+      await expect.poll(() => reference.isEnabled()).toBe(true);
+      await page.reload(); await expect.poll(() => reference.isEnabled()).toBe(true);
+      expect(await page.getByTestId(inputId).inputValue()).toBe(body);
+      await reference.click();
     }
-    await page.reload(); await expect.poll(() => reference.isEnabled()).toBe(true);
-    const body = await page.getByTestId(inputId).inputValue();
-    expect(body).toBe('  请读取这个文件\n原始正文  ');
-    await reference.click();
     await expect.poll(() => page.getByTestId(inputId).inputValue()).toContain('.webdcc/uploads/');
     const text = await page.getByTestId(inputId).inputValue();
     expect(text.startsWith(body + '\n')).toBe(true);
@@ -76,13 +73,18 @@ it('failed copy keeps the file and latest text, and a late successful copy canno
     const a = await seedWorkspaceAndSession(ctx, 'codex');
     const b = await ctx.manager.createSession({ workspaceId: a.workspaceId, agent: 'codex' });
     browser = await chromium.launch({ headless: true }); const { page, base } = await open(ctx, browser);
+    let attempts = 0;
+    await page.route('**/api/workspaces/*/attach', route => { attempts++; return route.fulfill({ status: 500, json: { error: 'copy failed' } }); });
     await page.goto(`${base}/s/${a.sessionId}`); await page.getByTestId('composer-input').fill('A body'); await drop(page);
-    const button = page.getByRole('button', { name: '放入工作区并引用', exact: true });
+    const button = page.getByRole('button', { name: '重试文件准备', exact: true });
+    await page.getByRole('alert').filter({ hasText: 'copy failed' }).waitFor();
     await expect.poll(() => button.isEnabled()).toBe(true);
-    await page.route('**/api/workspaces/*/attach', route => route.fulfill({ status: 500, json: { error: 'copy failed' } }));
-    await button.click(); await page.getByRole('alert').filter({ hasText: 'copy failed' }).waitFor();
     expect(await page.getByTestId('composer-input').inputValue()).toBe('A body');
     expect(await page.getByTestId('composer-attachments').locator('.attachment-chip').count()).toBe(1);
+    await page.getByTestId('composer-input').fill('A edited body');
+    await page.getByTestId('composer-input').press('Enter');
+    expect(attempts).toBe(1);
+    expect(ctx.store.allEvents(a.sessionId).filter(event => event.kind === 'user.message')).toHaveLength(0);
     await page.unroute('**/api/workspaces/*/attach');
     let finish!: () => void; let began!: () => void;
     const gate = new Promise<void>(resolve => { finish = resolve; }); const started = new Promise<void>(resolve => { began = resolve; });
@@ -93,7 +95,60 @@ it('failed copy keeps the file and latest text, and a late successful copy canno
     await expect.poll(() => page.getByTestId('attach-button').isEnabled()).toBe(true);
     expect(await page.getByTestId('composer-input').inputValue()).toBe('B body');
     await page.locator(`[data-testid="session-row"][href="/s/${a.sessionId}"]`).click();
-    await expect.poll(() => page.getByTestId('composer-input').inputValue()).toBe('A body');
-    await expect.poll(() => button.isEnabled()).toBe(true);
+    await expect.poll(() => page.getByTestId('composer-input').inputValue()).toContain('.webdcc/uploads/');
+    expect((await page.getByTestId('composer-input').inputValue()).startsWith('A edited body\n')).toBe(true);
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it('automatically prepares a batch serially, blocks Enter while copying and retains concurrent edits', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const { sessionId, workspaceId } = await seedWorkspaceAndSession(ctx, 'codex');
+    browser = await chromium.launch({ headless: true }); const { page, base } = await open(ctx, browser);
+    let finish!: () => void; let started!: () => void; let active = 0; let maximum = 0;
+    const gate = new Promise<void>(resolve => { finish = resolve; }); const began = new Promise<void>(resolve => { started = resolve; });
+    let first = true;
+    await page.route('**/api/workspaces/*/attach', async route => {
+      active++; maximum = Math.max(maximum, active);
+      if (first) { first = false; started(); await gate; }
+      await route.continue(); active--;
+    });
+    await page.goto(`${base}/s/${sessionId}`); await page.getByTestId('composer-input').fill('original');
+    await page.getByTestId('add-file-input').setInputFiles([
+      { name: filename, mimeType: 'text/markdown', buffer: bytes },
+      { name: 'second.md', mimeType: 'text/markdown', buffer: Buffer.from('second exact bytes') },
+    ]);
+    await began;
+    expect(await page.getByTestId('send-button').isDisabled()).toBe(true);
+    await page.getByTestId('composer-input').press('Enter');
+    expect(ctx.store.allEvents(sessionId).filter(event => event.kind === 'user.message')).toHaveLength(0);
+    await page.getByTestId('composer-input').fill('edited during preparation'); finish();
+    await expect.poll(() => page.getByTestId('composer-attachments').count()).toBe(0);
+    const text = await page.getByTestId('composer-input').inputValue();
+    const paths = text.split('\n').slice(1).map(line => JSON.parse(line) as string);
+    expect(paths).toHaveLength(2); expect(maximum).toBe(1);
+    expect(text.startsWith('edited during preparation\n')).toBe(true);
+    expect((await readFile(join(ctx.store.getWorkspace(workspaceId)!.path, paths[0]!))).equals(bytes)).toBe(true);
+    expect(await readFile(join(ctx.store.getWorkspace(workspaceId)!.path, paths[1]!), 'utf8')).toBe('second exact bytes');
+  } finally { await browser?.close(); await ctx.close(); }
+}, 30_000);
+
+it('refresh resumes automatic preparation from a completed upload without uploading it again', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const { sessionId } = await seedWorkspaceAndSession(ctx, 'codex');
+    browser = await chromium.launch({ headless: true }); const { page, base } = await open(ctx, browser);
+    let uploads = 0;
+    page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/uploads')) uploads++; });
+    await page.route('**/api/workspaces/*/attach', route => route.fulfill({ status: 503, json: { error: 'temporarily unavailable' } }));
+    await page.goto(`${base}/s/${sessionId}`); await page.getByTestId('composer-input').fill('read restored file'); await drop(page);
+    await page.getByRole('alert').filter({ hasText: 'temporarily unavailable' }).waitFor();
+    await expect.poll(() => ctx.store.getDraft(sessionId).fileIds.length).toBe(1);
+    expect(uploads).toBe(1);
+    await page.unroute('**/api/workspaces/*/attach'); await page.reload();
+    await expect.poll(() => page.getByTestId('composer-input').inputValue()).toContain('.webdcc/uploads/');
+    expect(uploads).toBe(1);
+    expect((await page.getByTestId('composer-input').inputValue()).startsWith('read restored file\n')).toBe(true);
+    expect(await page.getByTestId('composer-attachments').count()).toBe(0);
   } finally { await browser?.close(); await ctx.close(); }
 }, 30_000);
