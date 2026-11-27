@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { SlashControlResult } from '@webdcc/protocol';
@@ -101,7 +102,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     if (options.webDist !== undefined && existsSync(join(options.webDist, 'index.html'))) {
       if (!isAuthenticated(config.token, request.headers.cookie, authority)) return reply.status(401).type('text/html').send(UNAUTHORIZED_HTML);
       reissueIfLegacy(config.token, request, reply, authority);
-      return reply.type('text/html').sendFile('index.html');
+      return reply.header('cache-control', 'no-store').type('text/html').sendFile('index.html');
     }
     if (!isAuthenticated(config.token, request.headers.cookie, authority)) return reply.status(401).type('text/html').send(UNAUTHORIZED_HTML);
     reissueIfLegacy(config.token, request, reply, authority);
@@ -110,12 +111,30 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
       .send('<!doctype html><meta charset="utf-8"><title>WebDCC</title><body style="font-family:system-ui;padding:48px"><h1>WebDCC</h1><p>服务端已就绪。前端（M2）尚未构建。</p>');
   });
 
+  // Existing service workers exclude /api/ navigations. This authenticated
+  // entry can load the current shell even when an old worker serves index.
+  app.get('/api/app', async (request, reply) => {
+    if (options.webDist === undefined || !existsSync(join(options.webDist, 'index.html'))) return reply.status(404).send({ error: '前端尚未构建' });
+    const to = (request.query as { to?: unknown }).to;
+    if (to !== undefined && (typeof to !== 'string' || !to.startsWith('/') || to.startsWith('//') || to.includes('\\')
+      || [...to].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+      || new URL(to, 'http://webdcc.invalid').origin !== 'http://webdcc.invalid'
+      || /^\/api(?:\/|$)/.test(new URL(to, 'http://webdcc.invalid').pathname))) return reply.status(400).send({ error: '页面地址无效' });
+    const target = JSON.stringify(to ?? '/').replaceAll('<', '\\u003c');
+    const bootstrap = `<script>window.__wdccAppRecovery=(async()=>{try{if('serviceWorker' in navigator){const rows=await navigator.serviceWorker.getRegistrations();await Promise.all(rows.filter(r=>{const worker=r.active||r.waiting||r.installing;return r.scope===location.origin+'/'&&worker&&new URL(worker.scriptURL).pathname==='/sw.js'}).map(r=>r.unregister()));}}catch{/* Storage restrictions must not prevent the current page from opening. */}history.replaceState(null,'',${target});})();</script>`;
+    const html = await readFile(join(options.webDist, 'index.html'), 'utf8');
+    return reply.header('cache-control', 'no-store').header('referrer-policy', 'no-referrer').type('text/html').send(html.replace('<head>', '<head>' + bootstrap));
+  });
+
   if (options.webDist !== undefined && existsSync(options.webDist)) {
     await app.register(fastifyStatic, {
       root: options.webDist,
       prefix: '/',
       wildcard: false,
       index: false,
+      setHeaders: (response, path) => {
+        if (/[/\\](?:index\.html|sw\.js|registerSW\.js)$/.test(path)) response.header('cache-control', 'no-store');
+      },
     });
   }
 
@@ -181,7 +200,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
       if (!isAuthenticated(config.token, request.headers.cookie, authorityOf(request.headers, config.host, config.port))) {
         return reply.status(401).send({ error: 'unauthorized' });
       }
-      return reply.type('text/html').sendFile('index.html');
+      return reply.header('cache-control', 'no-store').type('text/html').sendFile('index.html');
     }
     return reply.status(404).send({ error: 'not found' });
   });

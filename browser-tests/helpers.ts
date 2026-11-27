@@ -24,10 +24,10 @@ export function observeSessionSnapshots(page: Page, sessionId: string): () => nu
 
 /** Serve the current source from a real temporary origin, so Chromium's local
  * network policy observes the actual listener. Deployment files are unused. */
-export async function createSourceTestApp(options: { dbPath?: string; adapterOptions?: FakeAdapterOptions } = {}) {
+export async function createSourceTestApp(options: { dbPath?: string; adapterOptions?: FakeAdapterOptions; clientCommit?: string } = {}) {
   const webDist = await mkdtemp(join(tmpdir(), 'wdcc-repair-browser-'));
   try {
-    await build({ entryPoints: ['packages/web/src/main.tsx'], bundle: true, outfile: join(webDist, 'ui.js'), format: 'esm', platform: 'browser', jsx: 'automatic', external: ['/fonts/*'], define: { 'import.meta.env': JSON.stringify({ DEV: true, MODE: 'test' }) } });
+    await build({ entryPoints: ['packages/web/src/main.tsx'], bundle: true, outfile: join(webDist, 'ui.js'), format: 'esm', platform: 'browser', jsx: 'automatic', external: ['/fonts/*'], define: { 'import.meta.env': JSON.stringify({ DEV: true, MODE: 'test' }), __WDCC_WEB_COMMIT__: JSON.stringify(options.clientCommit ?? 'dev') } });
     await writeFile(join(webDist, 'index.html'), '<html><head><link rel="stylesheet" href="/ui.css"></head><body><div id="root"></div><script type="module" src="/ui.js"></script></body></html>');
     const ctx = await createTestApp(options.adapterOptions ?? {}, TEST_TOKEN, {}, { webDist, dbPath: options.dbPath });
     const close = ctx.close;

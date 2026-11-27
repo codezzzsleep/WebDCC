@@ -18,6 +18,7 @@ import { ComposerInputController, type ComposerInputCapabilities, type ComposerI
 import { SyncedInputDraftStore } from '../lib/synced-input-draft-store.js';
 import { AttachmentPreview } from './InputAttachments.js';
 import { SlashControl } from './SlashControl.js';
+import { beforeAppUpdate } from '../lib/app-update.js';
 
 type ComposerMode =
   | {
@@ -296,6 +297,22 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const attachmentParts = (controls.drafts.snapshot()?.sessionId === draftSessionId ? controls.drafts.snapshot()?.contentParts.parts ?? [] : []).filter(part => part.type !== 'text');
   const uploadTasks = controls.uploads.list(draftSessionId);
   const uploading = selecting || referencing || attachmentParts.some(part => part.uploadTaskId !== undefined && ['queued', 'uploading', 'completing'].includes(controls.uploads.get(part.uploadTaskId)?.state ?? 'queued'));
+  const updateBlocked = useRef(false);
+  updateBlocked.current = uploading || busy;
+  useEffect(() => beforeAppUpdate(async () => {
+    for (;;) {
+      if (updateBlocked.current || controls.input.busy() || controls.drafts.loading()) throw new Error('附件或消息正在处理，请稍后更新');
+      const token = controls.drafts.token();
+      await controls.drafts.flush();
+      if (!token || !controls.drafts.accepts(token)) throw new Error('草稿已切换，请重新更新');
+      // Typing can continue while an IndexedDB write is pending. Drain the
+      // newest revision before navigating, and recheck active preparation.
+      if (controls.drafts.token()?.revision === token.revision) {
+        if (updateBlocked.current || controls.input.busy() || controls.drafts.loading()) throw new Error('附件或消息正在处理，请稍后更新');
+        return;
+      }
+    }
+  }), [controls]);
   const currentReasoning = agent === 'dsh' && mode.kind === 'session'
     ? dshReasoningObservation.confirmed ? dshReasoningObservation.effort! : session?.reasoningEffort === undefined ? '待确认' : `${session.reasoningEffort} · 待确认`
     : (agent === 'dsh' || agent === 'codex') && mode.kind === 'new' ? mode.choice.reasoningEffort ?? `沿用原生${selectedModel?.defaultReasoningEffort === undefined ? '' : `（默认 ${selectedModel.defaultReasoningEffort}）`}`

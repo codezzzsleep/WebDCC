@@ -9,8 +9,13 @@ performance.mark('wdcc:module');
 applyTheme(readTheme());
 const container = document.getElementById('root');
 if (container === null) throw new Error('缺少 #root 容器');
-createRoot(container).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
-);
+const recovery = (window as Window & { __wdccAppRecovery?: Promise<void> }).__wdccAppRecovery;
+void (async () => {
+  await recovery;
+  if ('serviceWorker' in navigator && import.meta.env.PROD) void navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => undefined);
+  createRoot(container).render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  );
+})();
