@@ -6,6 +6,8 @@ import { useAppData } from '../lib/appData.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
 import { NativeControls } from './NativeControls.js';
+import { api } from '../lib/api.js';
+import { codexDeepLink, sessionLink, sessionReferenceText } from '../lib/session-reference.js';
 
 interface SessionHeaderProps {
   sessionId: string;
@@ -26,11 +28,62 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
   const requestedNativeCommand = store.getNativeCommandRequest(sessionId);
   useEffect(() => { if (requestedNativeCommand !== undefined) setNativeOpen(true); }, [sessionId, requestedNativeCommand?.id]);
   const [menu, setMenu] = useState<'more' | 'dock' | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [copyNotice, setCopyNotice] = useState<{ text: string; error?: boolean }>();
+  const [manualCopy, setManualCopy] = useState<string>();
+  const copySource = useRef({ sessionId, generation: 0 });
+  copySource.current.sessionId = sessionId;
+  useEffect(() => {
+    copySource.current.generation++;
+    setCopying(false); setCopyNotice(undefined); setManualCopy(undefined);
+    return () => { copySource.current.generation++; };
+  }, [sessionId]);
   const actionsRef = useRef<HTMLDivElement>(null);
   const nativeDialogRef = useRef<HTMLDivElement>(null);
   const agent = session?.agent ?? 'dsh';
   const provider = providers.find((item) => item.id === session?.providerId);
   const modelText = [provider?.name, session?.model].filter((part) => part !== undefined && part !== '').join(' · ');
+  const copy = async (kind: 'web' | 'native' | 'deep' | 'reference'): Promise<void> => {
+    if (copying) return;
+    const sourceId = sessionId, generation = ++copySource.current.generation;
+    const current = (): boolean => copySource.current.sessionId === sourceId && copySource.current.generation === generation;
+    setCopying(true); setCopyNotice(undefined); setManualCopy(undefined);
+    const value = (async () => {
+      if (kind === 'web') return sessionLink(location.origin, sourceId);
+      if (kind === 'reference') return sessionReferenceText(location.origin, await api.prepareSessionReference(sourceId));
+      const source = await api.sessionReferenceIdentity(sourceId);
+      if (!source.nativeId) throw new Error('原生会话尚未建立，暂时没有 Session ID');
+      if (kind === 'deep' && source.agent !== 'codex') throw new Error('此会话没有 Codex Deep Link');
+      return kind === 'deep' ? codexDeepLink(source.nativeId) : source.nativeId;
+    })().then(text => {
+      if (!current()) throw new Error('会话已切换，请在来源会话重新复制');
+      return text;
+    });
+    // Safari requires clipboard.write during the user gesture; the promised
+    // Blob can wait for the authenticated reference preparation afterwards.
+    void value.catch(() => undefined);
+    try {
+      if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': value.then(text => new Blob([text], { type: 'text/plain' })) })]);
+      } else {
+        const text = await value;
+        if (!navigator.clipboard?.writeText) throw new Error('浏览器未开放剪贴板');
+        await navigator.clipboard.writeText(text);
+      }
+      if (current()) {
+        setMenu(null);
+        setCopyNotice({ text: kind === 'reference' ? '会话引用已复制，记录已保存在工作区' : kind === 'native' ? '原生 Session ID 已复制' : kind === 'deep' ? 'Deep Link 已复制' : '会话链接已复制' });
+      }
+    } catch (cause) {
+      let preparationError: unknown;
+      const text = await value.catch(error => { preparationError = error; return undefined; });
+      if (current()) {
+        const error = preparationError ?? cause;
+        setCopyNotice({ text: text === undefined ? (error instanceof Error ? error.message : String(error)) : '复制未完成，请在下方选中并复制', error: true });
+        setManualCopy(text); if (text !== undefined) setMenu(null);
+      }
+    } finally { if (current()) setCopying(false); }
+  };
   useEffect(() => {
     if (!nativeOpen) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -223,19 +276,40 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
                   type="button"
                   role="menuitem"
                   className="menu-item"
-                  onClick={() => {
-                    void navigator.clipboard?.writeText(window.location.href);
-                    setMenu(null);
-                  }}
+                  disabled={copying}
+                  onClick={() => void copy('web')}
                 >
                   <Icon name="link" />
                   复制链接
+                </button>
+                <button type="button" role="menuitem" className="menu-item" disabled={copying || !session?.nativeId}
+                  title={session?.nativeId ? '复制此 Agent 的原生会话身份' : '原生会话尚未建立'} onClick={() => void copy('native')}>
+                  <Icon name="copy" />复制原生 Session ID
+                </button>
+                {agent === 'codex' ? <button type="button" role="menuitem" className="menu-item" disabled={copying || !session?.nativeId}
+                  title="在 Codex 桌面应用中打开此原生会话" onClick={() => void copy('deep')}>
+                  <Icon name="link" />复制 Deep Link
+                </button> : null}
+                <button type="button" role="menuitem" className="menu-item" disabled={copying} data-testid="copy-session-reference"
+                  title="在当前会话的工作区保存可读记录快照，复制身份、链接和文件路径，供其他 Agent 查阅"
+                  onClick={() => void copy('reference')}>
+                  <Icon name="copy" /><span className="menu-item-body">{copying ? '正在准备复制…' : '复制会话引用'}<span className="menu-item-sub">保存记录到工作区，附上可读取路径</span></span>
                 </button>
               </div>
             ) : null}
           </span>
         </div>
       </div>
+      {copyNotice ? <div className="session-copy-notice" role={copyNotice.error ? 'alert' : 'status'}>{copyNotice.text}</div> : null}
+      {manualCopy !== undefined ? <div className="modal-backdrop" onClick={() => setManualCopy(undefined)}>
+        <div className="modal" role="dialog" aria-modal="true" aria-label="手动复制会话信息" onClick={event => event.stopPropagation()}>
+          <h2>复制会话信息</h2>
+          <label htmlFor="session-reference-copy">选中以下内容后复制</label>
+          <textarea id="session-reference-copy" className="text-input" rows={8} style={{ width: '100%', resize: 'vertical' }}
+            readOnly autoFocus value={manualCopy} onFocus={event => event.currentTarget.select()} />
+          <div className="modal-actions"><button type="button" className="btn" onClick={() => setManualCopy(undefined)}>关闭</button></div>
+        </div>
+      </div> : null}
       <nav className="tabs" aria-label="视图">
         <button type="button" className={tab === 'chat' ? 'tab active' : 'tab'} onClick={() => onTab('chat')} data-testid="tab-chat" aria-current={tab === 'chat'}>
           对话
