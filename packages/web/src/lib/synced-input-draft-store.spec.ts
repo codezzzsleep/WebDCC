@@ -113,3 +113,55 @@ it('an older explicit cloud choice cannot lower a newer baseline or partially ch
   await expect(synced.useRemote('A', 3)).rejects.toMatchObject({ status: 409 });
   expect(values.get('A')).toEqual(local); expect(baselines.get('A')).toEqual(baseline);
 });
+
+it('a persisted unacknowledged write is reconciled before sending newer local input', async () => {
+  const { synced, values, baselines } = fixture();
+  const accepted = remote('accepted before reload', 5);
+  baselines.set('A', { sessionId: 'A', revision: 4, text: '', contentParts: remote('', 4).contentParts,
+    pendingWrite: { text: accepted.text, contentParts: accepted.contentParts! } });
+  values.set('A', { sessionId: 'A', revision: 8, text: 'newer local input', contentParts: { version: 1, parts: [] }, updatedAt: 1 });
+  mocks.draft.mockResolvedValue(accepted); mocks.saveInputDraft.mockResolvedValue(remote('newer local input', 6));
+  await synced.sync('A');
+  expect(mocks.saveInputDraft).toHaveBeenLastCalledWith('A', 'newer local input', remote('newer local input', 6).contentParts, 5);
+  expect(baselines.get('A')).toEqual({ sessionId: 'A', revision: 6, text: 'newer local input', contentParts: remote('newer local input', 6).contentParts });
+  expect(synced.state('A')).toMatchObject({ pending: false });
+});
+
+it('an obsolete revision with unchanged remote content retries one fresh CAS and preserves the local edit', async () => {
+  const { synced, values, baselines } = fixture();
+  baselines.set('A', { sessionId: 'A', revision: 1, text: '', contentParts: remote('', 1).contentParts });
+  values.set('A', { sessionId: 'A', revision: 3, text: '本地输入', contentParts: { version: 1, parts: [] }, updatedAt: 1 });
+  mocks.saveInputDraft.mockClear(); mocks.saveInputDraft.mockRejectedValueOnce(Object.assign(new Error('409 draft conflict'), { status: 409 })).mockResolvedValue(remote('本地输入', 10));
+  mocks.draft.mockResolvedValue(remote('', 9));
+  await synced.sync('A');
+  expect(mocks.saveInputDraft.mock.calls.map(call => call[3])).toEqual([1, 9]);
+  expect(baselines.get('A')?.revision).toBe(10);
+  expect(values.get('A')?.text).toBe('本地输入'); expect(synced.state('A')).toMatchObject({ pending: false });
+});
+
+it('a recovered pending write never overwrites a different remote attachment or collaboration mode', async () => {
+  const { synced, values, baselines } = fixture();
+  const attempted = remote('same words', 5);
+  baselines.set('A', { sessionId: 'A', revision: 4, text: '', contentParts: remote('', 4).contentParts,
+    pendingWrite: { text: attempted.text, contentParts: attempted.contentParts! } });
+  const local: InputDraft<PreparedPart> = { sessionId: 'A', revision: 2, text: 'local edit', contentParts: { version: 1, parts: [] }, updatedAt: 1 };
+  values.set('A', local);
+  mocks.draft.mockResolvedValue({ ...attempted, contentParts: { version: 1, collaborationMode: 'plan', parts: [{ type: 'text', text: attempted.text }, { type: 'image', fileId: 'other-device-file' }] } });
+  mocks.saveInputDraft.mockClear();
+  await synced.sync('A');
+  expect(mocks.saveInputDraft).not.toHaveBeenCalled();
+  expect(values.get('A')).toEqual(local); expect(baselines.get('A')?.revision).toBe(4);
+  expect(synced.state('A')).toMatchObject({ conflict: true, pending: true });
+});
+
+it('a genuine remote edit remains a visible conflict after one rejected save', async () => {
+  const { synced, values, baselines } = fixture();
+  baselines.set('A', { sessionId: 'A', revision: 4, text: '', contentParts: remote('', 4).contentParts });
+  values.set('A', { sessionId: 'A', revision: 1, text: 'local draft', contentParts: { version: 1, parts: [] }, updatedAt: 1 });
+  mocks.saveInputDraft.mockClear(); mocks.saveInputDraft.mockRejectedValue(Object.assign(new Error('409 actual other-device edit'), { status: 409 }));
+  mocks.draft.mockResolvedValue(remote('different remote draft', 5));
+  await synced.sync('A');
+  expect(mocks.saveInputDraft).toHaveBeenCalledTimes(1);
+  expect(values.get('A')?.text).toBe('local draft'); expect(baselines.get('A')?.revision).toBe(4);
+  expect(synced.state('A')).toMatchObject({ conflict: true, pending: true });
+});
