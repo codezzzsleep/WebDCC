@@ -5,6 +5,7 @@ import { agentText } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
+import { useModalFocus } from '../lib/modal-focus.js';
 import { NativeControls } from './NativeControls.js';
 import { api } from '../lib/api.js';
 import { codexDeepLink, sessionLink, sessionReferenceText } from '../lib/session-reference.js';
@@ -31,6 +32,8 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
   const [copying, setCopying] = useState(false);
   const [copyNotice, setCopyNotice] = useState<{ text: string; error?: boolean }>();
   const [manualCopy, setManualCopy] = useState<string>();
+  const copyDialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(copyDialogRef, () => setManualCopy(undefined), manualCopy !== undefined);
   const copySource = useRef({ sessionId, generation: 0 });
   copySource.current.sessionId = sessionId;
   useEffect(() => {
@@ -302,7 +305,7 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
       </div>
       {copyNotice ? <div className="session-copy-notice" role={copyNotice.error ? 'alert' : 'status'}>{copyNotice.text}</div> : null}
       {manualCopy !== undefined ? <div className="modal-backdrop" onClick={() => setManualCopy(undefined)}>
-        <div className="modal" role="dialog" aria-modal="true" aria-label="手动复制会话信息" onClick={event => event.stopPropagation()}>
+        <div ref={copyDialogRef} tabIndex={-1} className="modal" role="dialog" aria-modal="true" aria-label="手动复制会话信息" onClick={event => event.stopPropagation()}>
           <h2>复制会话信息</h2>
           <label htmlFor="session-reference-copy">选中以下内容后复制</label>
           <textarea id="session-reference-copy" className="text-input" rows={8} style={{ width: '100%', resize: 'vertical' }}

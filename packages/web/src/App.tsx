@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRootRoute, createRoute, createRouter, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { claudeOutputOrigin, type EventData } from '@webdcc/protocol';
 import { api } from './lib/api.js';
@@ -24,6 +24,7 @@ import { NativeEventsPage } from './pages/NativeEvents.js';
 import { DiagnosticsPage } from './pages/Diagnostics.js';
 import { WatchdogBar } from './components/WatchdogBar.js';
 import { AppUpdate } from './components/AppUpdate.js';
+import { useModalFocus } from './lib/modal-focus.js';
 
 function initialCollapsed(): boolean {
   // SPEC 9.12：768–1023px 默认收起成窄栏；手机上是抽屉
@@ -74,6 +75,8 @@ function RootLayout(): React.ReactElement {
 }
 
 function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactElement {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef, onClose);
   const [path, setPath] = useState('');
   const [current, setCurrent] = useState('');
   const [entries, setEntries] = useState<{ name: string; path: string }[]>([]);
@@ -96,7 +99,7 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="add-ws-title" onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} tabIndex={-1} className="modal" role="dialog" aria-modal="true" aria-labelledby="add-ws-title" onClick={(event) => event.stopPropagation()}>
         <h2 id="add-ws-title">添加工作区</h2>
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
           选择服务器上的一个项目目录。三个 Agent 都在这个目录里工作。
@@ -225,8 +228,19 @@ function SessionPage(): React.ReactElement {
   const [mainId = '', dockSessionId] = sid.split('+');
   const session = store.getSession(mainId);
   const [tab, setTab] = useState<'chat' | 'trajectory'>('chat');
+  const [jump, setJump] = useState<{ sessionId: string; seq: number; revision: number }>();
   const [handoffText, setHandoffText] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    const locate = (): void => {
+      const seq = /^#e-(\d+)$/.exec(window.location.hash)?.[1];
+      if (seq !== undefined && Number.isSafeInteger(Number(seq)) && Number(seq) > 0) {
+        setTab('chat'); setJump(previous => ({ sessionId: mainId, seq: Number(seq), revision: (previous?.revision ?? 0) + 1 }));
+      } else setJump(undefined);
+    };
+    locate(); window.addEventListener('hashchange', locate);
+    return () => window.removeEventListener('hashchange', locate);
+  }, [mainId]);
 
   useEffect(() => {
     store.setCurrentSession(mainId, dockSessionId);
@@ -304,7 +318,7 @@ function SessionPage(): React.ReactElement {
           {session?.agent === 'codex' ? <WatchdogBar sessionId={mainId} /> : null}
           {tab === 'chat' ? (
             <>
-              <Timeline sessionId={mainId} onOpenDiff={openDiff} onHandoff={setHandoffText} />
+              <Timeline sessionId={mainId} highlightSeq={jump?.sessionId === mainId ? jump.seq : undefined} jumpRevision={jump?.revision} onOpenDiff={openDiff} onHandoff={setHandoffText} />
               <div className="composer-area">
                 <div className="composer-wrap" style={{ gap: 8 }}>
                   <TaskPanel sessionId={mainId} />
@@ -317,6 +331,7 @@ function SessionPage(): React.ReactElement {
               sessionId={mainId}
               onJump={(seq) => {
                 setTab('chat');
+                setJump(previous => ({ sessionId: mainId, seq, revision: (previous?.revision ?? 0) + 1 }));
                 window.location.hash = `e-${seq}`;
               }}
             />

@@ -891,6 +891,8 @@ button.step-line:hover {
   background: var(--warning-soft);
   border-radius: 8px;
 }
+.event-target.highlight, .turn.highlight, .trajectory-event-detail.highlight { outline: 2px solid var(--border-l4); outline-offset: 3px; border-radius: 8px; }
+.trajectory-event-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .step-detail {
   margin-left: 23px;
   font-size: 13px;
