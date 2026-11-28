@@ -37,13 +37,14 @@ function useTurns(sessionId: string): ProtocolTurnView[] {
 interface TimelineProps {
   sessionId: string;
   highlightSeq?: number;
+  jumpRevision?: number;
   onOpenDiff: (fileId: string, path: string) => void;
   onHandoff: (text: string) => void;
   /** 停靠区里只读对照：不显示"带到…"等操作 */
   compact?: boolean;
 }
 
-export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compact = false }: TimelineProps): React.ReactElement {
+export function Timeline({ sessionId, highlightSeq, jumpRevision, onOpenDiff, onHandoff, compact = false }: TimelineProps): React.ReactElement {
   const turns = useTurns(sessionId);
   const conversation = store.getSession(sessionId)?.conversation;
   const history = store.isViewingConversationHistory(sessionId);
@@ -58,6 +59,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [stickToBottom, setStickToBottom] = useState(true);
+  const [unlocatedSeq, setUnlocatedSeq] = useState<number>();
 
   useEffect(() => { setExpanded({}); setStickToBottom(true); }, [sessionId, conversation?.uuid, history]);
 
@@ -78,6 +80,38 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     estimateSize: () => 260,
     overscan: 6,
   });
+  const targetEvent = highlightSeq === undefined ? undefined : store.getEvents(sessionId).find(event => event.seq === highlightSeq);
+  const targetTurn = targetEvent === undefined ? -1 : turns.findIndex(turn => turn.turnId === targetEvent.turnId || turn.userSeq === targetEvent.seq);
+  const targetHasRow = targetEvent !== undefined && targetTurn >= 0 && (turns[targetTurn]?.userSeq === targetEvent.seq || turns[targetTurn]?.steps.some(event => event.seq === targetEvent.seq));
+  const lastJump = useRef('');
+  useEffect(() => {
+    if (highlightSeq === undefined || targetEvent === undefined) return;
+    const key = JSON.stringify([sessionId, highlightSeq, jumpRevision, targetTurn, targetHasRow, history]);
+    if (lastJump.current === key) return;
+    lastJump.current = key;
+    setUnlocatedSeq(undefined);
+    setStickToBottom(false);
+    if (targetTurn >= 0 && targetHasRow) {
+      setExpanded(previous => ({ ...previous, [turns[targetTurn]!.turnId]: true }));
+      virtualizer.scrollToIndex(targetTurn, { align: 'start' });
+    }
+    let cancelled = false, attempts = 0;
+    const focus = (): void => {
+      if (cancelled) return;
+      const selector = targetHasRow ? `[data-event-seq="${highlightSeq}"]` : '[data-testid="trajectory-event-detail"]';
+      const element = scrollRef.current?.querySelector<HTMLElement>(selector);
+      if (element) { element.scrollIntoView({ block: 'center' }); element.focus({ preventScroll: true }); }
+      else if (attempts++ < 30) requestAnimationFrame(focus);
+      else setUnlocatedSeq(highlightSeq);
+    };
+    const frame = requestAnimationFrame(focus);
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
+  }, [sessionId, highlightSeq, jumpRevision, targetTurn, targetHasRow, history]);
+  useEffect(() => {
+    if (unlocatedSeq === undefined || unlocatedSeq !== highlightSeq) return;
+    const element = scrollRef.current?.querySelector<HTMLElement>('[data-testid="trajectory-event-detail"]');
+    element?.scrollIntoView({ block: 'center' }); element?.focus({ preventScroll: true });
+  }, [unlocatedSeq, highlightSeq]);
   useSyncExternalStore(subscribeQuestionDrafts, questionDraftVersion);
   const pendingQuestions = latestQuestions(store.getConversationEvents(sessionId, history)).filter(needsQuestionAnswer);
   const goToQuestion = (question: StoredEvent): void => {
@@ -111,6 +145,11 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
       <button type="button" className="btn" onClick={() => goToQuestion(pendingQuestions[0]!)}>去回答</button>
     </div> : null}
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
+      {targetEvent !== undefined && (!targetHasRow || unlocatedSeq === highlightSeq) ? <div className="timeline-inner trajectory-event-detail highlight" tabIndex={-1} data-testid="trajectory-event-detail">
+        <p>事件 {targetEvent.seq} · {targetEvent.kind}：{targetHasRow ? '尚未在对话中定位到此记录' : '此记录没有独立的对话卡片'}，原始内容如下。</p>
+        <pre>{JSON.stringify(targetEvent.data, null, 2)}</pre>
+        <Link to="/settings/native-events" search={{ sessionId }}>查看原生记录</Link>
+      </div> : null}
       <OlderHistoryRecovery sessionId={sessionId} />
       {!history ? <NativeTerminalResults sessionId={sessionId} /> : null}
       {!history ? <HotRecoveryNotice sessionId={sessionId} /> : null}
@@ -216,7 +255,7 @@ function TurnView({
       : `${turn.state === 'interrupted' ? '已中断' : turn.state === 'failed' ? '出错' : '已完成'}${turn.durationMs === undefined ? '' : `，用时 ${duration(turn.durationMs)}`}`;
 
   return (
-    <section className={`turn ${running && !observationLost ? 'turn-running' : ''}`} id={turn.userSeq === undefined ? undefined : `e-${turn.userSeq}`}>
+    <section className={`turn ${running && !observationLost ? 'turn-running' : ''}${highlightSeq === turn.userSeq ? ' highlight' : ''}`} tabIndex={-1} data-event-seq={turn.userSeq} id={turn.userSeq === undefined ? undefined : `e-${turn.userSeq}`}>
       {turn.pending !== undefined || user.text !== '' || (user.images?.length ?? 0) > 0 || user.contentParts?.parts.some(part => part.type !== 'text') ? (
         <div className="user-message" data-testid="user-message">
           <div className="user-bubble">
@@ -492,7 +531,13 @@ function StepLine({
   );
 }
 
-function StepRow({
+function StepRow(props: { event: StoredEvent; highlight?: boolean; onOpenDiff: (fileId: string, path: string) => void }): React.ReactElement {
+  return <div id={`e-${props.event.seq}`} data-event-seq={props.event.seq} tabIndex={-1} className={props.highlight ? 'event-target highlight' : 'event-target'}>
+    <StepContent {...props} />
+  </div>;
+}
+
+function StepContent({
   event,
   highlight,
   onOpenDiff,
@@ -501,7 +546,8 @@ function StepRow({
   highlight?: boolean;
   onOpenDiff: (fileId: string, path: string) => void;
 }): React.ReactElement | null {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(highlight === true);
+  useEffect(() => { if (highlight) setOpen(true); }, [highlight]);
   const [subagentText, setSubagentText] = useState('');
   const [subagentBusy, setSubagentBusy] = useState(false);
   const [subagentNotice, setSubagentNotice] = useState<string>();
@@ -518,7 +564,7 @@ function StepRow({
     case 'assistant.message': {
       const data = event.data as EventData['assistant.message'];
       return (
-        <div className={`${className} assistant`} id={`e-${event.seq}`} data-testid="assistant-message" data-raw-text={data.text}>
+        <div className={`${className} assistant`} data-testid="assistant-message" data-raw-text={data.text}>
           <Markdown text={data.text} />
           {claudeIncomplete ? <small className="muted" role="status" data-testid="claude-incomplete-output">原生输出未完成</small> : null}
         </div>
@@ -540,7 +586,7 @@ function StepRow({
       const declined = nativeOperationDeclined(event);
       const failed = data.status === 'failed' || declined;
       return (
-        <div className={className} id={`e-${event.seq}`}>
+        <div className={className}>
           <StepLine icon="terminal" label={declined ? '命令已拒绝' : '运行命令'} detail={data.label ?? data.command} onClick={toggle} open={open} failed={failed} />
           {open ? <pre className="output">{data.outputTail === undefined || data.outputTail === '' ? '（无输出）' : data.outputTail}</pre> : null}
         </div>
@@ -796,7 +842,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
 
   if (resolvedText !== null) {
     return (
-      <div className="approval-card resolved" data-testid="approval-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName} data-resolved="true" id={`e-${event.seq}`}>
+      <div className="approval-card resolved" data-testid="approval-card" data-state="resolved" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName} data-resolved="true">
         <Icon name="check" size={15} strokeWidth={2.2} />
         <span className="approval-result">{resolvedText}</span>
         {what === '' ? null : <span className="what">· {what}</span>}
@@ -805,7 +851,7 @@ function ApprovalCard({ event, data }: { event: StoredEvent; data: EventData['ap
     );
   }
   return (
-    <div className="approval-card" data-testid="approval-card" data-state="pending" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName} id={`e-${event.seq}`}>
+    <div className="approval-card" data-testid="approval-card" data-state="pending" data-sync={synchronized ? 'ready' : 'loading'} data-tool={toolName}>
       <div className="approval-title">
         <Icon name="shield" size={16} />
         {data.title}

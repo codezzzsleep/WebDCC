@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRootRoute, createRoute, createRouter, Outlet, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { claudeOutputOrigin, type EventData } from '@webdcc/protocol';
 import { api } from './lib/api.js';
@@ -24,6 +24,7 @@ import { NativeEventsPage } from './pages/NativeEvents.js';
 import { DiagnosticsPage } from './pages/Diagnostics.js';
 import { WatchdogBar } from './components/WatchdogBar.js';
 import { AppUpdate } from './components/AppUpdate.js';
+import { useModalFocus } from './lib/modal-focus.js';
 
 function initialCollapsed(): boolean {
   // SPEC 9.12：768–1023px 默认收起成窄栏；手机上是抽屉
@@ -74,29 +75,41 @@ function RootLayout(): React.ReactElement {
 }
 
 function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactElement {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef, onClose);
   const [path, setPath] = useState('');
   const [current, setCurrent] = useState('');
   const [entries, setEntries] = useState<{ name: string; path: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [newDirectory, setNewDirectory] = useState(false);
   const [directoryName, setDirectoryName] = useState('');
+  const [browsing, setBrowsing] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const request = useRef(0);
+  const pathEdits = useRef(0);
+  const directoryReady = !browsing && current !== '' && path === current;
 
   const browse = (target?: string): void => {
+    const generation = ++request.current, edits = pathEdits.current;
+    setBrowsing(true); setEntries([]); setCurrent(''); setNewDirectory(false); setError(null);
     void api
       .browse(target)
       .then((result) => {
+        if (request.current !== generation) return;
         setEntries(result.entries);
         setCurrent(result.path);
-        setPath(result.path);
+        if (pathEdits.current === edits) setPath(result.path);
         setError(null);
       })
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+      .catch((cause: unknown) => { if (request.current === generation) setError(cause instanceof Error ? cause.message : String(cause)); })
+      .finally(() => { if (request.current === generation) setBrowsing(false); });
   };
-  useEffect(() => browse(undefined), []);
+  useEffect(() => { browse(undefined); return () => { request.current++; }; }, []);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="add-ws-title" onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} tabIndex={-1} className="modal" role="dialog" aria-modal="true" aria-labelledby="add-ws-title" onClick={(event) => event.stopPropagation()}>
         <h2 id="add-ws-title">添加工作区</h2>
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
           选择服务器上的一个项目目录。三个 Agent 都在这个目录里工作。
@@ -111,15 +124,16 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
           <label className="visually-hidden" htmlFor="ws-path">
             目录路径
           </label>
-          <input id="ws-path" className="text-input" style={{ flex: '1 1 260px', width: 'auto' }} value={path} placeholder="绝对路径" onChange={(event) => setPath(event.target.value)} />
-          <button type="submit" className="btn">
+          <input id="ws-path" className="text-input" style={{ flex: '1 1 260px', width: 'auto' }} value={path} placeholder="绝对路径" disabled={creating || adding} onChange={(event) => { pathEdits.current++; setPath(event.target.value); }} />
+          <button type="submit" className="btn" disabled={creating || adding}>
             打开
           </button>
         </form>
+        <p className="muted" role="status" data-testid="workspace-directory-state">{browsing ? '正在读取目录…' : current === '' ? '请选择并打开目录' : `当前目录：${current}`}{!browsing && current !== '' && path !== current ? '；新路径尚未打开，暂不能添加或创建文件夹。' : ''}</p>
         <ul className="browse-list">
           {current !== '/' && current !== '' ? (
             <li>
-              <button type="button" onClick={() => browse(current.replace(/\/[^/]+\/?$/, '') || '/')}>
+              <button type="button" disabled={creating || adding} onClick={() => browse(current.replace(/\/[^/]+\/?$/, '') || '/')}>
                 <Icon name="arrowLeft" size={14} />
                 上一级
               </button>
@@ -127,7 +141,7 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
           ) : null}
           {entries.map((entry) => (
             <li key={entry.path}>
-              <button type="button" onClick={() => browse(entry.path)}>
+              <button type="button" disabled={creating || adding} onClick={() => browse(entry.path)}>
                 <Icon name="folder" size={14} />
                 {entry.name}
               </button>
@@ -146,20 +160,23 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
           <button
             type="button"
             className="btn primary"
-            disabled={current === ''}
+            disabled={!directoryReady || creating || adding}
             onClick={() => {
+              if (!directoryReady || creating || adding) return;
+              setAdding(true);
               void api
                 .createWorkspace({ name: current.split('/').filter(Boolean).at(-1) ?? 'workspace', path: current })
                 .then(async () => {
                   await refreshWorkspaces();
                   onClose();
                 })
-                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+                .finally(() => setAdding(false));
             }}
           >
             添加这个目录
           </button>
-          <button type="button" className="btn" onClick={() => { setNewDirectory(true); setDirectoryName(''); setError(null); }} disabled={current === ''}>
+          <button type="button" className="btn" onClick={() => { setNewDirectory(true); setDirectoryName(''); setError(null); }} disabled={!directoryReady || creating || adding}>
             新建文件夹
           </button>
         </div>
@@ -169,14 +186,16 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
             onSubmit={(event) => {
               event.preventDefault();
               const name = directoryName.trim();
-              if (name === '') return;
+              if (name === '' || !directoryReady || creating || adding) return;
+              setCreating(true);
               void api.createDirectory(current, name)
                 .then((created) => { setNewDirectory(false); setDirectoryName(''); return browse(created.path); })
-                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+                .finally(() => setCreating(false));
             }}
           >
             <input className="text-input" autoFocus value={directoryName} placeholder="新文件夹名称" onChange={(event) => setDirectoryName(event.target.value)} />
-            <button type="submit" className="btn primary">创建</button>
+            <button type="submit" className="btn primary" disabled={!directoryReady || creating || adding}>创建</button>
             <button type="button" className="btn" onClick={() => setNewDirectory(false)}>取消</button>
           </form>
         ) : null}
@@ -225,8 +244,19 @@ function SessionPage(): React.ReactElement {
   const [mainId = '', dockSessionId] = sid.split('+');
   const session = store.getSession(mainId);
   const [tab, setTab] = useState<'chat' | 'trajectory'>('chat');
+  const [jump, setJump] = useState<{ sessionId: string; seq: number; revision: number }>();
   const [handoffText, setHandoffText] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    const locate = (): void => {
+      const seq = /^#e-(\d+)$/.exec(window.location.hash)?.[1];
+      if (seq !== undefined && Number.isSafeInteger(Number(seq)) && Number(seq) > 0) {
+        setTab('chat'); setJump(previous => ({ sessionId: mainId, seq: Number(seq), revision: (previous?.revision ?? 0) + 1 }));
+      } else setJump(undefined);
+    };
+    locate(); window.addEventListener('hashchange', locate);
+    return () => window.removeEventListener('hashchange', locate);
+  }, [mainId]);
 
   useEffect(() => {
     store.setCurrentSession(mainId, dockSessionId);
@@ -304,7 +334,7 @@ function SessionPage(): React.ReactElement {
           {session?.agent === 'codex' ? <WatchdogBar sessionId={mainId} /> : null}
           {tab === 'chat' ? (
             <>
-              <Timeline sessionId={mainId} onOpenDiff={openDiff} onHandoff={setHandoffText} />
+              <Timeline sessionId={mainId} highlightSeq={jump?.sessionId === mainId ? jump.seq : undefined} jumpRevision={jump?.revision} onOpenDiff={openDiff} onHandoff={setHandoffText} />
               <div className="composer-area">
                 <div className="composer-wrap" style={{ gap: 8 }}>
                   <TaskPanel sessionId={mainId} />
@@ -317,6 +347,7 @@ function SessionPage(): React.ReactElement {
               sessionId={mainId}
               onJump={(seq) => {
                 setTab('chat');
+                setJump(previous => ({ sessionId: mainId, seq, revision: (previous?.revision ?? 0) + 1 }));
                 window.location.hash = `e-${seq}`;
               }}
             />

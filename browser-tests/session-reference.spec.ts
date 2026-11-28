@@ -67,6 +67,7 @@ it('clipboard rejection exposes selectable reference and preparation failure nev
     expect(await dialog.getByRole('textbox').inputValue()).toContain('记录文件：');
     expect(await page.locator('.session-copy-notice').innerText()).toContain('复制未完成');
     await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect.poll(() => page.getByTestId('session-more').evaluate(el => document.activeElement === el)).toBe(true);
     await page.route(`**/api/sessions/${sessionId}/reference`, route => route.request().method() === 'POST'
       ? route.fulfill({ status: 503, json: { error: 'fixture reference preparation unavailable' } }) : route.continue());
     await page.getByTestId('session-more').click(); await page.getByRole('menuitem', { name: /复制会话引用/ }).click();
@@ -77,6 +78,8 @@ it('clipboard rejection exposes selectable reference and preparation failure nev
     await page.getByTestId('copy-session-reference').click(); await dialog.waitFor();
     expect(await dialog.getByRole('textbox').inputValue()).toContain('记录文件：');
     expect(await dialog.getByRole('textbox').evaluate(el => { const t = el as HTMLTextAreaElement; return t.selectionStart === 0 && t.selectionEnd === t.value.length; })).toBe(true);
+    await page.keyboard.press('Escape'); await dialog.waitFor({state:'hidden'});
+    expect(await page.getByTestId('session-more').evaluate(el => document.activeElement === el)).toBe(true);
   } finally { await browser?.close(); await ctx.close(); }
 });
 

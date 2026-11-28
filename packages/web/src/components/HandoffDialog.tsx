@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AGENT_IDS, agentAvailable, agentText } from '../lib/agents.js';
 import { useAppData } from '../lib/appData.js';
 import { useStoreVersion } from '../lib/hooks.js';
 import { store } from '../lib/store.js';
 import { AgentMark } from './AgentMark.js';
 import { Icon } from './Icon.js';
+import { useModalFocus } from '../lib/modal-focus.js';
 
 interface HandoffDialogProps {
   text: string;
@@ -19,6 +20,8 @@ interface HandoffDialogProps {
 
 /** "带到…"：把回答原文放进别的会话的输入框，绝不自动发送（SPEC 9.10） */
 export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHanded, onContinueIn }: HandoffDialogProps): React.ReactElement {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(dialogRef, onClose);
   useStoreVersion();
   const { meta } = useAppData();
   const [busy, setBusy] = useState(false);
@@ -47,7 +50,7 @@ export function HandoffDialog({ text, fromSessionId, workspaceId, onClose, onHan
 
   return (
     <div className="modal-backdrop" onClick={onClose} data-testid="handoff-dialog">
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="handoff-title" onClick={(event) => event.stopPropagation()}>
+      <div ref={dialogRef} tabIndex={-1} className="modal" role="dialog" aria-modal="true" aria-labelledby="handoff-title" onClick={(event) => event.stopPropagation()}>
         <h2 id="handoff-title">带到…</h2>
         {error ? <p role="alert">{error}</p> : null}
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
