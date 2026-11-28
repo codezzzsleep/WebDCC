@@ -13,6 +13,7 @@ function browser() {
 }
 
 it('one native call shares one countdown across its question items and late openings from old sockets are ignored', () => {
+  vi.useFakeTimers(); vi.setSystemTime(0);
   const { waits, sent } = browser();
   const first = waits.ensure('session', 'event:one', identity, true);
   const second = waits.ensure('session', 'event:two', { ...identity, itemId: 'two' }, true);

@@ -456,8 +456,9 @@ it('Codex Composer explains its native file boundary and Enter cannot submit a r
       await page.getByTestId('attach-button').click();
       await expect.poll(() => page.getByTestId('attach-button').getAttribute('aria-expanded')).toBe('true');
       expect(await page.getByTestId('add-file').isEnabled()).toBe(true);
-      // Mobile menus are bottom sheets; dismiss by tapping outside the sheet.
-      await page.getByTestId('composer-input').click();
+      // Menus sit above the toolbar and can cover the editor; tap a visible
+      // control outside the menu to dismiss it without changing the draft.
+      await page.getByTestId('tab-chat').click();
       await expect.poll(() => page.getByTestId('attach-button').getAttribute('aria-expanded')).toBe('false');
     }
     await page.setViewportSize({ width: 1280, height: 720 });
