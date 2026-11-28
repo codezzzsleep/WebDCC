@@ -83,19 +83,29 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
   const [error, setError] = useState<string | null>(null);
   const [newDirectory, setNewDirectory] = useState(false);
   const [directoryName, setDirectoryName] = useState('');
+  const [browsing, setBrowsing] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const request = useRef(0);
+  const pathEdits = useRef(0);
+  const directoryReady = !browsing && current !== '' && path === current;
 
   const browse = (target?: string): void => {
+    const generation = ++request.current, edits = pathEdits.current;
+    setBrowsing(true); setEntries([]); setCurrent(''); setNewDirectory(false); setError(null);
     void api
       .browse(target)
       .then((result) => {
+        if (request.current !== generation) return;
         setEntries(result.entries);
         setCurrent(result.path);
-        setPath(result.path);
+        if (pathEdits.current === edits) setPath(result.path);
         setError(null);
       })
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+      .catch((cause: unknown) => { if (request.current === generation) setError(cause instanceof Error ? cause.message : String(cause)); })
+      .finally(() => { if (request.current === generation) setBrowsing(false); });
   };
-  useEffect(() => browse(undefined), []);
+  useEffect(() => { browse(undefined); return () => { request.current++; }; }, []);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -114,15 +124,16 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
           <label className="visually-hidden" htmlFor="ws-path">
             目录路径
           </label>
-          <input id="ws-path" className="text-input" style={{ flex: '1 1 260px', width: 'auto' }} value={path} placeholder="绝对路径" onChange={(event) => setPath(event.target.value)} />
-          <button type="submit" className="btn">
+          <input id="ws-path" className="text-input" style={{ flex: '1 1 260px', width: 'auto' }} value={path} placeholder="绝对路径" disabled={creating || adding} onChange={(event) => { pathEdits.current++; setPath(event.target.value); }} />
+          <button type="submit" className="btn" disabled={creating || adding}>
             打开
           </button>
         </form>
+        <p className="muted" role="status" data-testid="workspace-directory-state">{browsing ? '正在读取目录…' : current === '' ? '请选择并打开目录' : `当前目录：${current}`}{!browsing && current !== '' && path !== current ? '；新路径尚未打开，暂不能添加或创建文件夹。' : ''}</p>
         <ul className="browse-list">
           {current !== '/' && current !== '' ? (
             <li>
-              <button type="button" onClick={() => browse(current.replace(/\/[^/]+\/?$/, '') || '/')}>
+              <button type="button" disabled={creating || adding} onClick={() => browse(current.replace(/\/[^/]+\/?$/, '') || '/')}>
                 <Icon name="arrowLeft" size={14} />
                 上一级
               </button>
@@ -130,7 +141,7 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
           ) : null}
           {entries.map((entry) => (
             <li key={entry.path}>
-              <button type="button" onClick={() => browse(entry.path)}>
+              <button type="button" disabled={creating || adding} onClick={() => browse(entry.path)}>
                 <Icon name="folder" size={14} />
                 {entry.name}
               </button>
@@ -149,20 +160,23 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
           <button
             type="button"
             className="btn primary"
-            disabled={current === ''}
+            disabled={!directoryReady || creating || adding}
             onClick={() => {
+              if (!directoryReady || creating || adding) return;
+              setAdding(true);
               void api
                 .createWorkspace({ name: current.split('/').filter(Boolean).at(-1) ?? 'workspace', path: current })
                 .then(async () => {
                   await refreshWorkspaces();
                   onClose();
                 })
-                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+                .finally(() => setAdding(false));
             }}
           >
             添加这个目录
           </button>
-          <button type="button" className="btn" onClick={() => { setNewDirectory(true); setDirectoryName(''); setError(null); }} disabled={current === ''}>
+          <button type="button" className="btn" onClick={() => { setNewDirectory(true); setDirectoryName(''); setError(null); }} disabled={!directoryReady || creating || adding}>
             新建文件夹
           </button>
         </div>
@@ -172,14 +186,16 @@ function AddWorkspaceDialog({ onClose }: { onClose: () => void }): React.ReactEl
             onSubmit={(event) => {
               event.preventDefault();
               const name = directoryName.trim();
-              if (name === '') return;
+              if (name === '' || !directoryReady || creating || adding) return;
+              setCreating(true);
               void api.createDirectory(current, name)
                 .then((created) => { setNewDirectory(false); setDirectoryName(''); return browse(created.path); })
-                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+                .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+                .finally(() => setCreating(false));
             }}
           >
             <input className="text-input" autoFocus value={directoryName} placeholder="新文件夹名称" onChange={(event) => setDirectoryName(event.target.value)} />
-            <button type="submit" className="btn primary">创建</button>
+            <button type="submit" className="btn primary" disabled={!directoryReady || creating || adding}>创建</button>
             <button type="button" className="btn" onClick={() => setNewDirectory(false)}>取消</button>
           </form>
         ) : null}

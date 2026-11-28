@@ -1,6 +1,8 @@
 import { chromium, type Browser } from '@playwright/test';
 import { expect, it } from 'vitest';
 import { createSourceTestApp } from './helpers.js';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 it.each([390, 1280])('locates a collapsed older event and gives modal keyboard ownership at %spx', async width => {
   const ctx = await createSourceTestApp(); let browser: Browser | undefined;
@@ -42,3 +44,27 @@ it.each([390, 1280])('locates a collapsed older event and gives modal keyboard o
     expect(await page.getByRole('button',{name:'添加工作区',exact:true}).evaluate(el=>el===document.activeElement)).toBe(true);
   } finally { await browser?.close(); await ctx.close(); }
 }, 50_000);
+
+it('only adds the last loaded directory and ignores an older browse response', async () => {
+  const ctx = await createSourceTestApp(); let browser: Browser | undefined;
+  try {
+    const a = join(ctx.dataDir, 'directory-a'), b = join(ctx.dataDir, 'directory-b'); await mkdir(a); await mkdir(b);
+    const base = await ctx.app.listen({host:'127.0.0.1', port:0}); browser = await chromium.launch({headless:true}); const page = await browser.newPage();
+    await page.context().addCookies([{name:'wdcc-auth', value:ctx.cookie.slice('wdcc-auth='.length), url:base}]); await page.goto(base);
+    await page.getByRole('button',{name:'添加工作区',exact:true}).click();
+    await expect.poll(()=>page.getByTestId('workspace-directory-state').innerText()).toContain('当前目录');
+    let release = (): void => {}; const held = new Promise<void>(resolve=>{release=resolve;});
+    let seen = (): void => {}; const fetched = new Promise<void>(resolve=>{seen=resolve;});
+    await page.route('**/api/fs/browse?*',async route=>{const response=await route.fetch(); if(new URL(route.request().url()).searchParams.get('path')===a){seen(); await held;} await route.fulfill({response});});
+    const path = page.getByRole('textbox',{name:'目录路径',exact:true}), dialog=page.getByRole('dialog');
+    await path.fill(a); expect(await dialog.getByRole('button',{name:'添加这个目录',exact:true}).isDisabled()).toBe(true);
+    await dialog.getByRole('button',{name:'打开',exact:true}).click(); await fetched;
+    expect(await dialog.getByRole('button',{name:'新建文件夹',exact:true}).isDisabled()).toBe(true);
+    await path.fill(b); await dialog.getByRole('button',{name:'打开',exact:true}).click();
+    await expect.poll(()=>page.getByTestId('workspace-directory-state').innerText()).toContain(b); release();
+    await page.waitForTimeout(100); expect(await path.inputValue()).toBe(b);
+    await dialog.getByRole('button',{name:'添加这个目录',exact:true}).click(); await dialog.waitFor({state:'hidden'});
+    expect(ctx.store.listWorkspaces().some(workspace=>workspace.path===b)).toBe(true);
+    expect(ctx.store.listWorkspaces().some(workspace=>workspace.path===a)).toBe(false);
+  } finally {await browser?.close(); await ctx.close();}
+}, 30_000);
