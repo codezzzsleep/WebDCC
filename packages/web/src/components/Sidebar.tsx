@@ -45,6 +45,8 @@ export function Sidebar({
   const activeWorkspaces = workspaces.filter(workspace => !workspace.archived);
   const archivedWorkspaces = workspaces.filter(workspace => workspace.archived);
   const sessions = store.getSessions();
+  const manageWorkspace = (workspace: WorkspaceDto): void => setWorkspaceAction({ ...workspace,
+    sessionCount: Math.max(workspace.sessionCount ?? 0, sessions.filter(session => session.workspaceId === workspace.id).length) });
 
   const grouped = useMemo(() => {
     const map = new Map<string, SessionMeta[]>();
@@ -179,7 +181,7 @@ export function Sidebar({
                 >
                   <Icon name="plus" size={15} />
                 </Link>
-                <button type="button" className="icon-btn workspace-more" aria-label={`管理工作区 ${workspace.name}`} title="管理工作区" onClick={() => setWorkspaceAction(workspace)}><Icon name="more" size={15} /></button>
+                <button type="button" className="icon-btn workspace-more" aria-label={`管理工作区 ${workspace.name}`} title="管理工作区" onClick={() => manageWorkspace(workspace)}><Icon name="more" size={15} /></button>
               </div>
               {rows.map(({ session, depth }) => (
                 <SessionRow
@@ -204,7 +206,7 @@ export function Sidebar({
           </button>
           {showArchivedWorkspaces ? archivedWorkspaces.map(workspace => <div className="workspace-row" key={workspace.id} data-testid={`workspace-${workspace.id}`} title={workspace.path}>
             <Icon name="folder" size={15} /><span className="name">{workspace.name}</span>
-            <button type="button" className="icon-btn workspace-more" aria-label={`管理工作区 ${workspace.name}`} onClick={() => setWorkspaceAction(workspace)}><Icon name="more" size={15} /></button>
+            <button type="button" className="icon-btn workspace-more" aria-label={`管理工作区 ${workspace.name}`} onClick={() => manageWorkspace(workspace)}><Icon name="more" size={15} /></button>
           </div>) : null}
         </div> : null}
 
