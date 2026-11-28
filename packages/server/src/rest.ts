@@ -22,7 +22,7 @@ import type {
 } from '@webdcc/protocol';
 import type { CommandDispatcher } from './dispatcher.js';
 import type { ProviderRegistry } from './providers.js';
-import { parseDshLink, type DshConnectionStore } from './dsh-connection.js';
+import { parseDshLink, type DshConnection, type DshConnectionStore } from './dsh-connection.js';
 import { attachToDshCredentials, verifiedDshHostClient, type DshHostClient, isAllowedEndpoint } from '@webdcc/adapter-dsh';
 import { DshSettingsService } from './native-settings.js';
 import type { FileStore } from './files.js';
@@ -64,8 +64,8 @@ function badRequest(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
 
-async function dshClient(deps: RouteDeps): Promise<DshHostClient> {
-  const connection = deps.dsh.connection;
+async function dshClient(connections: Pick<DshConnectionStore, 'connection'>): Promise<DshHostClient> {
+  const connection = connections.connection;
   if (connection === null) throw Object.assign(new Error('DSH 尚未连接'), { statusCode: 503 });
   const { client } = await verifiedDshHostClient(connection.url, connection);
   return client;
@@ -86,6 +86,18 @@ export async function resolveInsideWorkspace(workspacePath: string, requested: s
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const { store, files, manager, dispatcher } = deps;
+  const ownedDshConnection = (): { url: string; browserCookie: string; connectedAt: string } | null | undefined => {
+    const adapter = manager.adapter('dsh') as { nativeBrowserConnection?: () => { url: string; browserCookie: string; connectedAt: string } | null | undefined } | undefined;
+    return adapter?.nativeBrowserConnection?.();
+  };
+  // Read the currently owned Host without starting one or persisting its
+  // transient credential as an attach connection. Re-read for settings CAS.
+  const dshConnections = {
+    get connection(): DshConnection | null {
+      const runtime = ownedDshConnection();
+      return runtime === undefined ? deps.dsh.connection : runtime === null ? null : { ...runtime, cookie: runtime.browserCookie };
+    },
+  };
   registerNativeControlRoutes(app, manager, store);
   const metrics = new SystemMetricsReader(deps.dataDir);
   const workspaceFiles = new WorkspaceFiles(deps.recordFileOperation);
@@ -615,9 +627,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     });
   }
 
-  // ---------- DSH 连接（attach 模式） ----------
+  // ---------- DSH 连接 ----------
   app.get('/api/dsh', async () => {
-    const connection = deps.dsh.connection;
+    const connection = dshConnections.connection;
     let version: string | undefined;
     let connected = connection !== null;
     for (const adapter of manager.adaptersList()) {
@@ -631,7 +643,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     // settings page says "已连接" while the first real RPC fails with 401.
     if (connection !== null) {
       try {
-        const client = await dshClient(deps);
+        const client = await dshClient(dshConnections);
         dshEndpoint('session/modelCatalog');
         await client.rpc('session/modelCatalog', {});
       } catch {
@@ -639,7 +651,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       }
     }
     return {
-      mode: connection !== null || process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn',
+      mode: ownedDshConnection() !== undefined ? 'spawn' : deps.dsh.connection !== null || process.env['WDCC_DSH_MODE'] === 'attach' ? 'attach' : 'spawn',
       url: connection?.url ?? process.env['WDCC_DSH_URL'] ?? null,
       connected,
       ...(connection?.connectedAt === undefined ? {} : { connectedAt: connection.connectedAt }),
@@ -671,7 +683,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   });
 
   // Native settings writes are scoped to one namespace and the editor's revision.
-  const nativeSettings = new DshSettingsService(deps.dsh);
+  const nativeSettings = new DshSettingsService(dshConnections);
   app.get('/api/dsh/provider', request => nativeSettings.read((request.query as { providerKey?: string }).providerKey));
   app.post('/api/dsh/provider/create-preview', request => nativeSettings.previewCreateProvider(request.body));
   app.post('/api/dsh/provider', request => nativeSettings.createProvider(request.body));

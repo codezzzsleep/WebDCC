@@ -51,6 +51,10 @@ export function ProvidersPage(): React.ReactElement {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
+    if (harness === 'dsh') void refreshDsh();
+  }, [harness]);
+
+  useEffect(() => {
     void api.providerScan().then(result => { setScanInfo('扫描完成，新增 ' + result.imported + ' 个 Provider'); void refreshProviders(); })
       .catch((cause: unknown) => setScanInfo(cause instanceof Error ? cause.message : String(cause)));
   }, []);

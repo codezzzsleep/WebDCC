@@ -6,7 +6,7 @@ import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { api } from '../lib/api.js';
 import { store } from '../lib/store.js';
 import { AGENT_IDS, agentAvailable, agentStatusLine, agentText, defaultAccessMode, defaultChoice, rememberAccessMode, rememberModel, rememberReasoning, type ModelChoice } from '../lib/agents.js';
-import { useAppData } from '../lib/appData.js';
+import { refreshDsh, useAppData } from '../lib/appData.js';
 import { sha256Bytes } from '../lib/input-digest.js';
 import { AgentMark } from '../components/AgentMark.js';
 import { Composer } from '../components/Composer.js';
@@ -169,6 +169,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
       throw error;
     }
     if (sessionId === '') throw new Error('创建会话仍待确认，重试会查询同一创建命令');
+    if (agent === 'dsh') void refreshDsh();
     const openCreatedSession = async (): Promise<void> => {
       await navigate({ to: '/s/$sid', params: { sid: sessionId }, search: {} });
       finishAttempt(attempt);
