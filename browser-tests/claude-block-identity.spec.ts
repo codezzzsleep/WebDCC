@@ -72,7 +72,7 @@ it('source main/child block order and equal-tool-ID results recover through refr
     query.push(result('spawn', 'CHILD RESULT'));
     const childExpected = ['CHILD BEFORE', '读取 /child.txt\nCHILD RESULT', 'CHILD AFTER'];
     await expect.poll(() => task.getByTestId('claude-task-output').locator('pre').allTextContents()).toEqual(childExpected);
-    await expect.poll(() => page!.locator('.turn-body > .step-row').allTextContents()).toEqual(['MAIN BEFORE', expect.stringContaining('/main.txt'), 'MAIN AFTER']);
+    await expect.poll(() => page!.locator('.turn-body > .event-target > .step-row').allTextContents()).toEqual(['MAIN BEFORE', expect.stringContaining('/main.txt'), 'MAIN AFTER']);
     query.push({ type: 'result', subtype: 'success', session_id: nativeId, uuid: randomUUID(), is_error: false, result: 'MAIN FINAL' });
     await expect.poll(() => ctx.manager.getRuntime(session.id)?.turnId).toBeNull();
     const owned = sdk.owned().length;
@@ -88,7 +88,7 @@ it('source main/child block order and equal-tool-ID results recover through refr
       if (await title.getAttribute('aria-expanded') === 'true') await title.click();
       expect(await target.getByTestId('assistant-message').allTextContents()).toEqual(['MAIN FINAL']);
       await target.locator('.turn-summary').click();
-      await expect.poll(() => target.locator('.turn-body > .step-row').allTextContents()).toEqual(['MAIN BEFORE', expect.stringContaining('/main.txt'), 'MAIN AFTER', 'MAIN FINAL']);
+      await expect.poll(() => target.locator('.turn-body > .event-target > .step-row').allTextContents()).toEqual(['MAIN BEFORE', expect.stringContaining('/main.txt'), 'MAIN AFTER', 'MAIN FINAL']);
     };
     await page.reload(); await expect.poll(() => through()).toBe(ctx.store.lastSeq(session.id)); await verify(page);
     const previous = generation; for (const socket of ctx.app.websocketServer.clients) socket.terminate();
