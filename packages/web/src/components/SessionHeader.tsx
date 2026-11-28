@@ -32,8 +32,9 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
   const [copying, setCopying] = useState(false);
   const [copyNotice, setCopyNotice] = useState<{ text: string; error?: boolean }>();
   const [manualCopy, setManualCopy] = useState<string>();
+  const actionsRef = useRef<HTMLDivElement>(null);
   const copyDialogRef = useRef<HTMLDivElement>(null);
-  useModalFocus(copyDialogRef, () => setManualCopy(undefined), manualCopy !== undefined);
+  useModalFocus(copyDialogRef, () => setManualCopy(undefined), manualCopy !== undefined, () => actionsRef.current?.querySelector<HTMLElement>('[data-testid="session-more"]') ?? null);
   const copySource = useRef({ sessionId, generation: 0 });
   copySource.current.sessionId = sessionId;
   useEffect(() => {
@@ -41,7 +42,6 @@ export function SessionHeader({ sessionId, tab, onTab, dockSessionId, onOpenDock
     setCopying(false); setCopyNotice(undefined); setManualCopy(undefined);
     return () => { copySource.current.generation++; };
   }, [sessionId]);
-  const actionsRef = useRef<HTMLDivElement>(null);
   const nativeDialogRef = useRef<HTMLDivElement>(null);
   const agent = session?.agent ?? 'dsh';
   const provider = providers.find((item) => item.id === session?.providerId);

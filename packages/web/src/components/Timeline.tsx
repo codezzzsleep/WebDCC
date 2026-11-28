@@ -59,6 +59,7 @@ export function Timeline({ sessionId, highlightSeq, jumpRevision, onOpenDiff, on
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [stickToBottom, setStickToBottom] = useState(true);
+  const [unlocatedSeq, setUnlocatedSeq] = useState<number>();
 
   useEffect(() => { setExpanded({}); setStickToBottom(true); }, [sessionId, conversation?.uuid, history]);
 
@@ -88,6 +89,7 @@ export function Timeline({ sessionId, highlightSeq, jumpRevision, onOpenDiff, on
     const key = JSON.stringify([sessionId, highlightSeq, jumpRevision, targetTurn, targetHasRow, history]);
     if (lastJump.current === key) return;
     lastJump.current = key;
+    setUnlocatedSeq(undefined);
     setStickToBottom(false);
     if (targetTurn >= 0 && targetHasRow) {
       setExpanded(previous => ({ ...previous, [turns[targetTurn]!.turnId]: true }));
@@ -100,10 +102,16 @@ export function Timeline({ sessionId, highlightSeq, jumpRevision, onOpenDiff, on
       const element = scrollRef.current?.querySelector<HTMLElement>(selector);
       if (element) { element.scrollIntoView({ block: 'center' }); element.focus({ preventScroll: true }); }
       else if (attempts++ < 30) requestAnimationFrame(focus);
+      else setUnlocatedSeq(highlightSeq);
     };
     const frame = requestAnimationFrame(focus);
     return () => { cancelled = true; cancelAnimationFrame(frame); };
   }, [sessionId, highlightSeq, jumpRevision, targetTurn, targetHasRow, history]);
+  useEffect(() => {
+    if (unlocatedSeq === undefined || unlocatedSeq !== highlightSeq) return;
+    const element = scrollRef.current?.querySelector<HTMLElement>('[data-testid="trajectory-event-detail"]');
+    element?.scrollIntoView({ block: 'center' }); element?.focus({ preventScroll: true });
+  }, [unlocatedSeq, highlightSeq]);
   useSyncExternalStore(subscribeQuestionDrafts, questionDraftVersion);
   const pendingQuestions = latestQuestions(store.getConversationEvents(sessionId, history)).filter(needsQuestionAnswer);
   const goToQuestion = (question: StoredEvent): void => {
@@ -137,8 +145,8 @@ export function Timeline({ sessionId, highlightSeq, jumpRevision, onOpenDiff, on
       <button type="button" className="btn" onClick={() => goToQuestion(pendingQuestions[0]!)}>去回答</button>
     </div> : null}
     <div className="timeline" ref={scrollRef} onScroll={onScroll} data-testid="timeline">
-      {targetEvent !== undefined && !targetHasRow ? <div className="timeline-inner trajectory-event-detail highlight" tabIndex={-1} data-testid="trajectory-event-detail">
-        <p>事件 {targetEvent.seq} · {targetEvent.kind}：此记录没有独立的对话卡片，原始内容如下。</p>
+      {targetEvent !== undefined && (!targetHasRow || unlocatedSeq === highlightSeq) ? <div className="timeline-inner trajectory-event-detail highlight" tabIndex={-1} data-testid="trajectory-event-detail">
+        <p>事件 {targetEvent.seq} · {targetEvent.kind}：{targetHasRow ? '尚未在对话中定位到此记录' : '此记录没有独立的对话卡片'}，原始内容如下。</p>
         <pre>{JSON.stringify(targetEvent.data, null, 2)}</pre>
         <Link to="/settings/native-events" search={{ sessionId }}>查看原生记录</Link>
       </div> : null}

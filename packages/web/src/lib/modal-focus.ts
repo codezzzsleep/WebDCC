@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 
 /** Keep keyboard input on the active modal, then return to its opening control. */
-export function useModalFocus(ref: RefObject<HTMLElement | null>, close: () => void, enabled = true): void {
+export function useModalFocus(ref: RefObject<HTMLElement | null>, close: () => void, enabled = true, restore?: () => HTMLElement | null): void {
   const onClose = useRef(close); onClose.current = close;
+  const fallback = useRef(restore); fallback.current = restore;
   const trigger = useRef<Element | null>(null);
   const wasOpen = useRef(false);
   if (enabled && !wasOpen.current) trigger.current = document.activeElement;
@@ -29,7 +30,8 @@ export function useModalFocus(ref: RefObject<HTMLElement | null>, close: () => v
     document.addEventListener('keydown', keydown, true);
     return () => {
       cancelAnimationFrame(frame); document.removeEventListener('keydown', keydown, true);
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
+      const target = previous instanceof HTMLElement && previous.isConnected && previous !== document.body ? previous : fallback.current?.();
+      target?.focus({ preventScroll: true });
     };
   }, [enabled, ref]);
 }
