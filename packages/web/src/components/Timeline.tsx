@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { EventData, InteractionKind, LiveItem, StoredEvent, SubmittedQuestionAnswer, TurnView as ProtocolTurnView, UsageData } from '@webdcc/protocol';
@@ -26,8 +26,8 @@ import { HotRecoveryNotice, RecoveredHotItem } from './RecoveredHot.js';
 import { NativeTerminalResults } from './NativeTerminalResults.js';
 import { isIncompleteClaudeOutput, orderClaudeBlocks } from '@webdcc/protocol';
 import { CompletedRecoveryNotice, RecoveredCompletionCard } from './RecoveredCompletion.js';
-import { clearQuestionDraft, questionDraftKey, readQuestionDraft, saveQuestionDraft } from '../lib/question-drafts.js';
-import { focusQuestion, latestQuestions, needsQuestionAnswer } from '../lib/question-navigation.js';
+import { acceptQuestionAnswer, acceptSecretQuestionAnswer, clearQuestionDraft, markSecretQuestionEdited, questionDraftKey, questionDraftVersion, questionHasUnsavedChanges, readQuestionDraft, saveQuestionDraft, subscribeQuestionDrafts } from '../lib/question-drafts.js';
+import { awaitsQuestionAnswer, focusQuestion, latestQuestions, needsQuestionAnswer } from '../lib/question-navigation.js';
 
 function useTurns(sessionId: string): ProtocolTurnView[] {
   useStoreVersion();
@@ -78,6 +78,7 @@ export function Timeline({ sessionId, highlightSeq, onOpenDiff, onHandoff, compa
     estimateSize: () => 260,
     overscan: 6,
   });
+  useSyncExternalStore(subscribeQuestionDrafts, questionDraftVersion);
   const pendingQuestions = latestQuestions(store.getConversationEvents(sessionId, history)).filter(needsQuestionAnswer);
   const goToQuestion = (question: StoredEvent): void => {
     const questionId = (question.data as EventData['question']).questionId;
@@ -866,6 +867,7 @@ function InteractionSyncStatus({ sessionId, kind, id }: { sessionId: string; kin
 }
 
 function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['question'] }): React.ReactElement {
+  useSyncExternalStore(subscribeQuestionDrafts, questionDraftVersion);
   const identity = store.getSession(event.sessionId)?.agent === 'dsh' ? data.dshQuestion : undefined;
   const generalDraftKey = questionDraftKey(event, data);
   const draft = () => data.isSecret ? { selected: [], custom: '' } : identity === undefined ? readQuestionDraft(generalDraftKey) : store.dshQuestionWaits.drafts.read(event.sessionId, identity);
@@ -883,6 +885,8 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   }, [draftIdentity]);
   const [hidden, setHidden] = useState(false);
   const [submittedAnswer, setSubmittedAnswer] = useState<SubmittedQuestionAnswer>();
+  const [checkingGroup, setCheckingGroup] = useState(false);
+  const [groupError, setGroupError] = useState('');
   useStoreVersion();
   const submission = data.submission === 'sent' || data.submission === 'queued' || data.submission === 'uncertain'
     ? { commandId: '', status: data.submission, error: data.submissionError } : store.getInteractionSubmission(event.sessionId, 'answer', data.questionId)
@@ -892,13 +896,23 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   const submitting = submission !== undefined && ['pending', 'sent', 'queued', 'uncertain'].includes(submission.status);
   const wait = useDshQuestionWait(event.sessionId, data.questionId, identity, data.status !== 'answered' && data.status !== 'skipped', synchronized && !submitting && store.connectionState === 'online');
   const collapsed = wait?.hidden ?? hidden;
-  const busy = !synchronized || submitting || identity?.timed === true && identity.phase === 'open' && wait?.card.snapshot().channel !== 'waterfall';
+  const busy = !synchronized || submitting || checkingGroup || identity?.timed === true && identity.phase === 'open' && wait?.card.snapshot().channel !== 'waterfall';
   const edit = (nextSelected: string[], nextText: string): void => {
     edited.current = true;
     setSelected(nextSelected); setText(nextText); wait?.card.engage();
-    if (identity !== undefined && !data.isSecret) store.dshQuestionWaits.drafts.save(event.sessionId, identity, 'editing', { selected: nextSelected, custom: nextText });
-    else if (!data.isSecret) saveQuestionDraft(generalDraftKey, { selected: nextSelected, custom: nextText });
+    if (!data.isSecret) {
+      if (identity !== undefined) store.dshQuestionWaits.drafts.save(event.sessionId, identity, 'editing', { selected: nextSelected, custom: nextText });
+      saveQuestionDraft(generalDraftKey, { selected: nextSelected, custom: nextText }, identity === undefined);
+    } else if (submission?.status === 'collected') markSecretQuestionEdited(generalDraftKey);
   };
+  useEffect(() => {
+    if (data.isSecret && submission?.status === 'collected') acceptSecretQuestionAnswer(generalDraftKey, submission.commandId);
+  }, [generalDraftKey, data.isSecret, submission?.status, submission?.commandId]);
+  useEffect(() => {
+    if (identity === undefined || data.isSecret || data.status === 'answered' || data.status === 'skipped') return;
+    const current = draft();
+    if (current.selected.length || current.custom !== '') saveQuestionDraft(generalDraftKey, current, false);
+  }, [draftIdentity]);
   useEffect(() => {
     let current = true;
     setSubmittedAnswer(undefined);
@@ -906,6 +920,7 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
     void api.interaction(event.sessionId, 'answer', data.questionId).then(result => {
       if (!current || result.event?.kind !== 'question' || (result.event.data as EventData['question']).questionId !== data.questionId) return;
       setSubmittedAnswer(result.submittedAnswer);
+      if (result.submittedAnswer !== undefined && data.status !== 'answered' && data.status !== 'skipped') acceptQuestionAnswer(generalDraftKey, { selected: result.submittedAnswer.selected, custom: result.submittedAnswer.custom ?? '' });
       const local = draft();
       if (result.submittedAnswer !== undefined && !edited.current && local.selected.length === 0 && local.custom === '' && data.status !== 'answered' && data.status !== 'skipped') {
         const saved = { selected: result.submittedAnswer.selected, custom: result.submittedAnswer.custom ?? '' };
@@ -920,6 +935,10 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
   const group = data.groupId === undefined ? [event] : latestQuestions(store.getEvents(event.sessionId)).filter(item => item.turnId === event.turnId && (item.data as EventData['question']).groupId === data.groupId);
   const position = group.findIndex(item => (item.data as EventData['question']).questionId === data.questionId) + 1;
   const remaining = group.filter(needsQuestionAnswer);
+  const unsaved = submission?.status === 'collected' && questionHasUnsavedChanges(generalDraftKey);
+  const completesGroup = group.length > 1 && group.filter(awaitsQuestionAnswer).every(item => (item.data as EventData['question']).questionId === data.questionId);
+  const otherEdits = completesGroup ? group.filter(item => (item.data as EventData['question']).questionId !== data.questionId
+    && (item.data as EventData['question']).submission === 'collected' && questionHasUnsavedChanges(questionDraftKey(item, item.data as EventData['question']))) : [];
   const next = remaining.find(item => (item.data as EventData['question']).questionId !== data.questionId);
   const groupLabel = group.length > 1 ? `第 ${position} / ${group.length} 题 · ${remaining.length} 题待回答` : undefined;
   const answerPreview = submittedAnswer === undefined || data.isSecret ? null : <div className="question-answer-preview" data-testid="question-answer-preview">
@@ -927,6 +946,31 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
     {submittedAnswer.selected.length ? <ul>{submittedAnswer.selected.map((id, index) => <li key={`${id}-${index}`}>{data.options?.find(option => option.id === id)?.label ?? id}</li>)}</ul> : null}
     {submittedAnswer.custom ? <div className="question-answer-text">{submittedAnswer.custom}</div> : null}
   </div>;
+  const submitAnswer = async (intent?: 'queue'): Promise<void> => {
+    setGroupError('');
+    if (completesGroup) {
+      setCheckingGroup(true);
+      try {
+        for (const item of group) {
+          const question = item.data as EventData['question'];
+          if (question.questionId === data.questionId || question.submission !== 'collected') continue;
+          const result = await api.interaction(event.sessionId, 'answer', question.questionId);
+          if (!question.isSecret && result.submittedAnswer === undefined) {
+            setGroupError('暂时无法核对本组已保存的答案，请稍后重试。'); return;
+          }
+          if (result.submittedAnswer !== undefined && !question.isSecret) acceptQuestionAnswer(questionDraftKey(item, question), { selected: result.submittedAnswer.selected, custom: result.submittedAnswer.custom ?? '' });
+          if (questionHasUnsavedChanges(questionDraftKey(item, question))) {
+            setGroupError('其他题还有未保存的修改，请先更新对应答案。');
+            return;
+          }
+        }
+      } catch {
+        setGroupError('暂时无法核对本组已保存的答案，请稍后重试。'); return;
+      } finally { setCheckingGroup(false); }
+    }
+    store.answer(event.sessionId, data.questionId, { selected, custom: text }, intent === undefined ? undefined : { intent });
+    if (data.isSecret) setText('');
+  };
   const blocking = data.isBlocking !== false;
   const nonblockingLabel = blocking ? null : <span className="what">非阻塞提问</span>;
   const nativeDshCancelled = store.getSession(event.sessionId)?.agent === 'dsh' && data.status === 'skipped' && data.outcome === 'cancel';
@@ -985,25 +1029,27 @@ function QuestionCard({ event, data }: { event: StoredEvent; data: EventData['qu
           : <input className="text-input" type={data.isSecret ? 'password' : 'text'} autoComplete={data.isSecret ? 'off' : undefined} spellCheck={data.isSecret ? false : undefined} disabled={busy} placeholder={data.isSecret ? '输入敏感回答' : '其他（可选）'} aria-label="其他回答" value={text} onChange={(event_) => edit(selected, event_.target.value)} />
       ) : null}
       {data.isSecret ? <p>敏感回答只在本页面保留，刷新后需要重新输入。</p> : null}
-      {synchronized ? <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
+      {synchronized ? unsaved ? <p role="status" data-testid="question-unsaved">本题有未保存的修改，请更新答案后再提交整组。</p> : <InteractionStatus submission={submission} /> : <InteractionSyncStatus sessionId={event.sessionId} kind="answer" id={data.questionId} />}
       {submission?.status === 'collected' ? answerPreview : null}
+      {otherEdits.length ? <div className="question-unsaved-warning" role="status" data-testid="question-group-unsaved">
+        <span>其他题还有未保存的修改，请先更新：</span>
+        {otherEdits.map(item => <button key={(item.data as EventData['question']).questionId} type="button" className="btn" onClick={event_ => focusQuestion(event_.currentTarget.closest('.timeline'), (item.data as EventData['question']).questionId)}>返回第 {group.indexOf(item) + 1} 题修改</button>)}
+      </div> : null}
+      {groupError ? <p role="alert">{groupError}</p> : null}
       {synchronized && (submission?.status === 'uncertain' || isRetry) && store.getSession(event.sessionId)?.agent === 'dsh'
         ? <DshQuestionRecovery event={event} questionId={data.questionId} /> : null}
       <div className="approval-actions">
         <button
           type="button"
           className="btn primary"
-          disabled={busy || selected.length === 0 && text.trim() === ''}
-          onClick={() => {
-            store.answer(event.sessionId, data.questionId, { selected, custom: text });
-            if (data.isSecret) setText('');
-          }}
+          disabled={busy || otherEdits.length > 0 || selected.length === 0 && text.trim() === ''}
+          onClick={() => void submitAnswer()}
         >
-          {group.length > 1 ? submission?.status === 'collected' ? '更新本题答案' : remaining.length === 1 ? '提交本组回答' : '保存本题答案' : '提交'}
+          {checkingGroup ? '正在核对本组答案…' : group.length > 1 ? submission?.status === 'collected' ? '更新本题答案' : completesGroup ? '提交本组回答' : '保存本题答案' : '提交'}
         </button>
         {next ? <button type="button" className="btn" onClick={event_ => focusQuestion(event_.currentTarget.closest('.timeline'), (next.data as EventData['question']).questionId)}>回答下一题</button> : null}
-        {data.asyncReply && ['running', 'waiting'].includes(store.getSession(event.sessionId)?.status ?? '') ? <button type="button" className="btn" data-testid="question-queue-answer" disabled={busy || selected.length === 0 && text.trim() === ''}
-          onClick={() => store.answer(event.sessionId, data.questionId, { selected, custom: text }, { intent: 'queue' })}>排队回答</button> : null}
+        {data.asyncReply && ['running', 'waiting'].includes(store.getSession(event.sessionId)?.status ?? '') ? <button type="button" className="btn" data-testid="question-queue-answer" disabled={busy || otherEdits.length > 0 || selected.length === 0 && text.trim() === ''}
+          onClick={() => void submitAnswer('queue')}>排队回答</button> : null}
       </div>
       </div>}
     </div>

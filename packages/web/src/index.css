@@ -1253,6 +1253,10 @@ button.step-line:hover {
   container-type: inline-size;
   container-name: composer;
 }
+.composer-question-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 4px 0; font-size: 12px; }
+.composer-question-controls > span { margin-right: auto; color: var(--text-secondary); }
+.composer-return-question { align-self: flex-end; }
+.question-unsaved-warning { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 /* 输入框变窄（并排、窄窗口）：先收起 Provider 名和 Agent 名，再让胶囊省略 */
 @container composer (max-width: 600px) {
   .pill .pill-sub {
