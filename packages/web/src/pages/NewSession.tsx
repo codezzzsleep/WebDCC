@@ -106,7 +106,8 @@ function lastAgent(): string | null {
 /** 新会话：先选由谁来做，再在同一个输入框里说要做什么 */
 export function NewSession({ initial }: NewSessionProps): React.ReactElement {
   const navigate = useNavigate();
-  const { meta, providers, workspaces, dsh } = useAppData();
+  const { meta, providers, workspaces: allWorkspaces, dsh, loaded } = useAppData();
+  const workspaces = useMemo(() => allWorkspaces.filter(workspace => !workspace.archived), [allWorkspaces]);
   const [workspaceId, setWorkspaceId] = useState(initial?.w ?? '');
   const [agent, setAgent] = useState<string>(initial?.agent ?? lastAgent() ?? 'codex');
   const [choiceOverride, setChoiceOverride] = useState<Record<string, ModelChoice>>({});
@@ -151,7 +152,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
   };
 
   const submit = async (text: string, contentParts: InputContent): Promise<{ commandId: string }> => {
-    if (workspaceId === '') throw new Error('先添加一个工作区');
+    if (workspace === undefined) throw new Error('请先选择可用的工作区；原工作区的草稿仍保留');
     const accessMode = selectedMode;
     const options = {
       workspaceId,
@@ -275,6 +276,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
               里开始
             </h1>
             <p>先选 Harness，再从它的 Provider 和模型中选择；每个 Harness 保留自己的工具、提示词和权限。</p>
+            {loaded && workspaceId !== '' && workspace === undefined ? <p role="status">原工作区已归档或移除，草稿仍保留。请恢复工作区，或从上方重新选择后继续。</p> : null}
           </div>
 
           <div className="agent-cards" role="radiogroup" aria-label="选择 Agent">
@@ -314,6 +316,7 @@ export function NewSession({ initial }: NewSessionProps): React.ReactElement {
               setChoiceOverride((prev) => ({ ...prev, [agent]: next }));
             },
             accessMode: selectedMode,
+            ...(workspace === undefined ? { unavailableWorkspace: '请先选择可用工作区；原工作区的草稿仍保留' } : {}),
             onAccessMode: (modeId) => {
               rememberAccessMode(agent, modeId);
               setAccessModes((prev) => ({ ...prev, [agent]: modeId }));

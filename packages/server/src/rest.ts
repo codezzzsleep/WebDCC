@@ -222,9 +222,20 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     if (info === undefined || !info.isDirectory()) throw badRequest('path 必须是已存在目录');
     const canonical = await realpath(body.path);
     const existing = store.findWorkspaceByPath(canonical);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) return existing.archived === true ? store.archiveWorkspace(existing.id, false) : existing;
     const name = body.name?.trim() !== undefined && body.name.trim() !== '' ? body.name.trim() : basename(canonical);
     return store.createWorkspace(name, canonical);
+  });
+
+  app.patch('/api/workspaces/:id', async request => {
+    const body = request.body as { archived?: unknown } | null;
+    if (typeof body?.archived !== 'boolean' || Object.keys(body).some(key => key !== 'archived')) throw badRequest('需要工作区 archived 状态');
+    return store.archiveWorkspace((request.params as { id: string }).id, body.archived);
+  });
+
+  app.delete('/api/workspaces/:id', async (request, reply) => {
+    store.removeEmptyWorkspace((request.params as { id: string }).id);
+    return reply.status(204).send();
   });
 
   app.get('/api/fs/browse', async (request): Promise<BrowseResponse> => {

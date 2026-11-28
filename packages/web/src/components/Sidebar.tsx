@@ -11,6 +11,7 @@ import { AgentMark } from './AgentMark.js';
 import { Icon, Spinner } from './Icon.js';
 import { ServerMetricsStatus } from './ServerMetricsBar.js';
 import { sessionRows } from '../lib/sessionRows.js';
+import { WorkspaceActions } from './WorkspaceActions.js';
 
 interface SidebarProps {
   currentSessionId: string | null;
@@ -39,7 +40,13 @@ export function Sidebar({
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [theme, setTheme] = useState<Theme>(() => readTheme());
+  const [workspaceAction, setWorkspaceAction] = useState<WorkspaceDto>();
+  const [showArchivedWorkspaces, setShowArchivedWorkspaces] = useState(false);
+  const activeWorkspaces = workspaces.filter(workspace => !workspace.archived);
+  const archivedWorkspaces = workspaces.filter(workspace => workspace.archived);
   const sessions = store.getSessions();
+  const manageWorkspace = (workspace: WorkspaceDto): void => setWorkspaceAction({ ...workspace,
+    sessionCount: Math.max(workspace.sessionCount ?? 0, sessions.filter(session => session.workspaceId === workspace.id).length) });
 
   const grouped = useMemo(() => {
     const map = new Map<string, SessionMeta[]>();
@@ -54,7 +61,7 @@ export function Sidebar({
     return map;
   }, [sessions, query]);
 
-  const archived = sessions.filter((session) => session.archived === true);
+  const archived = sessions.filter((session) => session.archived === true && !archivedWorkspaces.some(workspace => workspace.id === session.workspaceId));
   const toggleTheme = (): void => {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
@@ -156,11 +163,11 @@ export function Sidebar({
       ) : null}
 
       <div className="workspace-list">
-        {workspaces.map((workspace) => {
+        {activeWorkspaces.map((workspace) => {
           const rows = sessionRows(grouped.get(workspace.id) ?? []);
           if (query.trim() !== '' && rows.length === 0) return null;
           return (
-            <div key={workspace.id} className="workspace-group">
+            <div key={workspace.id} className="workspace-group" data-testid={`workspace-${workspace.id}`}>
               <div className="workspace-row" title={workspace.path}>
                 <Icon name="folder" className="folder" />
                 <span className="name">{workspace.name}</span>
@@ -174,6 +181,7 @@ export function Sidebar({
                 >
                   <Icon name="plus" size={15} />
                 </Link>
+                <button type="button" className="icon-btn workspace-more" aria-label={`管理工作区 ${workspace.name}`} title="管理工作区" onClick={() => manageWorkspace(workspace)}><Icon name="more" size={15} /></button>
               </div>
               {rows.map(({ session, depth }) => (
                 <SessionRow
@@ -188,9 +196,19 @@ export function Sidebar({
             </div>
           );
         })}
-        {workspaces.length === 0 ? (
-          <div className="dock-notice">还没有工作区。点上面的文件夹按钮，添加服务器上的一个项目目录。</div>
+        {activeWorkspaces.length === 0 ? (
+          <div className="dock-notice">{archivedWorkspaces.length ? '没有使用中的工作区，可以展开下方已归档工作区恢复，或添加项目目录。' : '还没有工作区。点上面的文件夹按钮，添加服务器上的一个项目目录。'}</div>
         ) : null}
+
+        {archivedWorkspaces.length > 0 ? <div className="workspace-group" data-testid="archived-workspaces">
+          <button type="button" className="workspace-row workspace-archive-toggle" aria-expanded={showArchivedWorkspaces} data-testid="workspace-archive-toggle" onClick={() => setShowArchivedWorkspaces(value => !value)}>
+            <Icon name="archive" size={15} /><span className="name">已归档工作区（{archivedWorkspaces.length}）</span><Icon name={showArchivedWorkspaces ? 'chevronUp' : 'chevronDown'} size={14} />
+          </button>
+          {showArchivedWorkspaces ? archivedWorkspaces.map(workspace => <div className="workspace-row" key={workspace.id} data-testid={`workspace-${workspace.id}`} title={workspace.path}>
+            <Icon name="folder" size={15} /><span className="name">{workspace.name}</span>
+            <button type="button" className="icon-btn workspace-more" aria-label={`管理工作区 ${workspace.name}`} onClick={() => manageWorkspace(workspace)}><Icon name="more" size={15} /></button>
+          </div>) : null}
+        </div> : null}
 
         {archived.length > 0 ? (
           <div className="workspace-group" data-testid="archived-section">
@@ -235,6 +253,7 @@ export function Sidebar({
           );
         })}
       </div>
+      {workspaceAction ? <WorkspaceActions workspace={workspaceAction} onClose={() => setWorkspaceAction(undefined)} onArchived={() => setShowArchivedWorkspaces(true)} /> : null}
     </aside>
   );
 }

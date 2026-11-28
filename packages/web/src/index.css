@@ -524,6 +524,8 @@ textarea.text-input {
 .workspace-row .icon-btn:focus-visible {
   opacity: 1;
 }
+.workspace-row .workspace-more { opacity: 1; flex: 0 0 auto; }
+.workspace-archive-toggle { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; }
 .session-row {
   height: 34px;
   border-radius: 10px;

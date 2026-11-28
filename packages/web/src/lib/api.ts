@@ -125,6 +125,9 @@ export const api = {
   meta: () => request<MetaResponse>('/api/meta'),
   systemMetrics: () => request<SystemMetrics>('/api/system/metrics'),
   workspaces: () => request<WorkspaceDto[]>('/api/workspaces'),
+  archiveWorkspace: (id: string, archived: boolean) => request<WorkspaceDto>(`/api/workspaces/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: JSON.stringify({ archived }) }),
+  removeWorkspace: (id: string) => request<void>(`/api/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   createWorkspace: (input: { name: string; path: string }) =>
     request<WorkspaceDto>('/api/workspaces', { method: 'POST', body: JSON.stringify(input) }),
   browse: (path?: string) =>
