@@ -19,6 +19,7 @@ import { SyncedInputDraftStore } from '../lib/synced-input-draft-store.js';
 import { AttachmentPreview } from './InputAttachments.js';
 import { SlashControl } from './SlashControl.js';
 import { beforeAppUpdate } from '../lib/app-update.js';
+import { awaitsQuestionAnswer, latestQuestions } from '../lib/question-navigation.js';
 
 type ComposerMode =
   | {
@@ -76,6 +77,8 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const currentProviderId = mode.kind === 'session' ? (session?.providerId ?? null) : mode.choice.providerId;
 
   const [text, setText] = useState('');
+  const [openedQuestionContext, setOpenedQuestionContext] = useState<string>();
+  const [composing, setComposing] = useState(false);
   const capabilitiesRef = useRef<ComposerInputCapabilities>({ contentTypes: ['text', 'image', 'file'], intents: ['send'], running: false });
   const [controls] = useState(() => {
     const backend = new InputPreparationStore<PreparedPart>();
@@ -547,6 +550,14 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const blockedReason = parseSlashInput(text) ? controls.input.commandReason() : controls.input.reason(sendIntent);
   const viewingHistory = sessionId !== null && store.isViewingConversationHistory(sessionId);
   const sendDisabled = busy || blockedReason !== undefined || viewingHistory;
+  const blockingQuestions = sessionId === null || viewingHistory ? [] : latestQuestions(store.getConversationEvents(sessionId, false))
+    .filter(event => (event.data as { isBlocking?: boolean }).isBlocking !== false && awaitsQuestionAnswer(event));
+  const questionContext = JSON.stringify([sessionId, blockingQuestions.map(event => event.itemKey)]);
+  const canCompactForQuestions = blockingQuestions.length > 0 && !controls.drafts.loading()
+    && controls.drafts.snapshot()?.sessionId === draftSessionId && text === '' && attachmentParts.length === 0
+    && uploadTasks.every(task => task.state === 'completed' || task.state === 'cancelled')
+    && !selecting && !referencing && !busy && error === null && stopError === undefined && slashRequest === undefined;
+  const compactForQuestions = canCompactForQuestions && !composing && openedQuestionContext !== questionContext;
 
   useEffect(() => {
     if (agent !== 'codex' || workspaceId === '' || viewingHistory || selecting || referencing || controls.input.busy() || controls.drafts.loading()) return;
@@ -562,9 +573,23 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
     void referenceAttachment(part);
   }, [agent, workspaceId, draftSessionId, preparationVersion, selecting, referencing, viewingHistory, controls]);
 
+  if (compactForQuestions) return <div className="composer-wrap composer-question-mode" data-testid="composer">
+    <div className="composer-question-controls" data-testid="question-composer-compact">
+      <span>请在上方问题卡中回答</span>
+      <button type="button" className="btn" onClick={() => {
+        setOpenedQuestionContext(questionContext);
+        requestAnimationFrame(() => textareaRef.current?.focus());
+      }}>发送其他消息</button>
+      {running ? <button type="button" className="send-btn stop-btn" onClick={() => sessionId !== null && store.interrupt(sessionId, stopTurnId)} aria-label={stopTitle} title={stopTitle} data-testid="stop-button"><Icon name="stop" size={16} /><span>停止</span></button> : null}
+    </div>
+  </div>;
+
   return (
     <div className="composer-wrap" data-testid="composer">
+      {canCompactForQuestions && openedQuestionContext === questionContext ? <button type="button" className="btn composer-return-question" onClick={() => setOpenedQuestionContext(undefined)}>收起消息框，继续回答</button> : null}
       <div className={`composer${draggingFiles ? ' is-file-dragover' : ''}`}
+        onFocusCapture={() => setComposing(true)}
+        onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setComposing(false); }}
         onDragOver={event => {
           if (!event.dataTransfer.types.includes('Files')) return;
           event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDraggingFiles(true);
