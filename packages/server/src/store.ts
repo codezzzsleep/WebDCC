@@ -344,24 +344,23 @@ export class Store {
 
   // ---------- workspaces ----------
   listWorkspaces(): WorkspaceDto[] {
-    const rows = this.db
-      .prepare('SELECT id, name, path, created_at FROM workspaces ORDER BY created_at ASC')
-      .all() as { id: string; name: string; path: string; created_at: string }[];
-    return rows.map((row) => ({ id: row.id, name: row.name, path: row.path, createdAt: row.created_at }));
+    const rows = this.db.prepare(`SELECT w.id, w.name, w.path, w.created_at, w.archived,
+      (SELECT count(*) FROM sessions s WHERE s.workspace_id = w.id) AS session_count
+      FROM workspaces w ORDER BY w.created_at ASC`).all() as { id: string; name: string; path: string; created_at: string; archived: number; session_count: number }[];
+    return rows.map(row => ({ id: row.id, name: row.name, path: row.path, createdAt: row.created_at,
+      ...(row.archived === 1 ? { archived: true } : {}), sessionCount: row.session_count }));
   }
 
   getWorkspace(id: string): WorkspaceDto | undefined {
     const row = this.db
-      .prepare('SELECT id, name, path, created_at FROM workspaces WHERE id = ?')
-      .get(id) as { id: string; name: string; path: string; created_at: string } | undefined;
-    return row === undefined ? undefined : { id: row.id, name: row.name, path: row.path, createdAt: row.created_at };
+      .prepare('SELECT id, name, path, created_at, archived FROM workspaces WHERE id = ?')
+      .get(id) as { id: string; name: string; path: string; created_at: string; archived: number } | undefined;
+    return row === undefined ? undefined : { id: row.id, name: row.name, path: row.path, createdAt: row.created_at, ...(row.archived === 1 ? { archived: true } : {}) };
   }
 
   findWorkspaceByPath(path: string): WorkspaceDto | undefined {
-    const row = this.db
-      .prepare('SELECT id, name, path, created_at FROM workspaces WHERE path = ?')
-      .get(path) as { id: string; name: string; path: string; created_at: string } | undefined;
-    return row === undefined ? undefined : { id: row.id, name: row.name, path: row.path, createdAt: row.created_at };
+    const row = this.db.prepare('SELECT id FROM workspaces WHERE path = ?').get(path) as { id: string } | undefined;
+    return row === undefined ? undefined : this.getWorkspace(row.id);
   }
 
   createWorkspace(name: string, path: string): WorkspaceDto {
@@ -369,6 +368,21 @@ export class Store {
     const at = new Date().toISOString();
     this.db.prepare('INSERT INTO workspaces (id, name, path, created_at) VALUES (?, ?, ?, ?)').run(id, name, path, at);
     return { id, name, path, createdAt: at };
+  }
+
+  archiveWorkspace(id: string, archived: boolean): WorkspaceDto {
+    if (this.db.prepare('UPDATE workspaces SET archived = ? WHERE id = ?').run(archived ? 1 : 0, id).changes !== 1)
+      throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
+    return this.getWorkspace(id)!;
+  }
+
+  removeEmptyWorkspace(id: string): void {
+    this.db.transaction(() => {
+      if (this.getWorkspace(id) === undefined) return; // lost DELETE responses can be retried
+      if (this.db.prepare('SELECT 1 FROM sessions WHERE workspace_id = ? LIMIT 1').get(id) !== undefined)
+        throw Object.assign(new Error('工作区中仍有会话，请归档工作区以保留历史'), { statusCode: 409 });
+      this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
+    }).immediate();
   }
 
   // ---------- sessions ----------

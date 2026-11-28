@@ -48,6 +48,9 @@ function RootLayout(): React.ReactElement {
 
   useEffect(() => {
     void store.restoreOutbox().then(() => store.init());
+    const refresh = (): void => { void refreshWorkspaces(); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
   }, []);
 
   const match = /^\/s\/([^/?]+)/.exec(pathname);

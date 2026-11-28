@@ -593,6 +593,7 @@ export class SessionManager {
     await this.assertAccessMode(adapter, accessMode);
     const workspace = this.store.getWorkspace(input.workspaceId);
     if (workspace === undefined) throw Object.assign(new Error('工作区不存在'), { statusCode: 404 });
+    if (workspace.archived === true) throw Object.assign(new Error('工作区已归档，请先恢复后再新建会话'), { statusCode: 409 });
 
     const session = this.store.createSession({
       workspaceId: input.workspaceId,

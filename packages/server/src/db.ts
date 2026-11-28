@@ -7,7 +7,8 @@ export type Db = Database.Database;
 // v12 scopes input/drafts; v13 keeps file name/MIME identity separate from
 // shared content bytes, without changing any existing file ID.
 // v16 records whether native capture redaction changed each saved payload.
-export const CURRENT_SCHEMA_VERSION = 16;
+// v17 adds local workspace organization without changing native metadata.
+export const CURRENT_SCHEMA_VERSION = 17;
 
 /** Optional indexes must not hold the shared writer lock over a large scan
  * while another executor still needs to publish native output. Unknown process
@@ -93,6 +94,9 @@ export function openDb(file: string): Db {
   if (schemaVersion >= 16 && !(db.prepare('PRAGMA table_info(native_event_envelopes)').all() as { name: string }[]).some(column => column.name === 'payload_redacted')) {
     db.close(); throw new Error('数据库 schema v16 的原生删节证据不完整，拒绝启动');
   }
+  if (schemaVersion >= 17 && !(db.prepare('PRAGMA table_info(workspaces)').all() as { name: string }[]).some(column => column.name === 'archived')) {
+    db.close(); throw new Error('数据库 schema v17 的工作区归档状态不完整，拒绝启动');
+  }
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
@@ -100,6 +104,7 @@ export function openDb(file: string): Db {
   // Acquire the writer lock before reading migration metadata. Concurrent
   // opens must wait here, not upgrade an already stale WAL read snapshot.
   try { db.transaction(() => {
+    if (!(db.prepare('PRAGMA table_info(workspaces)').all() as { name: string }[]).some(column => column.name === 'archived')) db.exec('ALTER TABLE workspaces ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))');
     if (schemaVersion < 13) migrateFileAliases(db);
     db.exec(`CREATE TABLE IF NOT EXISTS native_owners (
       session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,

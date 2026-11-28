@@ -35,6 +35,7 @@ type ComposerMode =
       choice: ModelChoice;
       onChoice: (choice: ModelChoice) => void;
       accessMode: string | undefined;
+      unavailableWorkspace?: string;
       onAccessMode: (mode: string) => void;
       onSubmit: (text: string, contentParts: InputContent) => Promise<{ commandId: string }>;
     };
@@ -311,7 +312,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   capabilitiesRef.current = { contentTypes: agent === 'codex' ? ['text', 'image', 'audio', 'skill'] : ['text', 'image', 'file'], inputModalities: agent === 'claude-code' ? ['text', 'image'] : selectedModel?.inputModalities,
     workspaceFileReferences: agent === 'codex', collaborationModes: agent === 'codex' ? inputModes.modes.map(mode => mode.id) : [],
     intents: running ? agent === 'codex' || agent === 'dsh' ? ['queue', 'steer'] : ['queue'] : ['send'], running,
-    ...(mode.kind === 'new' && workspaceId === '' ? { unavailableReason: '请先选择工作区' } : {}) };
+    ...(mode.kind === 'new' && (workspaceId === '' || mode.unavailableWorkspace !== undefined) ? { unavailableReason: mode.unavailableWorkspace ?? '请先选择工作区' } : {}) };
   const attachmentParts = (controls.drafts.snapshot()?.sessionId === draftSessionId ? controls.drafts.snapshot()?.contentParts.parts ?? [] : []).filter(part => part.type !== 'text');
   const uploadTasks = controls.uploads.list(draftSessionId);
   const uploading = selecting || referencing || attachmentParts.some(part => part.uploadTaskId !== undefined && ['queued', 'uploading', 'completing'].includes(controls.uploads.get(part.uploadTaskId)?.state ?? 'queued'));

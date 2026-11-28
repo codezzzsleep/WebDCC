@@ -28,6 +28,9 @@ export interface WorkspaceDto {
   name: string;
   path: string;
   createdAt: string;
+  /** WebDCC organization only; native sessions and project files are retained. */
+  archived?: boolean;
+  sessionCount?: number;
 }
 
 /** A copied reference identifies a source conversation without resuming it. */
