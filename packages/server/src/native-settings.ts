@@ -48,7 +48,7 @@ function validate(value: unknown, fields: string[], required = ['providerKey', '
  * explicitly selected reference on that Host and never persist a local copy. */
 export class DshSettingsService {
   private writes: Promise<void> = Promise.resolve();
-  constructor(private readonly connections: DshConnectionStore) {}
+  constructor(private readonly connections: Pick<DshConnectionStore, 'connection'>) {}
 
   private exclusive<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.writes.then(operation);
