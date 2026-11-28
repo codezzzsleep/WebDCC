@@ -2261,16 +2261,16 @@ pre.code-block {
   .pill {
     max-width: 150px;
   }
-  /* 手机上输入框里的菜单改成贴底的面板，避免从屏幕左右两边溢出 */
+  /* 手机菜单在输入操作栏上方展开，避免遮住切换菜单的按钮。 */
   .composer-wrap .menu {
     position: fixed;
     left: 10px !important;
     right: 10px !important;
     top: auto;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    bottom: var(--composer-menu-bottom, calc(env(safe-area-inset-bottom, 0px) + 12px));
     width: auto !important;
     max-width: none;
-    max-height: 62vh;
+    max-height: min(62vh, calc(100dvh - var(--composer-menu-bottom, 12px) - 12px)) !important;
     z-index: 95;
   }
   /* 手机上输入框底部一行放得下：Agent 只留标识，模型只留模型名 */

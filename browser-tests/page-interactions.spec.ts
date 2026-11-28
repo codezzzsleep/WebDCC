@@ -42,6 +42,15 @@ it.each([390, 1280])('locates a collapsed older event and gives modal keyboard o
     await expect.poll(() => ws.evaluate(el => el.contains(document.activeElement))).toBe(true);
     await page.keyboard.press('Escape'); await ws.waitFor({state:'hidden'});
     expect(await page.getByRole('button',{name:'添加工作区',exact:true}).evaluate(el=>el===document.activeElement)).toBe(true);
+    if (width===390) await page.getByTestId('drawer-backdrop').click({position:{x:width-10,y:60}});
+    await page.getByTestId('composer-input').fill('/'); await page.getByTestId('slash-menu').waitFor();
+    await page.getByTestId('access-mode').click(); await page.getByTestId('slash-menu').waitFor({state:'hidden'});
+    expect(await page.getByTestId('composer').getByRole('menu').count()).toBe(1);
+    await page.getByRole('menuitemradio').first().click();
+    await page.getByTestId('composer-input').fill('@'); await page.getByTestId('at-menu').waitFor();
+    await page.getByTestId('model-menu').click(); await page.getByTestId('at-menu').waitFor({state:'hidden'});
+    expect(await page.getByTestId('composer').getByRole('menu').count()).toBe(1);
+    await page.keyboard.press('Escape'); expect(await page.getByTestId('composer-input').inputValue()).toBe('@');
   } finally { await browser?.close(); await ctx.close(); }
 }, 50_000);
 

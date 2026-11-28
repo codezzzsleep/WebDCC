@@ -1,5 +1,5 @@
 import { randomUuid } from '../lib/uuid.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CodexInputModeCatalog, InputContent, ModelOption, ProviderDto, SlashCommand, SlashControlRequest, NativeActionResponse } from '@webdcc/protocol';
 import { parseSlashInput, slashCommandFor } from '@webdcc/protocol';
 import { object as nativeObject, useClaudeTaskControls } from '../lib/claude-task-controls.js';
@@ -107,6 +107,10 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const [inputModes, setInputModes] = useState<CodexInputModeCatalog>({ modes: [], observedMode: null });
   const [modeCatalogRevision, setModeCatalogRevision] = useState(0);
   const [slashOpen, setSlashOpen] = useState(false);
+  useEffect(() => {
+    if (menu === null) return;
+    setSlashOpen(false); setMention({ open: false, query: '', start: 0 });
+  }, [menu]);
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
   const [slashReason, setSlashReason] = useState('');
   const [slashCatalogRevision, setSlashCatalogRevision] = useState(0);
@@ -126,6 +130,17 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   const attachInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (bar === null || menu === null && !slashOpen && !mention.open) return;
+    const position = (): void => {
+      const top = bar.getBoundingClientRect().top;
+      bar.style.setProperty('--composer-menu-bottom', `${Math.max(12, Math.min(innerHeight - 96, innerHeight - top + 8))}px`);
+    };
+    position(); window.addEventListener('resize', position); window.addEventListener('scroll', position, true);
+    const observer = new ResizeObserver(position); observer.observe(bar);
+    return () => { observer.disconnect(); window.removeEventListener('resize', position); window.removeEventListener('scroll', position, true); };
+  }, [menu, slashOpen, mention.open]);
 
   // 草稿：会话里的输入框跟着会话走（换设备也在）
   useEffect(() => {
@@ -363,6 +378,7 @@ export function Composer({ mode, workspaceId }: ComposerProps): React.ReactEleme
   }, [agent, draftSessionId, controls, preparationVersion, mode.kind, session]);
 
   const updateText = (value: string): void => {
+    setMenu(null);
     setText(value);
     persist(value);
     // "/" 开头：列出该 Agent 自己的命令（F8）。
